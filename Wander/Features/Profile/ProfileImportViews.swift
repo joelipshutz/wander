@@ -2421,7 +2421,10 @@ private struct PlaceImportPhotoThumb: View {
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
+                    canonicalPlaceKey: item.reviewPhotoRequest?.canonicalPhotoCacheKey ?? "import:\(item.id)",
                     placeName: item.displayName,
+                    photoRequest: item.reviewPhotoRequest,
+                    variant: .listThumbnail,
                     onLoadFailure: { failedPhoto in
                         if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
                             self.photo = nil
@@ -2457,7 +2460,9 @@ private struct PlaceImportPhotoThumb: View {
             return
         }
         do {
-            let resolvedPhoto = try await backend.placePhoto(for: request)
+            let resolvedPhoto = try await backend.placePhoto(
+                for: request.rendering(.listThumbnail)
+            )
             try Task.checkCancellation()
             photo = resolvedPhoto
         } catch {

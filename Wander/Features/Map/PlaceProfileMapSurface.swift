@@ -291,6 +291,7 @@ private struct PlaceProfilePreviewCard: View {
     @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto? = nil
     @State private var preparedImage: UIImage?
+    @State private var preparedImageKey: String?
     @State private var isShareSheetPresented = false
     @State private var activeCardAction: PlaceCardPreviewAction?
     @State private var isCardPressed = false
@@ -583,6 +584,9 @@ private struct PlaceProfilePreviewCard: View {
 
     @ViewBuilder
     private var cardPhoto: some View {
+        let stateImage = preparedImageKey == photoResolutionKey ? preparedImage : nil
+        let displayedImage = stateImage ?? synchronouslyCachedImage
+
         ZStack {
             if place.isDroppedPin {
                 ZStack(alignment: .bottomTrailing) {
@@ -613,8 +617,8 @@ private struct PlaceProfilePreviewCard: View {
                 PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 72)
             }
 
-            if let preparedImage {
-                Image(uiImage: preparedImage)
+            if let displayedImage {
+                Image(uiImage: displayedImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -657,10 +661,10 @@ private struct PlaceProfilePreviewCard: View {
 
     private var ratingPresentation: PlaceCardRatingPresentation? {
         PlaceCardPresentation.rating(
-            providerScore: photo?.providerRating,
-            providerCount: photo?.providerUserRatingCount,
+            providerScore: displayedPhoto?.providerRating,
+            providerCount: displayedPhoto?.providerUserRatingCount,
             recmeRating: presentation.overallRating ?? presentation.ownRating,
-            providerName: photo?.provider
+            providerName: displayedPhoto?.provider
         )
     }
 
@@ -674,10 +678,10 @@ private struct PlaceProfilePreviewCard: View {
 
     private var hoursPresentation: PlaceCardHoursPresentation? {
         PlaceCardPresentation.hours(
-            isOpen: photo?.providerOpenNow,
-            nextOpenTimeString: photo?.providerNextOpenTimeString,
-            nextCloseTimeString: photo?.providerNextCloseTimeString,
-            utcOffsetMinutes: photo?.providerUTCOffsetMinutes
+            isOpen: displayedPhoto?.providerOpenNow,
+            nextOpenTimeString: displayedPhoto?.providerNextOpenTimeString,
+            nextCloseTimeString: displayedPhoto?.providerNextCloseTimeString,
+            utcOffsetMinutes: displayedPhoto?.providerUTCOffsetMinutes
         )
     }
 
@@ -740,8 +744,17 @@ private struct PlaceProfilePreviewCard: View {
         let localPhoto = localPhoto
         guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
 
+        if let synchronouslyCachedPhoto {
+            photo = synchronouslyCachedPhoto.photo
+            preparedImage = synchronouslyCachedPhoto.image
+            preparedImageKey = resolutionKey
+            onReady()
+            return
+        }
+
         photo = nil
         preparedImage = nil
+        preparedImageKey = resolutionKey
 
         if place.isDroppedPin {
             let didPreparePhoto = await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
@@ -752,7 +765,9 @@ private struct PlaceProfilePreviewCard: View {
         }
 
         do {
-            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.card)
+            )
             try Task.checkCancellation()
 
             if remotePhoto.isGooglePlacesPhoto {
@@ -793,6 +808,7 @@ private struct PlaceProfilePreviewCard: View {
 
         photo = candidate
         preparedImage = image
+        preparedImageKey = resolutionKey
         await Task.yield()
         guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return false }
         onReady()
@@ -800,6 +816,14 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private func preparedImage(for photo: PlacePhoto) async -> UIImage? {
+        if let cached = PlacePhotoImagePipeline.shared.cachedImage(
+            canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+            photoKey: photo.cacheKey,
+            targetPixelSize: targetPixelSize
+        ) {
+            return cached.image
+        }
+
         let data: Data?
         if let localAssetRef = photo.localAssetRef,
            let localData = await Task.detached(priority: .utility, operation: {
@@ -807,19 +831,49 @@ private struct PlaceProfilePreviewCard: View {
            }).value {
             data = localData
         } else {
-            data = try? await backend.placePhotoImageData(for: photo)
+            data = try? await backend.placePhotoImageData(
+                for: photo,
+                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                variant: .card
+            )
         }
 
         guard !Task.isCancelled, let data else { return nil }
-        let targetPixelSize = max(
-            1,
-            Int(ceil(430 * displayScale))
-        )
         return await PlacePhotoImagePipeline.shared.image(
             from: data,
+            canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
             photoKey: photo.cacheKey,
             targetPixelSize: targetPixelSize
         )?.image
+    }
+
+    private var targetPixelSize: Int {
+        max(1, Int(ceil(430 * displayScale)))
+    }
+
+    private var synchronouslyCachedPhoto: ListPlaceResolvedPhoto? {
+        let candidate = place.isDroppedPin
+            ? localPhoto
+            : backend.cachedPlacePhoto(for: place.photoRequest.rendering(.card))
+        guard let candidate,
+              let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
+                  canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                  photoKey: candidate.cacheKey,
+                  targetPixelSize: targetPixelSize
+              )
+        else { return nil }
+        return ListPlaceResolvedPhoto(photo: candidate, image: decodedImage.image)
+    }
+
+    private var synchronouslyCachedImage: UIImage? {
+        synchronouslyCachedPhoto?.image
+    }
+
+    private var displayedPhoto: PlacePhoto? {
+        if preparedImageKey == photoResolutionKey {
+            return photo ?? synchronouslyCachedPhoto?.photo
+        }
+        return synchronouslyCachedPhoto?.photo
     }
 
 }
@@ -1185,7 +1239,9 @@ private struct PlaceProfileFullView: View {
         }
         .fullScreenCover(item: $viewerRoute) { route in
             PlacePhotoGalleryViewer(
+                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                 placeName: place.name,
+                photoRequest: place.photoRequest,
                 photos: galleryItems,
                 initialPhotoID: route.photoID,
                 currentUserID: currentUserID,
@@ -1314,7 +1370,9 @@ private struct PlaceProfileFullView: View {
 
     private func resolvedProviderPhoto() async -> PlacePhoto? {
         do {
-            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.profile)
+            )
             try Task.checkCancellation()
             if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
@@ -2174,7 +2232,9 @@ private struct PlacePhotoGalleryViewer: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
 
+    let canonicalPlaceKey: String
     let placeName: String
+    let photoRequest: PlacePhotoRequest
     let photos: [PlacePhotoGalleryItem]
     let currentUserID: String
     let onNearEnd: (String) -> Void
@@ -2186,7 +2246,9 @@ private struct PlacePhotoGalleryViewer: View {
     @State private var reportSubject: CommunityReportSubject?
 
     init(
+        canonicalPlaceKey: String,
         placeName: String,
+        photoRequest: PlacePhotoRequest,
         photos: [PlacePhotoGalleryItem],
         initialPhotoID: String,
         currentUserID: String,
@@ -2194,7 +2256,9 @@ private struct PlacePhotoGalleryViewer: View {
         onRefresh: @escaping @MainActor () async -> Void,
         onPhotoLoadFailure: @escaping (PlacePhoto) -> Void
     ) {
+        self.canonicalPlaceKey = canonicalPlaceKey
         self.placeName = placeName
+        self.photoRequest = photoRequest
         self.photos = photos
         self.currentUserID = currentUserID
         self.onNearEnd = onNearEnd
@@ -2297,7 +2361,10 @@ private struct PlacePhotoGalleryViewer: View {
                         ZoomablePhoto {
                             PlaceProfilePhotoImage(
                                 photo: item.photo,
+                                canonicalPlaceKey: canonicalPlaceKey,
                                 placeName: placeName,
+                                photoRequest: photoRequest,
+                                variant: .fullscreen,
                                 contentMode: .fit,
                                 onLoadFailure: onPhotoLoadFailure
                             )
@@ -2620,7 +2687,10 @@ private struct PlaceProfileMapHeader: View {
                         } label: {
                             PlaceProfilePhotoImage(
                                 photo: item.photo,
+                                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                                 placeName: place.name,
+                                photoRequest: place.photoRequest,
+                                variant: .profile,
                                 onLoadFailure: onPhotoLoadFailure
                             )
                             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2716,24 +2786,34 @@ private struct PlaceProfileMapHeader: View {
 
 struct PlaceProfilePhotoImage: View {
     let photo: PlacePhoto
+    let canonicalPlaceKey: String
     let placeName: String
+    var photoRequest: PlacePhotoRequest? = nil
+    var variant: PlacePhotoRenderVariant = .profile
     var contentMode: ContentMode = .fill
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.displayScale) private var displayScale
-    @State private var image: Image?
+    @State private var loadedImage: PlaceProfileLoadedImage?
 
     var body: some View {
         GeometryReader { proxy in
             let targetPixelSize = max(
-                1,
+                variant.minimumDecodePixelDimension ?? 1,
                 Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
             )
+            let currentRenderKey = renderKey(targetPixelSize: targetPixelSize)
+            let stateImage = loadedImage?.key == currentRenderKey ? loadedImage?.image : nil
+            let displayedImage = stateImage ?? PlacePhotoImagePipeline.shared.cachedImage(
+                canonicalPlaceKey: canonicalPlaceKey,
+                photoKey: photo.cacheKey,
+                targetPixelSize: targetPixelSize
+            )?.image
             ZStack {
                 Color.clear
 
-                if let image {
-                    image
+                if let displayedImage {
+                    Image(uiImage: displayedImage)
                         .resizable()
                         .aspectRatio(contentMode: contentMode)
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2742,29 +2822,55 @@ struct PlaceProfilePhotoImage: View {
                         .accessibilityLabel("Photo of \(placeName)")
                     }
             }
-            .task(id: "\(photo.cacheKey)|target-px:\(targetPixelSize)") {
-                await loadImage(targetPixelSize: targetPixelSize)
+            .task(id: currentRenderKey) {
+                await loadImage(
+                    targetPixelSize: targetPixelSize,
+                    renderKey: currentRenderKey
+                )
             }
         }
         .clipped()
     }
 
-    private func loadImage(targetPixelSize: Int) async {
-        image = nil
+    private func loadImage(targetPixelSize: Int, renderKey: String) async {
+        if let cachedImage = PlacePhotoImagePipeline.shared.cachedImage(
+            canonicalPlaceKey: canonicalPlaceKey,
+            photoKey: photo.cacheKey,
+            targetPixelSize: targetPixelSize
+        ) {
+            loadedImage = PlaceProfileLoadedImage(key: renderKey, image: cachedImage.image)
+            return
+        }
+
+        loadedImage = nil
+        let deliveryPhoto: PlacePhoto
+        if photo.isGooglePlacesPhoto, let photoRequest {
+            deliveryPhoto = (try? await backend.placePhoto(
+                for: photoRequest.rendering(variant)
+            )) ?? photo
+        } else {
+            deliveryPhoto = photo
+        }
+
         let data: Data?
-        if let localAssetRef = photo.localAssetRef,
+        if let localAssetRef = deliveryPhoto.localAssetRef,
            let localData = await Task.detached(priority: .utility, operation: {
                VisitPhotoLocalFileStore.data(from: localAssetRef)
            }).value {
             data = localData
         } else {
-            data = try? await backend.placePhotoImageData(for: photo)
+            data = try? await backend.placePhotoImageData(
+                for: deliveryPhoto,
+                canonicalPlaceKey: canonicalPlaceKey,
+                variant: variant
+            )
         }
 
         guard !Task.isCancelled,
               let data,
               let decodedImage = await PlacePhotoImagePipeline.shared.image(
                   from: data,
+                  canonicalPlaceKey: canonicalPlaceKey,
                   photoKey: photo.cacheKey,
                   targetPixelSize: targetPixelSize
               ),
@@ -2777,9 +2883,19 @@ struct PlaceProfilePhotoImage: View {
         }
 
         withAnimation(.easeOut(duration: 0.10)) {
-            image = Image(uiImage: decodedImage.image)
+            loadedImage = PlaceProfileLoadedImage(key: renderKey, image: decodedImage.image)
         }
     }
+
+    private func renderKey(targetPixelSize: Int) -> String {
+        "\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)|target-px:\(targetPixelSize)"
+    }
+
+}
+
+private struct PlaceProfileLoadedImage {
+    let key: String
+    let image: UIImage
 }
 
 private struct PlaceProfilePhotoThumb: View {
@@ -2794,7 +2910,10 @@ private struct PlaceProfilePhotoThumb: View {
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
+                    canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.name,
+                    photoRequest: place.photoRequest,
+                    variant: .listThumbnail,
                     onLoadFailure: onLoadFailure
                 )
                     .frame(width: size, height: size)

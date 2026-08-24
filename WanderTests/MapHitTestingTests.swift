@@ -881,7 +881,11 @@ final class MapSelectionMotionTests: XCTestCase {
         )
 
         XCTAssertTrue(repository.contains("private let photoSession: URLSession"))
-        XCTAssertTrue(repository.contains("photoSession: URLSession = .shared"))
+        XCTAssertTrue(
+            repository.contains(
+                "photoSession: URLSession = PlacePhotoNetworkSession.shared"
+            )
+        )
         XCTAssertTrue(repository.contains("request.cachePolicy = .useProtocolCachePolicy"))
         XCTAssertTrue(repository.contains("photoSession.data(for: request)"))
         XCTAssertFalse(repository.contains("request.setValue(\"no-store\""))

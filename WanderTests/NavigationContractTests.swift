@@ -1171,7 +1171,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(previewCard.contains("YOUR WANNA"))
         XCTAssertFalse(previewCard.contains(".checkInTicketSurface("))
         XCTAssertFalse(previewCard.contains("PlaceProfilePhotoImage("))
-        XCTAssertTrue(previewCard.contains("Image(uiImage: preparedImage)"))
+        XCTAssertTrue(previewCard.contains("Image(uiImage: displayedImage)"))
         XCTAssertFalse(previewCard.contains("image.byPreparingForDisplay()"))
         XCTAssertTrue(previewCard.contains("PlacePhotoImagePipeline.shared.image("))
         XCTAssertTrue(previewCard.contains("onReady()"))
@@ -1179,7 +1179,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(previewCard.contains("WanderTypography.editorialTitle"))
         XCTAssertTrue(previewCard.contains("cornerRadius: 30"))
         XCTAssertTrue(previewCard.contains("PlaceCardRatingDistanceRow("))
-        XCTAssertTrue(previewCard.contains("providerName: photo?.provider"))
+        XCTAssertTrue(previewCard.contains("providerName: displayedPhoto?.provider"))
         XCTAssertTrue(previewCard.contains("PlaceCardHoursBadge("))
         XCTAssertTrue(previewCard.contains("private var cardPressGesture: some Gesture"))
         XCTAssertTrue(previewCard.contains("pressDuration < 0.45"))
@@ -3780,6 +3780,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(fullView.contains("Strong fit based on your check-ins"))
         XCTAssertTrue(fullView.contains("bestForSection"))
         XCTAssertTrue(fullView.contains("PlaceActivitySection"))
+    }
+
+    func testPhotoSurfacesRequestTheirCrispDeliveryTiers() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Map/PlaceProfileMapSurface.swift"
+            )
+        )
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Lists/ListPlacePhotoResolver.swift"
+            )
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Feed/FeedScreen.swift"
+            )
+        )
+        let imports = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileImportViews.swift"
+            )
+        )
+
+        XCTAssertTrue(placeProfile.contains("place.photoRequest.rendering(.card)"))
+        XCTAssertTrue(placeProfile.contains("variant: .card"))
+        XCTAssertTrue(placeProfile.contains("place.photoRequest.rendering(.profile)"))
+        XCTAssertTrue(placeProfile.contains("variant: .profile"))
+        XCTAssertTrue(placeProfile.contains("variant: .fullscreen"))
+        XCTAssertTrue(lists.contains("request.rendering(.listThumbnail)"))
+        XCTAssertTrue(lists.contains("variant: .listThumbnail"))
+        XCTAssertTrue(feed.contains("sheetPlace.photoRequest.rendering(.feed)"))
+        XCTAssertTrue(feed.contains("variant: .feed"))
+        XCTAssertTrue(imports.contains("request.rendering(.listThumbnail)"))
+        XCTAssertTrue(imports.contains("variant: .listThumbnail"))
     }
 
     func testPlaceProfileActionsKeepTheStandardRailAndExposeEveryWalkthroughAction() throws {

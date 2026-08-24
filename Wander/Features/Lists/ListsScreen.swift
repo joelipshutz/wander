@@ -3733,6 +3733,17 @@ private struct ListPlacePhotoMedia: View {
                 Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
             )
             let resolutionKey = photoResolutionKey
+            let cachedPhoto = ListPlacePhotoResolver.cachedResolvedPhoto(
+                request: place.canonicalProfilePlace.photoRequest,
+                preferredUserPhoto: place.preferredUserPhoto,
+                eligibleUserIDs: eligibleUserIDs,
+                authorizationScopeKey: photoAuthorizationScopeKey,
+                targetPixelSize: targetPixelSize,
+                backend: backend
+            )
+            let displayedPhoto = resolvedPhotoKey == resolutionKey
+                ? (resolvedPhoto ?? cachedPhoto)
+                : cachedPhoto
 
             ZStack {
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -3740,8 +3751,8 @@ private struct ListPlacePhotoMedia: View {
 
                 WanderCategoryEmoji(emoji: place.emoji, size: fallbackEmojiSize)
 
-                if resolvedPhotoKey == resolutionKey, let resolvedPhoto {
-                    Image(uiImage: resolvedPhoto.image)
+                if let displayedPhoto {
+                    Image(uiImage: displayedPhoto.image)
                         .resizable()
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -3752,8 +3763,7 @@ private struct ListPlacePhotoMedia: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .overlay(alignment: .bottom) {
-                if resolvedPhotoKey == resolutionKey,
-                   resolvedPhoto?.photo.isGooglePlacesPhoto == true {
+                if displayedPhoto?.photo.isGooglePlacesPhoto == true {
                     Text("Google Maps")
                         .font(.system(size: googleAttributionFontSize, weight: .semibold))
                         .foregroundStyle(Color.white)
@@ -3766,6 +3776,11 @@ private struct ListPlacePhotoMedia: View {
                 }
             }
             .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+                if let cachedPhoto {
+                    resolvedPhoto = cachedPhoto
+                    resolvedPhotoKey = resolutionKey
+                    return
+                }
                 resolvedPhoto = nil
                 resolvedPhotoKey = resolutionKey
                 let resolved = await ListPlacePhotoResolver.resolve(
