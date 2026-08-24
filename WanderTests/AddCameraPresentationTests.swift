@@ -2,6 +2,34 @@ import XCTest
 @testable import Wander
 
 final class AddCameraPresentationTests: XCTestCase {
+    func testCameraPreviewAspectFillScaleCoversTallPhone() {
+        let scale = AddCameraPreviewLayout.aspectFillScale(
+            for: CGSize(width: 393, height: 852)
+        )
+
+        let scaledPreviewHeight = 393
+            * AddCameraPreviewLayout.portraitCaptureHeightToWidthRatio
+            * scale
+        XCTAssertEqual(scaledPreviewHeight, 852, accuracy: 0.001)
+        XCTAssertGreaterThan(scale, 1)
+    }
+
+    func testCameraPreviewAspectFillScaleIsStableAcrossRepeatedPresentation() {
+        let previewSize = CGSize(width: 393, height: 852)
+
+        let firstPresentation = AddCameraPreviewLayout.aspectFillScale(for: previewSize)
+        let reopenedPresentation = AddCameraPreviewLayout.aspectFillScale(for: previewSize)
+
+        XCTAssertEqual(firstPresentation, reopenedPresentation)
+    }
+
+    func testCameraPreviewAspectFillScaleHandlesUnresolvedLayout() {
+        XCTAssertEqual(
+            AddCameraPreviewLayout.aspectFillScale(for: .zero),
+            1
+        )
+    }
+
     func testAuthorizedAvailableCameraPresentsFullScreenCaptureRoute() {
         var presentation = AddCameraPresentationState()
 

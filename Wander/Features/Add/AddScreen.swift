@@ -76,6 +76,17 @@ struct AddCameraPresentationState: Equatable {
     }
 }
 
+enum AddCameraPreviewLayout {
+    static let portraitCaptureHeightToWidthRatio: CGFloat = 4.0 / 3.0
+
+    static func aspectFillScale(for containerSize: CGSize) -> CGFloat {
+        guard containerSize.width > 0, containerSize.height > 0 else { return 1 }
+
+        let unscaledPreviewHeight = containerSize.width * portraitCaptureHeightToWidthRatio
+        return max(1, containerSize.height / unscaledPreviewHeight)
+    }
+}
+
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
     static let pendingReviewRestingHeight: CGFloat = 570
@@ -1897,13 +1908,16 @@ private struct AddCameraCaptureScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            AddCameraPicker(
-                captureRequest: captureRequest,
-                requestedCameraDevice: requestedCameraDevice,
-                onImage: onImage,
-                onCancel: onCancel
-            )
-                .ignoresSafeArea()
+            GeometryReader { geometry in
+                AddCameraPicker(
+                    previewSize: geometry.size,
+                    captureRequest: captureRequest,
+                    requestedCameraDevice: requestedCameraDevice,
+                    onImage: onImage,
+                    onCancel: onCancel
+                )
+            }
+            .ignoresSafeArea()
 
             VStack {
                 HStack {
@@ -2080,6 +2094,7 @@ private struct AddCameraRecoveryScreen: View {
 }
 
 private struct AddCameraPicker: UIViewControllerRepresentable {
+    let previewSize: CGSize
     let captureRequest: Int
     let requestedCameraDevice: UIImagePickerController.CameraDevice
     let onImage: @MainActor (UIImage) -> Void
@@ -2093,10 +2108,13 @@ private struct AddCameraPicker: UIViewControllerRepresentable {
         picker.delegate = context.coordinator
         picker.modalPresentationStyle = .fullScreen
         picker.view.backgroundColor = .black
+        updatePreviewTransform(on: picker)
         return picker
     }
 
     func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        updatePreviewTransform(on: uiViewController)
+
         if UIImagePickerController.isCameraDeviceAvailable(requestedCameraDevice),
            uiViewController.cameraDevice != requestedCameraDevice {
             uiViewController.cameraDevice = requestedCameraDevice
@@ -2105,6 +2123,11 @@ private struct AddCameraPicker: UIViewControllerRepresentable {
         guard context.coordinator.lastHandledCaptureRequest != captureRequest else { return }
         context.coordinator.lastHandledCaptureRequest = captureRequest
         uiViewController.takePicture()
+    }
+
+    private func updatePreviewTransform(on picker: UIImagePickerController) {
+        let scale = AddCameraPreviewLayout.aspectFillScale(for: previewSize)
+        picker.cameraViewTransform = CGAffineTransform(scaleX: scale, y: scale)
     }
 
     func makeCoordinator() -> Coordinator {
