@@ -4939,10 +4939,8 @@ private func savedPlaceOutlines(
 ) -> [MapPinOutline] {
     let lookupKeys = [
         visiblePlace.id,
-        visiblePlace.userPlace.id,
         visiblePlace.userPlace.localID,
         visiblePlace.userPlace.serverID,
-        visiblePlace.place.id,
         visiblePlace.place.localID,
         visiblePlace.place.serverID,
         VisiblePlaceGrouping.key(for: visiblePlace)
@@ -4994,10 +4992,8 @@ private func listSavedPlaceOutlineCatalog(
             group.places.flatMap { visiblePlace in
                 [
                     visiblePlace.id,
-                    visiblePlace.userPlace.id,
                     visiblePlace.userPlace.localID,
                     visiblePlace.userPlace.serverID,
-                    visiblePlace.place.id,
                     visiblePlace.place.localID,
                     visiblePlace.place.serverID
                 ].compactMap { $0 }

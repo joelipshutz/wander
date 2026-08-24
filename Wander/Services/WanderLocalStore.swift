@@ -2198,9 +2198,13 @@ final class WanderStore: ObservableObject {
         let existingCategories = Set(existingPlaces.map(\.effectiveCategory))
         let existingLocalities = Set(existingPlaces.compactMap { $0.place.locality?.lowercased() })
         let existingTags = Set(existingPlaces.flatMap { tagTokens(for: $0) })
-        let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
+        let candidates = listSuggestionCandidates(for: list)
+        let focusedCategory = focusedListSuggestionCategory(
+            in: existingPlaces,
+            whenAvailableAmong: candidates
+        )
 
-        let suggestions = listSuggestionCandidates(for: list)
+        let suggestions = candidates
             .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
             .map { visiblePlace in
                 var score = 0.0
@@ -2251,8 +2255,11 @@ final class WanderStore: ObservableObject {
         do {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
             let existingPlaces = visiblePlaces(in: list)
-            let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
             let candidates = listSuggestionCandidates(for: list)
+            let focusedCategory = focusedListSuggestionCategory(
+                in: existingPlaces,
+                whenAvailableAmong: candidates
+            )
             let candidatesByID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
@@ -3347,8 +3354,12 @@ final class WanderStore: ObservableObject {
 
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
-        let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
         let candidates = listSuggestionCandidates(for: list)
+        let focusedCategory = focusedListSuggestionCategory(
+            in: existingPlaces,
+            whenAvailableAmong: candidates
+        )
+        let focusedCandidates = candidates
             .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
             .sorted { lhs, rhs in
                 if lhs.owner.id == currentUser.id && rhs.owner.id != currentUser.id { return true }
@@ -3361,7 +3372,7 @@ final class WanderStore: ObservableObject {
             title: list.name,
             description: list.description,
             existingPlaces: existingPlaces.map(listSuggestionPlacePayload),
-            candidatePlaces: candidates.map(listSuggestionPlacePayload),
+            candidatePlaces: focusedCandidates.map(listSuggestionPlacePayload),
             limit: limit
         )
     }
@@ -3379,14 +3390,18 @@ final class WanderStore: ObservableObject {
 
     /// A list with a clear category family should not drift because one
     /// outlier happens to share a city or a generic note token.
-    private func focusedListSuggestionCategory(in places: [VisiblePlace]) -> String? {
+    private func focusedListSuggestionCategory(
+        in places: [VisiblePlace],
+        whenAvailableAmong candidates: [VisiblePlace]
+    ) -> String? {
         guard places.count >= 3 else { return nil }
         let counts = places.reduce(into: [String: Int]()) { result, place in
             result[place.effectiveCategory, default: 0] += 1
         }
         guard let leading = counts.max(by: { $0.value < $1.value }),
               leading.value >= 2,
-              Double(leading.value) / Double(places.count) >= 0.6
+              Double(leading.value) / Double(places.count) >= 0.6,
+              candidates.contains(where: { $0.effectiveCategory == leading.key })
         else { return nil }
         return leading.key
     }
@@ -3437,10 +3452,14 @@ final class WanderStore: ObservableObject {
                 ?? place.locality
                 ?? place.region
             guard let location, !location.isEmpty else { return suggestion }
+            let reasonBody = suggestion.reason.split(separator: ":", maxSplits: 1)
+                .last
+                .map(String.init)
+                ?? suggestion.reason
             return ListPlaceSuggestion(
                 visiblePlace: suggestion.visiblePlace,
                 reason: ListSuggestionReasonFormatter.displayText(
-                    "\(suggestion.reason) + \(location)",
+                    "Fits: \(location) + \(reasonBody)",
                     for: suggestion.visiblePlace
                 ),
                 score: suggestion.score
