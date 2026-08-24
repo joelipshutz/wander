@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(11);
+select plan(13);
 
 select ok(
   (
@@ -106,6 +106,16 @@ values
     'mapkit',
     'social-save-guard',
     1
+  ),
+  (
+    '66666666-6666-4666-8666-666666666690',
+    'Social Note Isolation Guard',
+    'coffee',
+    34.0503,
+    -118.2503,
+    'mapkit',
+    'social-note-isolation-guard',
+    1
   );
 
 insert into public.user_places (
@@ -145,6 +155,16 @@ values
     '22222222-2222-4222-8222-222222222290',
     'been',
     'source note',
+    5,
+    'followers',
+    'manual'
+  ),
+  (
+    '77777777-7777-4777-8777-777777777790',
+    'user_wanna_guard_source',
+    '66666666-6666-4666-8666-666666666690',
+    'been',
+    'source private note',
     5,
     'followers',
     'manual'
@@ -258,6 +278,45 @@ select is(
     "attribute": ["owner value"]
   }'::jsonb,
   'stale social Wanna Go save leaves the complete check-in unchanged'
+);
+
+select public.save_visible_place(
+  '66666666-6666-4666-8666-666666666690',
+  '77777777-7777-4777-8777-777777777790'
+);
+
+select is(
+  (
+    select up.note
+    from public.user_places up
+    where up.user_id = 'user_wanna_guard_owner'
+      and up.place_id = '66666666-6666-4666-8666-666666666690'
+      and up.deleted_at is null
+  ),
+  null::text,
+  'a new social save does not copy the source account note'
+);
+
+update public.user_places
+set note = 'owner private note'
+where user_id = 'user_wanna_guard_owner'
+  and place_id = '66666666-6666-4666-8666-666666666690';
+
+select public.save_visible_place(
+  '66666666-6666-4666-8666-666666666690',
+  '77777777-7777-4777-8777-777777777790'
+);
+
+select is(
+  (
+    select up.note
+    from public.user_places up
+    where up.user_id = 'user_wanna_guard_owner'
+      and up.place_id = '66666666-6666-4666-8666-666666666690'
+      and up.deleted_at is null
+  ),
+  'owner private note',
+  'a repeated social save preserves the viewer account note'
 );
 
 select * from finish();

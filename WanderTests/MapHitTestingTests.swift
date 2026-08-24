@@ -265,6 +265,179 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.45, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusTransitionPolicy.maximumStagger, 0.12, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusPolicy.minimumOpacity, 0.26, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusUsesTenPointGradientStops() {
+        let firstStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let secondStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+                + MapPinFocusPolicy.distanceStep
+        )
+        let thirdStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+                + (2 * MapPinFocusPolicy.distanceStep)
+        )
+
+        XCTAssertEqual(firstStop, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertEqual(secondStop - firstStop, MapPinFocusPolicy.opacityStep, accuracy: 0.001)
+        XCTAssertEqual(thirdStop - secondStop, MapPinFocusPolicy.opacityStep, accuracy: 0.001)
+        XCTAssertEqual(
+            MapPinFocusPolicy.opacity(forNormalizedDistance: MapPinFocusPolicy.outerRadius),
+            1,
+            accuracy: 0.001
+        )
+    }
+
+    func testSelectedPinFocusInterpolatesSmoothlyBetweenGradientStops() {
+        let selected = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+
+        let collidingPinOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.999),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let midFalloffOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.98),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let distantPinOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.95),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+
+        XCTAssertEqual(collidingPinOpacity, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertGreaterThan(midFalloffOpacity, MapPinFocusPolicy.minimumOpacity)
+        XCTAssertLessThan(midFalloffOpacity, 1)
+        XCTAssertEqual(distantPinOpacity, 1, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusFadesNearToFarAndRestoresFarToNear() {
+        let nearFade = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: MapPinFocusPolicy.minimumOpacity,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let farFade = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 0.92,
+            normalizedDistance: MapPinFocusPolicy.outerRadius - 0.01
+        )
+
+        XCTAssertLessThan(
+            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: nearFade),
+            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: farFade)
+        )
+        XCTAssertGreaterThan(
+            MapPinFocusTransitionPolicy.delay(from: nearFade, to: .unfocused),
+            MapPinFocusTransitionPolicy.delay(from: farFade, to: .unfocused)
+        )
+    }
+
+    func testSelectionReplacementFadesNewClusterWhileRestoringOldCluster() {
+        let nearOldCluster = MapPinFocusConfiguration(
+            selectionID: "old",
+            opacity: MapPinFocusPolicy.minimumOpacity,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let oldClusterAfterReplacement = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 1,
+            normalizedDistance: MapPinFocusPolicy.outerRadius
+        )
+        let newClusterBeforeReplacement = MapPinFocusConfiguration(
+            selectionID: "old",
+            opacity: 1,
+            normalizedDistance: MapPinFocusPolicy.outerRadius
+        )
+        let nearNewCluster = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: MapPinFocusPolicy.minimumOpacity,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+
+        XCTAssertEqual(
+            MapPinFocusTransitionPolicy.direction(
+                from: nearOldCluster,
+                to: oldClusterAfterReplacement
+            ),
+            .restore
+        )
+        XCTAssertEqual(
+            MapPinFocusTransitionPolicy.direction(
+                from: newClusterBeforeReplacement,
+                to: nearNewCluster
+            ),
+            .fade
+        )
+    }
+
+    func testSelectedPinFocusClearsWithoutASelection() {
+        let opacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            selectedCoordinate: nil,
+            regionSpan: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+        )
+
+        XCTAssertEqual(opacity, 1, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusMovesToTheReplacementSelection() {
+        let firstSelection = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let replacementSelection = CLLocationCoordinate2D(latitude: 34, longitude: -117.95)
+        let nearbyFirstPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.999)
+        let nearbyReplacementPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.951)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+
+        let firstPinBeforeReplacement = MapPinFocusPolicy.opacity(
+            for: nearbyFirstPin,
+            selectedCoordinate: firstSelection,
+            regionSpan: span
+        )
+        let firstPinAfterReplacement = MapPinFocusPolicy.opacity(
+            for: nearbyFirstPin,
+            selectedCoordinate: replacementSelection,
+            regionSpan: span
+        )
+        let replacementPinBeforeSelection = MapPinFocusPolicy.opacity(
+            for: nearbyReplacementPin,
+            selectedCoordinate: firstSelection,
+            regionSpan: span
+        )
+        let replacementPinAfterSelection = MapPinFocusPolicy.opacity(
+            for: nearbyReplacementPin,
+            selectedCoordinate: replacementSelection,
+            regionSpan: span
+        )
+
+        XCTAssertEqual(firstPinBeforeReplacement, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertEqual(firstPinAfterReplacement, 1, accuracy: 0.001)
+        XCTAssertEqual(replacementPinBeforeSelection, 1, accuracy: 0.001)
+        XCTAssertEqual(replacementPinAfterSelection, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusUsesAnEllipticalVerticalFalloff() {
+        let selected = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+        let horizontalOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.98),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let verticalOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34.02, longitude: -118),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+
+        XCTAssertGreaterThan(verticalOpacity, horizontalOpacity)
     }
 
     @MainActor
@@ -521,13 +694,9 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let inactiveAnnotations = try XCTUnwrap(map.range(of: "ForEach(inactiveAnnotationGroups"))
-        let activeAnnotation = try XCTUnwrap(
-            map.range(of: "if highlightsCompactSelection, let group = activeAnnotationGroup")
-        )
-
-        XCTAssertLessThan(inactiveAnnotations.lowerBound, activeAnnotation.lowerBound)
-        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
         XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
     }
 
@@ -570,11 +739,23 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains("MagnifyGesture(minimumScaleDelta:"))
         XCTAssertTrue(map.contains("MapGestureObserver("))
         XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
+        XCTAssertTrue(map.contains("PassiveMapTapGestureRecognizer"))
+        XCTAssertTrue(map.contains("recognizer.onCompletedTap = { [weak self] point in"))
+        XCTAssertTrue(
+            map.contains(
+                "recognizer.maximumMovement = MapHitTesting.passiveTapAllowableMovement"
+            )
+        )
+        XCTAssertTrue(map.contains("state = .failed"))
+        XCTAssertTrue(map.contains("callback?(completedLocation)"))
         XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
         XCTAssertTrue(map.contains("recognizer.numberOfTouchesRequired = 1"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
         XCTAssertTrue(map.contains("recognizer.delaysTouchesBegan = false"))
         XCTAssertTrue(map.contains("shouldRecognizeSimultaneouslyWith otherGestureRecognizer"))
+        XCTAssertTrue(map.contains("observer.onTap(point)"))
+        XCTAssertTrue(map.contains("observer.onLongPress(recognizer.location(in: mapView))"))
+        XCTAssertFalse(map.contains("observer.onTap(recognizer.location(in: anchorView))"))
         XCTAssertTrue(map.contains("registerMapZoom()"))
         XCTAssertTrue(map.contains("tapDate.timeIntervalSince(previousMapTapDate)"))
         XCTAssertTrue(map.contains("let tapRegion = currentSearchRegion"))
@@ -595,9 +776,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains("if highlightsCompactSelection, let group = activeAnnotationGroup"))
-        XCTAssertTrue(map.contains("if highlightsCompactSelection, let candidate = activeSearchCandidate"))
-        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
+        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(
+            map.contains(
+                "pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll"
+            )
+        )
+        XCTAssertGreaterThanOrEqual(
+            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
+            2
+        )
         XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertFalse(map.contains("replacementFadeOutDuration"))
@@ -614,6 +804,10 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
     }
 
+    func testPassiveSingleTapObserverRecognizesImmediatelyWithoutBlockingMapMovement() {
+        XCTAssertEqual(MapHitTesting.passiveTapAllowableMovement, 10)
+    }
+
     func testWalkthroughUsesTheCanonicalHotchkissFallback() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -628,18 +822,52 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
     }
 
-    func testActiveMapAnnotationsDoNotRenderDuplicateNativeTitles() throws {
+    func testInactiveMapAnnotationsHideCompetingTitlesAndActiveSelectionUsesOverlay() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let emptyTitleAnnotations = map.components(
-            separatedBy: "Annotation(\n                                \"\","
-        ).count - 1
 
-        XCTAssertEqual(emptyTitleAnnotations, 2)
+        XCTAssertGreaterThanOrEqual(
+            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
+            2
+        )
+        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay("))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+    }
+
+    func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: root.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-360-active-pin-layering-and-tap-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let expected = try XCTUnwrap(fixture["expected_results"] as? [String: Any])
+        let verified = try XCTUnwrap(fixture["post_fix_verification"] as? [String: Any])
+
+        XCTAssertEqual(
+            expected["selected_pin_and_title_render_above_every_other_map_annotation"] as? Bool,
+            true
+        )
+        XCTAssertEqual(
+            expected["competing_place_names_hidden_while_custom_map_content_is_shown"] as? Bool,
+            true
+        )
+        XCTAssertEqual(expected["custom_pin_selects_on_first_completed_tap"] as? Bool, true)
+        XCTAssertEqual(expected["inactive_pin_opacity_floor"] as? Double, 0.26)
+        XCTAssertEqual(verified["physical_screen_coordinate_tap_selected_place"] as? String, "Canyon Lookout Trail")
+        XCTAssertEqual(verified["selected_pin_and_title_visually_frontmost"] as? Bool, true)
+        XCTAssertEqual(verified["competing_custom_place_names_visible"] as? Bool, false)
     }
 
     func testProviderPhotoTransportReusesSessionAndProtocolCaching() throws {
@@ -1689,11 +1917,26 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(MapPinVisualMetrics.activeTitleClearance, 2)
         XCTAssertGreaterThanOrEqual(
             MapPinVisualMetrics.activeTitleVerticalOffset(
-                selectedScale: MapPinSelectionMotionStyle.selectedScale
+                selectedScale: MapPinSelectionMotionStyle.selectedScale,
+                outlineCount: 0
             ),
             (MapPinVisualMetrics.discDiameter * MapPinSelectionMotionStyle.selectedScale / 2)
                 + MapPinVisualMetrics.activeTitleClearance
         )
+        let noOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 0
+        )
+        let singleOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 1
+        )
+        let doubleOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 2
+        )
+        XCTAssertLessThan(noOutlineOffset, singleOutlineOffset)
+        XCTAssertLessThan(singleOutlineOffset, doubleOutlineOffset)
 
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

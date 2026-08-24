@@ -234,6 +234,9 @@ private struct VisiblePlaceCategoryPresentationKey: Hashable {
     let userSubcategoryOverride: String?
     let userCategoryOverrideSource: String?
     let userCategoryOverrideConfidence: Double?
+    let viewerPrimaryCategory: String?
+    let viewerSubcategory: String?
+    let viewerFoodType: String?
     let cuisineValueJSON: String?
 }
 
@@ -349,6 +352,9 @@ private enum VisiblePlaceCategoryPresentationResolver {
             userSubcategoryOverride: userPlace.subcategoryOverride,
             userCategoryOverrideSource: userPlace.categoryOverrideSource,
             userCategoryOverrideConfidence: userPlace.categoryOverrideConfidence,
+            viewerPrimaryCategory: userPlace.viewerPrimaryCategory,
+            viewerSubcategory: userPlace.viewerSubcategory,
+            viewerFoodType: userPlace.viewerFoodType,
             cuisineValueJSON: cuisineValueJSON
         )
 
@@ -362,6 +368,14 @@ private enum VisiblePlaceCategoryPresentationResolver {
                     confidence: userPlace.categoryOverrideConfidence,
                     rawProviderType: place.rawProviderType
                 )
+            } else if let viewerPrimaryCategory = userPlace.viewerPrimaryCategory {
+                assignment = LocalPlaceCategoryAssignmentResolver.assignment(
+                    primaryCategory: viewerPrimaryCategory,
+                    subcategory: userPlace.viewerSubcategory,
+                    source: PlaceCategorySource.snapshot.rawValue,
+                    confidence: 1,
+                    rawProviderType: nil
+                )
             } else {
                 assignment = LocalPlaceCategoryAssignmentResolver.assignment(
                     primaryCategory: key.placePrimaryCategory,
@@ -373,7 +387,10 @@ private enum VisiblePlaceCategoryPresentationResolver {
             }
 
             let restaurantCuisine = decodedRestaurantCuisine(from: cuisineValueJSON)
-                ?? inferredRestaurantCuisine(for: assignment, place: place)
+                ?? userPlace.viewerFoodType
+                ?? (userPlace.viewerPrimaryCategory == nil
+                    ? inferredRestaurantCuisine(for: assignment, place: place)
+                    : nil)
             return VisiblePlaceCategoryPresentation(
                 assignment: assignment,
                 display: WanderPlaceCategory.display(for: assignment),

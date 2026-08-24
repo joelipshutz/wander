@@ -216,7 +216,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
         XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
         XCTAssertEqual(conversion.initialStatus, .been)
-        XCTAssertEqual(conversion.initialNote, "Bring a picnic blanket.")
+        XCTAssertEqual(conversion.initialNote, "")
         XCTAssertTrue(conversion.startsOnDetails)
         XCTAssertFalse(conversion.showsRemoveControl)
         XCTAssertTrue(conversion.allowsPhotoAttachments)
@@ -228,7 +228,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             )
         )
         XCTAssertEqual(conversionDraft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
-        XCTAssertEqual(conversionDraft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(conversionDraft.form.note, "")
         XCTAssertEqual(conversionDraft.form.selectedStatus, .been)
         XCTAssertEqual(conversionDraft.form.step, .details)
 

@@ -3,6 +3,84 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testVisiblePlaceDecodesPrivateViewerTaxonomyEnvelopeWithoutPersistingItAsSaveContent() throws {
+        let data = """
+        {
+          "user_place_id": "up_owner_noun",
+          "place_id": "place_noun",
+          "owner_user_id": "user_owner",
+          "owner_handle": "owner",
+          "owner_display_name": "Owner",
+          "owner_avatar_url": null,
+          "canonical_name": "Noun",
+          "category": "bars_nightlife",
+          "primary_category": "bars_nightlife",
+          "subcategory": "Wine Bar",
+          "category_source": "provider",
+          "category_confidence": 0.98,
+          "raw_provider_type": "wine_bar",
+          "latitude": 33.99034,
+          "longitude": -118.44389,
+          "status": "been",
+          "visibility": "followers",
+          "note": null,
+          "visited_at": "2026-07-01T12:00:00Z",
+          "saved_at": "2026-07-01T12:00:00Z",
+          "created_at": "2026-07-01T12:00:00Z",
+          "updated_at": "2026-08-24T06:57:27Z",
+          "rating_signal": null,
+          "rating_score": 4,
+          "recommended_score": 4,
+          "recommended_count": 1,
+          "category_override": null,
+          "subcategory_override": null,
+          "category_override_source": null,
+          "category_override_confidence": null,
+          "source_type": "manual",
+          "attributes": [
+            {
+              "question_definition_id": null,
+              "question_key": "__viewer_taxonomy_primary_category",
+              "value_type": "text",
+              "value": "coffee_tea_sweets",
+              "prompt": null,
+              "options": [],
+              "is_system": true
+            },
+            {
+              "question_definition_id": null,
+              "question_key": "__viewer_taxonomy_subcategory",
+              "value_type": "text",
+              "value": "Coffee shop",
+              "prompt": null,
+              "options": [],
+              "is_system": true
+            },
+            {
+              "question_definition_id": null,
+              "question_key": "coffee_tags",
+              "value_type": "multi_tag",
+              "value": ["quiet"],
+              "prompt": "Good for",
+              "options": [],
+              "is_system": true
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let dto = try RemoteDecoding.decoder.decode(RemoteVisiblePlaceDTO.self, from: data)
+        let visiblePlace = try dto.visiblePlace()
+
+        XCTAssertEqual(visiblePlace.place.primaryCategory, WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(visiblePlace.place.subcategory, "Wine bar")
+        XCTAssertEqual(visiblePlace.userPlace.viewerPrimaryCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(visiblePlace.userPlace.viewerSubcategory, "Coffee shop")
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(visiblePlace.effectiveSubcategory, "Coffee shop")
+        XCTAssertEqual(visiblePlace.attributes.map(\.questionKey), ["coffee_tags"])
+    }
+
     func testRemoteRegistrationRefreshRequiresAccountConsentAndSystemPermission() {
         XCTAssertTrue(PushNotificationManager.shouldRefreshRemoteRegistration(
             isSignedIn: true,
