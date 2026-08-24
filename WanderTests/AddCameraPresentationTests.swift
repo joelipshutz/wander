@@ -66,6 +66,40 @@ final class AddCameraPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.route, .permissionDenied)
     }
 
+    func testRestrictedCameraPresentsRecoveryWithoutSettingsRoute() {
+        var presentation = AddCameraPresentationState()
+
+        let requestsPermission = presentation.requestCamera(
+            isAvailable: true,
+            authorization: .restricted
+        )
+
+        XCTAssertFalse(requestsPermission)
+        XCTAssertEqual(presentation.route, .restricted)
+    }
+
+    func testReturningFromSettingsRefreshesDeniedCameraAuthorization() {
+        var presentation = AddCameraPresentationState(route: .permissionDenied)
+
+        presentation.refreshAuthorization(
+            isAvailable: true,
+            authorization: .authorized
+        )
+
+        XCTAssertEqual(presentation.route, .camera)
+    }
+
+    func testReturningFromSettingsKeepsDeniedCameraRecoveryWhenStillDenied() {
+        var presentation = AddCameraPresentationState(route: .permissionDenied)
+
+        presentation.refreshAuthorization(
+            isAvailable: true,
+            authorization: .denied
+        )
+
+        XCTAssertEqual(presentation.route, .permissionDenied)
+    }
+
     func testUndeterminedCameraWaitsForPermissionBeforePresentation() {
         var presentation = AddCameraPresentationState()
 

@@ -1721,8 +1721,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(cameraPicker.contains("uiViewController.takePicture()"))
         XCTAssertTrue(cameraPicker.contains("uiViewController.cameraDevice = requestedCameraDevice"))
         XCTAssertTrue(addScreen.contains("case .permissionDenied:"))
+        XCTAssertTrue(addScreen.contains("case .restricted:"))
         XCTAssertTrue(addScreen.contains("case .unavailable:"))
         XCTAssertTrue(addScreen.contains("handleCameraPresentationDismissal"))
+        XCTAssertTrue(addScreen.contains("cameraSessionID == sessionID else { return }"))
+        XCTAssertTrue(addScreen.contains("onGallery: switchCameraToPhotoLibrary"))
+        XCTAssertTrue(addScreen.contains("onCancel: cancelCameraCapture"))
+        XCTAssertTrue(addScreen.contains("cameraPresentation.refreshAuthorization("))
         XCTAssertTrue(addScreen.contains("Task.detached(priority: .userInitiated"))
     }
 

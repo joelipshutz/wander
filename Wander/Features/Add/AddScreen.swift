@@ -9,11 +9,13 @@ enum AddCameraAuthorization: Equatable {
     case authorized
     case notDetermined
     case denied
+    case restricted
 }
 
 enum AddCameraCaptureRoute: String, Identifiable, Equatable {
     case camera
     case permissionDenied
+    case restricted
     case unavailable
 
     var id: String { rawValue }
@@ -45,6 +47,9 @@ struct AddCameraPresentationState: Equatable {
         case .denied:
             route = .permissionDenied
             return false
+        case .restricted:
+            route = .restricted
+            return false
         }
     }
 
@@ -58,6 +63,22 @@ struct AddCameraPresentationState: Equatable {
 
     mutating func dismissCapture() {
         route = nil
+    }
+
+    mutating func refreshAuthorization(
+        isAvailable: Bool,
+        authorization: AddCameraAuthorization
+    ) {
+        guard route == .permissionDenied else { return }
+
+        switch authorization {
+        case .authorized:
+            route = isAvailable ? .camera : .unavailable
+        case .restricted:
+            route = .restricted
+        case .notDetermined, .denied:
+            break
+        }
     }
 
     mutating func switchToPhotoLibrary() {
@@ -127,6 +148,7 @@ enum AddSuggestedPlaces {
 }
 
 struct AddScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -157,6 +179,7 @@ struct AddScreen: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showsPhotoLibrary = false
     @State private var cameraPresentation = AddCameraPresentationState()
+    @State private var cameraSessionID = UUID()
     @State private var pendingCapturedPhoto: UIImage?
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var closesAfterSaveFlowDismiss = false
@@ -258,6 +281,13 @@ struct AddScreen: View {
             }
             .onChange(of: resetToken) { _, _ in
                 reset()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                cameraPresentation.refreshAuthorization(
+                    isAvailable: isCameraAvailable,
+                    authorization: cameraAuthorization
+                )
             }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
                 if activeSurface == .saveFlow {
@@ -1170,8 +1200,10 @@ struct AddScreen: View {
             .authorized
         case .notDetermined:
             .notDetermined
-        case .denied, .restricted:
+        case .denied:
             .denied
+        case .restricted:
+            .restricted
         @unknown default:
             .denied
         }
@@ -1179,6 +1211,8 @@ struct AddScreen: View {
 
     @MainActor
     private func requestCamera() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
         let needsPermissionRequest = cameraPresentation.requestCamera(
             isAvailable: isCameraAvailable,
             authorization: cameraAuthorization
@@ -1199,39 +1233,50 @@ struct AddScreen: View {
     private func cameraCaptureDestination(_ route: AddCameraCaptureRoute) -> some View {
         switch route {
         case .camera:
+            let sessionID = cameraSessionID
             AddCameraCaptureScreen(
                 onImage: { image in
+                    guard cameraPresentation.route == .camera,
+                          cameraSessionID == sessionID else { return }
                     pendingCapturedPhoto = image
                     cameraPresentation.dismissCapture()
                 },
-                onGallery: {
-                    cameraPresentation.switchToPhotoLibrary()
-                },
-                onCancel: {
-                    cameraPresentation.dismissCapture()
-                }
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
             )
         case .permissionDenied:
             AddCameraRecoveryScreen(
                 state: .permissionDenied,
-                onGallery: {
-                    cameraPresentation.switchToPhotoLibrary()
-                },
-                onCancel: {
-                    cameraPresentation.dismissCapture()
-                }
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
+            )
+        case .restricted:
+            AddCameraRecoveryScreen(
+                state: .restricted,
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
             )
         case .unavailable:
             AddCameraRecoveryScreen(
                 state: .unavailable,
-                onGallery: {
-                    cameraPresentation.switchToPhotoLibrary()
-                },
-                onCancel: {
-                    cameraPresentation.dismissCapture()
-                }
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
             )
         }
+    }
+
+    @MainActor
+    private func switchCameraToPhotoLibrary() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
+        cameraPresentation.switchToPhotoLibrary()
+    }
+
+    @MainActor
+    private func cancelCameraCapture() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
+        cameraPresentation.dismissCapture()
     }
 
     @MainActor
@@ -1993,12 +2038,15 @@ private struct AddCameraCaptureScreen: View {
 
 private enum AddCameraRecoveryState: Equatable {
     case permissionDenied
+    case restricted
     case unavailable
 
     var title: String {
         switch self {
         case .permissionDenied:
             "Camera access is off"
+        case .restricted:
+            "Camera access is restricted"
         case .unavailable:
             "Camera isn't available"
         }
@@ -2008,6 +2056,8 @@ private enum AddCameraRecoveryState: Equatable {
         switch self {
         case .permissionDenied:
             "Allow camera access in Settings, or choose an existing photo instead."
+        case .restricted:
+            "This device doesn't allow camera access. You can choose an existing photo instead."
         case .unavailable:
             "You can still choose a photo without losing anything you've entered."
         }
@@ -2050,12 +2100,12 @@ private struct AddCameraRecoveryScreen: View {
 
                 VStack(spacing: WanderTheme.spacing2) {
                     Text(state.title)
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.title.bold())
                         .foregroundStyle(WanderTheme.textInk.color)
                         .multilineTextAlignment(.center)
 
                     Text(state.message)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.body.weight(.medium))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .multilineTextAlignment(.center)
                 }
