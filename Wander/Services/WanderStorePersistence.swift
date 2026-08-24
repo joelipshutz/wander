@@ -544,6 +544,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let subcategoryOverride: String?
         let categoryOverrideSource: String?
         let categoryOverrideConfidence: Double?
+        let viewerPrimaryCategory: String?
+        let viewerSubcategory: String?
+        let viewerFoodType: String?
         let visibilityRaw: String
         let nearbyConfirmed: Bool
         let visitedAt: Date?
@@ -580,6 +583,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             subcategoryOverride = userPlace.subcategoryOverride
             categoryOverrideSource = userPlace.categoryOverrideSource
             categoryOverrideConfidence = userPlace.categoryOverrideConfidence
+            viewerPrimaryCategory = userPlace.viewerPrimaryCategory
+            viewerSubcategory = userPlace.viewerSubcategory
+            viewerFoodType = userPlace.viewerFoodType
             visibilityRaw = userPlace.visibilityRaw
             nearbyConfirmed = userPlace.nearbyConfirmed
             visitedAt = userPlace.visitedAt
@@ -619,6 +625,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 subcategoryOverride: subcategoryOverride,
                 categoryOverrideSource: categoryOverrideSource,
                 categoryOverrideConfidence: categoryOverrideConfidence,
+                viewerPrimaryCategory: viewerPrimaryCategory,
+                viewerSubcategory: viewerSubcategory,
+                viewerFoodType: viewerFoodType,
                 nearbyConfirmed: nearbyConfirmed,
                 visitedAt: visitedAt,
                 savedAt: savedAt,

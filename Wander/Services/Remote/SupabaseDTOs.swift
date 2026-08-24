@@ -130,6 +130,13 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
 }
 
 struct RemoteVisiblePlaceDTO: Codable, Equatable {
+    private enum ViewerTaxonomyKey {
+        static let primaryCategory = "__viewer_taxonomy_primary_category"
+        static let subcategory = "__viewer_taxonomy_subcategory"
+        static let foodType = "__viewer_taxonomy_food_type"
+        static let all = Set([primaryCategory, subcategory, foodType])
+    }
+
     let userPlaceID: String
     let placeID: String
     let ownerUserID: String
@@ -218,6 +225,17 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             throw WanderRemoteError.invalidResponse("Unknown place visibility: \(visibility)")
         }
 
+        let projectedTaxonomy = Dictionary(
+            uniqueKeysWithValues: attributes.compactMap { attribute -> (String, String)? in
+                guard ViewerTaxonomyKey.all.contains(attribute.questionKey),
+                      case .string(let value) = attribute.value
+                else { return nil }
+                return (attribute.questionKey, value)
+            }
+        )
+        let visibleAttributes = attributes.filter {
+            !ViewerTaxonomyKey.all.contains($0.questionKey)
+        }
         let isCommunityAggregate = ownerUserID == FeaturedCommunityPlaceSignal.ownerID
         let owner = LocalProfile(
             localID: ownerUserID,
@@ -262,6 +280,9 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             subcategoryOverride: subcategoryOverride,
             categoryOverrideSource: categoryOverrideSource,
             categoryOverrideConfidence: categoryOverrideConfidence,
+            viewerPrimaryCategory: projectedTaxonomy[ViewerTaxonomyKey.primaryCategory],
+            viewerSubcategory: projectedTaxonomy[ViewerTaxonomyKey.subcategory],
+            viewerFoodType: projectedTaxonomy[ViewerTaxonomyKey.foodType],
             visitedAt: visitedAt,
             savedAt: savedAt,
             sourceType: sourceType,
@@ -276,7 +297,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             place: place,
             userPlace: userPlace,
             owner: owner,
-            attributes: attributes.map { $0.localAttribute(userPlaceID: userPlaceID) },
+            attributes: visibleAttributes.map { $0.localAttribute(userPlaceID: userPlaceID) },
             communitySaveCount: communitySaveCount ?? 0
         )
     }
