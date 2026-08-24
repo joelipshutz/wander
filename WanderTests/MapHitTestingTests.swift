@@ -266,9 +266,33 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusTransitionPolicy.maximumStagger, 0.12, accuracy: 0.001)
     }
 
-    func testSelectedPinFocusUsesASmoothDistanceFalloff() {
+    func testSelectedPinFocusUsesTenPointGradientStops() {
+        let firstStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let secondStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+                + MapPinFocusPolicy.distanceStep
+        )
+        let thirdStop = MapPinFocusPolicy.opacity(
+            forNormalizedDistance: MapPinFocusPolicy.innerRadius
+                + (2 * MapPinFocusPolicy.distanceStep)
+        )
+
+        XCTAssertEqual(firstStop, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertEqual(secondStop - firstStop, MapPinFocusPolicy.opacityStep, accuracy: 0.001)
+        XCTAssertEqual(thirdStop - secondStop, MapPinFocusPolicy.opacityStep, accuracy: 0.001)
+        XCTAssertEqual(
+            MapPinFocusPolicy.opacity(forNormalizedDistance: MapPinFocusPolicy.outerRadius),
+            1,
+            accuracy: 0.001
+        )
+    }
+
+    func testSelectedPinFocusInterpolatesSmoothlyBetweenGradientStops() {
         let selected = CLLocationCoordinate2D(latitude: 34, longitude: -118)
         let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
 
@@ -294,6 +318,66 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(distantPinOpacity, 1, accuracy: 0.001)
     }
 
+    func testSelectedPinFocusFadesNearToFarAndRestoresFarToNear() {
+        let nearFade = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 0.22,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let farFade = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 0.92,
+            normalizedDistance: MapPinFocusPolicy.outerRadius - 0.01
+        )
+
+        XCTAssertLessThan(
+            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: nearFade),
+            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: farFade)
+        )
+        XCTAssertGreaterThan(
+            MapPinFocusTransitionPolicy.delay(from: nearFade, to: .unfocused),
+            MapPinFocusTransitionPolicy.delay(from: farFade, to: .unfocused)
+        )
+    }
+
+    func testSelectionReplacementFadesNewClusterWhileRestoringOldCluster() {
+        let nearOldCluster = MapPinFocusConfiguration(
+            selectionID: "old",
+            opacity: 0.22,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+        let oldClusterAfterReplacement = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 1,
+            normalizedDistance: MapPinFocusPolicy.outerRadius
+        )
+        let newClusterBeforeReplacement = MapPinFocusConfiguration(
+            selectionID: "old",
+            opacity: 1,
+            normalizedDistance: MapPinFocusPolicy.outerRadius
+        )
+        let nearNewCluster = MapPinFocusConfiguration(
+            selectionID: "new",
+            opacity: 0.22,
+            normalizedDistance: MapPinFocusPolicy.innerRadius
+        )
+
+        XCTAssertEqual(
+            MapPinFocusTransitionPolicy.direction(
+                from: nearOldCluster,
+                to: oldClusterAfterReplacement
+            ),
+            .restore
+        )
+        XCTAssertEqual(
+            MapPinFocusTransitionPolicy.direction(
+                from: newClusterBeforeReplacement,
+                to: nearNewCluster
+            ),
+            .fade
+        )
+    }
+
     func testSelectedPinFocusClearsWithoutASelection() {
         let opacity = MapPinFocusPolicy.opacity(
             for: CLLocationCoordinate2D(latitude: 34, longitude: -118),
@@ -306,9 +390,9 @@ final class MapSelectionMotionTests: XCTestCase {
 
     func testSelectedPinFocusMovesToTheReplacementSelection() {
         let firstSelection = CLLocationCoordinate2D(latitude: 34, longitude: -118)
-        let replacementSelection = CLLocationCoordinate2D(latitude: 34, longitude: -117.96)
+        let replacementSelection = CLLocationCoordinate2D(latitude: 34, longitude: -117.95)
         let nearbyFirstPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.999)
-        let nearbyReplacementPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.961)
+        let nearbyReplacementPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.951)
         let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
 
         let firstPinBeforeReplacement = MapPinFocusPolicy.opacity(
@@ -1649,11 +1733,26 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(MapPinVisualMetrics.activeTitleClearance, 2)
         XCTAssertGreaterThanOrEqual(
             MapPinVisualMetrics.activeTitleVerticalOffset(
-                selectedScale: MapPinSelectionMotionStyle.selectedScale
+                selectedScale: MapPinSelectionMotionStyle.selectedScale,
+                outlineCount: 0
             ),
             (MapPinVisualMetrics.discDiameter * MapPinSelectionMotionStyle.selectedScale / 2)
                 + MapPinVisualMetrics.activeTitleClearance
         )
+        let noOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 0
+        )
+        let singleOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 1
+        )
+        let doubleOutlineOffset = MapPinVisualMetrics.activeTitleVerticalOffset(
+            selectedScale: MapPinSelectionMotionStyle.selectedScale,
+            outlineCount: 2
+        )
+        XCTAssertLessThan(noOutlineOffset, singleOutlineOffset)
+        XCTAssertLessThan(singleOutlineOffset, doubleOutlineOffset)
 
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
