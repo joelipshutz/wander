@@ -3220,13 +3220,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
         XCTAssertEqual(store.visits(for: first.userPlaceID).count, 1)
         XCTAssertEqual(store.visits(for: first.userPlaceID).first?.ratingScore, 4)
-        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.note, "want to try")
-        XCTAssertEqual(
-            store.currentUserVisiblePlaces.first(where: {
-                $0.userPlace.id == first.userPlaceID
-            })?.userPlace.note,
-            "want to try"
-        )
+        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.note, "went today")
         XCTAssertEqual(
             store.currentUserVisiblePlaces.first(where: {
                 $0.userPlace.id == first.userPlaceID
@@ -4269,7 +4263,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.userPlace.ratingScore, 4.5)
     }
 
-    func testImportStatusChangePreservesOptionalDetailsInsteadOfRebuildingStaleCandidate() async throws {
+    func testImportStatusChangePreservesClassificationButDoesNotCarryNotesBetweenMemories() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let originalCandidate = PlaceCandidate(
@@ -4322,7 +4316,7 @@ final class WanderStoreTests: XCTestCase {
             store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
         )
         XCTAssertEqual(visiblePlace.userPlace.status, .wannaGo)
-        XCTAssertEqual(visiblePlace.userPlace.note, "edited in Optional Details")
+        XCTAssertNil(visiblePlace.userPlace.note)
         XCTAssertEqual(visiblePlace.userPlace.visibility, .selfOnly)
         XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
         XCTAssertEqual(visiblePlace.effectiveSubcategory, "Coffee shop")
@@ -4345,7 +4339,7 @@ final class WanderStoreTests: XCTestCase {
         let restoredVisit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
         XCTAssertEqual(visiblePlace.userPlace.status, .been)
         XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
-        XCTAssertEqual(restoredVisit.note, "edited in Optional Details")
+        XCTAssertNil(restoredVisit.note)
         XCTAssertEqual(restoredVisit.ratingScore, 4.5)
         XCTAssertEqual(
             VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: restoredVisit.attributeAnswersJSON),
@@ -4411,7 +4405,7 @@ final class WanderStoreTests: XCTestCase {
             "Check in at Add Visit Defaults Cafe"
         )
         XCTAssertNil(wantContext.initialRatingScore)
-        XCTAssertEqual(wantContext.initialNote, "want because patio")
+        XCTAssertEqual(wantContext.initialNote, "")
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
         XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
 
@@ -7358,6 +7352,46 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(result, SaveResult(userPlaceID: "up_remote_saved", syncState: .synced))
         XCTAssertEqual(socialSaveRepository.requests, [FakeSocialPlaceSaveRepository.Request(placeID: placeID, sourceUserPlaceID: sourceUserPlaceID)])
         XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.serverID == "up_remote_saved" && $0.userPlace.syncState == .synced })
+        XCTAssertNil(
+            store.currentUserVisiblePlaces.first {
+                $0.userPlace.serverID == "up_remote_saved"
+            }?.userPlace.note,
+            "A social save must not copy the source account's note"
+        )
+    }
+
+    func testRepeatedSocialWannaSavePreservesTheCurrentUsersOwnNote() throws {
+        let store = makeStore()
+        let socialPlace = try XCTUnwrap(store.visiblePlaces().first { $0.owner.id == "user_maya" })
+
+        let firstSave = store.saveVisiblePlace(socialPlace)
+        let candidate = PlaceCandidate(
+            id: socialPlace.place.id,
+            name: socialPlace.place.canonicalName,
+            category: socialPlace.effectiveCategory,
+            latitude: socialPlace.place.latitude,
+            longitude: socialPlace.place.longitude,
+            sourceProvider: socialPlace.place.sourceProvider,
+            sourceProviderPlaceID: socialPlace.place.sourceProviderPlaceID,
+            confidence: socialPlace.place.confidence ?? 1
+        )
+        _ = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "My own reason for going",
+            sourceType: .manual
+        )
+
+        let repeatedSave = store.saveVisiblePlace(socialPlace)
+
+        XCTAssertEqual(repeatedSave.userPlaceID, firstSave.userPlaceID)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first {
+                $0.userPlace.id == firstSave.userPlaceID
+            }?.userPlace.note,
+            "My own reason for going"
+        )
     }
 
     func testSocialSaveDoesNotCopyAnotherUsersPrivateTaxonomy() throws {
