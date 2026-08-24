@@ -92,16 +92,53 @@ struct MapSearchSelectionSession: Equatable {
     }
 }
 
-private final class MapPressLocationTracker {
-    var location: CGPoint?
-}
-
-private final class MapCameraRegionTracker {
-    var region: MKCoordinateRegion
+final class MapCameraRegionTracker {
+    private(set) var region: MKCoordinateRegion
+    private(set) var interactionStartRegion: MKCoordinateRegion?
+    private var didObserveZoom = false
 
     init(region: MKCoordinateRegion) {
         self.region = region
     }
+
+    var isInteractionActive: Bool {
+        interactionStartRegion != nil
+    }
+
+    func recordCameraChange(_ region: MKCoordinateRegion) {
+        if interactionStartRegion == nil {
+            interactionStartRegion = self.region
+            didObserveZoom = false
+        }
+        self.region = region
+        if let interactionStartRegion,
+           MapSelectionGesturePolicy.classify(
+               from: interactionStartRegion,
+               to: region
+           ) == .zoom {
+            didObserveZoom = true
+        }
+    }
+
+    func finishCameraChange(_ region: MKCoordinateRegion) -> MapCameraInteraction {
+        let startRegion = interactionStartRegion ?? self.region
+        self.region = region
+        interactionStartRegion = nil
+        let interaction = MapSelectionGesturePolicy.classify(from: startRegion, to: region)
+        defer { didObserveZoom = false }
+        return didObserveZoom ? .zoom : interaction
+    }
+
+    func synchronize(with region: MKCoordinateRegion) {
+        self.region = region
+        interactionStartRegion = nil
+        didObserveZoom = false
+    }
+}
+
+private enum MapSelectableMarker {
+    case visiblePlace(VisiblePlace)
+    case searchCandidate(PlaceCandidate)
 }
 
 private struct MapRenderProjectionKey: Equatable {
@@ -313,11 +350,8 @@ struct MapScreen: View {
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
+    @State private var nativeMapFeatureSelectionSuppressionUntil = Date.distantPast
     @State private var ignoreNextMapTap = false
-    @State private var mapPressLocation = MapPressLocationTracker()
-    @State private var mapInteractionStartRegion: MKCoordinateRegion?
-    @State private var mapInteractionDidZoom = false
-    @State private var mapInteractionClassificationTask: Task<Void, Never>?
     @State private var mapTapDismissalTask: Task<Void, Never>?
     @State private var mapTapDismissalSuppressionUntil = Date.distantPast
     @State private var previousMapTapDate = Date.distantPast
@@ -668,7 +702,11 @@ struct MapScreen: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 MapReader { proxy in
-                    Map(position: $position, selection: $selectedMapFeature) {
+                    Map(
+                        position: $position,
+                        interactionModes: .all,
+                        selection: $selectedMapFeature
+                    ) {
                         if Self.canShowUserLocation {
                             UserAnnotation()
                         }
@@ -690,18 +728,17 @@ struct MapScreen: View {
                                 group.primary.place.canonicalName,
                                 coordinate: coordinate
                             ) {
-                                Button {
-                                    selectVisiblePlaceFromMapTap(group.primary)
-                                } label: {
-                                    MapPlaceMarker(
-                                        visiblePlace: group.primary,
-                                        saves: saveSummaries(for: group),
-                                        currentUserID: store.currentUser.id,
-                                        isSelected: false
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                                MapPlaceMarker(
+                                    visiblePlace: group.primary,
+                                    saves: saveSummaries(for: group),
+                                    currentUserID: store.currentUser.id,
+                                    isSelected: false
+                                )
                                 .frame(minWidth: 44, minHeight: 44)
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction {
+                                    selectVisiblePlaceFromMapTap(group.primary)
+                                }
                                 .modifier(
                                     MapPinEntranceModifier(
                                         isVisible: isTransitionVisible,
@@ -711,6 +748,7 @@ struct MapScreen: View {
                                 .modifier(
                                     MapPinFocusModifier(configuration: focusConfiguration)
                                 )
+                                .allowsHitTesting(false)
                             }
                         }
 
@@ -732,16 +770,15 @@ struct MapScreen: View {
                                     candidate.name,
                                     coordinate: coordinate
                                 ) {
-                                    Button {
-                                        selectSearchCandidateFromMapTap(candidate)
-                                    } label: {
-                                        SearchResultMarker(
-                                            candidate: candidate,
-                                            isSelected: false
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
+                                    SearchResultMarker(
+                                        candidate: candidate,
+                                        isSelected: false
+                                    )
                                     .frame(minWidth: 44, minHeight: 44)
+                                    .accessibilityAddTraits(.isButton)
+                                    .accessibilityAction {
+                                        selectSearchCandidateFromMapTap(candidate)
+                                    }
                                     .modifier(
                                         MapPinEntranceModifier(
                                             isVisible: true,
@@ -751,6 +788,7 @@ struct MapScreen: View {
                                     .modifier(
                                         MapPinFocusModifier(configuration: focusConfiguration)
                                     )
+                                    .allowsHitTesting(false)
                                 }
                             }
                         }
@@ -764,32 +802,32 @@ struct MapScreen: View {
                                     longitude: group.primary.place.longitude
                                 )
                             ) {
-                                Button {
-                                    replayActivePinBounce()
-                                } label: {
-                                    ActiveMapAnnotationContent(
-                                        title: group.primary.place.canonicalName,
-                                        outlineCount: MapPlaceMarker.outlineCount(
-                                            visiblePlace: group.primary,
-                                            saves: activeSaves,
-                                            currentUserID: store.currentUser.id
+                                ActiveMapAnnotationContent(
+                                    title: group.primary.place.canonicalName,
+                                    outlineCount: MapPlaceMarker.outlineCount(
+                                        visiblePlace: group.primary,
+                                        saves: activeSaves,
+                                        currentUserID: store.currentUser.id
+                                    )
+                                ) {
+                                    MapPlaceMarker(
+                                        visiblePlace: group.primary,
+                                        saves: activeSaves,
+                                        currentUserID: store.currentUser.id,
+                                        isSelected: true
+                                    )
+                                    .modifier(
+                                        MapPinReselectionBounceModifier(
+                                            trigger: activePinBounceRevision
                                         )
-                                    ) {
-                                        MapPlaceMarker(
-                                            visiblePlace: group.primary,
-                                            saves: activeSaves,
-                                            currentUserID: store.currentUser.id,
-                                            isSelected: true
-                                        )
-                                        .modifier(
-                                            MapPinReselectionBounceModifier(
-                                                trigger: activePinBounceRevision
-                                            )
-                                        )
-                                    }
+                                    )
                                 }
-                                .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .allowsHitTesting(false)
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction {
+                                    replayActivePinBounce()
+                                }
                             }
                         }
 
@@ -803,23 +841,23 @@ struct MapScreen: View {
                                     longitude: longitude
                                 )
                             ) {
-                                Button {
-                                    replayActivePinBounce()
-                                } label: {
-                                    ActiveMapAnnotationContent(
-                                        title: candidate.name,
-                                        outlineCount: MapPinVisualMetrics.searchResultOutlineCount
-                                    ) {
-                                        SearchResultMarker(candidate: candidate, isSelected: true)
-                                            .modifier(
-                                                MapPinReselectionBounceModifier(
-                                                    trigger: activePinBounceRevision
-                                                )
+                                ActiveMapAnnotationContent(
+                                    title: candidate.name,
+                                    outlineCount: MapPinVisualMetrics.searchResultOutlineCount
+                                ) {
+                                    SearchResultMarker(candidate: candidate, isSelected: true)
+                                        .modifier(
+                                            MapPinReselectionBounceModifier(
+                                                trigger: activePinBounceRevision
                                             )
-                                    }
+                                        )
                                 }
-                                .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .allowsHitTesting(false)
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction {
+                                    replayActivePinBounce()
+                                }
                             }
                         }
 
@@ -851,42 +889,25 @@ struct MapScreen: View {
                         handleMapCameraChange(context.region)
                     }
                     .onMapCameraChange(frequency: .onEnd) { context in
+                        handleMapCameraInteractionEnd(context.region)
                         handleFeaturedCameraChange(context.region)
                     }
-                    .onTapGesture(coordinateSpace: .local) { point in
-                        handleMapTap(at: point, proxy: proxy)
-                    }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                            .onChanged { value in
-                                mapPressLocation.location = value.location
-                            }
-                    )
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: MapHitTesting.panDismissalDistance, coordinateSpace: .local)
-                            .onChanged { _ in
-                                handleMapDragChange()
-                            }
-                            .onEnded { _ in
-                                handleMapDragEnd()
-                            }
-                    )
-                    .simultaneousGesture(
-                        MagnifyGesture(minimumScaleDelta: MapSelectionGesturePolicy.minimumMagnificationDelta)
-                            .onChanged { _ in
-                                handleMapMagnificationChange()
-                            }
-                    )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.48)
-                            .onEnded { didComplete in
-                                guard didComplete, let point = mapPressLocation.location else { return }
+                    // MapKit owns movement gestures. This observer only reads
+                    // tap locations and never cancels or delays map touches.
+                    .overlay {
+                        MapGestureObserver(
+                            longPressMinimumDuration: 0.48,
+                            onTap: { point in
+                                handleMapTap(at: point, proxy: proxy)
+                            },
+                            onLongPress: { point in
                                 if handleMapLongPress(at: point, proxy: proxy) {
                                     ignoreNextMapTap = true
                                 }
-                                mapPressLocation.location = nil
                             }
-                    )
+                        )
+                        .allowsHitTesting(false)
+                    }
                     .onPreferenceChange(MapViewportHeightPreferenceKey.self) { height in
                         guard height > 0 else { return }
                         measuredMapViewportHeight = height
@@ -1215,7 +1236,6 @@ struct MapScreen: View {
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
                 mapPinTransitionTask?.cancel()
-                mapInteractionClassificationTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
@@ -1442,7 +1462,7 @@ struct MapScreen: View {
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         )
         position = .region(region)
-        cameraRegionTracker.region = region
+        cameraRegionTracker.synchronize(with: region)
     }
 
     private func selectMapSource(
@@ -1652,7 +1672,31 @@ struct MapScreen: View {
             ignoreNextMapTap = false
             return
         }
-        guard !isTapNearSelectableMarker(point, proxy: proxy) else { return }
+        if let marker = selectableMarker(at: point, proxy: proxy) {
+            nativeMapFeatureSelectionSuppressionUntil = Date.now.addingTimeInterval(
+                MapSelectionGesturePolicy.nativeFeatureTapSuppressionDuration
+            )
+            switch marker {
+            case let .visiblePlace(visiblePlace):
+                let groupKey = VisiblePlaceGrouping.matchingGroup(
+                    for: visiblePlace,
+                    in: visiblePlaces,
+                    currentUserID: store.currentUser.id
+                )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
+                if highlightsCompactSelection, selectedPlaceGroupKey == groupKey {
+                    replayActivePinBounce()
+                } else {
+                    selectVisiblePlaceFromMapTap(visiblePlace)
+                }
+            case let .searchCandidate(candidate):
+                if highlightsCompactSelection, selectedSearchCandidateID == candidate.id {
+                    replayActivePinBounce()
+                } else {
+                    selectSearchCandidateFromMapTap(candidate)
+                }
+            }
+            return
+        }
         let tapDate = Date.now
         guard tapDate >= mapTapDismissalSuppressionUntil else { return }
 
@@ -1687,7 +1731,7 @@ struct MapScreen: View {
             guard !Task.isCancelled,
                   revision == mapSelectionRevision,
                   selectedMapFeature == nil,
-                  mapInteractionStartRegion == nil,
+                  !cameraRegionTracker.isInteractionActive,
                   Date.now >= mapTapDismissalSuppressionUntil
             else {
                 mapTapDismissalTask = nil
@@ -1700,66 +1744,22 @@ struct MapScreen: View {
     }
 
     private func handleMapCameraChange(_ region: MKCoordinateRegion) {
-        let previousRegion = currentSearchRegion
-        cameraRegionTracker.region = region
+        cameraRegionTracker.recordCameraChange(region)
+    }
 
-        let comparisonRegion = mapInteractionStartRegion ?? previousRegion
-        if MapSelectionGesturePolicy.classify(
-            from: comparisonRegion,
-            to: region
-        ) == .zoom {
+    private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
+        switch cameraRegionTracker.finishCameraChange(region) {
+        case .stationary:
+            break
+        case .zoom:
             registerMapZoom()
-        }
-    }
-
-    private func handleMapDragChange() {
-        guard mapInteractionStartRegion == nil else { return }
-
-        mapInteractionClassificationTask?.cancel()
-        mapInteractionClassificationTask = nil
-        mapInteractionStartRegion = currentSearchRegion
-        mapInteractionDidZoom = false
-    }
-
-    private func handleMapDragEnd() {
-        guard let startRegion = mapInteractionStartRegion else { return }
-
-        mapInteractionClassificationTask?.cancel()
-        let revision = mapSelectionRevision
-        mapInteractionClassificationTask = Task { @MainActor in
-            do {
-                try await Task.sleep(
-                    nanoseconds: MapSelectionGesturePolicy.cameraSettleDelayNanoseconds
-                )
-            } catch {
-                return
-            }
-
-            let interaction = MapSelectionGesturePolicy.classify(
-                from: startRegion,
-                to: currentSearchRegion
-            )
-            let preservesSelection = mapInteractionDidZoom || interaction == .zoom
-            mapInteractionStartRegion = nil
-            mapInteractionDidZoom = false
-            mapInteractionClassificationTask = nil
-
-            guard !Task.isCancelled,
-                  revision == mapSelectionRevision,
-                  !preservesSelection,
-                  interaction == .pan
-            else { return }
-
+        case .pan:
+            cancelPendingMapTapDismissal()
             requestCompactSelectionDismissal(trigger: .oneFingerPan)
         }
     }
 
-    private func handleMapMagnificationChange() {
-        registerMapZoom()
-    }
-
     private func registerMapZoom() {
-        mapInteractionDidZoom = true
         mapTapDismissalSuppressionUntil = Date.now.addingTimeInterval(
             MapSelectionGesturePolicy.postZoomTapSuppressionDuration
         )
@@ -1825,21 +1825,45 @@ struct MapScreen: View {
     }
 
     private func isTapNearSelectableMarker(_ point: CGPoint, proxy: MapProxy) -> Bool {
-        let savedPlaceCoordinates = mapAnnotationPlaces.map { visiblePlace in
-            CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
+        selectableMarker(at: point, proxy: proxy) != nil
+    }
+
+    private func selectableMarker(
+        at point: CGPoint,
+        proxy: MapProxy
+    ) -> MapSelectableMarker? {
+        var targets: [(marker: MapSelectableMarker, distance: CGFloat)] = []
+
+        for visiblePlace in mapAnnotationPlaces {
+            let coordinate = CLLocationCoordinate2D(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
+            guard let markerPoint = proxy.convert(coordinate, to: .local) else { continue }
+            targets.append((
+                marker: .visiblePlace(visiblePlace),
+                distance: hypot(markerPoint.x - point.x, markerPoint.y - point.y)
+            ))
         }
-        let searchCandidateCoordinates = mappableSearchCandidates.compactMap { candidate -> CLLocationCoordinate2D? in
+
+        for candidate in mappableSearchCandidates {
             guard let latitude = candidate.latitude,
-                  let longitude = candidate.longitude
-            else { return nil }
-
-            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                  let longitude = candidate.longitude,
+                  let markerPoint = proxy.convert(
+                      CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                      to: .local
+                  )
+            else { continue }
+            targets.append((
+                marker: .searchCandidate(candidate),
+                distance: hypot(markerPoint.x - point.x, markerPoint.y - point.y)
+            ))
         }
-        let markerPoints = (savedPlaceCoordinates + searchCandidateCoordinates).compactMap { markerCoordinate in
-            proxy.convert(markerCoordinate, to: .local)
-        }
 
-        return MapHitTesting.isScreenPoint(point, nearAny: markerPoints)
+        return targets
+            .filter { $0.distance <= MapHitTesting.markerTapRadius }
+            .min { $0.distance < $1.distance }?
+            .marker
     }
 
     private func resolveInitialSelection() {
@@ -1951,7 +1975,7 @@ struct MapScreen: View {
             )
         )
         position = .region(region)
-        cameraRegionTracker.region = region
+        cameraRegionTracker.synchronize(with: region)
     }
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {
@@ -2288,7 +2312,7 @@ struct MapScreen: View {
             viewportHeight: measuredMapViewportHeight,
             obscuredBottomHeight: selectedPlaceRecenterClearance
         )
-        cameraRegionTracker.region = region
+        cameraRegionTracker.synchronize(with: region)
         withAnimation(
             reduceMotion
                 ? MapCompactCardMotionStyle.reducedMotionAnimation
@@ -2837,6 +2861,10 @@ struct MapScreen: View {
     }
 
     private func handleMapFeatureSelection(_ feature: MapFeature?) {
+        if feature != nil, Date.now < nativeMapFeatureSelectionSuppressionUntil {
+            clearNativeMapFeatureSelection()
+            return
+        }
         if feature != nil {
             dismissMoreFilters()
         }
@@ -3791,7 +3819,7 @@ struct MapScreen: View {
             viewportHeight: measuredMapViewportHeight,
             obscuredBottomHeight: selectedPlaceRecenterClearance
         )
-        cameraRegionTracker.region = region
+        cameraRegionTracker.synchronize(with: region)
         withAnimation(
             reduceMotion
                 ? MapCompactCardMotionStyle.reducedMotionAnimation
@@ -3880,11 +3908,11 @@ struct MapScreen: View {
                                 pitch: 0
                             )
                         )
-                        cameraRegionTracker.region = MKCoordinateRegion(
+                        cameraRegionTracker.synchronize(with: MKCoordinateRegion(
                             center: center,
                             latitudinalMeters: Self.recenterCameraDistance * 2,
                             longitudinalMeters: Self.recenterCameraDistance * 2
-                        )
+                        ))
                     } else {
                         position = .region(
                             MKCoordinateRegion(
@@ -4298,9 +4326,216 @@ enum MapNearbyPermissionPolicy {
     }
 }
 
+private final class MapGestureAnchorView: UIView {
+    var onGeometryChange: ((MapGestureAnchorView) -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onGeometryChange?(self)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onGeometryChange?(self)
+    }
+}
+
+private struct MapGestureObserver: UIViewRepresentable {
+    let longPressMinimumDuration: TimeInterval
+    let onTap: (CGPoint) -> Void
+    let onLongPress: (CGPoint) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(observer: self)
+    }
+
+    func makeUIView(context: Context) -> MapGestureAnchorView {
+        let view = MapGestureAnchorView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.onGeometryChange = { [weak coordinator = context.coordinator] anchorView in
+            coordinator?.attachIfNeeded(to: anchorView)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: MapGestureAnchorView, context: Context) {
+        context.coordinator.update(observer: self, anchorView: uiView)
+    }
+
+    static func dismantleUIView(
+        _ uiView: MapGestureAnchorView,
+        coordinator: Coordinator
+    ) {
+        uiView.onGeometryChange = nil
+        coordinator.detach()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private var observer: MapGestureObserver
+        private weak var anchorView: MapGestureAnchorView?
+        private weak var mapView: MKMapView?
+        private var attachmentRetryTask: Task<Void, Never>?
+        private var attachmentRetryCount = 0
+        private lazy var tapRecognizer: UITapGestureRecognizer = {
+            let recognizer = UITapGestureRecognizer(
+                target: self,
+                action: #selector(handleTap(_:))
+            )
+            configureForPassiveObservation(recognizer)
+            return recognizer
+        }()
+        private lazy var longPressRecognizer: UILongPressGestureRecognizer = {
+            let recognizer = UILongPressGestureRecognizer(
+                target: self,
+                action: #selector(handleLongPress(_:))
+            )
+            recognizer.minimumPressDuration = observer.longPressMinimumDuration
+            recognizer.allowableMovement = 10
+            recognizer.numberOfTouchesRequired = 1
+            configureForPassiveObservation(recognizer)
+            return recognizer
+        }()
+
+        init(observer: MapGestureObserver) {
+            self.observer = observer
+        }
+
+        func update(
+            observer: MapGestureObserver,
+            anchorView: MapGestureAnchorView
+        ) {
+            self.observer = observer
+            longPressRecognizer.minimumPressDuration = observer.longPressMinimumDuration
+            attachIfNeeded(to: anchorView)
+        }
+
+        func attachIfNeeded(to anchorView: MapGestureAnchorView) {
+            self.anchorView = anchorView
+            guard let window = anchorView.window else {
+                scheduleAttachmentRetry(for: anchorView)
+                return
+            }
+            let anchorFrame = anchorView.convert(anchorView.bounds, to: window)
+            if let mapView,
+               mapView.window === window,
+               Self.overlapArea(of: mapView, with: anchorFrame, in: window) > 0 {
+                return
+            }
+            guard let resolvedMapView = Self.bestMapView(in: window, matching: anchorView) else {
+                scheduleAttachmentRetry(for: anchorView)
+                return
+            }
+
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
+            guard mapView !== resolvedMapView else { return }
+
+            removeRecognizers(from: mapView)
+            resolvedMapView.addGestureRecognizer(tapRecognizer)
+            resolvedMapView.addGestureRecognizer(longPressRecognizer)
+            mapView = resolvedMapView
+        }
+
+        func detach() {
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
+            removeRecognizers(from: mapView)
+            mapView = nil
+            anchorView = nil
+        }
+
+        @objc
+        private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let anchorView
+            else { return }
+
+            observer.onTap(recognizer.location(in: anchorView))
+        }
+
+        @objc
+        private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let anchorView
+            else { return }
+
+            observer.onLongPress(recognizer.location(in: anchorView))
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        private func configureForPassiveObservation(_ recognizer: UIGestureRecognizer) {
+            // Preserve pan, pinch, rotate, pitch, double-tap, and two-finger zoom.
+            recognizer.cancelsTouchesInView = false
+            recognizer.delaysTouchesBegan = false
+            recognizer.delaysTouchesEnded = false
+            recognizer.delegate = self
+        }
+
+        private func removeRecognizers(from mapView: MKMapView?) {
+            mapView?.removeGestureRecognizer(tapRecognizer)
+            mapView?.removeGestureRecognizer(longPressRecognizer)
+        }
+
+        private func scheduleAttachmentRetry(for anchorView: MapGestureAnchorView) {
+            guard attachmentRetryTask == nil, attachmentRetryCount < 20 else { return }
+            attachmentRetryCount += 1
+            attachmentRetryTask = Task { @MainActor [weak self, weak anchorView] in
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled, let self, let anchorView else { return }
+                self.attachmentRetryTask = nil
+                self.attachIfNeeded(to: anchorView)
+            }
+        }
+
+        private static func bestMapView(
+            in window: UIWindow,
+            matching anchorView: MapGestureAnchorView
+        ) -> MKMapView? {
+            let anchorFrame = anchorView.convert(anchorView.bounds, to: window)
+            guard !anchorFrame.isEmpty else { return nil }
+
+            return mapViews(in: window)
+                .filter { !$0.isHidden && $0.alpha > 0 && $0.isUserInteractionEnabled }
+                .max { lhs, rhs in
+                    overlapArea(of: lhs, with: anchorFrame, in: window)
+                        < overlapArea(of: rhs, with: anchorFrame, in: window)
+                }
+                .flatMap { mapView in
+                    overlapArea(of: mapView, with: anchorFrame, in: window) > 0
+                        ? mapView
+                        : nil
+                }
+        }
+
+        private static func mapViews(in root: UIView) -> [MKMapView] {
+            let current = (root as? MKMapView).map { [$0] } ?? []
+            return current + root.subviews.flatMap(mapViews)
+        }
+
+        private static func overlapArea(
+            of mapView: MKMapView,
+            with anchorFrame: CGRect,
+            in window: UIWindow
+        ) -> CGFloat {
+            let mapFrame = mapView.convert(mapView.bounds, to: window)
+            let intersection = mapFrame.intersection(anchorFrame)
+            guard !intersection.isNull, !intersection.isInfinite else { return 0 }
+            return intersection.width * intersection.height
+        }
+    }
+}
+
 enum MapHitTesting {
     static let markerTapRadius: CGFloat = 34
-    static let panDismissalDistance: CGFloat = 8
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
@@ -6365,12 +6600,11 @@ enum MapCameraInteraction: Equatable {
 }
 
 enum MapSelectionGesturePolicy {
-    static let minimumMagnificationDelta: CGFloat = 0.01
     static let minimumZoomSpanChangeRatio = 0.005
     static let minimumPanCenterChangeRatio = 0.002
     static let tapDismissalDelayNanoseconds: UInt64 = 320_000_000
-    static let cameraSettleDelayNanoseconds: UInt64 = 120_000_000
     static let postZoomTapSuppressionDuration: TimeInterval = 0.5
+    static let nativeFeatureTapSuppressionDuration: TimeInterval = 0.5
     static let doubleTapRecognitionWindow: TimeInterval = 0.32
 
     static func classify(
