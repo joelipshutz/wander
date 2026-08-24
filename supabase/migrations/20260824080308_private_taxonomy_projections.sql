@@ -159,7 +159,16 @@ as $$
       from public.place_attributes attribute
       left join public.question_definitions definition on definition.id = attribute.question_definition_id
       where attribute.user_place_id = visible.user_place_id
-        and (visible.is_self or attribute.question_key <> 'restaurant_cuisine')
+        and (
+          attribute.question_key <> 'restaurant_cuisine'
+          or (
+            visible.is_self
+            and (
+              visible.source_type is distinct from 'social_save'
+              or attribute.taxonomy_is_personal is true
+            )
+          )
+        )
     ), '[]'::jsonb) || app.viewer_taxonomy_projection_attributes(visible.place_id)
   from visible_rows visible
   left join rating_summary summary on summary.place_id = visible.place_id;
@@ -322,7 +331,16 @@ as $$
       from public.place_attributes attribute
       left join public.question_definitions definition on definition.id = attribute.question_definition_id
       where attribute.user_place_id = visible.user_place_id
-        and (visible.is_self or attribute.question_key <> 'restaurant_cuisine')
+        and (
+          attribute.question_key <> 'restaurant_cuisine'
+          or (
+            visible.is_self
+            and (
+              visible.source_type is distinct from 'social_save'
+              or attribute.taxonomy_is_personal is true
+            )
+          )
+        )
     ), '[]'::jsonb) || app.viewer_taxonomy_projection_attributes(visible.place_id)
   from visible_rows visible
   left join rating_summary summary on summary.place_id = visible.place_id
@@ -528,7 +546,16 @@ as $$
         from public.place_attributes attribute
         left join public.question_definitions definition on definition.id = attribute.question_definition_id
         where attribute.user_place_id = social.user_place_id
-          and (social.is_self or attribute.question_key <> 'restaurant_cuisine')
+          and (
+            attribute.question_key <> 'restaurant_cuisine'
+            or (
+              social.is_self
+              and (
+                social.source_type is distinct from 'social_save'
+                or attribute.taxonomy_is_personal is true
+              )
+            )
+          )
       ), '[]'::jsonb) || app.viewer_taxonomy_projection_attributes(social.place_id) as attributes,
       stats.latest_activity as sort_activity,
       true as sort_social

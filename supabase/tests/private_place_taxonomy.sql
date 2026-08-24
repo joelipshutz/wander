@@ -2,7 +2,24 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(20);
+select plan(24);
+
+select ok(
+  position(
+    'for update of place'
+    in pg_get_functiondef('app.recompute_place_taxonomy_consensus(uuid)'::regprocedure)
+  ) > 0,
+  'consensus recomputation serializes each place before tallying votes'
+);
+
+select ok(
+  not (
+    app.private_taxonomy_snapshot_projection(
+      '{"attribute_answers":[{"question_key":"restaurant_cuisine","value":"Thai"},{"question_key":"personal_labels","value":["date night"]}]}'::jsonb
+    )->'attribute_answers' @> '[{"question_key":"restaurant_cuisine"}]'::jsonb
+  ),
+  'legacy shared-visit snapshots hide the source owner food type at projection time'
+);
 
 select ok(
   not has_table_privilege('authenticated', 'public.place_taxonomy_snapshots', 'select'),
@@ -29,7 +46,8 @@ values
   ('taxonomy_viewer', 'taxonomyviewer', 'Taxonomy Viewer', false),
   ('taxonomy_owner', 'taxonomyowner', 'Taxonomy Owner', false),
   ('taxonomy_late_viewer', 'taxonomylateviewer', 'Taxonomy Late Viewer', false),
-  ('taxonomy_list_viewer', 'taxonomylistviewer', 'Taxonomy List Viewer', false);
+  ('taxonomy_list_viewer', 'taxonomylistviewer', 'Taxonomy List Viewer', false),
+  ('taxonomy_social_viewer', 'taxonomysocialviewer', 'Taxonomy Social Viewer', false);
 
 insert into public.profiles (id, handle, display_name, is_private_profile)
 select
@@ -109,6 +127,69 @@ values (
   'restaurant_cuisine',
   'restaurant_cuisine',
   '"Steakhouse"'::jsonb
+);
+
+-- Simulate a cuisine copied into a social save before REC-362. The lineage
+-- marker stays false unless the recipient later changes that value.
+insert into public.user_places (
+  id,
+  user_id,
+  place_id,
+  status,
+  visibility,
+  source_type
+)
+values (
+  'a6210000-0000-0000-0000-000000000002',
+  'taxonomy_social_viewer',
+  'a6200000-0000-0000-0000-000000000001',
+  'wanna_go',
+  'followers',
+  'social_save'
+);
+
+insert into public.place_attributes (
+  user_place_id,
+  question_definition_id,
+  question_key,
+  value_type,
+  value
+)
+values (
+  'a6210000-0000-0000-0000-000000000002',
+  null,
+  'restaurant_cuisine',
+  'restaurant_cuisine',
+  '"Steakhouse"'::jsonb
+);
+
+update public.place_attributes
+set taxonomy_is_personal = false
+where user_place_id = 'a6210000-0000-0000-0000-000000000002'
+  and question_key = 'restaurant_cuisine';
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'taxonomy_social_viewer', true);
+
+select ok(
+  (select food_type is null
+   from app.viewer_place_taxonomy('a6200000-0000-0000-0000-000000000001'))
+  and not (
+    select attributes @> '[{"question_key":"restaurant_cuisine"}]'::jsonb
+    from public.profile_visible_places('taxonomy_social_viewer', null, null)
+    where place_id = 'a6200000-0000-0000-0000-000000000001'
+  ),
+  'a legacy copied cuisine is hidden even from the recipient projection until they select it'
+);
+
+reset role;
+
+select is(
+  (select food_type_voter_count
+   from public.places
+   where id = 'a6200000-0000-0000-0000-000000000001'),
+  1,
+  'a legacy copied cuisine does not count as a consensus selection'
 );
 
 set local role authenticated;

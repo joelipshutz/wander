@@ -58,6 +58,38 @@ create index if not exists place_attributes_food_type_vote_idx
   on public.place_attributes (question_key, user_place_id)
   where question_key = 'restaurant_cuisine';
 
+-- Rows written before REC-362 have no provenance. A null marker remains valid
+-- for ordinary saves, while legacy social-save cuisine is treated as copied
+-- and hidden until that recipient explicitly writes their own value.
+alter table public.place_attributes
+  add column if not exists taxonomy_is_personal boolean;
+
+comment on column public.place_attributes.taxonomy_is_personal is
+  'True when restaurant_cuisine was inserted or changed after private taxonomy enforcement; null legacy social-save values are never projected or counted.';
+
+create or replace function app.mark_personal_taxonomy_write()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, app
+as $$
+begin
+  if new.question_key = 'restaurant_cuisine' then
+    new.taxonomy_is_personal := true;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function app.mark_personal_taxonomy_write()
+  from public, anon, authenticated;
+
+drop trigger if exists place_attributes_mark_personal_taxonomy on public.place_attributes;
+create trigger place_attributes_mark_personal_taxonomy
+  before insert or update of value
+  on public.place_attributes
+  for each row execute function app.mark_personal_taxonomy_write();
+
 create or replace function app.taxonomy_food_type_value(input_value jsonb)
 returns text
 language sql
@@ -136,6 +168,10 @@ as $$
     from own_place
     join public.place_attributes attribute on attribute.user_place_id = own_place.id
     where attribute.question_key = 'restaurant_cuisine'
+      and (
+        own_place.source_type is distinct from 'social_save'
+        or attribute.taxonomy_is_personal is true
+      )
     limit 1
   ),
   snapshot as (
@@ -313,7 +349,10 @@ begin
     place.provider_food_type
   into provider_category, provider_subcategory, provider_food_type
   from public.places place
-  where place.id = input_place_id;
+  where place.id = input_place_id
+  -- Serialize each place before tallying so concurrent votes cannot publish a
+  -- stale last-writer-wins consensus cache.
+  for update of place;
 
   if provider_category is null then
     return;
@@ -380,6 +419,10 @@ begin
     where own.place_id = input_place_id
       and own.deleted_at is null
       and attribute.question_key = 'restaurant_cuisine'
+      and (
+        own.source_type is distinct from 'social_save'
+        or attribute.taxonomy_is_personal is true
+      )
   )
   select count(distinct vote.user_id)::integer
   into food_type_voters
@@ -395,6 +438,10 @@ begin
     where own.place_id = input_place_id
       and own.deleted_at is null
       and attribute.question_key = 'restaurant_cuisine'
+      and (
+        own.source_type is distinct from 'social_save'
+        or attribute.taxonomy_is_personal is true
+      )
   )
   select candidate.value
   into food_type_winner
@@ -564,10 +611,10 @@ from (
 cross join lateral app.global_place_taxonomy(relation.place_id) taxonomy
 on conflict (user_id, place_id) do nothing;
 
--- The provider row for Noun changed from Coffee shop to Wine Bar at
--- 2026-08-24 06:57:27 UTC. All existing relations predate that refresh, so
--- preserve the prior provider default for those users while leaving Wine Bar
--- canonical for people without a prior relation.
+-- Noun's MapKit identity row received a Google Places taxonomy refresh from
+-- Coffee shop to Wine Bar at 2026-08-24 06:57:27 UTC. All existing relations
+-- predate that refresh, so preserve the prior provider default for those users
+-- while leaving Wine Bar canonical for people without a prior relation.
 update public.place_taxonomy_snapshots snapshot
 set
   primary_category = 'coffee_tea_sweets',
@@ -941,7 +988,7 @@ as $$
       select jsonb_agg(answer.value order by answer.ordinality)
       from jsonb_array_elements(coalesce(source_visit.attribute_answers, '[]'::jsonb))
         with ordinality answer(value, ordinality)
-      where answer.value->>'question_key' <> 'restaurant_cuisine'
+      where answer.value->>'question_key' is distinct from 'restaurant_cuisine'
     ), '[]'::jsonb),
     'tags', to_jsonb(source_visit.tags),
     'photos', coalesce((
@@ -969,12 +1016,210 @@ as $$
     and source_visit.deleted_at is null
 $$;
 
+create or replace function app.private_taxonomy_snapshot_projection(input_snapshot jsonb)
+returns jsonb
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select case
+    when input_snapshot is null then null
+    when jsonb_typeof(input_snapshot) <> 'object' then input_snapshot
+    else jsonb_set(
+      input_snapshot,
+      '{attribute_answers}',
+      coalesce((
+        select jsonb_agg(answer.value order by answer.ordinality)
+        from jsonb_array_elements(
+          case
+            when jsonb_typeof(input_snapshot->'attribute_answers') = 'array'
+              then input_snapshot->'attribute_answers'
+            else '[]'::jsonb
+          end
+        ) with ordinality answer(value, ordinality)
+        where answer.value->>'question_key' is distinct from 'restaurant_cuisine'
+      ), '[]'::jsonb),
+      true
+    )
+  end
+$$;
+
+revoke all on function app.private_taxonomy_snapshot_projection(jsonb)
+  from public, anon, authenticated;
+
+-- Project legacy invitation snapshots through the same privacy filter used for
+-- new invitations. Stored snapshots remain untouched.
+create or replace function public.list_shared_visit_inbox(
+  input_before timestamptz default null,
+  input_limit integer default 50
+)
+returns table (
+  participant_id uuid,
+  group_id uuid,
+  invitation_generation integer,
+  snapshot_revision integer,
+  participant_status text,
+  invited_at timestamptz,
+  source_visit_id uuid,
+  source_owner_user_id text,
+  source_owner_handle text,
+  source_owner_display_name text,
+  source_owner_avatar_url text,
+  place_id uuid,
+  canonical_name text,
+  category text,
+  primary_category text,
+  subcategory text,
+  address text,
+  locality text,
+  region text,
+  country text,
+  latitude double precision,
+  longitude double precision,
+  source_provider text,
+  source_provider_place_id text,
+  source_snapshot jsonb
+)
+language sql
+stable
+security definer
+set search_path = public, app
+as $$
+  select
+    participant.id,
+    shared_group.id,
+    participant.invitation_generation,
+    participant.snapshot_revision,
+    participant.status,
+    participant.invited_at,
+    shared_group.source_visit_id,
+    owner.id,
+    owner.handle,
+    owner.display_name,
+    owner.avatar_url,
+    place.id,
+    place.canonical_name,
+    place.category,
+    place.primary_category,
+    place.subcategory,
+    place.address,
+    place.locality,
+    place.region,
+    place.country,
+    place.latitude,
+    place.longitude,
+    place.source_provider,
+    place.source_provider_place_id,
+    app.private_taxonomy_snapshot_projection(participant.invitation_snapshot)
+  from public.shared_visit_participants participant
+  join public.shared_visit_groups shared_group on shared_group.id = participant.group_id
+  join public.profiles owner on owner.id = shared_group.owner_user_id
+  join public.places place on place.id = shared_group.place_id
+  where participant.user_id = app.current_user_id()
+    and participant.status = 'pending'
+    and participant.invitation_snapshot is not null
+    and shared_group.cancelled_at is null
+    and owner.deleted_at is null
+    and not owner.is_private_profile
+    and (input_before is null or participant.invited_at < input_before)
+  order by participant.invited_at desc, participant.id
+  limit greatest(1, least(coalesce(input_limit, 50), 50))
+$$;
+
+create or replace function public.get_shared_visit_context(
+  input_participant_id uuid,
+  input_generation integer
+)
+returns table (
+  participant_id uuid,
+  group_id uuid,
+  invitation_generation integer,
+  snapshot_revision integer,
+  participant_status text,
+  invited_at timestamptz,
+  source_visit_id uuid,
+  source_owner_user_id text,
+  source_owner_handle text,
+  source_owner_display_name text,
+  source_owner_avatar_url text,
+  place_id uuid,
+  canonical_name text,
+  category text,
+  primary_category text,
+  subcategory text,
+  address text,
+  locality text,
+  region text,
+  country text,
+  latitude double precision,
+  longitude double precision,
+  source_provider text,
+  source_provider_place_id text,
+  source_snapshot jsonb
+)
+language sql
+stable
+security definer
+set search_path = public, app
+as $$
+  select
+    participant.id,
+    shared_group.id,
+    participant.invitation_generation,
+    participant.snapshot_revision,
+    participant.status,
+    participant.invited_at,
+    shared_group.source_visit_id,
+    owner.id,
+    owner.handle,
+    owner.display_name,
+    owner.avatar_url,
+    place.id,
+    place.canonical_name,
+    place.category,
+    place.primary_category,
+    place.subcategory,
+    place.address,
+    place.locality,
+    place.region,
+    place.country,
+    place.latitude,
+    place.longitude,
+    place.source_provider,
+    place.source_provider_place_id,
+    app.private_taxonomy_snapshot_projection(participant.invitation_snapshot)
+  from public.shared_visit_participants participant
+  join public.shared_visit_groups shared_group on shared_group.id = participant.group_id
+  join public.profiles owner on owner.id = shared_group.owner_user_id
+  join public.places place on place.id = shared_group.place_id
+  where participant.id = input_participant_id
+    and participant.user_id = app.current_user_id()
+    and participant.invitation_generation = input_generation
+    and participant.status = 'pending'
+    and participant.invitation_snapshot is not null
+    and shared_group.cancelled_at is null
+    and owner.deleted_at is null
+    and not owner.is_private_profile
+$$;
+
+revoke all on function public.list_shared_visit_inbox(timestamptz, integer)
+  from public, anon;
+revoke all on function public.get_shared_visit_context(uuid, integer)
+  from public, anon;
+grant execute on function public.list_shared_visit_inbox(timestamptz, integer)
+  to authenticated;
+grant execute on function public.get_shared_visit_context(uuid, integer)
+  to authenticated;
+
 comment on function app.save_own_place(jsonb, jsonb, jsonb) is
   'Authenticated own-place save. Provider refreshes update canonical taxonomy; viewer consensus cannot overwrite provider truth.';
 comment on function app.save_visible_place(uuid, uuid) is
   'Copies a visible place without copying the source owner''s private food type and preserves the viewer''s first-relation taxonomy snapshot.';
 comment on function app.shared_visit_source_snapshot(uuid) is
   'Builds a shareable visit snapshot without the source owner''s private restaurant food type.';
+comment on function app.private_taxonomy_snapshot_projection(jsonb) is
+  'Removes private restaurant food type answers from legacy and current shared-visit snapshot projections without mutating stored history.';
 
 revoke all on function app.save_own_place(jsonb, jsonb, jsonb) from public, anon;
 revoke all on function app.save_visible_place(uuid, uuid) from public, anon;

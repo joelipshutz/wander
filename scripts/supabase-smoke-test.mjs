@@ -1581,7 +1581,7 @@ do $shared_context$
 declare
   smoke_invitation smoke_shared_visit_invitation;
   inbox_count integer;
-  context_note text;
+  context_snapshot jsonb;
 begin
   select * into smoke_invitation from smoke_shared_visit_invitation;
   select count(*)::integer into inbox_count
@@ -1592,13 +1592,22 @@ begin
     raise exception 'shared visit inbox visibility failed';
   end if;
 
-  select context.source_snapshot->>'note' into context_note
+  select context.source_snapshot into context_snapshot
   from public.get_shared_visit_context(
     smoke_invitation.participant_id,
     smoke_invitation.invitation_generation
   ) context;
-  if context_note is distinct from 'Rolled back linked preferred-photo smoke visit' then
+  if context_snapshot->>'note' is distinct from 'Rolled back linked preferred-photo smoke visit' then
     raise exception 'shared visit invitation snapshot failed';
+  end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(
+      coalesce(context_snapshot->'attribute_answers', '[]'::jsonb)
+    ) answer(value)
+    where answer.value->>'question_key' = 'restaurant_cuisine'
+  ) then
+    raise exception 'shared visit exposed the source owner''s private food type';
   end if;
 end
 $shared_context$;
