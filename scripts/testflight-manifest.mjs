@@ -471,7 +471,10 @@ export async function syncManifestRange({
   const comments = await listManifestComments(client, issue.number);
   const results = [];
   for (const commit of commits) {
-    const entry = await deriveEntryForCommit(client, commit);
+    const existing = comments.find((comment) => comment.entry.commit === commit.sha)?.entry;
+    const entry = existing && existing.pr == null && existing.disposition !== "unclassified"
+      ? existing
+      : await deriveEntryForCommit(client, commit);
     const action = await upsertEntryComment(client, issue.number, comments, entry);
     results.push({ commit: commit.sha, disposition: entry.disposition, action });
   }
