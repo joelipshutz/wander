@@ -53,6 +53,7 @@
 		1F6050501FF55A31CF052BDD /* OnboardingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5C022AA603520F5AFAA348 /* OnboardingState.swift */; };
 		20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */; };
 		21DB99956D5231546070A9D5 /* ListPlacePhotoResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */; };
+		22366D3693CFC2DA01B4FB7B /* rec-330-camera-preview-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */; };
 		24AA5015511677E17DD8A5BC /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
 		25D95FE2C19A7AC94B8FAF01 /* PlaceProfilePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C27E1F825871B306B970668 /* PlaceProfilePresentationTests.swift */; };
 		26573736780BA54719E0F7EC /* LinkPlaceParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */; };
@@ -154,6 +155,7 @@
 		9076FBE375DEE0E60A95FFCD /* ContactInviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8FA25DC61F3557DC6AC60AE /* ContactInviteSheet.swift */; };
 		91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C904029812CF4369275B29FA /* FeedScreen.swift */; };
 		91F2161DAF8327E2D985C80D /* rec-289-pinch-zoom-selection-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = F7E072B06ED29B9846EA203B /* rec-289-pinch-zoom-selection-pre.json */; };
+		9323D4075F400D6C36E1DBA8 /* AddCameraPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */; };
 		93E16EB26DD015377F5B2D9A /* rec-274-messages-composer-dismissal-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = B4CFACA664252A3BBDF70791 /* rec-274-messages-composer-dismissal-pre.json */; };
 		940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */; };
 		951634B967546BAA6394E0A8 /* rec-253-community-personalized-featured-post.json in Resources */ = {isa = PBXBuildFile; fileRef = 5D8CC526097B987E95522A42 /* rec-253-community-personalized-featured-post.json */; };
@@ -317,6 +319,7 @@
 		0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverScreen.swift; sourceTree = "<group>"; };
 		038D4985674B1D969110954F /* WanderEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderEnums.swift; sourceTree = "<group>"; };
 		03B626117566DC2BBAA50BF9 /* OnboardingLocationMapPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingLocationMapPreview.swift; sourceTree = "<group>"; };
+		04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddCameraPresentationTests.swift; sourceTree = "<group>"; };
 		0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetConstants.swift; sourceTree = "<group>"; };
 		059173381275E3363050A4E1 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
 		0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInboxDrainer.swift; sourceTree = "<group>"; };
@@ -458,6 +461,7 @@
 		94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-270-liquid-glass-pin-transition-pre.png"; sourceTree = "<group>"; };
 		981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEngagementViews.swift; sourceTree = "<group>"; };
 		9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapKitPlaceResolver.swift; sourceTree = "<group>"; };
+		9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-330-camera-preview-pre.json"; sourceTree = "<group>"; };
 		9E5C022AA603520F5AFAA348 /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
 		9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceExternalLinksTests.swift; sourceTree = "<group>"; };
 		9F0B6B10FCA35BC2BBC333BC /* PlaceImportCandidateMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportCandidateMatcher.swift; sourceTree = "<group>"; };
@@ -685,6 +689,7 @@
 				0B82E95F99088884DF1C0C97 /* rec-303-map-pin-entrance-bounce-post.png */,
 				00EAE08EF86AAB6428F14701 /* rec-303-map-pin-entrance-bounce-pre.json */,
 				F4773A8786B641C4B1B2AD5E /* rec-303-map-pin-entrance-bounce-pre.png */,
+				9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */,
 				1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */,
 				139BCA88A502517AA4BD9F9F /* rec-360-active-pin-layering-and-tap-pre.json */,
 				8249999898241DFF75C992C3 /* rec-360-active-pin-layering-and-tap-pre.png */,
@@ -792,6 +797,7 @@
 			isa = PBXGroup;
 			children = (
 				3EA6591C2750C3AB8B3E33C6 /* ActivityEngagementTests.swift */,
+				04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */,
 				34977B260344994771BCC93E /* AuthSessionTests.swift */,
 				D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */,
 				C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */,
@@ -1361,6 +1367,7 @@
 				C609A317876A8AB33A96DF6B /* rec-303-map-pin-entrance-bounce-post.png in Resources */,
 				06CF892F21408BC786EF5D3A /* rec-303-map-pin-entrance-bounce-pre.json in Resources */,
 				10758BA557EF6D1DF76EDE1A /* rec-303-map-pin-entrance-bounce-pre.png in Resources */,
+				22366D3693CFC2DA01B4FB7B /* rec-330-camera-preview-pre.json in Resources */,
 				CCEC1EF2FAE2A0572AF39550 /* rec-360-active-pin-layering-and-tap-post.png in Resources */,
 				84316327A030DB7D1B0CD590 /* rec-360-active-pin-layering-and-tap-pre.json in Resources */,
 				DE5F78BF05179155567775F1 /* rec-360-active-pin-layering-and-tap-pre.png in Resources */,
@@ -1536,6 +1543,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BA257D07059164E47F1CF145 /* ActivityEngagementTests.swift in Sources */,
+				9323D4075F400D6C36E1DBA8 /* AddCameraPresentationTests.swift in Sources */,
 				C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */,
 				0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */,
 				940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */,

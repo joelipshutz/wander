@@ -4540,17 +4540,16 @@ private struct MapGestureObserver: UIViewRepresentable {
         }
 
         private func handleCompletedTap(at point: CGPoint) {
-            guard let mapView, let anchorView else { return }
-            observer.onTap(mapView.convert(point, to: anchorView))
+            observer.onTap(point)
         }
 
         @objc
         private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began,
-                  let anchorView
+                  let mapView
             else { return }
 
-            observer.onLongPress(recognizer.location(in: anchorView))
+            observer.onLongPress(recognizer.location(in: mapView))
         }
 
         func gestureRecognizer(
@@ -7149,6 +7148,7 @@ struct MapPlaceSaveContext: Identifiable {
     let candidate: PlaceCandidate
     let mode: MapPlaceSaveMode
     let requiresStatusConfirmation: Bool
+    let preselectsInitialStatus: Bool
     let hasPriorCheckIn: Bool
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
@@ -7166,6 +7166,7 @@ struct MapPlaceSaveContext: Identifiable {
         candidate: PlaceCandidate,
         mode: MapPlaceSaveMode,
         requiresStatusConfirmation: Bool,
+        preselectsInitialStatus: Bool = false,
         hasPriorCheckIn: Bool,
         initialStatus: PlaceStatus,
         initialVisibility: PlaceVisibility,
@@ -7182,6 +7183,7 @@ struct MapPlaceSaveContext: Identifiable {
         self.candidate = candidate
         self.mode = mode
         self.requiresStatusConfirmation = requiresStatusConfirmation
+        self.preselectsInitialStatus = preselectsInitialStatus
         self.hasPriorCheckIn = hasPriorCheckIn
         self.initialStatus = initialStatus
         self.initialVisibility = initialVisibility
@@ -7361,12 +7363,14 @@ struct MapPlaceSaveContext: Identifiable {
         defaultVisibility: PlaceVisibility,
         initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = [],
         currentUserSave: VisiblePlace? = nil,
-        latestVisit: LocalPlaceVisit? = nil
+        latestVisit: LocalPlaceVisit? = nil,
+        preselectsInitialStatus: Bool = false
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
             mode: .add(sourceType),
             requiresStatusConfirmation: true,
+            preselectsInitialStatus: preselectsInitialStatus,
             hasPriorCheckIn: currentUserSave?.userPlace.status == .been,
             initialStatus: currentUserSave?.userPlace.status ?? .wannaGo,
             initialVisibility: currentUserSave?.userPlace.visibility ?? defaultVisibility,
@@ -7461,7 +7465,6 @@ struct MapPlaceSaveContext: Identifiable {
     ) -> MapPlaceSaveContext {
         let defaultAttributes = latestVisit.map { VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON) }
             ?? attributes.map { PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON) }
-        let note = visiblePlace.userPlace.status == .wannaGo ? visiblePlace.userPlace.note ?? "" : ""
         return MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .addVisit(visiblePlace),
@@ -7470,7 +7473,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: latestVisit?.ratingScore,
-            initialNote: note,
+            initialNote: "",
             initialPlannedDate: nil,
             initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
             initialPersonalLabels: [],
@@ -7483,7 +7486,8 @@ struct MapPlaceSaveContext: Identifiable {
         _ visiblePlace: VisiblePlace,
         defaultVisibility: PlaceVisibility,
         attributes: [LocalPlaceAttribute],
-        latestVisit: LocalPlaceVisit?
+        latestVisit: LocalPlaceVisit?,
+        preselectsInitialStatus: Bool = false
     ) -> MapPlaceSaveContext {
         var currentUserSave = visiblePlace
         currentUserSave.attributes = attributes
@@ -7492,7 +7496,8 @@ struct MapPlaceSaveContext: Identifiable {
             sourceType: .manual,
             defaultVisibility: defaultVisibility,
             currentUserSave: currentUserSave,
-            latestVisit: latestVisit
+            latestVisit: latestVisit,
+            preselectsInitialStatus: preselectsInitialStatus
         )
     }
 
@@ -8617,7 +8622,9 @@ struct MapPlaceSaveEditor: View {
         _selectedAssignment = State(initialValue: initialAssignment)
         _selectedStatus = State(initialValue: initialStatus)
         _hasSelectedStatus = State(
-            initialValue: initialStep == .details || !context.requiresStatusConfirmation
+            initialValue: initialStep == .details
+                || !context.requiresStatusConfirmation
+                || context.preselectsInitialStatus
         )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)
@@ -9393,7 +9400,8 @@ struct MapPlaceSaveEditor: View {
 
     private var removeSaveSection: some View {
         MapSaveDestructiveButton(
-            title: isRemoving ? "removing..." : context.removeTitle,
+            title: isRemoving ? "removing..." : "delete",
+            accessibilityLabel: isRemoving ? "removing..." : context.removeTitle,
             systemImage: "trash",
             isDisabled: isSaving || isRemoving
         ) {
@@ -10685,6 +10693,7 @@ private struct MapSaveChoicePill: View {
 
 private struct MapSaveDestructiveButton: View {
     let title: String
+    let accessibilityLabel: String
     let systemImage: String
     let isDisabled: Bool
     let action: () -> Void
@@ -10695,16 +10704,15 @@ private struct MapSaveDestructiveButton: View {
                 Image(systemName: systemImage)
                 Text(title)
             }
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .background(WanderTheme.stateError.color)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .clipShape(Capsule())
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(WanderTheme.stateError.color)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .contentShape(Rectangle())
             .opacity(isDisabled ? 0.52 : 1)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .accessibilityLabel(title)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

@@ -884,7 +884,8 @@ private struct ListDetailScreen: View {
     @State private var isAddingPlaces = false
     @State private var suggestionBatch = ListSuggestionBatch()
     @State private var isLoadingSuggestions = false
-    @State private var shouldShowAutoSaveExplanation = false
+    @State private var saveToast: ListSaveToastPresentation?
+    @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
     @State private var isShowingLeaveConfirmation = false
     @State private var isLeavingList = false
@@ -1017,8 +1018,7 @@ private struct ListDetailScreen: View {
         }
         .navigationDestination(isPresented: $isAddingPlaces) {
             if let sourceList {
-                ListAddPlacesScreen(list: sourceList) { result in
-                    handleAddResult(result)
+                ListAddPlacesScreen(list: sourceList) { _ in
                     onListChanged(sourceList.id)
                 }
             } else {
@@ -1032,15 +1032,39 @@ private struct ListDetailScreen: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if shouldShowAutoSaveExplanation {
-                ListAutoSaveToast()
+            if let saveToast {
+                ListSaveToast(presentation: saveToast) {
+                    openSaveFlow(for: saveToast.companionSave)
+                }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing4)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .allowsHitTesting(false)
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: saveToast)
+        .sheet(item: $placeSaveFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                let result = await persistListPlaceSaveSubmission(
+                    submission,
+                    store: store,
+                    auth: auth,
+                    backend: backend
+                )
+                if let sourceList {
+                    onListChanged(sourceList.id)
+                }
+                return result
+            } onRemove: { context in
+                await removeListPlaceSave(
+                    context,
+                    store: store,
+                    auth: auth,
+                    backend: backend
+                )
+            }
+        }
         .onDisappear {
             autoSaveToastTask?.cancel()
         }
@@ -1260,7 +1284,7 @@ private struct ListDetailScreen: View {
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        MapPinOutlineBuilder.outlineCatalog(
+        listSavedPlaceOutlineCatalog(
             for: store.visiblePlaces(),
             currentUserID: store.currentUser.id
         )
@@ -1355,23 +1379,33 @@ private struct ListDetailScreen: View {
 
     @MainActor
     private func handleAddResult(_ result: ListPlaceAddResult) {
-        if result.shouldExplainAutoSave {
-            showAutoSaveToast()
+        guard result.outcome == .added,
+              let presentation = ListSaveToastPresentation(companionSave: result.companionSave)
+        else { return }
+        showSaveToast(presentation)
+    }
+
+    @MainActor
+    private func showSaveToast(_ presentation: ListSaveToastPresentation) {
+        autoSaveToastTask?.cancel()
+        saveToast = presentation
+        autoSaveToastTask = Task {
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                saveToast = nil
+                autoSaveToastTask = nil
+            }
         }
     }
 
     @MainActor
-    private func showAutoSaveToast() {
+    private func openSaveFlow(for companionSave: ListPlaceAddResult.CompanionSave) {
+        guard let context = listSaveFlowContext(for: companionSave, store: store) else { return }
         autoSaveToastTask?.cancel()
-        shouldShowAutoSaveExplanation = true
-        autoSaveToastTask = Task {
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                shouldShowAutoSaveExplanation = false
-                autoSaveToastTask = nil
-            }
-        }
+        saveToast = nil
+        store.saveFlowDidPresent(.saveSheet)
+        placeSaveFlow = context
     }
 
     @MainActor
@@ -1472,6 +1506,7 @@ private struct ListSuggestionsSection: View {
 private struct ListAddPlacesScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let list: LocalPlaceList
     let onAdded: (ListPlaceAddResult) -> Void
@@ -1482,7 +1517,8 @@ private struct ListAddPlacesScreen: View {
     @State private var isSearching = false
     @State private var selectedPlace: ListPlaceMock?
     @State private var pendingSearchCandidateIDs = Set<String>()
-    @State private var shouldShowAutoSaveExplanation = false
+    @State private var saveToast: ListSaveToastPresentation?
+    @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
 
     var body: some View {
@@ -1531,15 +1567,35 @@ private struct ListAddPlacesScreen: View {
             selectedPlaceDestination
         }
         .overlay(alignment: .bottom) {
-            if shouldShowAutoSaveExplanation {
-                ListAutoSaveToast()
+            if let saveToast {
+                ListSaveToast(presentation: saveToast) {
+                    openSaveFlow(for: saveToast.companionSave)
+                }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing4)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .allowsHitTesting(false)
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: saveToast)
+        .sheet(item: $placeSaveFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await persistListPlaceSaveSubmission(
+                    submission,
+                    store: store,
+                    auth: auth,
+                    backend: backend
+                )
+            } onRemove: { context in
+                await removeListPlaceSave(
+                    context,
+                    store: store,
+                    auth: auth,
+                    backend: backend
+                )
+            }
+        }
         .onDisappear {
             autoSaveToastTask?.cancel()
             suggestionBatch.cancelPendingAdditions()
@@ -1636,7 +1692,7 @@ private struct ListAddPlacesScreen: View {
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        MapPinOutlineBuilder.outlineCatalog(
+        listSavedPlaceOutlineCatalog(
             for: store.visiblePlaces(),
             currentUserID: store.currentUser.id
         )
@@ -1711,23 +1767,33 @@ private struct ListAddPlacesScreen: View {
 
     @MainActor
     private func handleAddResult(_ result: ListPlaceAddResult) {
-        if result.shouldExplainAutoSave {
-            showAutoSaveToast()
+        guard result.outcome == .added,
+              let presentation = ListSaveToastPresentation(companionSave: result.companionSave)
+        else { return }
+        showSaveToast(presentation)
+    }
+
+    @MainActor
+    private func showSaveToast(_ presentation: ListSaveToastPresentation) {
+        autoSaveToastTask?.cancel()
+        saveToast = presentation
+        autoSaveToastTask = Task {
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                saveToast = nil
+                autoSaveToastTask = nil
+            }
         }
     }
 
     @MainActor
-    private func showAutoSaveToast() {
+    private func openSaveFlow(for companionSave: ListPlaceAddResult.CompanionSave) {
+        guard let context = listSaveFlowContext(for: companionSave, store: store) else { return }
         autoSaveToastTask?.cancel()
-        shouldShowAutoSaveExplanation = true
-        autoSaveToastTask = Task {
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                shouldShowAutoSaveExplanation = false
-                autoSaveToastTask = nil
-            }
-        }
+        saveToast = nil
+        store.saveFlowDidPresent(.saveSheet)
+        placeSaveFlow = context
     }
 
     @MainActor
@@ -1771,29 +1837,160 @@ private struct ListAddPlacesUnavailableScreen: View {
     }
 }
 
-private struct ListAutoSaveToast: View {
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .black))
-                .frame(width: 34, height: 34)
-                .background(WanderTheme.terracotta.color)
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .clipShape(Circle())
+@MainActor
+func listSaveFlowContext(
+    for companionSave: ListPlaceAddResult.CompanionSave,
+    store: WanderStore
+) -> MapPlaceSaveContext? {
+    guard let userPlaceID = companionSave.userPlaceID,
+          let visiblePlace = store.currentUserVisiblePlaces.first(where: { visiblePlace in
+              visiblePlace.userPlace.id == userPlaceID
+                  || visiblePlace.userPlace.localID == userPlaceID
+                  || visiblePlace.userPlace.serverID == userPlaceID
+          })
+    else { return nil }
 
-            Text("We also saved this to your Want list.")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .fixedSize(horizontal: false, vertical: true)
+    let attributes = store.attributes(for: visiblePlace.userPlace.id)
+    let latestVisit = store.visits(for: visiblePlace.userPlace.id).first
 
-            Spacer(minLength: 0)
+    switch companionSave {
+    case .none:
+        return nil
+    case .createdWanna:
+        return MapPlaceSaveContext.reselectCurrentUserSave(
+            visiblePlace,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            attributes: attributes,
+            latestVisit: latestVisit,
+            preselectsInitialStatus: true
+        )
+    case .existingWanna:
+        return MapPlaceSaveContext.editWant(visiblePlace, attributes: attributes)
+    }
+}
+
+@MainActor
+private func persistListPlaceSaveSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    auth: AuthSessionStore,
+    backend: WanderBackend
+) async -> SaveResult? {
+    let visitBackend = auth.isSignedIn ? backend : nil
+    let result: SaveResult?
+
+    switch submission.context.mode {
+    case .sharedVisit:
+        return nil
+    case .add:
+        result = await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: visitBackend
+        )
+    case .addVisit, .editVisit, .editWant:
+        let (scopedResult, targetVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: visitBackend
+        )
+        guard let scopedResult else { return nil }
+        await persistVisitPhotoAttachments(
+            submission.photoAttachments,
+            to: targetVisit,
+            store: store,
+            backend: visitBackend
+        )
+        result = scopedResult
+    }
+
+    if result != nil, !auth.isSignedIn {
+        auth.presentGate(for: .syncPlace)
+    }
+    return result
+}
+
+@MainActor
+private func removeListPlaceSave(
+    _ context: MapPlaceSaveContext,
+    store: WanderStore,
+    auth: AuthSessionStore,
+    backend: WanderBackend
+) async -> Bool {
+    switch context.mode {
+    case .editVisit(_, let visit):
+        return await store.deleteVisit(
+            visitID: visit.id,
+            backend: auth.isSignedIn ? backend : nil
+        )
+    case .editWant(let visiblePlace):
+        return await store.removeSave(
+            userPlaceID: visiblePlace.userPlace.id,
+            backend: auth.isSignedIn ? backend : nil
+        ) != nil
+    case .add, .addVisit, .sharedVisit:
+        return false
+    }
+}
+
+struct ListSaveToastPresentation: Equatable {
+    let companionSave: ListPlaceAddResult.CompanionSave
+    let message: String
+    let actionTitle: String
+
+    init?(companionSave: ListPlaceAddResult.CompanionSave) {
+        self.companionSave = companionSave
+        switch companionSave {
+        case .none:
+            return nil
+        case .createdWanna:
+            message = "We also saved this to your Wanna Go"
+            actionTitle = "edit"
+        case .existingWanna:
+            message = "This is already saved to your Wanna Go"
+            actionTitle = "edit"
         }
-        .padding(WanderTheme.spacing3)
+    }
+}
+
+private struct ListSaveToast: View {
+    let presentation: ListSaveToastPresentation
+    let onEdit: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .symbolEffect(.bounce, value: presentation.message)
+
+            Text(presentation.message + " •")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .layoutPriority(1)
+
+            Button(presentation.actionTitle, action: onEdit)
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .underline()
+                .padding(.horizontal, 10)
+                .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the place save editor")
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, WanderTheme.spacing2)
+        .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.surfaceRaised.color.opacity(0.98))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 18, x: 0, y: 10)
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
         )
     }
@@ -4741,8 +4938,18 @@ private func savedPlaceOutlines(
     outlineCatalog: [String: [MapPinOutline]],
     currentUserID: String
 ) -> [MapPinOutline] {
-    if let outlines = outlineCatalog[visiblePlace.id] {
-        return outlines
+    let lookupKeys = [
+        visiblePlace.id,
+        visiblePlace.userPlace.localID,
+        visiblePlace.userPlace.serverID,
+        visiblePlace.place.localID,
+        visiblePlace.place.serverID,
+        VisiblePlaceGrouping.key(for: visiblePlace)
+    ].compactMap { $0 }
+    for key in lookupKeys {
+        if let outlines = outlineCatalog[key] {
+            return outlines
+        }
     }
 
     return MapPinOutlineBuilder.outlines(
@@ -4759,12 +4966,45 @@ private func savedPlaceOutlines(
     for place: ListPlaceMock,
     outlineCatalog: [String: [MapPinOutline]]
 ) -> [MapPinOutline] {
-    if let visiblePlaceID = place.visiblePlaceID,
-       let outlines = outlineCatalog[visiblePlaceID] {
-        return outlines
+    for key in [place.visiblePlaceID, place.placeID].compactMap({ $0 }) {
+        if let outlines = outlineCatalog[key] {
+            return outlines
+        }
     }
 
     return MapPinOutlineBuilder.outlines(for: place.saveStates)
+}
+
+private func listSavedPlaceOutlineCatalog(
+    for visiblePlaces: [VisiblePlace],
+    currentUserID: String
+) -> [String: [MapPinOutline]] {
+    var catalog: [String: [MapPinOutline]] = [:]
+    for group in VisiblePlaceGrouping.groups(from: visiblePlaces, currentUserID: currentUserID) {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: group.places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
+        )
+        let lookupKeys = group.aliases.union([group.key]).union(
+            group.places.flatMap { visiblePlace in
+                [
+                    visiblePlace.id,
+                    visiblePlace.userPlace.localID,
+                    visiblePlace.userPlace.serverID,
+                    visiblePlace.place.localID,
+                    visiblePlace.place.serverID
+                ].compactMap { $0 }
+            }
+        )
+        for key in lookupKeys {
+            catalog[key] = outlines
+        }
+    }
+    return catalog
 }
 
 private struct ListCollaboratorMock: Identifiable {
