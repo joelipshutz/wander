@@ -4396,19 +4396,19 @@ private struct MapGestureObserver: UIViewRepresentable {
         @objc
         private func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard recognizer.state == .ended,
-                  let anchorView
+                  let mapView
             else { return }
 
-            observer.onTap(recognizer.location(in: anchorView))
+            observer.onTap(recognizer.location(in: mapView))
         }
 
         @objc
         private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began,
-                  let anchorView
+                  let mapView
             else { return }
 
-            observer.onLongPress(recognizer.location(in: anchorView))
+            observer.onLongPress(recognizer.location(in: mapView))
         }
 
         func gestureRecognizer(
