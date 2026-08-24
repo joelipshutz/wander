@@ -1,0 +1,33 @@
+{
+  "issue": "REC-360",
+  "capture_source": "Ryan's physical-device screenshot and tap report from the REC-360 Xcode test branch",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the supplied physical-device screenshot is the pre-fix source of truth",
+  "branch": "codex/rec-360-pin-focus-falloff",
+  "reported_commit": "f0dadadce",
+  "screenshot": "rec-360-active-pin-layering-and-tap-pre.png",
+  "screenshot_sha256": "63077fda3e52aef95b82d74930166fb635e23629f7ad31abd22a4f0e2d3080b1",
+  "precondition": {
+    "selected_place_name": "Menya Tigre",
+    "selected_place_card_presented": true,
+    "dense_nearby_annotations": true
+  },
+  "buggy_results": {
+    "inactive_annotations_cover_selected_pin_and_title": true,
+    "unrelated_native_place_names_remain_visible": true,
+    "custom_pin_requires_more_than_one_tap": true
+  },
+  "expected_results": {
+    "selected_pin_and_title_render_above_every_other_map_annotation": true,
+    "competing_place_names_hidden_while_custom_map_content_is_shown": true,
+    "custom_pin_selects_on_first_completed_tap": true,
+    "inactive_pin_opacity_floor": 0.26
+  },
+  "post_fix_verification": {
+    "simulator": "iPhone 17, iOS 26.5",
+    "physical_screen_coordinate_tap_selected_place": "Canyon Lookout Trail",
+    "selected_pin_and_title_visually_frontmost": true,
+    "competing_custom_place_names_visible": false,
+    "screenshot": "rec-360-active-pin-layering-and-tap-post.png",
+    "screenshot_sha256": "8a2bae8dbe0c5fe17047d04184cf3d409ba606ba934be30c59e4d74412b42bfa"
+  }
+}

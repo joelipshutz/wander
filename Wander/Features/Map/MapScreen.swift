@@ -670,6 +670,26 @@ struct MapScreen: View {
             ? annotationGroups.first(where: { $0.key == selectedPlaceGroupKey })
             : nil
         let activeSearchCandidate = highlightsCompactSelection ? selectedSearchCandidate : nil
+        let activePinFocusSelection: (id: String, coordinate: CLLocationCoordinate2D)? = {
+            if let activeAnnotationGroup {
+                return (
+                    id: "saved:\(activeAnnotationGroup.key)",
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: activeAnnotationGroup.primary.place.latitude,
+                        longitude: activeAnnotationGroup.primary.place.longitude
+                    )
+                )
+            }
+            if let activeSearchCandidate,
+               let latitude = activeSearchCandidate.latitude,
+               let longitude = activeSearchCandidate.longitude {
+                return (
+                    id: "search:\(activeSearchCandidate.id)",
+                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                )
+            }
+            return nil
+        }()
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
@@ -694,12 +714,19 @@ struct MapScreen: View {
                         ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                            let coordinate = CLLocationCoordinate2D(
+                                latitude: group.primary.place.latitude,
+                                longitude: group.primary.place.longitude
+                            )
+                            let focusConfiguration = MapPinFocusPolicy.configuration(
+                                for: coordinate,
+                                selectionID: activePinFocusSelection?.id,
+                                selectedCoordinate: activePinFocusSelection?.coordinate,
+                                regionSpan: currentSearchRegion.span
+                            )
                             Annotation(
                                 group.primary.place.canonicalName,
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
+                                coordinate: coordinate
                             ) {
                                 MapPlaceMarker(
                                     visiblePlace: group.primary,
@@ -718,17 +745,31 @@ struct MapScreen: View {
                                         delay: entranceDelay
                                     )
                                 )
+                                .modifier(
+                                    MapPinFocusModifier(configuration: focusConfiguration)
+                                )
                                 .allowsHitTesting(false)
                             }
+                            .annotationTitles(.hidden)
                         }
 
                         ForEach(inactiveSearchCandidates, id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
                                 let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                                let coordinate = CLLocationCoordinate2D(
+                                    latitude: latitude,
+                                    longitude: longitude
+                                )
+                                let focusConfiguration = MapPinFocusPolicy.configuration(
+                                    for: coordinate,
+                                    selectionID: activePinFocusSelection?.id,
+                                    selectedCoordinate: activePinFocusSelection?.coordinate,
+                                    regionSpan: currentSearchRegion.span
+                                )
                                 Annotation(
                                     candidate.name,
-                                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                                    coordinate: coordinate
                                 ) {
                                     SearchResultMarker(
                                         candidate: candidate,
@@ -745,70 +786,23 @@ struct MapScreen: View {
                                             delay: entranceDelay
                                         )
                                     )
+                                    .modifier(
+                                        MapPinFocusModifier(configuration: focusConfiguration)
+                                    )
                                     .allowsHitTesting(false)
                                 }
-                            }
-                        }
-
-                        if highlightsCompactSelection, let group = activeAnnotationGroup {
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
-                            ) {
-                                ActiveMapAnnotationContent(title: group.primary.place.canonicalName) {
-                                    MapPlaceMarker(
-                                        visiblePlace: group.primary,
-                                        saves: saveSummaries(for: group),
-                                        currentUserID: store.currentUser.id,
-                                        isSelected: true
-                                    )
-                                    .modifier(
-                                        MapPinReselectionBounceModifier(
-                                            trigger: activePinBounceRevision
-                                        )
-                                    )
-                                }
-                                .frame(minWidth: 44, minHeight: 44)
-                                .allowsHitTesting(false)
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityAction {
-                                    replayActivePinBounce()
-                                }
-                            }
-                        }
-
-                        if highlightsCompactSelection, let candidate = activeSearchCandidate,
-                           let latitude = candidate.latitude,
-                           let longitude = candidate.longitude {
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: latitude,
-                                    longitude: longitude
-                                )
-                            ) {
-                                ActiveMapAnnotationContent(title: candidate.name) {
-                                    SearchResultMarker(candidate: candidate, isSelected: true)
-                                        .modifier(
-                                            MapPinReselectionBounceModifier(
-                                                trigger: activePinBounceRevision
-                                            )
-                                        )
-                                }
-                                .frame(minWidth: 44, minHeight: 44)
-                                .allowsHitTesting(false)
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityAction {
-                                    replayActivePinBounce()
-                                }
+                                .annotationTitles(.hidden)
                             }
                         }
 
                     }
-                    .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .mapStyle(
+                        .standard(
+                            elevation: .flat,
+                            emphasis: .muted,
+                            pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll
+                        )
+                    )
                     .environment(
                         \.colorScheme,
                         store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
@@ -820,6 +814,13 @@ struct MapScreen: View {
                     .modifier(HideNativeMapFeatureAccessory())
                     .tint(Self.currentLocationTint)
                     .ignoresSafeArea()
+                    .overlay {
+                        activeMapAnnotationOverlay(
+                            proxy: proxy,
+                            group: activeAnnotationGroup,
+                            candidate: activeSearchCandidate
+                        )
+                    }
                     .background {
                         GeometryReader { geometry in
                             Color.clear.preference(
@@ -1609,6 +1610,81 @@ struct MapScreen: View {
     private func replayActivePinBounce() {
         cancelPendingMapTapDismissal()
         activePinBounceRevision &+= 1
+    }
+
+    @ViewBuilder
+    private func activeMapAnnotationOverlay(
+        proxy: MapProxy,
+        group: VisiblePlaceGroup?,
+        candidate: PlaceCandidate?
+    ) -> some View {
+        GeometryReader { _ in
+            if highlightsCompactSelection, let group {
+                let coordinate = CLLocationCoordinate2D(
+                    latitude: group.primary.place.latitude,
+                    longitude: group.primary.place.longitude
+                )
+                if let point = proxy.convert(coordinate, to: .local) {
+                    let activeSaves = saveSummaries(for: group)
+                    Button {
+                        replayActivePinBounce()
+                    } label: {
+                        ActiveMapAnnotationContent(
+                            title: group.primary.place.canonicalName,
+                            outlineCount: MapPlaceMarker.outlineCount(
+                                visiblePlace: group.primary,
+                                saves: activeSaves,
+                                currentUserID: store.currentUser.id
+                            )
+                        ) {
+                            MapPlaceMarker(
+                                visiblePlace: group.primary,
+                                saves: activeSaves,
+                                currentUserID: store.currentUser.id,
+                                isSelected: true
+                            )
+                            .modifier(
+                                MapPinReselectionBounceModifier(
+                                    trigger: activePinBounceRevision
+                                )
+                            )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("map.pin.active.saved.\(group.key)")
+                    .position(point)
+                }
+            } else if highlightsCompactSelection,
+                      let candidate,
+                      let latitude = candidate.latitude,
+                      let longitude = candidate.longitude,
+                      let point = proxy.convert(
+                          CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                          to: .local
+                      ) {
+                Button {
+                    replayActivePinBounce()
+                } label: {
+                    ActiveMapAnnotationContent(
+                        title: candidate.name,
+                        outlineCount: MapPinVisualMetrics.searchResultOutlineCount
+                    ) {
+                        SearchResultMarker(candidate: candidate, isSelected: true)
+                            .modifier(
+                                MapPinReselectionBounceModifier(
+                                    trigger: activePinBounceRevision
+                                )
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("map.pin.active.search.\(candidate.id)")
+                .position(point)
+            }
+        }
+        .zIndex(MapAnnotationLayering.activeOverlayZIndex)
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
@@ -4286,6 +4362,75 @@ private final class MapGestureAnchorView: UIView {
     }
 }
 
+private final class PassiveMapTapGestureRecognizer: UIGestureRecognizer {
+    var maximumMovement: CGFloat = 10
+    var onCompletedTap: ((CGPoint) -> Void)?
+
+    private var initialLocation: CGPoint?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible,
+              touches.count == 1,
+              event.allTouches?.count == 1,
+              let touch = touches.first
+        else {
+            state = .failed
+            return
+        }
+
+        initialLocation = touch.location(in: view)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible,
+              let initialLocation,
+              let touch = touches.first
+        else { return }
+
+        let currentLocation = touch.location(in: view)
+        if hypot(
+            currentLocation.x - initialLocation.x,
+            currentLocation.y - initialLocation.y
+        ) > maximumMovement {
+            state = .failed
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible,
+              let initialLocation,
+              let touch = touches.first
+        else {
+            state = .failed
+            return
+        }
+
+        let completedLocation = touch.location(in: view)
+        let stayedWithinTapRadius = hypot(
+            completedLocation.x - initialLocation.x,
+            completedLocation.y - initialLocation.y
+        ) <= maximumMovement
+        let callback = onCompletedTap
+
+        // This observer deliberately never recognizes. Failing leaves every
+        // MapKit gesture free to resolve normally while still reporting the
+        // completed single touch to the map's coordinate hit tester.
+        state = .failed
+        if stayedWithinTapRadius {
+            callback?(completedLocation)
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = .failed
+    }
+
+    override func reset() {
+        initialLocation = nil
+        super.reset()
+    }
+}
+
 private struct MapGestureObserver: UIViewRepresentable {
     let longPressMinimumDuration: TimeInterval
     let onTap: (CGPoint) -> Void
@@ -4323,11 +4468,12 @@ private struct MapGestureObserver: UIViewRepresentable {
         private weak var mapView: MKMapView?
         private var attachmentRetryTask: Task<Void, Never>?
         private var attachmentRetryCount = 0
-        private lazy var tapRecognizer: UITapGestureRecognizer = {
-            let recognizer = UITapGestureRecognizer(
-                target: self,
-                action: #selector(handleTap(_:))
-            )
+        private lazy var tapRecognizer: PassiveMapTapGestureRecognizer = {
+            let recognizer = PassiveMapTapGestureRecognizer()
+            recognizer.maximumMovement = MapHitTesting.passiveTapAllowableMovement
+            recognizer.onCompletedTap = { [weak self] point in
+                self?.handleCompletedTap(at: point)
+            }
             configureForPassiveObservation(recognizer)
             return recognizer
         }()
@@ -4393,13 +4539,8 @@ private struct MapGestureObserver: UIViewRepresentable {
             anchorView = nil
         }
 
-        @objc
-        private func handleTap(_ recognizer: UITapGestureRecognizer) {
-            guard recognizer.state == .ended,
-                  let mapView
-            else { return }
-
-            observer.onTap(recognizer.location(in: mapView))
+        private func handleCompletedTap(at point: CGPoint) {
+            observer.onTap(point)
         }
 
         @objc
@@ -4482,6 +4623,7 @@ private struct MapGestureObserver: UIViewRepresentable {
 
 enum MapHitTesting {
     static let markerTapRadius: CGFloat = 34
+    static let passiveTapAllowableMovement: CGFloat = 10
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
@@ -4563,6 +4705,192 @@ enum MapPinEntranceStyle {
 
     static func staggerDelay(for index: Int) -> TimeInterval {
         min(TimeInterval(max(0, index)) * staggerInterval, maximumStagger)
+    }
+}
+
+struct MapPinFocusConfiguration: Equatable {
+    let selectionID: String?
+    let opacity: Double
+    let normalizedDistance: Double?
+
+    static let unfocused = MapPinFocusConfiguration(
+        selectionID: nil,
+        opacity: 1,
+        normalizedDistance: nil
+    )
+}
+
+enum MapPinFocusPolicy {
+    static let minimumOpacity = 0.26
+    static let innerRadius = 0.08
+    static let distanceStep = 0.04
+    static let opacityStep = 0.10
+    static let outerRadius = 0.40
+    static let verticalDistanceWeight = 1.65
+
+    static func configuration(
+        for coordinate: CLLocationCoordinate2D,
+        selectionID: String?,
+        selectedCoordinate: CLLocationCoordinate2D?,
+        regionSpan: MKCoordinateSpan
+    ) -> MapPinFocusConfiguration {
+        guard let selectionID,
+              let normalizedDistance = normalizedDistance(
+                  from: coordinate,
+                  to: selectedCoordinate,
+                  regionSpan: regionSpan
+              )
+        else { return .unfocused }
+
+        return MapPinFocusConfiguration(
+            selectionID: selectionID,
+            opacity: opacity(forNormalizedDistance: normalizedDistance),
+            normalizedDistance: normalizedDistance
+        )
+    }
+
+    static func opacity(
+        for coordinate: CLLocationCoordinate2D,
+        selectedCoordinate: CLLocationCoordinate2D?,
+        regionSpan: MKCoordinateSpan
+    ) -> Double {
+        guard let normalizedDistance = normalizedDistance(
+            from: coordinate,
+            to: selectedCoordinate,
+            regionSpan: regionSpan
+        ) else { return 1 }
+
+        return opacity(forNormalizedDistance: normalizedDistance)
+    }
+
+    static func opacity(forNormalizedDistance normalizedDistance: Double) -> Double {
+        guard normalizedDistance > innerRadius else { return minimumOpacity }
+        guard normalizedDistance < outerRadius else { return 1 }
+
+        let bandProgress = (normalizedDistance - innerRadius) / distanceStep
+        let lowerBand = floor(bandProgress)
+        let progressWithinBand = bandProgress - lowerBand
+        let lowerOpacity = min(1, minimumOpacity + (lowerBand * opacityStep))
+        let upperOpacity = min(1, lowerOpacity + opacityStep)
+        let smoothProgress = progressWithinBand * progressWithinBand
+            * (3 - (2 * progressWithinBand))
+
+        return lowerOpacity + ((upperOpacity - lowerOpacity) * smoothProgress)
+    }
+
+    static func normalizedDistance(
+        from coordinate: CLLocationCoordinate2D,
+        to selectedCoordinate: CLLocationCoordinate2D?,
+        regionSpan: MKCoordinateSpan
+    ) -> Double? {
+        guard let selectedCoordinate,
+              CLLocationCoordinate2DIsValid(coordinate),
+              CLLocationCoordinate2DIsValid(selectedCoordinate),
+              regionSpan.latitudeDelta > 0,
+              regionSpan.longitudeDelta > 0
+        else { return nil }
+
+        let rawLongitudeDelta = abs(coordinate.longitude - selectedCoordinate.longitude)
+        let wrappedLongitudeDelta = min(rawLongitudeDelta, 360 - rawLongitudeDelta)
+        let normalizedHorizontalDistance = wrappedLongitudeDelta / regionSpan.longitudeDelta
+        let normalizedVerticalDistance = abs(coordinate.latitude - selectedCoordinate.latitude)
+            / regionSpan.latitudeDelta
+            * verticalDistanceWeight
+        return hypot(
+            normalizedHorizontalDistance,
+            normalizedVerticalDistance
+        )
+    }
+}
+
+enum MapPinFocusTransitionDirection: Equatable {
+    case fade
+    case restore
+    case steady
+}
+
+enum MapPinFocusTransitionPolicy {
+    static let maximumStagger: TimeInterval = 0.12
+
+    static func direction(
+        from previous: MapPinFocusConfiguration,
+        to current: MapPinFocusConfiguration
+    ) -> MapPinFocusTransitionDirection {
+        if current.opacity < previous.opacity { return .fade }
+        if current.opacity > previous.opacity { return .restore }
+        return .steady
+    }
+
+    static func delay(
+        from previous: MapPinFocusConfiguration,
+        to current: MapPinFocusConfiguration
+    ) -> TimeInterval {
+        guard previous.selectionID != current.selectionID else { return 0 }
+
+        switch direction(from: previous, to: current) {
+        case .fade:
+            return staggerProgress(for: current.normalizedDistance) * maximumStagger
+        case .restore:
+            return (1 - staggerProgress(for: previous.normalizedDistance)) * maximumStagger
+        case .steady:
+            return 0
+        }
+    }
+
+    private static func staggerProgress(for normalizedDistance: Double?) -> Double {
+        guard let normalizedDistance else { return 1 }
+        let progress = (normalizedDistance - MapPinFocusPolicy.innerRadius)
+            / (MapPinFocusPolicy.outerRadius - MapPinFocusPolicy.innerRadius)
+        return min(max(progress, 0), 1)
+    }
+}
+
+@MainActor
+enum MapPinFocusMotionStyle {
+    static let duration: TimeInterval = 0.22
+    static let animation = Animation.easeInOut(duration: duration)
+}
+
+private struct MapPinFocusModifier: ViewModifier {
+    let configuration: MapPinFocusConfiguration
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var renderedOpacity: Double?
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(renderedOpacity ?? configuration.opacity)
+            .onAppear {
+                setWithoutAnimation(configuration.opacity)
+            }
+            .onChange(of: configuration) { previous, current in
+                transition(from: previous, to: current)
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                setWithoutAnimation(configuration.opacity)
+            }
+    }
+
+    private func transition(
+        from previous: MapPinFocusConfiguration,
+        to current: MapPinFocusConfiguration
+    ) {
+        guard !reduceMotion else {
+            setWithoutAnimation(current.opacity)
+            return
+        }
+
+        let delay = MapPinFocusTransitionPolicy.delay(from: previous, to: current)
+        withAnimation(MapPinFocusMotionStyle.animation.delay(delay)) {
+            renderedOpacity = current.opacity
+        }
+    }
+
+    private func setWithoutAnimation(_ opacity: Double) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            renderedOpacity = opacity
+        }
     }
 }
 
@@ -6076,14 +6404,17 @@ private struct MapMoreOptionChip: View {
 
 private struct ActiveMapAnnotationContent<Marker: View>: View {
     let title: String
+    let outlineCount: Int
     let marker: Marker
     @Environment(\.wanderMapAppearance) private var appearance
 
     init(
         title: String,
+        outlineCount: Int,
         @ViewBuilder marker: () -> Marker
     ) {
         self.title = title
+        self.outlineCount = outlineCount
         self.marker = marker()
     }
 
@@ -6102,7 +6433,8 @@ private struct ActiveMapAnnotationContent<Marker: View>: View {
                 )
                 .offset(
                     y: MapPinVisualMetrics.activeTitleVerticalOffset(
-                        selectedScale: MapPinSelectionMotionStyle.selectedScale
+                        selectedScale: MapPinSelectionMotionStyle.selectedScale,
+                        outlineCount: outlineCount
                     )
                 )
                 .allowsHitTesting(false)
@@ -6152,7 +6484,11 @@ private struct MapPlaceMarker: View {
     var body: some View {
         WanderMapPin(
             visiblePlace: visiblePlace,
-            outlines: MapPinOutlineBuilder.outlines(for: saveStates)
+            outlines: Self.outlines(
+                visiblePlace: visiblePlace,
+                saves: saves,
+                currentUserID: currentUserID
+            )
         )
         .scaleEffect(
             isSelected
@@ -6162,7 +6498,37 @@ private struct MapPlaceMarker: View {
         .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
     }
 
-    private var saveStates: [MapPinSaveState] {
+    static func outlineCount(
+        visiblePlace: VisiblePlace,
+        saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> Int {
+        outlines(
+            visiblePlace: visiblePlace,
+            saves: saves,
+            currentUserID: currentUserID
+        ).count
+    }
+
+    private static func outlines(
+        visiblePlace: VisiblePlace,
+        saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> [MapPinOutline] {
+        MapPinOutlineBuilder.outlines(
+            for: saveStates(
+                visiblePlace: visiblePlace,
+                saves: saves,
+                currentUserID: currentUserID
+            )
+        )
+    }
+
+    private static func saveStates(
+        visiblePlace: VisiblePlace,
+        saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> [MapPinSaveState] {
         let states = saves.map { summary in
             MapPinSaveState(
                 ownership: summary.visiblePlace.owner.id == currentUserID ? .currentUser : .social,
@@ -6294,12 +6660,22 @@ enum MapPinVisualMetrics {
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+    static let searchResultOutlineCount = 2
     static let activeTitleClearance: CGFloat = 2
     static let activeTitleFontSize: CGFloat = 13
     static let activeTitleLineHeight: CGFloat = 16
 
-    static func activeTitleVerticalOffset(selectedScale: CGFloat) -> CGFloat {
-        (discDiameter * selectedScale / 2)
+    static func activeTitleVerticalOffset(
+        selectedScale: CGFloat,
+        outlineCount: Int
+    ) -> CGFloat {
+        let outlineExpansion: CGFloat = switch outlineCount {
+        case ...0: 0
+        case 1: outlineWidth / 2
+        default: abs(secondaryOutlinePadding) + (outlineWidth / 2)
+        }
+
+        return ((discDiameter / 2 + outlineExpansion) * selectedScale)
             + activeTitleClearance
             + (activeTitleLineHeight / 2)
     }
@@ -6357,6 +6733,10 @@ enum MapSelectionLifetimePolicy {
             false
         }
     }
+}
+
+enum MapAnnotationLayering {
+    static let activeOverlayZIndex = 100.0
 }
 
 private struct MapPinReselectionBounceModifier: ViewModifier {
