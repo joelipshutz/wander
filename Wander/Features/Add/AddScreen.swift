@@ -380,8 +380,6 @@ struct AddScreen: View {
                 } onRemove: { _ in
                     false
                 }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
             }
             .fullScreenCover(
                 item: $cameraPresentation.route,

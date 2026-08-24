@@ -1997,6 +1997,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("if sourceContext.requiresStatusConfirmation"))
         XCTAssertTrue(mapScreen.contains("if isReadyForDetails"))
         XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.statusSelector\")"))
+        XCTAssertTrue(mapScreen.contains("private struct MapSaveChoiceButton: View"))
+        XCTAssertTrue(mapScreen.contains("VStack(alignment: .leading, spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(mapScreen.contains(".frame(maxWidth: .infinity, minHeight: 52)"))
+        XCTAssertFalse(mapScreen.contains("private struct MapSaveChoicePill: View"))
         XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus)"))
         XCTAssertTrue(mapScreen.contains("sourceContext.preselectingStatus(status)"))
         XCTAssertTrue(mapScreen.contains("restoreModeDraft(cachedDraft)"))
@@ -2046,9 +2050,9 @@ final class NavigationContractTests: XCTestCase {
             return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
         }
         XCTAssertEqual(attachedEssentialOffsets, attachedEssentialOffsets.sorted())
-        XCTAssertTrue(optionalDetails.contains("if presentation == .attached"))
-        XCTAssertTrue(optionalDetails.contains("placeTypeSection"))
-        XCTAssertTrue(optionalDetails.contains("visitParticipationSections"))
+        XCTAssertFalse(optionalDetails.contains("presentation == .attached"))
+        XCTAssertFalse(optionalDetails.contains("placeTypeSection"))
+        XCTAssertFalse(optionalDetails.contains("visitParticipationSections"))
 
         let optionalMarkers = [
             "questionAndLabelSections",
@@ -3943,7 +3947,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(authGate.contains(".espressoConfirmation"))
     }
 
-    func testFirstMapSavesUseOneSharedEditorForSheetAndAttachedTray() throws {
+    func testFirstMapSavesUseOneSharedSheetForEveryEntryPoint() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -3963,29 +3967,33 @@ final class NavigationContractTests: XCTestCase {
             after: "struct MapPlaceSaveEditor: View {",
             before: "private struct MapSaveVisitPhotoSection: View"
         )
+        let placeProfileSheet = try sourceSection(
+            placeProfile,
+            after: "struct PlaceSaveAttachedSheet: View {",
+            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable"
+        )
 
         XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
-        XCTAssertTrue(sheetWrapper.contains("presentation: .sheet"))
         XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
-        XCTAssertTrue(placeProfile.contains("MapPlaceSaveEditor("))
-        XCTAssertTrue(placeProfile.contains("presentation: .attached"))
+        XCTAssertTrue(placeProfileSheet.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertFalse(placeProfileSheet.contains("MapPlaceSaveEditor("))
+        XCTAssertFalse(mapScreen.contains("MapPlaceSaveEditorPresentation"))
+        XCTAssertFalse(placeProfile.contains("presentation: .attached"))
         XCTAssertTrue(placeProfile.contains(".sheet(item: attachedSaveSheetContext)"))
         XCTAssertTrue(placeProfile.contains(".id(context.id)"))
         XCTAssertTrue(placeProfile.contains("if attachedSaveContext == nil"))
         XCTAssertTrue(placeProfile.contains("onAttachedClose()"))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
-        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"Wanna\" : CheckInCopy.verb"))
-        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"bookmark.fill\" : \"star.fill\""))
         XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(trayAccessibilityIdentifier)"))
-        XCTAssertTrue(placeProfile.contains("static let compactHeight: CGFloat = 430"))
-        XCTAssertTrue(placeProfile.contains("static let compactDetent = PresentationDetent.height(compactHeight)"))
-        XCTAssertTrue(placeProfile.contains(".presentationDetents("))
-        XCTAssertTrue(placeProfile.contains("[Self.compactDetent, .large]"))
-        XCTAssertTrue(placeProfile.contains(".presentationDragIndicator(.visible)"))
-        XCTAssertTrue(placeProfile.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
-        XCTAssertTrue(placeProfile.contains(".presentationContentInteraction(.resizes)"))
-        XCTAssertTrue(placeProfile.contains("onContentExpansionRequested: expand"))
+        XCTAssertTrue(sheetWrapper.contains("static let detent = PresentationDetent.large"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationDetents([Self.detent])"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
+        XCTAssertFalse(placeProfileSheet.contains(".presentationDetents"))
+        XCTAssertTrue(placeProfileSheet.contains("onClose: onClose"))
+        XCTAssertTrue(placeProfileSheet.contains("onSaveCompleted: onSaveCompleted"))
+        XCTAssertFalse(placeProfileSheet.contains("compactDetent"))
+        XCTAssertFalse(placeProfileSheet.contains("presentationBackgroundInteraction"))
         XCTAssertTrue(sharedEditor.contains("onExpansionRequested: onContentExpansionRequested"))
 
         XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
@@ -3995,7 +4003,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
         XCTAssertTrue(sharedEditor.contains("guard saveAttemptedAt == nil else { return }"))
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
-        XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
+        XCTAssertTrue(sharedEditor.contains("candidateCard"))
+        XCTAssertTrue(sharedEditor.contains("placeTypeSection"))
+        XCTAssertTrue(sharedEditor.contains("visitParticipationSections"))
+        XCTAssertFalse(sharedEditor.contains("presentation == .attached"))
+        XCTAssertFalse(sharedEditor.contains("presentation == .sheet"))
         XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))
         XCTAssertEqual(
             sharedEditor.components(separatedBy: "onContentExpansionRequested()").count - 1,

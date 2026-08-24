@@ -2048,9 +2048,6 @@ struct PlaceProfileFloatingActions: View {
 }
 
 struct PlaceSaveAttachedSheet: View {
-    static let compactHeight: CGFloat = 430
-    static let compactDetent = PresentationDetent.height(compactHeight)
-
     let context: MapPlaceSaveContext
     let draft: PlaceSaveDraft?
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
@@ -2058,9 +2055,7 @@ struct PlaceSaveAttachedSheet: View {
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onClose: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
-    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
-    @State private var selectedDetent = PlaceSaveAttachedSheet.compactDetent
 
     private var resolvedDraft: PlaceSaveDraft? {
         guard let liveDraft = placeSaveDraftStore.draft,
@@ -2073,18 +2068,6 @@ struct PlaceSaveAttachedSheet: View {
         resolvedDraft?.form.selectedStatus ?? context.initialStatus
     }
 
-    private var trayTitle: String {
-        selectedStatus == .wannaGo ? "Wanna" : CheckInCopy.verb
-    }
-
-    private var traySystemImage: String {
-        selectedStatus == .wannaGo ? "bookmark.fill" : "star.fill"
-    }
-
-    private var collapseAccessibilityLabel: String {
-        selectedStatus == .wannaGo ? "Collapse Wanna" : "Collapse check-in"
-    }
-
     private var trayAccessibilityIdentifier: String {
         selectedStatus == .wannaGo
             ? "place-profile.attached-wanna"
@@ -2092,69 +2075,17 @@ struct PlaceSaveAttachedSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Label(trayTitle, systemImage: traySystemImage)
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityAddTraits(.isSelected)
-
-                Spacer()
-
-                Button(action: onClose) {
-                    Label(collapseAccessibilityLabel, systemImage: "chevron.down")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(
-                            minWidth: WanderTheme.tapMinimum,
-                            minHeight: WanderTheme.tapMinimum
-                        )
-                        .foregroundStyle(WanderTheme.textInk.color)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(collapseAccessibilityLabel)
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-
-            Divider()
-                .background(WanderTheme.borderHairline.color)
-
-            GeometryReader { proxy in
-                MapPlaceSaveEditor(
-                    context: context,
-                    draft: resolvedDraft,
-                    presentation: .attached,
-                    onDraftChange: onDraftChange,
-                    onSave: onSave,
-                    onRemove: onRemove,
-                    onClose: onClose,
-                    onContentExpansionRequested: expand,
-                    onSaveCompleted: onSaveCompleted
-                )
-                .id(context.id)
-                .frame(width: proxy.size.width, height: proxy.size.height)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(WanderTheme.surfaceBone.color)
-        .presentationDetents(
-            [Self.compactDetent, .large],
-            selection: $selectedDetent
+        MapPlaceSaveFlowSheet(
+            context: context,
+            draft: resolvedDraft,
+            onDraftChange: onDraftChange,
+            onSave: onSave,
+            onRemove: onRemove,
+            onClose: onClose,
+            onSaveCompleted: onSaveCompleted
         )
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(WanderTheme.radiusSheet)
-        .presentationBackground(WanderTheme.surfaceBone.color)
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
-        .presentationContentInteraction(.resizes)
-        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
+        .id(context.id)
         .accessibilityIdentifier(trayAccessibilityIdentifier)
-    }
-
-    private func expand() {
-        withAnimation(.snappy(duration: 0.34, extraBounce: 0)) {
-            selectedDetent = .large
-        }
     }
 }
 

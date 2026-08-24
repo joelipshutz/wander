@@ -4,12 +4,9 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
-    func testAttachedSheetUsesCompactAndSystemLargeDetents() {
-        XCTAssertEqual(PlaceSaveAttachedSheet.compactHeight, 430)
-        XCTAssertEqual(
-            PlaceSaveAttachedSheet.compactDetent,
-            PresentationDetent.height(430)
-        )
+    @MainActor
+    func testEverySaveEntryPointUsesTheSharedLargeSheetDetent() {
+        XCTAssertEqual(MapPlaceSaveFlowSheet.detent, .large)
     }
 
     func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {

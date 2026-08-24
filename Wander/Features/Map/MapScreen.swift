@@ -1197,8 +1197,6 @@ struct MapScreen: View {
                 } onRemove: { context in
                     await removeMapSave(context)
                 }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
             }
             .toolbar(.hidden, for: .navigationBar)
         }
@@ -8151,56 +8149,72 @@ private struct MapCheckInDateSection: View {
     }
 }
 
-enum MapPlaceSaveEditorPresentation: Equatable {
-    case sheet
-    case attached
-}
-
 struct MapPlaceSaveFlowSheet: View {
+    static let detent = PresentationDetent.large
+
     @Environment(\.dismiss) private var dismiss
     let context: MapPlaceSaveContext
     let draft: PlaceSaveDraft?
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onClose: (@MainActor () -> Void)?
+    let onSaveCompleted: (@MainActor (SaveResult) -> Void)?
 
     init(
         context: MapPlaceSaveContext,
         draft: PlaceSaveDraft? = nil,
         onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
-        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
+        onClose: (@MainActor () -> Void)? = nil,
+        onSaveCompleted: (@MainActor (SaveResult) -> Void)? = nil
     ) {
         self.context = context
         self.draft = draft
         self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
+        self.onClose = onClose
+        self.onSaveCompleted = onSaveCompleted
     }
 
     var body: some View {
         MapPlaceSaveEditor(
             context: context,
             draft: draft,
-            presentation: .sheet,
             onDraftChange: onDraftChange,
             onSave: onSave,
             onRemove: onRemove,
-            onClose: { dismiss() },
-            onSaveCompleted: { _ in dismiss() }
+            onClose: {
+                if let onClose {
+                    onClose()
+                } else {
+                    dismiss()
+                }
+            },
+            onSaveCompleted: { result in
+                if let onSaveCompleted {
+                    onSaveCompleted(result)
+                } else {
+                    dismiss()
+                }
+            }
         )
+        .presentationDetents([Self.detent])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(WanderTheme.radiusSheet)
+        .presentationBackground(WanderTheme.canvasWarm.color)
     }
 }
 
 struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let sourceContext: MapPlaceSaveContext
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let draftID: UUID?
-    let presentation: MapPlaceSaveEditorPresentation
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onClose: @MainActor () -> Void
     let onContentExpansionRequested: @MainActor () -> Void
@@ -8248,7 +8262,6 @@ struct MapPlaceSaveEditor: View {
     init(
         context: MapPlaceSaveContext,
         draft: PlaceSaveDraft? = nil,
-        presentation: MapPlaceSaveEditorPresentation,
         onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
@@ -8259,7 +8272,6 @@ struct MapPlaceSaveEditor: View {
         sourceContext = context
         _context = State(initialValue: context)
         draftID = draft?.id
-        self.presentation = presentation
         self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
@@ -8456,16 +8468,13 @@ struct MapPlaceSaveEditor: View {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: isReadyForDetails ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                        if presentation == .sheet {
-                            header
-                        }
-
+                        header
                         singleScreenContent
                     }
                     .walkthroughTarget(isReadyForDetails ? nil : .saveStatus)
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
-                    .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
+                    .padding(.top, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing6)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .background(editorBackground)
@@ -8546,9 +8555,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var editorBackground: Color {
-        presentation == .attached
-            ? WanderTheme.surfaceBone.color
-            : WanderTheme.canvasWarm.color
+        WanderTheme.canvasWarm.color
     }
 
     private var header: some View {
@@ -8606,24 +8613,13 @@ struct MapPlaceSaveEditor: View {
 
     private var singleScreenContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            if presentation == .sheet {
-                candidateCard
-            }
+            candidateCard
 
             if sourceContext.requiresStatusConfirmation {
                 MapSavePickerBlock(title: "what do you want to do?") {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize {
-                            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                                checkInStatusChoice
-                                wannaGoStatusChoice
-                            }
-                        } else {
-                            HStack(spacing: WanderTheme.spacing2) {
-                                checkInStatusChoice
-                                wannaGoStatusChoice
-                            }
-                        }
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        checkInStatusChoice
+                        wannaGoStatusChoice
                     }
                     .walkthroughEmphasis(.saveStatus)
                 }
@@ -8639,7 +8635,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var checkInStatusChoice: some View {
-        MapSaveChoicePill(
+        MapSaveChoiceButton(
             title: CheckInCopy.verb,
             isSelected: presentedHasSelectedStatus && selectedStatus == .been
         ) {
@@ -8650,7 +8646,7 @@ struct MapPlaceSaveEditor: View {
     @ViewBuilder
     private var wannaGoStatusChoice: some View {
         if sourceContext.allowsWannaGoSelection {
-            MapSaveChoicePill(
+            MapSaveChoiceButton(
                 title: "wanna go",
                 isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
             ) {
@@ -8683,11 +8679,9 @@ struct MapPlaceSaveEditor: View {
                 .id(WalkthroughTargetID.saveNote)
                 .walkthroughTarget(.saveNote)
 
-            if presentation == .sheet {
-                placeTypeSection
-                    .id(WalkthroughTargetID.saveDetails)
-                    .walkthroughTarget(.saveDetails)
-            }
+            placeTypeSection
+                .id(WalkthroughTargetID.saveDetails)
+                .walkthroughTarget(.saveDetails)
 
             if selectedStatus == .been || walkthroughs.activeSurface == .saveFlow {
                 ratingSection
@@ -8696,11 +8690,9 @@ struct MapPlaceSaveEditor: View {
             }
 
             if selectedStatus == .been {
-                if presentation == .sheet {
-                    visitParticipationSections
-                        .id(WalkthroughTargetID.saveFriends)
-                        .walkthroughTarget(.saveFriends)
-                }
+                visitParticipationSections
+                    .id(WalkthroughTargetID.saveFriends)
+                    .walkthroughTarget(.saveFriends)
             }
 
             optionalDetailsDisclosure
@@ -9067,17 +9059,6 @@ struct MapPlaceSaveEditor: View {
             )
 
             if isShowingOptionalDetails {
-                if presentation == .attached {
-                    placeTypeSection
-                        .id(WalkthroughTargetID.saveDetails)
-                        .walkthroughTarget(.saveDetails)
-
-                    if selectedStatus == .been {
-                        visitParticipationSections
-                            .id(WalkthroughTargetID.saveFriends)
-                            .walkthroughTarget(.saveFriends)
-                    }
-                }
                 questionAndLabelSections
                     .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
                 visibilitySection
@@ -10431,10 +10412,11 @@ private struct MapSavePickerBlock<Content: View>: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             content
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct MapSaveChoicePill: View {
+private struct MapSaveChoiceButton: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
@@ -10444,12 +10426,15 @@ private struct MapSaveChoicePill: View {
             Text(title)
                 .font(WanderTypography.label)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: WanderTheme.tapMinimum)
+                .frame(maxWidth: .infinity, minHeight: 52)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
                 .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityValue(isSelected ? "selected" : "not selected")
