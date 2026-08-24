@@ -265,6 +265,94 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.45, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusUsesASmoothDistanceFalloff() {
+        let selected = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+
+        let collidingPinOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.999),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let midFalloffOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.98),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let distantPinOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.95),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+
+        XCTAssertEqual(collidingPinOpacity, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertGreaterThan(midFalloffOpacity, MapPinFocusPolicy.minimumOpacity)
+        XCTAssertLessThan(midFalloffOpacity, 1)
+        XCTAssertEqual(distantPinOpacity, 1, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusClearsWithoutASelection() {
+        let opacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            selectedCoordinate: nil,
+            regionSpan: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+        )
+
+        XCTAssertEqual(opacity, 1, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusMovesToTheReplacementSelection() {
+        let firstSelection = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let replacementSelection = CLLocationCoordinate2D(latitude: 34, longitude: -117.96)
+        let nearbyFirstPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.999)
+        let nearbyReplacementPin = CLLocationCoordinate2D(latitude: 34, longitude: -117.961)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+
+        let firstPinBeforeReplacement = MapPinFocusPolicy.opacity(
+            for: nearbyFirstPin,
+            selectedCoordinate: firstSelection,
+            regionSpan: span
+        )
+        let firstPinAfterReplacement = MapPinFocusPolicy.opacity(
+            for: nearbyFirstPin,
+            selectedCoordinate: replacementSelection,
+            regionSpan: span
+        )
+        let replacementPinBeforeSelection = MapPinFocusPolicy.opacity(
+            for: nearbyReplacementPin,
+            selectedCoordinate: firstSelection,
+            regionSpan: span
+        )
+        let replacementPinAfterSelection = MapPinFocusPolicy.opacity(
+            for: nearbyReplacementPin,
+            selectedCoordinate: replacementSelection,
+            regionSpan: span
+        )
+
+        XCTAssertEqual(firstPinBeforeReplacement, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+        XCTAssertEqual(firstPinAfterReplacement, 1, accuracy: 0.001)
+        XCTAssertEqual(replacementPinBeforeSelection, 1, accuracy: 0.001)
+        XCTAssertEqual(replacementPinAfterSelection, MapPinFocusPolicy.minimumOpacity, accuracy: 0.001)
+    }
+
+    func testSelectedPinFocusUsesAnEllipticalVerticalFalloff() {
+        let selected = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let span = MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.10)
+        let horizontalOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34, longitude: -117.98),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+        let verticalOpacity = MapPinFocusPolicy.opacity(
+            for: CLLocationCoordinate2D(latitude: 34.02, longitude: -118),
+            selectedCoordinate: selected,
+            regionSpan: span
+        )
+
+        XCTAssertGreaterThan(verticalOpacity, horizontalOpacity)
     }
 
     @MainActor

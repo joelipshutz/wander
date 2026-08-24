@@ -636,6 +636,20 @@ struct MapScreen: View {
             ? annotationGroups.first(where: { $0.key == selectedPlaceGroupKey })
             : nil
         let activeSearchCandidate = highlightsCompactSelection ? selectedSearchCandidate : nil
+        let activePinFocusCoordinate: CLLocationCoordinate2D? = {
+            if let activeAnnotationGroup {
+                return CLLocationCoordinate2D(
+                    latitude: activeAnnotationGroup.primary.place.latitude,
+                    longitude: activeAnnotationGroup.primary.place.longitude
+                )
+            }
+            if let activeSearchCandidate,
+               let latitude = activeSearchCandidate.latitude,
+               let longitude = activeSearchCandidate.longitude {
+                return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            }
+            return nil
+        }()
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
@@ -656,12 +670,18 @@ struct MapScreen: View {
                         ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                            let coordinate = CLLocationCoordinate2D(
+                                latitude: group.primary.place.latitude,
+                                longitude: group.primary.place.longitude
+                            )
+                            let focusOpacity = MapPinFocusPolicy.opacity(
+                                for: coordinate,
+                                selectedCoordinate: activePinFocusCoordinate,
+                                regionSpan: currentSearchRegion.span
+                            )
                             Annotation(
                                 group.primary.place.canonicalName,
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
+                                coordinate: coordinate
                             ) {
                                 Button {
                                     selectVisiblePlaceFromMapTap(group.primary)
@@ -681,6 +701,7 @@ struct MapScreen: View {
                                         delay: entranceDelay
                                     )
                                 )
+                                .modifier(MapPinFocusModifier(opacity: focusOpacity))
                             }
                         }
 
@@ -688,9 +709,18 @@ struct MapScreen: View {
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
                                 let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                                let coordinate = CLLocationCoordinate2D(
+                                    latitude: latitude,
+                                    longitude: longitude
+                                )
+                                let focusOpacity = MapPinFocusPolicy.opacity(
+                                    for: coordinate,
+                                    selectedCoordinate: activePinFocusCoordinate,
+                                    regionSpan: currentSearchRegion.span
+                                )
                                 Annotation(
                                     candidate.name,
-                                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                                    coordinate: coordinate
                                 ) {
                                     Button {
                                         selectSearchCandidateFromMapTap(candidate)
@@ -708,6 +738,7 @@ struct MapScreen: View {
                                             delay: entranceDelay
                                         )
                                     )
+                                    .modifier(MapPinFocusModifier(opacity: focusOpacity))
                                 }
                             }
                         }
@@ -4328,6 +4359,64 @@ enum MapPinEntranceStyle {
 
     static func staggerDelay(for index: Int) -> TimeInterval {
         min(TimeInterval(max(0, index)) * staggerInterval, maximumStagger)
+    }
+}
+
+enum MapPinFocusPolicy {
+    static let minimumOpacity = 0.22
+    static let innerRadius = 0.08
+    static let outerRadius = 0.34
+    static let verticalDistanceWeight = 1.65
+
+    static func opacity(
+        for coordinate: CLLocationCoordinate2D,
+        selectedCoordinate: CLLocationCoordinate2D?,
+        regionSpan: MKCoordinateSpan
+    ) -> Double {
+        guard let selectedCoordinate,
+              CLLocationCoordinate2DIsValid(coordinate),
+              CLLocationCoordinate2DIsValid(selectedCoordinate),
+              regionSpan.latitudeDelta > 0,
+              regionSpan.longitudeDelta > 0
+        else { return 1 }
+
+        let rawLongitudeDelta = abs(coordinate.longitude - selectedCoordinate.longitude)
+        let wrappedLongitudeDelta = min(rawLongitudeDelta, 360 - rawLongitudeDelta)
+        let normalizedHorizontalDistance = wrappedLongitudeDelta / regionSpan.longitudeDelta
+        let normalizedVerticalDistance = abs(coordinate.latitude - selectedCoordinate.latitude)
+            / regionSpan.latitudeDelta
+            * verticalDistanceWeight
+        let normalizedDistance = hypot(
+            normalizedHorizontalDistance,
+            normalizedVerticalDistance
+        )
+
+        guard normalizedDistance > innerRadius else { return minimumOpacity }
+        guard normalizedDistance < outerRadius else { return 1 }
+
+        let linearProgress = (normalizedDistance - innerRadius) / (outerRadius - innerRadius)
+        let smoothProgress = linearProgress * linearProgress * (3 - (2 * linearProgress))
+        return minimumOpacity + ((1 - minimumOpacity) * smoothProgress)
+    }
+}
+
+@MainActor
+enum MapPinFocusMotionStyle {
+    static let duration: TimeInterval = 0.22
+    static let animation = Animation.easeInOut(duration: duration)
+}
+
+private struct MapPinFocusModifier: ViewModifier {
+    let opacity: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(opacity)
+            .animation(
+                reduceMotion ? nil : MapPinFocusMotionStyle.animation,
+                value: opacity
+            )
     }
 }
 
