@@ -182,7 +182,6 @@ struct AddScreen: View {
     @State private var cameraSessionID = UUID()
     @State private var pendingCapturedPhoto: UIImage?
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
-    @State private var closesAfterSaveFlowDismiss = false
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
     @State private var showsImportHub = ProcessInfo.processInfo.arguments.contains(
@@ -253,7 +252,60 @@ struct AddScreen: View {
             || walkthroughs.currentStep?.target == .addPlace
     }
 
+    private var activeSheetDetents: Set<PresentationDetent> {
+        guard addSaveFlow != nil else {
+            return AddSheetLayout.detents(
+                hasPendingImports: importStore.summary.hasPendingImports
+            )
+        }
+        return [MapPlaceSaveFlowSheet.compactDetent, .large]
+    }
+
+    private var activeSheetBackground: Color {
+        addSaveFlow == nil
+            ? WanderTheme.surfaceBone.color
+            : WanderTheme.canvasWarm.color
+    }
+
     var body: some View {
+        Group {
+            if let context = addSaveFlow {
+                inlineSaveFlow(context)
+                    .transition(.opacity)
+            } else {
+                addPlaceFlow
+                    .transition(.opacity)
+            }
+        }
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0),
+            value: addSaveFlow?.id
+        )
+        .presentationDetents(activeSheetDetents, selection: $selectedDetent)
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(WanderTheme.radiusSheet)
+        .presentationBackground(activeSheetBackground)
+        .presentationBackgroundInteraction(
+            .enabled(upThrough: MapPlaceSaveFlowSheet.compactDetent)
+        )
+        .presentationContentInteraction(.resizes)
+        .walkthroughPresenterScrim(
+            isPresented: addSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
+        )
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
+        .onChange(of: walkthroughs.currentStep?.target) { _, _ in
+            autoCloseAfterImportIfNeeded()
+        }
+        .onChange(of: walkthroughs.requestedSurface) { _, _ in
+            autoCloseAfterImportIfNeeded()
+        }
+        .onChange(of: importStore.summary.hasPendingImports) { _, _ in
+            guard addSaveFlow == nil, selectedDetent != .large else { return }
+            selectedDetent = restingDetent
+        }
+    }
+
+    private var addPlaceFlow: some View {
         NavigationStack {
             Group {
                 if showsPinnedImportEntry {
@@ -357,30 +409,6 @@ struct AddScreen: View {
             .task(id: placeSaveDraftStore.draft?.id) {
                 restoreActiveSaveFlowIfNeeded()
             }
-            .sheet(item: $addSaveFlow, onDismiss: {
-                placeSaveDraftStore.clear()
-                store.saveFlowDidDismiss(.saveSheet)
-                if closesAfterSaveFlowDismiss {
-                    closesAfterSaveFlowDismiss = false
-                    onClose()
-                }
-            }) { context in
-                MapPlaceSaveFlowSheet(
-                    context: context,
-                    draft: placeSaveDraftStore.draft,
-                    onDraftChange: { draftID, form, submittedAt in
-                        placeSaveDraftStore.update(
-                            draftID: draftID,
-                            form: form,
-                            submittedAt: submittedAt
-                        )
-                    }
-                ) { submission in
-                    await saveSharedSubmission(submission)
-                } onRemove: { _ in
-                    false
-                }
-            }
             .fullScreenCover(
                 item: $cameraPresentation.route,
                 onDismiss: handleCameraPresentationDismissal
@@ -422,15 +450,28 @@ struct AddScreen: View {
                     .environmentObject(backend)
             }
         }
-        .walkthroughPresenterScrim(
-            isPresented: addSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
+    }
+
+    private func inlineSaveFlow(_ context: MapPlaceSaveContext) -> some View {
+        MapPlaceSaveEditor(
+            context: context,
+            draft: placeSaveDraftStore.draft,
+            onDraftChange: { draftID, form, submittedAt in
+                placeSaveDraftStore.update(
+                    draftID: draftID,
+                    form: form,
+                    submittedAt: submittedAt
+                )
+            },
+            onSave: saveSharedSubmission,
+            onRemove: { _ in false },
+            onClose: dismissInlineSaveFlow,
+            onContentExpansionRequested: expandSheet,
+            onSaveCompleted: completeInlineSaveFlow
         )
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
-        .onChange(of: walkthroughs.currentStep?.target) { _, _ in
-            autoCloseAfterImportIfNeeded()
-        }
-        .onChange(of: walkthroughs.requestedSurface) { _, _ in
-            autoCloseAfterImportIfNeeded()
+        .id(context.id)
+        .onDisappear {
+            store.saveFlowDidDismiss(.saveSheet)
         }
     }
 
@@ -1064,7 +1105,7 @@ struct AddScreen: View {
             initialPhotoAttachments: pendingVisitPhotoAttachments
         ))
         // Persist the recoverable form before moving the NUX checkpoint to the
-        // nested save sheet. A kill between these statements can now always
+        // inline save editor. A kill between these statements can now always
         // reconstruct the exact presentation.
         walkthroughs.perform(.addPlace, transitioningTo: .saveFlow)
     }
@@ -1094,7 +1135,18 @@ struct AddScreen: View {
         ) {
             placeSaveDraftStore.begin(draft)
         }
-        addSaveFlow = context
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0)) {
+            addSaveFlow = context
+        }
+        Task { @MainActor in
+            await Task.yield()
+            guard addSaveFlow?.id == context.id else { return }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.42, extraBounce: 0)) {
+                selectedDetent = context.startsOnDetails
+                    ? .large
+                    : MapPlaceSaveFlowSheet.compactDetent
+            }
+        }
     }
 
     private func restoreActiveSaveFlowIfNeeded() {
@@ -1122,8 +1174,10 @@ struct AddScreen: View {
         if draft.form.step == .details {
             context = context.resolvingExistingSave(selection: draft.form.selectedStatus)
         }
-        selectedDetent = .large
         addSaveFlow = context
+        selectedDetent = draft.form.step == .details
+            ? .large
+            : MapPlaceSaveFlowSheet.compactDetent
     }
 
     private func restoreLegacyWalkthroughSaveWithoutDraftIfNeeded() {
@@ -1163,7 +1217,20 @@ struct AddScreen: View {
             defaultVisibility: store.effectiveDefaultVisibility
         )
         presentSaveFlow(context)
-        selectedDetent = .large
+    }
+
+    private func dismissInlineSaveFlow() {
+        placeSaveDraftStore.clear()
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0)) {
+            addSaveFlow = nil
+            selectedDetent = .large
+        }
+    }
+
+    private func completeInlineSaveFlow(_: SaveResult) {
+        placeSaveDraftStore.clear()
+        addSaveFlow = nil
+        onClose()
     }
 
     private func addCandidateContext(
@@ -1329,7 +1396,7 @@ struct AddScreen: View {
             backend: auth.isSignedIn ? backend : nil
         ) else { return nil }
 
-        // During the NUX, the nested sheet records its memory snapshot and
+        // During the NUX, the inline editor records its memory snapshot and
         // advances the checkpoint after this returns. Keep the submitted draft
         // until that transition succeeds so a process kill remains recoverable.
         if walkthroughs.activeSurface != .saveFlow {
@@ -1338,7 +1405,6 @@ struct AddScreen: View {
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()
-        closesAfterSaveFlowDismiss = true
         if needsSignIn {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))

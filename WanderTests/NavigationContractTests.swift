@@ -1653,7 +1653,7 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
+    func testAddTabAdvancesToTheCanonicalEditorInsideItsExistingSheet() throws {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
         )
@@ -1665,7 +1665,12 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertTrue(addScreen.contains("private func inlineSaveFlow("))
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveEditor("))
+        XCTAssertFalse(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertFalse(addScreen.contains(".sheet(item: $addSaveFlow"))
+        XCTAssertTrue(addScreen.contains("return [MapPlaceSaveFlowSheet.compactDetent, .large]"))
+        XCTAssertTrue(addScreen.contains("selectedDetent = context.startsOnDetails"))
         XCTAssertTrue(addScreen.contains("context: context"))
         XCTAssertTrue(addScreen.contains("persistAddPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
@@ -1835,12 +1840,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
         XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 520"))
         XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 570"))
-        XCTAssertTrue(
-            root.contains(
-                "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
-            )
-        )
-        XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
+        XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
+        XCTAssertTrue(addScreen.contains("AddSheetLayout.detents("))
+        XCTAssertTrue(addScreen.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
         XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
         XCTAssertTrue(
@@ -3970,9 +3972,8 @@ final class NavigationContractTests: XCTestCase {
             before: "private struct MapSaveVisitPhotoSection: View"
         )
 
-        let entryPointCallCounts = [
+        let directSheetEntryPointCallCounts = [
             "Wander/Features/Activity/ActivityEngagementViews.swift": 1,
-            "Wander/Features/Add/AddScreen.swift": 1,
             "Wander/Features/Discover/DiscoverScreen.swift": 1,
             "Wander/Features/Feed/FeedScreen.swift": 1,
             "Wander/Features/Profile/ProfileImportViews.swift": 2,
@@ -3981,7 +3982,7 @@ final class NavigationContractTests: XCTestCase {
             "Wander/Features/Map/MapScreen.swift": 2
         ]
 
-        for (path, expectedCallCount) in entryPointCallCounts {
+        for (path, expectedCallCount) in directSheetEntryPointCallCounts {
             let source = try String(contentsOf: projectRoot.appendingPathComponent(path))
             XCTAssertEqual(
                 source.components(separatedBy: "MapPlaceSaveFlowSheet(").count - 1,
@@ -3990,6 +3991,19 @@ final class NavigationContractTests: XCTestCase {
             )
             XCTAssertTrue(source.contains(".sheet(item:"), "\(path) must present saves as a bottom sheet.")
         }
+
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        XCTAssertTrue(addScreen.contains("private func inlineSaveFlow("))
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveEditor("))
+        XCTAssertFalse(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertFalse(addScreen.contains(".sheet(item: $addSaveFlow"))
+        XCTAssertTrue(addScreen.contains("onClose: dismissInlineSaveFlow"))
+        XCTAssertTrue(addScreen.contains("onContentExpansionRequested: expandSheet"))
+        XCTAssertTrue(addScreen.contains("onSaveCompleted: completeInlineSaveFlow"))
+        XCTAssertTrue(addScreen.contains("return [MapPlaceSaveFlowSheet.compactDetent, .large]"))
+        XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
 
         XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
         XCTAssertFalse(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
