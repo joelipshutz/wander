@@ -1998,7 +1998,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("if isReadyForDetails"))
         XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.statusSelector\")"))
         XCTAssertTrue(mapScreen.contains("private struct MapSaveChoiceButton: View"))
-        XCTAssertTrue(mapScreen.contains("VStack(alignment: .leading, spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(mapScreen.contains("HStack(spacing: WanderTheme.spacing2)"))
         XCTAssertTrue(mapScreen.contains(".frame(maxWidth: .infinity, minHeight: 52)"))
         XCTAssertFalse(mapScreen.contains("private struct MapSaveChoicePill: View"))
         XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus)"))

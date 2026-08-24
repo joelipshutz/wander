@@ -8617,7 +8617,7 @@ struct MapPlaceSaveEditor: View {
 
             if sourceContext.requiresStatusConfirmation {
                 MapSavePickerBlock(title: "what do you want to do?") {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    HStack(spacing: WanderTheme.spacing2) {
                         checkInStatusChoice
                         wannaGoStatusChoice
                     }
