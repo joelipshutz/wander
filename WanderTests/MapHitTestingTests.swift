@@ -528,7 +528,7 @@ final class MapSelectionMotionTests: XCTestCase {
 
         XCTAssertLessThan(inactiveAnnotations.lowerBound, activeAnnotation.lowerBound)
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
-        XCTAssertFalse(map.contains("proxy.convert(coordinate, to: .local)"))
+        XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
     }
 
     func testMapInteractionSourceLeavesNativeGesturesUnblockedAndKeepsPanDismissal() throws {
@@ -571,6 +571,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("MapGestureObserver("))
         XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
         XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
+        XCTAssertTrue(map.contains("recognizer.numberOfTouchesRequired = 1"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
         XCTAssertTrue(map.contains("recognizer.delaysTouchesBegan = false"))
         XCTAssertTrue(map.contains("shouldRecognizeSimultaneouslyWith otherGestureRecognizer"))
@@ -597,7 +598,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("if highlightsCompactSelection, let group = activeAnnotationGroup"))
         XCTAssertTrue(map.contains("if highlightsCompactSelection, let candidate = activeSearchCandidate"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
-        XCTAssertFalse(map.contains("proxy.convert(coordinate, to: .local)"))
+        XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertFalse(map.contains("replacementFadeOutDuration"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))

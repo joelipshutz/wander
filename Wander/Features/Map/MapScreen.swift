@@ -4338,8 +4338,7 @@ private struct MapGestureObserver: UIViewRepresentable {
             )
             recognizer.minimumPressDuration = observer.longPressMinimumDuration
             recognizer.allowableMovement = 10
-            recognizer.minimumNumberOfTouches = 1
-            recognizer.maximumNumberOfTouches = 1
+            recognizer.numberOfTouchesRequired = 1
             configureForPassiveObservation(recognizer)
             return recognizer
         }()
