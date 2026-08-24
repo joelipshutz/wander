@@ -182,6 +182,7 @@
 		A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */; };
 		A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5665DF2A481AC9A45CE315E /* ContactProvider.swift */; };
 		A8A8F191163DE3166FE3CEA0 /* rec-253-community-personalized-featured-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */; };
+		AAB7435F80274F652331795F /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04222274EEE469DC168630 /* FeatureFlags.swift */; };
 		AD4AA98EFE3113857F5A9854 /* MapRegionFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */; };
 		AF13291EF0063A544605486A /* PlaceExternalLinksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */; };
 		AF5D0849C43DDC7D8AA7A9BF /* LocalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED7D1302D938DD4775E8816 /* LocalModels.swift */; };
@@ -235,6 +236,7 @@
 		E675767BE5C249B99B816B74 /* WanderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0078639327C81EA5F98400B4 /* WanderApp.swift */; };
 		E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E1982754D8F9C0128D97CB /* AppEntryView.swift */; };
 		EA20FADB4391084DB096A69F /* MapMoreFilterResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2501CCE4DDE0DD7DF68F8F4A /* MapMoreFilterResetTests.swift */; };
+		EAAA2737ACAAE2C8F6FF4491 /* FeatureFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */; };
 		EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */; };
 		ECDD1D96B99E5D8E77B6D14C /* PlaceCardPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1989A2162AE02769ADE7449 /* PlaceCardPresentation.swift */; };
 		EEB58DFCAF0DD4CEDFC84D27 /* PlaceProfileSaveActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA187646A3EFB882E7D3689 /* PlaceProfileSaveActionPolicy.swift */; };
@@ -541,9 +543,11 @@
 		F62C6A6EE96BB03651C6503D /* MapFilterInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFilterInteractionUITests.swift; sourceTree = "<group>"; };
 		F7550C652E50A85ADBBDDCFC /* SaveStreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreakTests.swift; sourceTree = "<group>"; };
 		F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListPlacePhotoResolver.swift; sourceTree = "<group>"; };
+		F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlagTests.swift; sourceTree = "<group>"; };
 		F7E072B06ED29B9846EA203B /* rec-289-pinch-zoom-selection-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-289-pinch-zoom-selection-pre.json"; sourceTree = "<group>"; };
 		F914BADC7EEEC736F36EC1C3 /* CommunityReportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityReportSheet.swift; sourceTree = "<group>"; };
 		F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalListModels.swift; sourceTree = "<group>"; };
+		FA04222274EEE469DC168630 /* FeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlags.swift; sourceTree = "<group>"; };
 		FA3EDD3FA845221CF23EBFCA /* SaveStreakReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreakReminder.swift; sourceTree = "<group>"; };
 		FB380F47FA611A421B432D61 /* TrustedPlaceSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedPlaceSearch.swift; sourceTree = "<group>"; };
 		FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreak.swift; sourceTree = "<group>"; };
@@ -792,6 +796,7 @@
 				65300A1846111DFE644E7D4F /* CommunityModerationTests.swift */,
 				260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */,
 				AE9E0413D74DC5421A150467 /* ExtractionCandidateFilterTests.swift */,
+				F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */,
 				840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */,
 				1E6F6858FAB55D4C03CB7BC2 /* FirstVisitWalkthroughTests.swift */,
 				250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */,
@@ -972,6 +977,7 @@
 			children = (
 				73F1E08A489F203F67F25F17 /* AppBrand.swift */,
 				55E1982754D8F9C0128D97CB /* AppEntryView.swift */,
+				FA04222274EEE469DC168630 /* FeatureFlags.swift */,
 				0078639327C81EA5F98400B4 /* WanderApp.swift */,
 				E850341A28B18117631F62F5 /* WanderBackend.swift */,
 				DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */,
@@ -1385,6 +1391,7 @@
 				00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */,
 				1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */,
 				812F84570207D139A528319C /* DiscoverScreen.swift in Sources */,
+				AAB7435F80274F652331795F /* FeatureFlags.swift in Sources */,
 				B2D3D8AE71BC35FB52F0AE0C /* FeedModels.swift in Sources */,
 				91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */,
 				97DA8BB449DC58D55A4DD2ED /* FirstVisitWalkthrough.swift in Sources */,
@@ -1532,6 +1539,7 @@
 				6174C281A2E3108DC73FEA0F /* CommunityModerationTests.swift in Sources */,
 				74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */,
 				7AE6B55E9D5E343894865F0B /* ExtractionCandidateFilterTests.swift in Sources */,
+				EAAA2737ACAAE2C8F6FF4491 /* FeatureFlagTests.swift in Sources */,
 				CDE989C7F726EC820478464B /* FeedModelsTests.swift in Sources */,
 				CE09B8314A8C8030E6644CBC /* FirstVisitWalkthroughTests.swift in Sources */,
 				45833D5AA3703CD781FE0E0E /* InviteFrameworkTests.swift in Sources */,
@@ -1740,7 +1748,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 160;
+				CURRENT_PROJECT_VERSION = 161;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
@@ -1757,7 +1765,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 160;
+				CURRENT_PROJECT_VERSION = 161;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;

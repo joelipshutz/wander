@@ -1,30 +1,5 @@
 import Foundation
 
-enum FeatureFlagKey: String, CaseIterable, Hashable {
-    case firstVisitNUX = "first_visit_nux"
-    case debugSettings = "debug_settings"
-    case placeProfileSaveTrayV1 = "place_profile_save_tray_v1"
-    case semanticPlaceSearchV1 = "semantic_place_search_v1"
-
-    var allowsAccountOverride: Bool {
-        self != .semanticPlaceSearchV1
-    }
-}
-
-enum FeatureFlagValueSource: Equatable {
-    case globalDefault
-    case accountOverride
-}
-
-struct ResolvedFeatureFlagValue: Equatable {
-    let isEnabled: Bool
-    let source: FeatureFlagValueSource
-
-    var explicitAccountOverride: Bool? {
-        source == .accountOverride ? isEnabled : nil
-    }
-}
-
 enum FeatureFlagResolution: Equatable {
     case unresolved
     case resolved(userID: String, values: [FeatureFlagKey: ResolvedFeatureFlagValue])
@@ -64,7 +39,10 @@ enum SemanticPlaceSearchAccessPolicy {
     }
 
     static func isEnabled(serverFlag: Bool?, isDebugBuild: Bool) -> Bool {
-        isDebugBuild || serverFlag == true
+        // Debug builds use the same resolved flag as TestFlight so an explicit
+        // Off override can actually disable the feature on a developer device.
+        _ = isDebugBuild
+        return serverFlag == true
     }
 
     private static var isDebugBuild: Bool {
@@ -106,6 +84,7 @@ final class WanderBackend: ObservableObject {
     let sharedVisitRepository: (any SharedVisitRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
+    private let featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot
     private var placePhotoCache: [String: PlacePhoto] = [:]
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
     private let placePhotoImageCache: NSCache<NSString, NSData> = {
@@ -118,6 +97,7 @@ final class WanderBackend: ObservableObject {
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
+        self.featureFlagDeviceOverrides = FeatureFlagOverrideStore().launchSnapshot()
 
         if configuration.isSupabaseConfigured {
             let client = WanderSupabaseClient(configuration: configuration, authSession: authSession)
@@ -192,9 +172,11 @@ final class WanderBackend: ObservableObject {
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
-        featureFlagRepository: (any FeatureFlagRepository)? = nil
+        featureFlagRepository: (any FeatureFlagRepository)? = nil,
+        featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot()
     ) {
         self.configuration = configuration
+        self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
         self.featureFlagRepository = featureFlagRepository
         self.profileRepository = profileRepository
         self.profileAvatarRepository = profileAvatarRepository
@@ -269,10 +251,22 @@ final class WanderBackend: ObservableObject {
     }
 
     func featureFlag(_ key: FeatureFlagKey, for userID: String) -> Bool? {
-        resolvedFeatureFlag(key, for: userID)?.isEnabled
+        guard key.definition.valueKind == .boolean else { return nil }
+        return resolvedFeatureFlag(key, for: userID)?.isEnabled
     }
 
-    func resolvedFeatureFlag(
+    func integerFeatureFlag(_ key: FeatureFlagKey, for userID: String) -> Int? {
+        resolvedFeatureFlag(key, for: userID)?.integerValue
+    }
+
+    func deviceFeatureFlagOverride(
+        _ key: FeatureFlagKey,
+        for userID: String
+    ) -> FeatureFlagValue? {
+        featureFlagDeviceOverrides.override(for: key, userID: userID)
+    }
+
+    func remoteFeatureFlag(
         _ key: FeatureFlagKey,
         for userID: String
     ) -> ResolvedFeatureFlagValue? {
@@ -280,6 +274,23 @@ final class WanderBackend: ObservableObject {
               resolvedUserID == userID
         else { return nil }
         return values[key]
+    }
+
+    func resolvedFeatureFlag(
+        _ key: FeatureFlagKey,
+        for userID: String
+    ) -> ResolvedFeatureFlagValue? {
+        if let override = featureFlagDeviceOverrides.override(for: key, userID: userID) {
+            return ResolvedFeatureFlagValue(value: override, source: .deviceOverride)
+        }
+        if let remote = remoteFeatureFlag(key, for: userID) {
+            return remote
+        }
+        guard !featureFlagResolution.isPending(for: userID) else { return nil }
+        return ResolvedFeatureFlagValue(
+            value: key.definition.bundledDefault,
+            source: .bundledDefault
+        )
     }
 
     var canSyncProfileAvatars: Bool {
