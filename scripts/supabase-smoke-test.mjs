@@ -2307,6 +2307,100 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
   );
   const socialPlaceID = socialFixture.rows[0].place_id;
   const sourceUserPlaceID = socialFixture.rows[0].source_user_place_id;
+  const isolatedSocialPlace = {
+    canonical_name: "Codex Smoke Note Isolation",
+    category: "coffee_tea_sweets",
+    primary_category: "coffee_tea_sweets",
+    subcategory: "Coffee shop",
+    category_source: "deterministic",
+    raw_provider_type: "coffee shop",
+    address: "2 Smoke Test Way",
+    locality: "Los Angeles",
+    region: "CA",
+    country: "United States",
+    latitude: 34.052245,
+    longitude: -118.243693,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "social-note-isolation-smoke",
+    confidence: 1,
+  };
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  const isolatedSourceSave = await expectQuery(
+    client,
+    "create a source-account memory with a private note",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(isolatedSocialPlace),
+      JSON.stringify({
+        status: "been",
+        visibility: "followers",
+        note: "collaborator private note",
+        nearby_confirmed: false,
+        source_type: "manual",
+        rating_score: 5,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id)
+      && Boolean(result.rows[0]?.saved?.place_id),
+  );
+  const isolatedSourceUserPlaceID = isolatedSourceSave.rows[0].saved.user_place_id;
+  const isolatedSocialPlaceID = isolatedSourceSave.rows[0].saved.place_id;
+
+  await setAuthenticatedUser(client, smokeUserID);
+  const isolatedSocialSave = await expectQuery(
+    client,
+    "social save creates the viewer memory without the source note",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [isolatedSocialPlaceID, isolatedSourceUserPlaceID],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+  const isolatedSocialSaveID = isolatedSocialSave.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "new social save keeps the source-account note isolated",
+    "select status, note from public.user_places where id = $1::uuid",
+    [isolatedSocialSaveID],
+    (result) => result.rows.length === 1
+      && result.rows[0].status === "wanna_go"
+      && result.rows[0].note === null,
+  );
+
+  await expectQuery(
+    client,
+    "viewer adds an account-owned note to the social save",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(isolatedSocialPlace),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "followers",
+        note: "viewer private note",
+        nearby_confirmed: false,
+        source_type: "social_save",
+      }),
+    ],
+    (result) => result.rows[0]?.saved?.user_place_id === isolatedSocialSaveID,
+  );
+
+  await expectQuery(
+    client,
+    "repeated social save returns the existing viewer memory",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [isolatedSocialPlaceID, isolatedSourceUserPlaceID],
+    (result) => result.rows[0]?.saved?.user_place_id === isolatedSocialSaveID,
+  );
+
+  await expectQuery(
+    client,
+    "repeated social save preserves the viewer account note",
+    "select note from public.user_places where id = $1::uuid",
+    [isolatedSocialSaveID],
+    (result) => result.rows.length === 1
+      && result.rows[0].note === "viewer private note",
+  );
+
   const socialPlace = {
     canonical_name: "Codex Smoke Coffee",
     category: "coffee_tea_sweets",
