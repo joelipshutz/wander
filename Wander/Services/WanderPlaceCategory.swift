@@ -5,6 +5,8 @@ enum PlaceCategorySource: String, Codable {
     case deterministic
     case ai
     case user
+    case snapshot
+    case consensus
     case legacy
     case unknown
 }
@@ -25,7 +27,10 @@ struct PlaceCategoryAssignment: Equatable, Codable {
     ) {
         let normalizedSource = PlaceCategorySource(rawValue: source) ?? .unknown
         let requestedPrimary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
-        let evidenceAssignment = normalizedSource == .user
+        let keepsRequestedTaxonomy = normalizedSource == .user
+            || normalizedSource == .snapshot
+            || normalizedSource == .consensus
+        let evidenceAssignment = keepsRequestedTaxonomy
             ? nil
             : WanderPlaceCategory.categoryEvidenceAssignment(
                 subcategory: subcategory,
@@ -37,7 +42,7 @@ struct PlaceCategoryAssignment: Equatable, Codable {
             primaryCategory: requestedPrimary
         )
         let inferredSubcategory: String?
-        if normalizedSource == .user {
+        if keepsRequestedTaxonomy {
             inferredSubcategory = requestedSubcategory
         } else if normalizedPrimary != requestedPrimary
                     || WanderPlaceCategory.isDefaultSubcategory(
@@ -2333,6 +2338,10 @@ enum WanderPlaceCategory {
         switch PlaceCategorySource(rawValue: source) {
         case .user:
             "edited"
+        case .snapshot:
+            "saved"
+        case .consensus:
+            "community"
         case .ai:
             "smart guess"
         case .legacy:
