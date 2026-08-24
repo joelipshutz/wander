@@ -1040,6 +1040,7 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -1062,6 +1063,21 @@ private struct PlaceProfileFullView: View {
                 }
             }
         )
+    }
+
+    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return attachedSaveDraft }
+        return liveDraft
+    }
+
+    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
+        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
+            ?? context.initialStatus
+        return selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
     }
 
     var body: some View {
@@ -1153,9 +1169,9 @@ private struct PlaceProfileFullView: View {
             }
         }
         .sheet(item: attachedSaveSheetContext) { context in
-            PlaceSaveAttachedSheet(
+            MapPlaceSaveFlowSheet(
                 context: context,
-                draft: attachedSaveDraft,
+                draft: resolvedAttachedSaveDraft(for: context),
                 onDraftChange: onAttachedDraftChange,
                 onSave: onAttachedSave,
                 onRemove: onAttachedRemove,
@@ -1163,6 +1179,7 @@ private struct PlaceProfileFullView: View {
                 onSaveCompleted: onAttachedSaveCompleted
             )
             .id(context.id)
+            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
         }
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
@@ -2045,48 +2062,6 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
-}
-
-struct PlaceSaveAttachedSheet: View {
-    let context: MapPlaceSaveContext
-    let draft: PlaceSaveDraft?
-    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
-    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
-    let onClose: @MainActor () -> Void
-    let onSaveCompleted: @MainActor (SaveResult) -> Void
-    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
-
-    private var resolvedDraft: PlaceSaveDraft? {
-        guard let liveDraft = placeSaveDraftStore.draft,
-              liveDraft.candidate.id == context.candidate.id
-        else { return draft }
-        return liveDraft
-    }
-
-    private var selectedStatus: PlaceStatus {
-        resolvedDraft?.form.selectedStatus ?? context.initialStatus
-    }
-
-    private var trayAccessibilityIdentifier: String {
-        selectedStatus == .wannaGo
-            ? "place-profile.attached-wanna"
-            : "place-profile.attached-check-in"
-    }
-
-    var body: some View {
-        MapPlaceSaveFlowSheet(
-            context: context,
-            draft: resolvedDraft,
-            onDraftChange: onDraftChange,
-            onSave: onSave,
-            onRemove: onRemove,
-            onClose: onClose,
-            onSaveCompleted: onSaveCompleted
-        )
-        .id(context.id)
-        .accessibilityIdentifier(trayAccessibilityIdentifier)
-    }
 }
 
 private struct PlacePhotoGalleryViewerRoute: Identifiable {

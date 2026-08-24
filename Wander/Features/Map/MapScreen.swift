@@ -8062,7 +8062,6 @@ private final class CheckInDateTrayPresentation: ObservableObject {
 private struct MapCheckInDateSection: View {
     @Binding var visitedAt: Date
     @ObservedObject var presentation: CheckInDateTrayPresentation
-    let onExpansionRequested: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -8072,11 +8071,7 @@ private struct MapCheckInDateSection: View {
 
             VStack(spacing: 0) {
                 Button {
-                    let isOpening = !presentation.isExpanded
                     presentation.isExpanded.toggle()
-                    if isOpening {
-                        onExpansionRequested()
-                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -8217,7 +8212,6 @@ struct MapPlaceSaveEditor: View {
     let draftID: UUID?
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onClose: @MainActor () -> Void
-    let onContentExpansionRequested: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -8266,7 +8260,6 @@ struct MapPlaceSaveEditor: View {
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
         onClose: @escaping @MainActor () -> Void,
-        onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         sourceContext = context
@@ -8276,7 +8269,6 @@ struct MapPlaceSaveEditor: View {
         self.onSave = onSave
         self.onRemove = onRemove
         self.onClose = onClose
-        self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
@@ -8664,8 +8656,7 @@ struct MapPlaceSaveEditor: View {
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
-                    presentation: checkInDateTrayPresentation,
-                    onExpansionRequested: onContentExpansionRequested
+                    presentation: checkInDateTrayPresentation
                 )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
@@ -8819,11 +8810,7 @@ struct MapPlaceSaveEditor: View {
 
             VStack(spacing: 0) {
                 Button {
-                    let isOpening = !isShowingPlannedDatePicker
                     isShowingPlannedDatePicker.toggle()
-                    if isOpening {
-                        onContentExpansionRequested()
-                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -8992,11 +8979,7 @@ struct MapPlaceSaveEditor: View {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
                     return
                 } else {
-                    let isOpening = !isShowingOptionalDetails
                     isShowingOptionalDetails.toggle()
-                    if isOpening {
-                        onContentExpansionRequested()
-                    }
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {

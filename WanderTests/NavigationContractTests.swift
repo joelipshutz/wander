@@ -3831,7 +3831,7 @@ final class NavigationContractTests: XCTestCase {
         let floatingActions = try sourceSection(
             placeProfile,
             after: "struct PlaceProfileFloatingActions: View {",
-            before: "struct PlaceSaveAttachedSheet: View {"
+            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable"
         )
 
         XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
@@ -3947,7 +3947,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(authGate.contains(".espressoConfirmation"))
     }
 
-    func testFirstMapSavesUseOneSharedSheetForEveryEntryPoint() throws {
+    func testEverySaveEntryPointUsesOneSharedBottomSheet() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -3967,34 +3967,49 @@ final class NavigationContractTests: XCTestCase {
             after: "struct MapPlaceSaveEditor: View {",
             before: "private struct MapSaveVisitPhotoSection: View"
         )
-        let placeProfileSheet = try sourceSection(
-            placeProfile,
-            after: "struct PlaceSaveAttachedSheet: View {",
-            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable"
-        )
+
+        let entryPointCallCounts = [
+            "Wander/Features/Activity/ActivityEngagementViews.swift": 1,
+            "Wander/Features/Add/AddScreen.swift": 1,
+            "Wander/Features/Discover/DiscoverScreen.swift": 1,
+            "Wander/Features/Feed/FeedScreen.swift": 1,
+            "Wander/Features/Profile/ProfileImportViews.swift": 2,
+            "Wander/Features/Profile/ProfileScreen.swift": 1,
+            "Wander/Features/Map/PlaceProfileMapSurface.swift": 1,
+            "Wander/Features/Map/MapScreen.swift": 2
+        ]
+
+        for (path, expectedCallCount) in entryPointCallCounts {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(path))
+            XCTAssertEqual(
+                source.components(separatedBy: "MapPlaceSaveFlowSheet(").count - 1,
+                expectedCallCount,
+                "\(path) must route every save entry point through the shared bottom sheet."
+            )
+            XCTAssertTrue(source.contains(".sheet(item:"), "\(path) must present saves as a bottom sheet.")
+        }
 
         XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
-        XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
-        XCTAssertTrue(placeProfileSheet.contains("MapPlaceSaveFlowSheet("))
-        XCTAssertFalse(placeProfileSheet.contains("MapPlaceSaveEditor("))
+        XCTAssertFalse(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
+        XCTAssertTrue(placeProfile.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertFalse(placeProfile.contains("MapPlaceSaveEditor("))
         XCTAssertFalse(mapScreen.contains("MapPlaceSaveEditorPresentation"))
         XCTAssertFalse(placeProfile.contains("presentation: .attached"))
         XCTAssertTrue(placeProfile.contains(".sheet(item: attachedSaveSheetContext)"))
+        XCTAssertTrue(placeProfile.contains("draft: resolvedAttachedSaveDraft(for: context)"))
         XCTAssertTrue(placeProfile.contains(".id(context.id)"))
         XCTAssertTrue(placeProfile.contains("if attachedSaveContext == nil"))
         XCTAssertTrue(placeProfile.contains("onAttachedClose()"))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
-        XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(trayAccessibilityIdentifier)"))
+        XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))"))
         XCTAssertTrue(sheetWrapper.contains("static let detent = PresentationDetent.large"))
         XCTAssertTrue(sheetWrapper.contains(".presentationDetents([Self.detent])"))
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
-        XCTAssertFalse(placeProfileSheet.contains(".presentationDetents"))
-        XCTAssertTrue(placeProfileSheet.contains("onClose: onClose"))
-        XCTAssertTrue(placeProfileSheet.contains("onSaveCompleted: onSaveCompleted"))
-        XCTAssertFalse(placeProfileSheet.contains("compactDetent"))
-        XCTAssertFalse(placeProfileSheet.contains("presentationBackgroundInteraction"))
-        XCTAssertTrue(sharedEditor.contains("onExpansionRequested: onContentExpansionRequested"))
+        XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
+        XCTAssertTrue(placeProfile.contains("onSaveCompleted: onAttachedSaveCompleted"))
+        XCTAssertFalse(placeProfile.contains("compactDetent"))
+        XCTAssertFalse(placeProfile.contains("presentationBackgroundInteraction"))
 
         XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
         XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))
@@ -4008,12 +4023,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("visitParticipationSections"))
         XCTAssertFalse(sharedEditor.contains("presentation == .attached"))
         XCTAssertFalse(sharedEditor.contains("presentation == .sheet"))
-        XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))
-        XCTAssertEqual(
-            sharedEditor.components(separatedBy: "onContentExpansionRequested()").count - 1,
-            2,
-            "Opening the Wanna date picker or More options should expand the attached tray."
-        )
+        XCTAssertFalse(sharedEditor.contains("onContentExpansionRequested"))
 
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))
