@@ -1,0 +1,16 @@
+{
+  "linear_issue": "REC-330",
+  "branch": "codex/rec-330-fullscreen-camera",
+  "captured_at": "2026-08-23",
+  "capture_method": "User-supplied physical-device screenshot plus source-contract inspection; this repository intentionally has no DebugBridge or GET /state/snapshot integration.",
+  "privacy": "The screenshot pixels were not copied into the repository because they contain private camera content. Only non-content geometry is recorded.",
+  "device_screenshot": {
+    "pixel_width": 1179,
+    "pixel_height": 2556,
+    "camera_preview_pixel_height": 1572,
+    "camera_preview_aspect_ratio": "4:3 portrait",
+    "black_control_region_pixel_height": 984
+  },
+  "source_evidence": "UIImagePickerController hides its native controls but no cameraViewTransform is applied, so its 4:3 preview does not fill a tall full-screen cover.",
+  "expected": "Every Take Photo presentation, including reopening after dismissal, aspect-fills the entire capture surface behind the SwiftUI controls."
+}

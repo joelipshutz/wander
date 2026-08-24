@@ -1612,34 +1612,45 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
         )
 
-        XCTAssertTrue(profileSettings.contains("Section(\"Debug settings\")"))
+        XCTAssertTrue(profileSettings.contains("Text(\"Feature flags\")"))
         XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
         XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
         XCTAssertTrue(backend.contains("isSimulator || serverFlag == true"))
-        XCTAssertTrue(profileSettings.contains("Label(\"First-visit NUX\""))
-        XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
-        XCTAssertTrue(profileSettings.contains("Label(\"Place button style\""))
-        XCTAssertTrue(profileSettings.contains("settings.debug.placeActionVariant"))
-        XCTAssertTrue(profileSettings.contains("PlaceProfileFloatingActionVariant.allCases"))
-        XCTAssertTrue(profileSettings.contains("placeActionDebugPreferences.setVariant"))
-        XCTAssertFalse(profileSettings.contains("settings.debug.replayNUX"))
-        XCTAssertFalse(profileSettings.contains("settings.debug.disableNUX"))
+        XCTAssertTrue(profileSettings.contains("ForEach(FeatureFlagKey.allCases"))
+        XCTAssertTrue(profileSettings.contains("settings.flags.\\(key.rawValue)"))
+        XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
+        XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
+        XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
+        XCTAssertTrue(profileSettings.contains("Restart rec.me to apply these changes"))
+        XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
+        XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
         XCTAssertFalse(profileSettings.contains("ryan_lieblein"))
         XCTAssertFalse(profileSettings.contains("@gmail.com"))
         XCTAssertTrue(root.contains("FirstVisitWalkthroughDebugReplayPolicy.resolve("))
         XCTAssertTrue(root.contains("debugReplay.shouldPreserveLocalJourney"))
-        XCTAssertTrue(root.contains("shouldRepairCompletedLocalJourney("))
-        XCTAssertTrue(root.contains("walkthroughs.hasCompletedPrimaryJourney"))
         XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
-        XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
+        XCTAssertFalse(root.contains("onNUXDebugSettingsChanged"))
         XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
-        XCTAssertTrue(root.contains("placeActionDebugPreferences.activeVariant("))
-        XCTAssertTrue(root.contains("isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled("))
+        XCTAssertTrue(root.contains("backend.integerFeatureFlag(.placeProfileActionVariant"))
+        XCTAssertTrue(root.contains("backend.deviceFeatureFlagOverride(.firstVisitNUX"))
         XCTAssertTrue(root.contains(".environment("))
         XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
         XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .productionDefault"))
+        XCTAssertTrue(root.contains("walkthroughDebugPreferenceSnapshot.shouldStartReplay"))
+        let foregroundRefresh = try XCTUnwrap(
+            root
+                .components(separatedBy: "private func refreshWalkthroughFeatureFlagsAfterForeground()")
+                .last?
+                .components(separatedBy: "private func presentLaunchLessonIfAppropriate()")
+                .first
+        )
+        XCTAssertTrue(
+            foregroundRefresh.contains(
+                "placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant("
+            )
+        )
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
@@ -1679,6 +1690,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("\"choose the place you're at\""))
         XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
+    }
+
+    func testAddCameraUsesFullScreenCaptureWithRecoverableGalleryHandoff() throws {
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let cameraCapture = try sourceSection(
+            addScreen,
+            after: "private struct AddCameraCaptureScreen: View",
+            before: "private enum AddCameraRecoveryState"
+        )
+        let cameraPickerStart = try XCTUnwrap(
+            addScreen.range(of: "private struct AddCameraPicker: UIViewControllerRepresentable")
+        )
+        let cameraPicker = String(addScreen[cameraPickerStart.lowerBound...])
+
+        XCTAssertTrue(addScreen.contains(".fullScreenCover("))
+        XCTAssertTrue(addScreen.contains("item: $cameraPresentation.route"))
+        XCTAssertFalse(addScreen.contains(".sheet(isPresented: $showsCamera)"))
+        XCTAssertTrue(addScreen.contains("AddCameraCaptureScreen("))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"photo.on.rectangle\")"))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"arrow.triangle.2.circlepath.camera\")"))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"xmark\")"))
+        XCTAssertTrue(cameraCapture.contains("captureRequest += 1"))
+        XCTAssertTrue(cameraCapture.contains("GeometryReader { geometry in"))
+        XCTAssertTrue(cameraPicker.contains("picker.showsCameraControls = false"))
+        XCTAssertTrue(cameraPicker.contains("updatePreviewTransform(on: uiViewController)"))
+        XCTAssertTrue(cameraPicker.contains("picker.cameraViewTransform = CGAffineTransform"))
+        XCTAssertTrue(cameraPicker.contains("uiViewController.takePicture()"))
+        XCTAssertTrue(cameraPicker.contains("uiViewController.cameraDevice = requestedCameraDevice"))
+        XCTAssertTrue(addScreen.contains("case .permissionDenied:"))
+        XCTAssertTrue(addScreen.contains("case .restricted:"))
+        XCTAssertTrue(addScreen.contains("case .unavailable:"))
+        XCTAssertTrue(addScreen.contains("handleCameraPresentationDismissal"))
+        XCTAssertTrue(addScreen.contains("cameraSessionID == sessionID else { return }"))
+        XCTAssertTrue(addScreen.contains("onGallery: switchCameraToPhotoLibrary"))
+        XCTAssertTrue(addScreen.contains("onCancel: cancelCameraCapture"))
+        XCTAssertTrue(addScreen.contains("cameraPresentation.refreshAuthorization("))
+        XCTAssertTrue(addScreen.contains("Task.detached(priority: .userInitiated"))
     }
 
     func testSuccessfulMapSaveWaitsForSheetDismissalBeforeSelectingSavedPlace() throws {
@@ -2005,6 +2055,56 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedVisitComponents.contains("Text(\"friends\")"))
         XCTAssertTrue(sharedVisitComponents.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
+    }
+
+    func testEditSaveDeleteActionIsLightweightWithoutChangingRemovalFlow() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let removeSection = try sourceSection(
+            mapScreen,
+            after: "private var removeSaveSection: some View",
+            before: "private var ratingSection: some View"
+        )
+        let destructiveButton = try sourceSection(
+            mapScreen,
+            after: "private struct MapSaveDestructiveButton: View",
+            before: "private struct PlaceTypeRow: View"
+        )
+        let removalConfirmation = try sourceSection(
+            mapScreen,
+            after: ".alert(context.removeConfirmationTitle",
+            before: "} message:"
+        )
+
+        XCTAssertTrue(removeSection.contains("title: isRemoving ? \"removing...\" : \"delete\""))
+        XCTAssertTrue(
+            removeSection.contains(
+                "accessibilityLabel: isRemoving ? \"removing...\" : context.removeTitle"
+            )
+        )
+        XCTAssertTrue(removeSection.contains("systemImage: \"trash\""))
+        XCTAssertTrue(removeSection.contains("isDisabled: isSaving || isRemoving"))
+        XCTAssertTrue(removeSection.contains("isShowingRemoveConfirmation = true"))
+
+        XCTAssertTrue(destructiveButton.contains("let action: () -> Void"))
+        XCTAssertTrue(destructiveButton.contains("Button(action: action)"))
+        XCTAssertTrue(destructiveButton.contains(".font(.system(size: 14, weight: .semibold))"))
+        XCTAssertTrue(destructiveButton.contains(".foregroundStyle(WanderTheme.stateError.color)"))
+        XCTAssertTrue(
+            destructiveButton.contains(
+                ".frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)"
+            )
+        )
+        XCTAssertTrue(destructiveButton.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(destructiveButton.contains(".disabled(isDisabled)"))
+        XCTAssertTrue(destructiveButton.contains(".accessibilityLabel(accessibilityLabel)"))
+        XCTAssertFalse(destructiveButton.contains(".background(WanderTheme.stateError.color)"))
+        XCTAssertFalse(destructiveButton.contains(".clipShape(Capsule())"))
+
+        XCTAssertTrue(removalConfirmation.contains("Button(context.removeTitle, role: .destructive)"))
+        XCTAssertTrue(removalConfirmation.contains("removeSave()"))
+        XCTAssertTrue(mapScreen.contains("Text(context.removeConfirmationMessage)"))
     }
 
     func testEveryMoreOptionsQuestionUsesTheStructuredTagShelfTileLanguage() throws {
@@ -3882,6 +3982,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("onDraftChange(draftID, update.form, update.submittedAt)"))
         XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
+        XCTAssertTrue(sharedEditor.contains("guard saveAttemptedAt == nil else { return }"))
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
         XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))
@@ -3894,7 +3995,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))
         XCTAssertTrue(policy.contains("static func attachedSaveContext("))
-        XCTAssertTrue(policy.contains("if isSimulator {"))
+        XCTAssertFalse(policy.contains("if isSimulator {"))
+        XCTAssertTrue(policy.contains("Simulator builds follow the same flag as TestFlight"))
         XCTAssertTrue(policy.contains("route == .floatingActions"))
         XCTAssertTrue(policy.contains("state == .unsaved"))
         XCTAssertTrue(policy.contains("state == .wanna"))

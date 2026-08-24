@@ -1027,10 +1027,10 @@ enum WanderPlaceCategory {
             aliases: [
             "outdoors_nature", "outdoors nature", "outdoors and nature", "outdoors", "nature", "hike", "hiking",
             "trail", "trailhead", "waterfall", "hot spring", "canyon", "mountain", "park", "national park",
-            "playground", "garden", "beach", "lake", "campground", "rv park", "marina", "ski resort", "skate park"
+            "playground", "garden", "beach", "dog beach", "lake", "campground", "rv park", "marina", "ski resort", "skate park"
         ],
             subcategories: [
-            "Park", "City park", "State park", "National park", "Hiking area", "Trail", "Hike", "Beach", "Lake",
+            "Park", "City park", "State park", "National park", "Hiking area", "Trail", "Hike", "Beach", "Dog beach", "Lake",
             "River", "Island", "Woods/forest", "Mountain peak", "Scenic spot", "Viewpoint", "Overlook",
             "Waterfall", "Hot spring", "Cave", "Nature preserve", "Wildlife refuge", "Wildlife park",
             "Botanical garden", "Garden", "Picnic area", "Dog park", "Playground", "Campground", "RV park",
@@ -1522,7 +1522,7 @@ enum WanderPlaceCategory {
                 "Viewpoint", "Overlook", "Waterfall", "Cave", "Nature preserve", "Wildlife refuge", "Wildlife park"
             ]),
             PlaceCategorySubcategoryGroup(title: "Water & camping", subcategories: [
-                "Beach", "Lake", "River", "Hot spring", "Campground", "RV park", "Dispersed camping", "Cabin",
+                "Beach", "Dog beach", "Lake", "River", "Hot spring", "Campground", "RV park", "Dispersed camping", "Cabin",
                 "Cottage", "Marina", "Fishing pier", "Fishing pond", "Fishing charter"
             ]),
             PlaceCategorySubcategoryGroup(title: "Outdoor sports", subcategories: [

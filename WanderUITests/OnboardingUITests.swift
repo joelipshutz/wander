@@ -1794,6 +1794,63 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
+    func testMapCheckInSaveWorksWithFocusedNoteAndVisibleKeyboard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityExtraLarge"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let attachedTray = app.otherElements["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertTrue(note.isHittable)
+        note.tap()
+        note.typeText("Keyboard-visible check-in")
+
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+
+        let save = attachedTray.buttons["Check in"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable)
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            keyboard.waitForNonExistence(timeout: 4),
+            "The same Save tap should intentionally dismiss the keyboard."
+        )
+        XCTAssertTrue(
+            attachedTray.waitForNonExistence(timeout: 4),
+            "One physical Save tap should commit and dismiss the Check-in editor."
+        )
+        XCTAssertTrue(
+            app.buttons["Check in again"].firstMatch.waitForExistence(timeout: 4),
+            "The completed Check-in should update the place action exactly once."
+        )
+    }
+
     func testAttachedWannaSheetCanExpandCollapseAndDismissFromItsNativeGrabber() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -1947,6 +2004,56 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "Existing Wanna converts to attached Check in"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testEditWannaDeleteActionPreservesItsConfirmationBehavior() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Elysian Picnic Steps",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
+        wanna.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Update Wanna"].exists)
+
+        let deleteButton = attachedTray.buttons["Remove from Wanna"].firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))
+
+        let editorScrollView = attachedTray.scrollViews.firstMatch
+        XCTAssertTrue(editorScrollView.exists)
+        editorScrollView.swipeUp()
+        if !deleteButton.isHittable {
+            editorScrollView.swipeUp()
+        }
+        XCTAssertTrue(deleteButton.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-361 lightweight Edit Wanna delete action"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        deleteButton.tap()
+        let confirmation = app.alerts["Remove from Wanna?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 2))
+        XCTAssertTrue(confirmation.buttons["Remove from Wanna"].exists)
+        XCTAssertTrue(confirmation.buttons["Cancel"].exists)
+        confirmation.buttons["Cancel"].tap()
+
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 2))
+        XCTAssertTrue(attachedTray.exists)
+        XCTAssertTrue(app.buttons["Update Wanna"].exists)
     }
 
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {

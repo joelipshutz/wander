@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "categories": [
     {
       "id": "restaurants_food",
@@ -382,6 +382,7 @@
         "playground",
         "garden",
         "beach",
+        "dog beach",
         "lake",
         "campground",
         "rv park",
@@ -398,6 +399,7 @@
         "Trail",
         "Hike",
         "Beach",
+        "Dog beach",
         "Lake",
         "River",
         "Island",
