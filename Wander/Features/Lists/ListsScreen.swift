@@ -1190,7 +1190,7 @@ private struct ListDetailScreen: View {
                 .font(.system(size: 18, weight: .black))
 
             if visiblePlaces.isEmpty {
-                Text(renderedList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
+                Text("There are no places added to this list yet.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1376,15 +1376,21 @@ private struct ListDetailScreen: View {
 
     @MainActor
     private func removePlace(_ place: ListPlaceMock) {
+        removedPlaceIDs.insert(place.id)
+
         if let sourceList, let placeID = place.placeID {
             Task {
-                _ = await store.removePlace(placeID: placeID, from: sourceList, backend: backend)
+                _ = await store.removePlace(
+                    placeID: placeID,
+                    visiblePlaceID: place.visiblePlaceID,
+                    from: sourceList,
+                    backend: backend
+                )
                 await MainActor.run {
+                    removedPlaceIDs.remove(place.id)
                     onListChanged(sourceList.id)
                 }
             }
-        } else {
-            removedPlaceIDs.insert(place.id)
         }
     }
 
@@ -4429,15 +4435,14 @@ private extension PlaceListMock {
                 preferredUserPhoto: preferredUserPhoto
             )
         }
-        self.itemCountOverride = list.cachedItemCount
+        self.itemCountOverride = visiblePlaces.count
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
         self.canAddPlaces = store.canAddPlaces(to: list)
         self.canLeave = store.canLeave(list)
-        // The store currently has no list-scoped request state. A cached count
-        // without hydrated places is unresolved content, not proof that a
-        // request is actively loading.
+        // Detail counts must describe the rows the viewer can actually see.
+        // Cached server membership counts may include unresolved legacy items.
         self.mapAvailability = .ready
     }
 }

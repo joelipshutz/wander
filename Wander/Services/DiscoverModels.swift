@@ -807,6 +807,19 @@ enum VisiblePlaceGrouping {
         !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
     }
 
+    static func matches(_ lhs: LocalPlace, _ rhs: LocalPlace) -> Bool {
+        !groupingAliases(for: lhs).isDisjoint(with: groupingAliases(for: rhs))
+    }
+
+    static func groupingAliases(for place: LocalPlace) -> Set<String> {
+        let identifiers = [place.id, place.localID, place.serverID]
+            .compactMap { $0 }
+            .map(normalizedIdentifier)
+            .filter { !$0.isEmpty }
+            .map { "id:\($0)" }
+        return Set(keys(for: place)).union(identifiers)
+    }
+
     static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {
         matches(visiblePlace.place, candidate: candidate)
     }
@@ -862,7 +875,10 @@ enum VisiblePlaceGrouping {
     }
 
     private static func keys(for visiblePlace: VisiblePlace) -> [String] {
-        let place = visiblePlace.place
+        keys(for: visiblePlace.place)
+    }
+
+    private static func keys(for place: LocalPlace) -> [String] {
         var keys: [String] = []
 
         func append(_ key: String) {
