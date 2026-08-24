@@ -3893,6 +3893,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("onDraftChange(draftID, update.form, update.submittedAt)"))
         XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
+        XCTAssertTrue(sharedEditor.contains("guard saveAttemptedAt == nil else { return }"))
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
         XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))

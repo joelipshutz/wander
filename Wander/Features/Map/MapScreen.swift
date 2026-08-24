@@ -9592,6 +9592,7 @@ struct MapPlaceSaveEditor: View {
 
     private func save() {
         guard !isSaving else { return }
+        guard saveAttemptedAt == nil else { return }
         dismissKeyboard()
         guard selectedStatus != .been || visitedAt <= Date.now else {
             errorMessage = "A check-in date can’t be in the future."
