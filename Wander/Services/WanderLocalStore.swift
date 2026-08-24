@@ -2195,20 +2195,19 @@ final class WanderStore: ObservableObject {
         })
         .joined(separator: " ")
         .lowercased()
-        let existingCategories = Set(existingPlaces.map { $0.place.category.lowercased() })
+        let existingCategories = Set(existingPlaces.map(\.effectiveCategory))
         let existingLocalities = Set(existingPlaces.compactMap { $0.place.locality?.lowercased() })
         let existingTags = Set(existingPlaces.flatMap { tagTokens(for: $0) })
+        let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
 
-        return visiblePlaces()
-            .filter {
-                !hasPlace($0, in: list)
-                    && !wasRemovedFromList($0.place, list: list)
-            }
+        let suggestions = listSuggestionCandidates(for: list)
+            .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
             .map { visiblePlace in
                 var score = 0.0
                 var reasons: [String] = []
-                let category = visiblePlace.place.category.lowercased()
-                if existingCategories.contains(category) || contextText.contains(category) {
+                let category = visiblePlace.effectiveCategory
+                if existingCategories.contains(category)
+                    || contextText.contains(visiblePlace.place.category.lowercased()) {
                     score += 4
                     reasons.append(visiblePlace.effectiveCompactType)
                 }
@@ -2241,6 +2240,8 @@ final class WanderStore: ObservableObject {
             }
             .prefix(limit)
             .map { $0 }
+
+        return disambiguatingSameNameLocations(in: suggestions)
     }
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5, backend: WanderBackend?) async -> [ListPlaceSuggestion] {
@@ -2249,9 +2250,13 @@ final class WanderStore: ObservableObject {
 
         do {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
-            let candidatesByID = Dictionary(uniqueKeysWithValues: visiblePlaces().map { ($0.id, $0) })
+            let existingPlaces = visiblePlaces(in: list)
+            let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
+            let candidates = listSuggestionCandidates(for: list)
+            let candidatesByID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
+                      focusedCategory == nil || visiblePlace.effectiveCategory == focusedCategory,
                       !hasPlace(visiblePlace, in: list),
                       !wasRemovedFromList(visiblePlace.place, list: list)
                 else { return nil }
@@ -2261,7 +2266,10 @@ final class WanderStore: ObservableObject {
                     score: item.score ?? 0
                 )
             }
-            return remoteSuggestions.isEmpty ? fallback : Array(remoteSuggestions.prefix(limit))
+            let canonicalSuggestions = canonicalListSuggestions(remoteSuggestions, limit: limit)
+            return canonicalSuggestions.isEmpty
+                ? fallback
+                : disambiguatingSameNameLocations(in: canonicalSuggestions)
         } catch {
             lastRemoteError = remoteErrorMessage(error)
             return fallback
@@ -2393,6 +2401,15 @@ final class WanderStore: ObservableObject {
             return ListPlaceAddResult(outcome: .alreadyInList, companionSave: .none)
         }
 
+        let existingCurrentUserSaveIDs = Set(currentUserVisiblePlaces.flatMap { visiblePlace in
+            [
+                visiblePlace.id,
+                visiblePlace.userPlace.id,
+                visiblePlace.userPlace.localID,
+                visiblePlace.userPlace.serverID
+            ].compactMap { $0 }
+        })
+
         let saveResult = await saveCandidate(
             candidate,
             status: .wannaGo,
@@ -2410,9 +2427,24 @@ final class WanderStore: ObservableObject {
         }
 
         let result = await addVisiblePlace(savedVisiblePlace, to: list, backend: backend)
+        let saveAlreadyExisted = !existingCurrentUserSaveIDs.isDisjoint(with: Set([
+            saveResult.userPlaceID,
+            savedVisiblePlace.id,
+            savedVisiblePlace.userPlace.id,
+            savedVisiblePlace.userPlace.localID,
+            savedVisiblePlace.userPlace.serverID
+        ].compactMap { $0 }))
+        let companionSave: ListPlaceAddResult.CompanionSave
+        if savedVisiblePlace.userPlace.status == .been {
+            companionSave = .none
+        } else if saveAlreadyExisted {
+            companionSave = .existingWanna(userPlaceID: savedVisiblePlace.userPlace.id)
+        } else {
+            companionSave = .createdWanna(userPlaceID: savedVisiblePlace.userPlace.id)
+        }
         return ListPlaceAddResult(
             outcome: result.outcome,
-            companionSave: .createdWanna(userPlaceID: saveResult.userPlaceID)
+            companionSave: companionSave
         )
     }
 
@@ -3315,11 +3347,9 @@ final class WanderStore: ObservableObject {
 
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
-        let candidates = visiblePlaces()
-            .filter {
-                !hasPlace($0, in: list)
-                    && !wasRemovedFromList($0.place, list: list)
-            }
+        let focusedCategory = focusedListSuggestionCategory(in: existingPlaces)
+        let candidates = listSuggestionCandidates(for: list)
+            .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
             .sorted { lhs, rhs in
                 if lhs.owner.id == currentUser.id && rhs.owner.id != currentUser.id { return true }
                 if rhs.owner.id == currentUser.id && lhs.owner.id != currentUser.id { return false }
@@ -3334,6 +3364,88 @@ final class WanderStore: ObservableObject {
             candidatePlaces: candidates.map(listSuggestionPlacePayload),
             limit: limit
         )
+    }
+
+    private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {
+        let addablePlaces = visiblePlaces().filter {
+            !hasPlace($0, in: list)
+                && !wasRemovedFromList($0.place, list: list)
+        }
+        return VisiblePlaceGrouping.representativePlaces(
+            from: addablePlaces,
+            currentUserID: currentUser.id
+        )
+    }
+
+    /// A list with a clear category family should not drift because one
+    /// outlier happens to share a city or a generic note token.
+    private func focusedListSuggestionCategory(in places: [VisiblePlace]) -> String? {
+        guard places.count >= 3 else { return nil }
+        let counts = places.reduce(into: [String: Int]()) { result, place in
+            result[place.effectiveCategory, default: 0] += 1
+        }
+        guard let leading = counts.max(by: { $0.value < $1.value }),
+              leading.value >= 2,
+              Double(leading.value) / Double(places.count) >= 0.6
+        else { return nil }
+        return leading.key
+    }
+
+    private func canonicalListSuggestions(
+        _ suggestions: [ListPlaceSuggestion],
+        limit: Int
+    ) -> [ListPlaceSuggestion] {
+        var accepted: [ListPlaceSuggestion] = []
+        for suggestion in suggestions {
+            guard !accepted.contains(where: {
+                VisiblePlaceGrouping.matches($0.visiblePlace, suggestion.visiblePlace)
+            }) else { continue }
+            accepted.append(suggestion)
+            if accepted.count == limit { break }
+        }
+        return accepted
+    }
+
+    private func disambiguatingSameNameLocations(
+        in suggestions: [ListPlaceSuggestion]
+    ) -> [ListPlaceSuggestion] {
+        let countsByName = Dictionary(grouping: suggestions) {
+            $0.visiblePlace.place.canonicalName
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        }
+
+        return suggestions.map { suggestion in
+            let place = suggestion.visiblePlace.place
+            let nameKey = place.canonicalName
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            guard countsByName[nameKey, default: []].count > 1 else {
+                return suggestion
+            }
+
+            let location = place.address?
+                .split(separator: ",", maxSplits: 1)
+                .first
+                .map(String.init)
+                ?? place.locality
+                ?? place.region
+            guard let location, !location.isEmpty else { return suggestion }
+            return ListPlaceSuggestion(
+                visiblePlace: suggestion.visiblePlace,
+                reason: ListSuggestionReasonFormatter.displayText(
+                    "\(suggestion.reason) + \(location)",
+                    for: suggestion.visiblePlace
+                ),
+                score: suggestion.score
+            )
+        }
     }
 
     private func listSuggestionPlacePayload(_ visiblePlace: VisiblePlace) -> ListSuggestionPlacePayload {
@@ -6167,6 +6279,10 @@ final class WanderStore: ObservableObject {
                 categorySource: visiblePlace.categoryAssignment.source,
                 categoryConfidence: visiblePlace.categoryAssignment.confidence,
                 rawProviderType: visiblePlace.place.rawProviderType,
+                address: visiblePlace.place.address,
+                locality: visiblePlace.place.locality,
+                region: visiblePlace.place.region,
+                country: visiblePlace.place.country,
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude,
                 sourceProvider: visiblePlace.place.sourceProvider,

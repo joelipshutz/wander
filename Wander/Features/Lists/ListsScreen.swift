@@ -1284,7 +1284,7 @@ private struct ListDetailScreen: View {
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        MapPinOutlineBuilder.outlineCatalog(
+        listSavedPlaceOutlineCatalog(
             for: store.visiblePlaces(),
             currentUserID: store.currentUser.id
         )
@@ -1692,7 +1692,7 @@ private struct ListAddPlacesScreen: View {
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        MapPinOutlineBuilder.outlineCatalog(
+        listSavedPlaceOutlineCatalog(
             for: store.visiblePlaces(),
             currentUserID: store.currentUser.id
         )
@@ -1957,38 +1957,39 @@ private struct ListSaveToast: View {
     let onEdit: () -> Void
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .black))
-                .frame(width: 34, height: 34)
-                .background(WanderTheme.terracotta.color)
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .clipShape(Circle())
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .symbolEffect(.bounce, value: presentation.message)
 
-            HStack(spacing: WanderTheme.spacing1) {
-                Text(presentation.message + " •")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(presentation.message + " •")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .layoutPriority(1)
 
-                Button(presentation.actionTitle, action: onEdit)
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .underline()
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the place save editor")
-            }
-
-            Spacer(minLength: 0)
+            Button(presentation.actionTitle, action: onEdit)
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .underline()
+                .padding(.horizontal, 10)
+                .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.stateSuccess.color.opacity(0.12))
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the place save editor")
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, WanderTheme.spacing2)
+        .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.surfaceRaised.color.opacity(0.98))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 18, x: 0, y: 10)
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
         )
     }
@@ -4936,8 +4937,20 @@ private func savedPlaceOutlines(
     outlineCatalog: [String: [MapPinOutline]],
     currentUserID: String
 ) -> [MapPinOutline] {
-    if let outlines = outlineCatalog[visiblePlace.id] {
-        return outlines
+    let lookupKeys = [
+        visiblePlace.id,
+        visiblePlace.userPlace.id,
+        visiblePlace.userPlace.localID,
+        visiblePlace.userPlace.serverID,
+        visiblePlace.place.id,
+        visiblePlace.place.localID,
+        visiblePlace.place.serverID,
+        VisiblePlaceGrouping.key(for: visiblePlace)
+    ].compactMap { $0 }
+    for key in lookupKeys {
+        if let outlines = outlineCatalog[key] {
+            return outlines
+        }
     }
 
     return MapPinOutlineBuilder.outlines(
@@ -4954,12 +4967,47 @@ private func savedPlaceOutlines(
     for place: ListPlaceMock,
     outlineCatalog: [String: [MapPinOutline]]
 ) -> [MapPinOutline] {
-    if let visiblePlaceID = place.visiblePlaceID,
-       let outlines = outlineCatalog[visiblePlaceID] {
-        return outlines
+    for key in [place.visiblePlaceID, place.placeID].compactMap({ $0 }) {
+        if let outlines = outlineCatalog[key] {
+            return outlines
+        }
     }
 
     return MapPinOutlineBuilder.outlines(for: place.saveStates)
+}
+
+private func listSavedPlaceOutlineCatalog(
+    for visiblePlaces: [VisiblePlace],
+    currentUserID: String
+) -> [String: [MapPinOutline]] {
+    var catalog: [String: [MapPinOutline]] = [:]
+    for group in VisiblePlaceGrouping.groups(from: visiblePlaces, currentUserID: currentUserID) {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: group.places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
+        )
+        let lookupKeys = group.aliases.union([group.key]).union(
+            group.places.flatMap { visiblePlace in
+                [
+                    visiblePlace.id,
+                    visiblePlace.userPlace.id,
+                    visiblePlace.userPlace.localID,
+                    visiblePlace.userPlace.serverID,
+                    visiblePlace.place.id,
+                    visiblePlace.place.localID,
+                    visiblePlace.place.serverID
+                ].compactMap { $0 }
+            }
+        )
+        for key in lookupKeys {
+            catalog[key] = outlines
+        }
+    }
+    return catalog
 }
 
 private struct ListCollaboratorMock: Identifiable {

@@ -8813,6 +8813,11 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(suggestions.isEmpty)
         XCTAssertTrue(suggestions.allSatisfy { !existingPlaceIDs.contains($0.visiblePlace.place.id) })
+        for (index, suggestion) in suggestions.enumerated() {
+            XCTAssertFalse(suggestions.dropFirst(index + 1).contains {
+                VisiblePlaceGrouping.matches(suggestion.visiblePlace, $0.visiblePlace)
+            })
+        }
     }
 
     func testListSuggestionReasonsRemoveInternalMetadataLabels() throws {
@@ -8834,6 +8839,13 @@ final class WanderStoreTests: XCTestCase {
                 for: visiblePlace
             ),
             "Fits: outdoor seating"
+        )
+        XCTAssertEqual(
+            ListSuggestionReasonFormatter.displayText(
+                "Fits: Bakery + and, coffee",
+                for: visiblePlace
+            ),
+            "Fits: Bakery + coffee"
         )
 
         let fallback = ListSuggestionReasonFormatter.displayText(
@@ -8870,6 +8882,135 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(reason.contains("_"))
         XCTAssertFalse(reason.lowercased().contains("areas"))
         XCTAssertNotEqual(reason.lowercased(), "fits: place")
+    }
+
+    func testListSuggestionsRespectAFocusedCategoryFamily() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Coffee and bakeries",
+                description: "Morning coffee and pastries",
+                visibility: .followers
+            )
+        )
+
+        func save(_ id: String, name: String, category: String, latitude: Double) -> SaveResult {
+            store.saveCandidate(
+                PlaceCandidate(
+                    id: id,
+                    name: name,
+                    category: category,
+                    locality: "Los Angeles",
+                    region: "CA",
+                    latitude: latitude,
+                    longitude: -118.24,
+                    confidence: 0.95
+                ),
+                status: .wannaGo,
+                visibility: .followers,
+                note: nil,
+                sourceType: .manual
+            )
+        }
+
+        let existing = [
+            save("coffee_1", name: "Coffee One", category: "coffee", latitude: 34.041),
+            save("coffee_2", name: "Coffee Two", category: "cafe", latitude: 34.042),
+            save("coffee_3", name: "Bakery Three", category: "bakery", latitude: 34.043),
+            save("coffee_4", name: "Coffee Four", category: "coffee shop", latitude: 34.044),
+            save("trail_1", name: "Existing Trail", category: "trail", latitude: 34.045)
+        ]
+        for saveResult in existing {
+            XCTAssertEqual(store.addCurrentUserPlace(userPlaceID: saveResult.userPlaceID, to: list).outcome, .added)
+        }
+        _ = save("coffee_candidate", name: "Coffee Candidate", category: "coffee", latitude: 34.046)
+        _ = save("trail_candidate", name: "S Bay Trail", category: "trail", latitude: 34.047)
+
+        let suggestions = store.listSuggestions(for: list, limit: 8)
+
+        XCTAssertEqual(suggestions.map { $0.visiblePlace.place.canonicalName }, ["Coffee Candidate"])
+        XCTAssertTrue(suggestions.allSatisfy {
+            $0.visiblePlace.effectiveCategory == WanderPlaceCategory.coffeeTeaSweets
+        })
+    }
+
+    func testListSuggestionsDeduplicateCanonicalSavesAndLabelDistinctLocations() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Coffee",
+                description: "Coffee shops",
+                visibility: .followers
+            )
+        )
+
+        for index in 0..<3 {
+            let saved = store.saveCandidate(
+                PlaceCandidate(
+                    id: "anchor_\(index)",
+                    name: "Anchor Coffee \(index)",
+                    category: "coffee",
+                    locality: "Los Angeles",
+                    region: "CA",
+                    latitude: 34.01 + Double(index) * 0.001,
+                    longitude: -118.24,
+                    confidence: 0.95
+                ),
+                status: .wannaGo,
+                visibility: .followers,
+                note: nil,
+                sourceType: .manual
+            )
+            XCTAssertEqual(store.addCurrentUserPlace(userPlaceID: saved.userPlaceID, to: list).outcome, .added)
+        }
+
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "gnarwhal_santa_monica",
+                name: "Gnarwhal Coffee Co.",
+                category: "coffee",
+                address: "3101 Main Street",
+                locality: "Santa Monica",
+                region: "CA",
+                latitude: 34.001,
+                longitude: -118.481,
+                confidence: 0.95
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "gnarwhal_downtown",
+                name: "Gnarwhal Coffee Co.",
+                category: "coffee",
+                address: "700 South Grand Avenue",
+                locality: "Los Angeles",
+                region: "CA",
+                latitude: 34.047,
+                longitude: -118.256,
+                confidence: 0.95
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        let suggestions = store.listSuggestions(for: list, limit: 8)
+            .filter { $0.visiblePlace.place.canonicalName == "Gnarwhal Coffee Co." }
+
+        XCTAssertEqual(suggestions.count, 2, "Different locations should remain separate suggestions")
+        XCTAssertTrue(suggestions.contains { $0.reason.contains("3101 Main Street") })
+        XCTAssertTrue(suggestions.contains { $0.reason.contains("700 South Grand Avenue") })
+        XCTAssertEqual(
+            suggestions.count,
+            Set(suggestions.map { VisiblePlaceGrouping.key(for: $0.visiblePlace) }).count
+        )
     }
 
     func testListSuggestionBatchKeepsRemainingPlacesUntilExhausted() throws {
@@ -8957,6 +9098,24 @@ final class WanderStoreTests: XCTestCase {
         }
         XCTAssertEqual(projectedPlace?.owner.id, store.currentUser.id)
         XCTAssertEqual(projectedPlace?.userPlace.status, .wannaGo)
+        let canonicalGroup = VisiblePlaceGrouping.matchingGroup(
+            for: socialPlace,
+            in: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
+        XCTAssertTrue(canonicalGroup?.places.contains { $0.owner.id == store.currentUser.id } == true)
+        XCTAssertTrue(canonicalGroup?.places.contains { $0.owner.id != store.currentUser.id } == true)
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: canonicalGroup?.places.map {
+                MapPinSaveState(
+                    ownership: $0.owner.id == store.currentUser.id ? .currentUser : .social,
+                    status: $0.userPlace.status
+                )
+            } ?? []
+        )
+        XCTAssertEqual(outlines.count, 2)
+        XCTAssertTrue(outlines.contains { $0.ownership == .currentUser })
+        XCTAssertTrue(outlines.contains { $0.ownership == .social })
     }
 
     func testAddingUnsavedCandidateToListReportsCreatedWannaForEditableToast() async throws {
