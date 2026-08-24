@@ -259,6 +259,9 @@ final class LocalUserPlace {
     var subcategoryOverride: String?
     var categoryOverrideSource: String?
     var categoryOverrideConfidence: Double?
+    var viewerPrimaryCategory: String?
+    var viewerSubcategory: String?
+    var viewerFoodType: String?
     var visibilityRaw: String
     var nearbyConfirmed: Bool
     var visitedAt: Date?
@@ -280,7 +283,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, viewerPrimaryCategory: String? = nil, viewerSubcategory: String? = nil, viewerFoodType: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -295,6 +298,9 @@ final class LocalUserPlace {
         self.subcategoryOverride = WanderPlaceCategory.normalizedSubcategory(subcategoryOverride)
         self.categoryOverrideSource = categoryOverrideSource
         self.categoryOverrideConfidence = categoryOverrideConfidence
+        self.viewerPrimaryCategory = viewerPrimaryCategory.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        self.viewerSubcategory = WanderPlaceCategory.normalizedSubcategory(viewerSubcategory)
+        self.viewerFoodType = WanderPlaceCategory.normalizedSubcategory(viewerFoodType)
         self.visibilityRaw = visibility.rawValue
         self.nearbyConfirmed = nearbyConfirmed
         self.visitedAt = visitedAt

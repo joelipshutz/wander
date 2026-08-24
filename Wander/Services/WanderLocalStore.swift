@@ -3715,6 +3715,13 @@ final class WanderStore: ObservableObject {
         let place = upsertPlace(from: invitation.candidate, sourceType: .socialSave)
         let now = Date.now
         let streakSummaryBeforeSave = saveStreakSummary
+        let viewerSnapshot = viewerTaxonomySnapshotAssignment(from: invitation.candidate)
+        let viewerSnapshotFoodType = WanderPlaceCategory.restaurantCuisineInference(
+            name: invitation.candidate.name,
+            rawProviderType: invitation.candidate.rawProviderType,
+            subcategory: viewerSnapshot.subcategory,
+            category: viewerSnapshot.primaryCategory
+        )?.cuisine
         let userPlace: LocalUserPlace
         let createdNewUserPlace: Bool
 
@@ -3736,6 +3743,11 @@ final class WanderStore: ObservableObject {
             existing.sourceType = AddSourceType.socialSave.rawValue
             existing.sourceUserPlaceID = nil
             existing.attributionUserID = invitation.sourceOwnerUserID
+            if existing.viewerPrimaryCategory == nil {
+                existing.viewerPrimaryCategory = viewerSnapshot.primaryCategory
+                existing.viewerSubcategory = viewerSnapshot.subcategory
+                existing.viewerFoodType = viewerSnapshotFoodType
+            }
             existing.syncStateRaw = SyncState.synced.rawValue
             existing.serverUpdatedAt = now
             existing.lastSyncError = nil
@@ -3753,6 +3765,9 @@ final class WanderStore: ObservableObject {
                 visibility: draft.visibility,
                 note: draft.note,
                 ratingScore: draft.ratingScore,
+                viewerPrimaryCategory: viewerSnapshot.primaryCategory,
+                viewerSubcategory: viewerSnapshot.subcategory,
+                viewerFoodType: viewerSnapshotFoodType,
                 nearbyConfirmed: false,
                 visitedAt: draft.visitedAt,
                 savedAt: now,
@@ -5186,8 +5201,20 @@ final class WanderStore: ObservableObject {
         let place = upsertPlace(from: candidate, sourceType: sourceType)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
         let categoryOverride = categoryOverrideAssignment(from: candidate)
+        let viewerSnapshot = viewerTaxonomySnapshotAssignment(from: candidate)
+        let viewerSnapshotFoodType = WanderPlaceCategory.restaurantCuisineInference(
+            name: candidate.name,
+            rawProviderType: candidate.rawProviderType,
+            subcategory: viewerSnapshot.subcategory,
+            category: viewerSnapshot.primaryCategory
+        )?.cuisine
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
+            if existing.viewerPrimaryCategory == nil {
+                existing.viewerPrimaryCategory = viewerSnapshot.primaryCategory
+                existing.viewerSubcategory = viewerSnapshot.subcategory
+                existing.viewerFoodType = viewerSnapshotFoodType
+            }
             let previousStatus = existing.status
             let previousAttributeDrafts = attributeDrafts(for: existing.id)
             if previousStatus == .wannaGo, status == .been {
@@ -5263,6 +5290,9 @@ final class WanderStore: ObservableObject {
             subcategoryOverride: categoryOverride?.subcategory,
             categoryOverrideSource: categoryOverride?.source,
             categoryOverrideConfidence: categoryOverride?.confidence,
+            viewerPrimaryCategory: viewerSnapshot.primaryCategory,
+            viewerSubcategory: viewerSnapshot.subcategory,
+            viewerFoodType: viewerSnapshotFoodType,
             nearbyConfirmed: sourceType == .currentLocation,
             savedAt: savedAt,
             plannedDate: status == .wannaGo
@@ -6198,19 +6228,39 @@ final class WanderStore: ObservableObject {
     }
 
     func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo) -> SaveResult {
-        let copiedAttributes = attributes(for: visiblePlace.userPlace.id).map { attribute in
-            PlaceAttributeDraft(questionKey: attribute.questionKey, valueType: attribute.valueType, valueJSON: attribute.valueJSON)
+        let sourceAttributes = visiblePlace.attributes.isEmpty
+            ? attributes(for: visiblePlace.userPlace.id)
+            : visiblePlace.attributes
+        let copiedAttributes = sourceAttributes
+            .filter { $0.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine }
+            .map { attribute in
+                PlaceAttributeDraft(questionKey: attribute.questionKey, valueType: attribute.valueType, valueJSON: attribute.valueJSON)
+            }
+        let taxonomyAssignment: PlaceCategoryAssignment
+        if visiblePlace.owner.id != currentUser.id,
+           visiblePlace.userPlace.categoryOverride != nil {
+            taxonomyAssignment = PlaceCategoryAssignment(
+                primaryCategory: visiblePlace.place.primaryCategory,
+                subcategory: visiblePlace.place.subcategory,
+                source: visiblePlace.place.categorySource,
+                confidence: visiblePlace.place.categoryConfidence,
+                rawProviderType: visiblePlace.place.rawProviderType
+            )
+        } else {
+            taxonomyAssignment = visiblePlace.categoryAssignment
         }
 
-        return saveCandidate(
+        let result = saveCandidate(
             PlaceCandidate(
                 id: visiblePlace.place.id,
                 name: visiblePlace.place.canonicalName,
-                category: visiblePlace.effectiveCategory,
-                primaryCategory: visiblePlace.effectiveCategory,
-                subcategory: visiblePlace.effectiveSubcategory,
-                categorySource: visiblePlace.categoryAssignment.source,
-                categoryConfidence: visiblePlace.categoryAssignment.confidence,
+                category: taxonomyAssignment.primaryCategory,
+                primaryCategory: taxonomyAssignment.primaryCategory,
+                subcategory: taxonomyAssignment.subcategory,
+                categorySource: visiblePlace.owner.id == currentUser.id
+                    ? visiblePlace.categoryAssignment.source
+                    : PlaceCategorySource.snapshot.rawValue,
+                categoryConfidence: taxonomyAssignment.confidence,
                 rawProviderType: visiblePlace.place.rawProviderType,
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude,
@@ -6228,6 +6278,15 @@ final class WanderStore: ObservableObject {
             sourceType: .socialSave,
             attributes: copiedAttributes
         )
+        if let saved = currentUserPlace(matching: result.userPlaceID) {
+            saved.viewerPrimaryCategory = taxonomyAssignment.primaryCategory
+            saved.viewerSubcategory = taxonomyAssignment.subcategory
+            saved.viewerFoodType = visiblePlace.owner.id == currentUser.id
+                ? visiblePlace.restaurantCuisine
+                : visiblePlace.userPlace.viewerFoodType
+            persist()
+        }
+        return result
     }
 
     @discardableResult
@@ -8941,11 +9000,11 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemoteAttributes(from visiblePlaces: [VisiblePlace]) {
-        let userPlaceIDsWithAttributes = Set(visiblePlaces.filter { !$0.attributes.isEmpty }.map(\.userPlace.id))
-        guard !userPlaceIDsWithAttributes.isEmpty else { return }
+        let refreshedUserPlaceIDs = Set(visiblePlaces.map(\.userPlace.id))
+        guard !refreshedUserPlaceIDs.isEmpty else { return }
 
         placeAttributes.removeAll { attribute in
-            userPlaceIDsWithAttributes.contains(attribute.userPlaceID)
+            refreshedUserPlaceIDs.contains(attribute.userPlaceID)
                 && attribute.localID.hasPrefix("remote_attr_")
         }
 
@@ -9453,7 +9512,8 @@ final class WanderStore: ObservableObject {
     }
 
     private func sharedPlaceAssignment(from candidate: PlaceCandidate) -> PlaceCategoryAssignment {
-        if candidate.categorySource == PlaceCategorySource.user.rawValue {
+        if candidate.categorySource == PlaceCategorySource.user.rawValue
+            || candidate.categorySource == PlaceCategorySource.snapshot.rawValue {
             let rawProviderType = candidate.rawProviderType ?? PlaceCategorySource.unknown.rawValue
             return WanderPlaceCategory.assignment(
                 forRawCategory: rawProviderType,
@@ -9463,6 +9523,13 @@ final class WanderStore: ObservableObject {
             )
         }
 
+        return candidate.categoryAssignment
+    }
+
+    private func viewerTaxonomySnapshotAssignment(from candidate: PlaceCandidate) -> PlaceCategoryAssignment {
+        if candidate.categorySource == PlaceCategorySource.user.rawValue {
+            return sharedPlaceAssignment(from: candidate)
+        }
         return candidate.categoryAssignment
     }
 

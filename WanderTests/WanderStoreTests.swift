@@ -7360,6 +7360,74 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.serverID == "up_remote_saved" && $0.userPlace.syncState == .synced })
     }
 
+    func testSocialSaveDoesNotCopyAnotherUsersPrivateTaxonomy() throws {
+        let store = makeStore()
+        let place = LocalPlace(
+            localID: "remote_place_private_taxonomy",
+            canonicalName: "Private Taxonomy",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            categorySource: PlaceCategorySource.provider.rawValue,
+            rawProviderType: "restaurant",
+            latitude: 34.1,
+            longitude: -118.2,
+            syncState: .synced
+        )
+        let sourceSave = LocalUserPlace(
+            localID: "remote_up_private_taxonomy",
+            userID: "user_maya",
+            placeID: place.id,
+            status: .been,
+            visibility: .followers,
+            categoryOverride: WanderPlaceCategory.barsNightlife,
+            subcategoryOverride: "Wine Bar",
+            categoryOverrideSource: PlaceCategorySource.user.rawValue,
+            viewerPrimaryCategory: WanderPlaceCategory.restaurantsFood,
+            viewerSubcategory: "Restaurant",
+            viewerFoodType: "Seafood",
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let socialPlace = VisiblePlace(
+            id: sourceSave.id,
+            place: place,
+            userPlace: sourceSave,
+            owner: LocalProfile(localID: "user_maya", handle: "maya", displayName: "Maya"),
+            attributes: [
+                LocalPlaceAttribute(
+                    localID: "source_private_food_type",
+                    userPlaceID: sourceSave.id,
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    valueJSON: "\"Steakhouse\""
+                ),
+                LocalPlaceAttribute(
+                    localID: "source_shareable_tag",
+                    userPlaceID: sourceSave.id,
+                    questionKey: "restaurant_tags",
+                    valueType: "multi_tag",
+                    valueJSON: "[\"date night\"]"
+                )
+            ]
+        )
+
+        let result = store.saveVisiblePlace(socialPlace)
+        let saved = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertNil(saved.userPlace.categoryOverride)
+        XCTAssertEqual(saved.effectiveCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(saved.restaurantCuisine, "Seafood")
+        XCTAssertNil(store.attributes(for: result.userPlaceID).first {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        })
+        XCTAssertNotNil(store.attributes(for: result.userPlaceID).first {
+            $0.questionKey == "restaurant_tags"
+        })
+    }
+
     func testRemoteSocialWannaSaveDoesNotReplaceAnExistingCheckIn() async {
         let store = makeStore()
         let socialSaveRepository = FakeSocialPlaceSaveRepository(result: SaveResult(userPlaceID: "up_remote_saved", syncState: .synced))
@@ -7594,7 +7662,10 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertTrue(changed)
         XCTAssertEqual(saved.place.rawProviderType, "italian_restaurant")
-        XCTAssertEqual(saved.categoryEmoji, "🍝")
+        XCTAssertEqual(saved.effectiveCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(saved.effectiveSubcategory, "Restaurant")
+        XCTAssertNil(saved.restaurantCuisine)
+        XCTAssertEqual(saved.categoryEmoji, "🍽️")
         XCTAssertEqual(userPlaceRepository.savedDrafts.count, 2)
         XCTAssertEqual(userPlaceRepository.savedDrafts.last?.place.rawProviderType, "italian_restaurant")
 
@@ -7672,7 +7743,10 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(photoRepository.requests.map(\.name), ["Ugo"])
         XCTAssertEqual(photoRepository.requests.map(\.requiresPhoto), [false])
         XCTAssertEqual(enriched.place.rawProviderType, "italian_restaurant")
-        XCTAssertEqual(enriched.categoryEmoji, "🍝")
+        XCTAssertEqual(enriched.effectiveCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(enriched.effectiveSubcategory, "Restaurant")
+        XCTAssertNil(enriched.restaurantCuisine)
+        XCTAssertEqual(enriched.categoryEmoji, "🍽️")
         XCTAssertEqual(enriched.userPlace.syncState, .pendingUpdate)
 
         let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
@@ -7747,7 +7821,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(secondPhotoRepository.requests.isEmpty)
     }
 
-    func testProviderPrimaryTypeCanCorrectGenericRestaurantToBakery() async throws {
+    func testProviderPrimaryTypeRefreshPreservesExistingSaverTaxonomySnapshot() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
         let result = store.saveCandidate(
@@ -7783,9 +7857,11 @@ final class WanderStoreTests: XCTestCase {
         let enriched = try XCTUnwrap(
             store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
         )
-        XCTAssertEqual(enriched.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
-        XCTAssertEqual(enriched.effectiveSubcategory, "Bakery")
-        XCTAssertEqual(enriched.categoryEmoji, "🥐")
+        XCTAssertEqual(enriched.place.primaryCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(enriched.place.subcategory, "Bakery")
+        XCTAssertEqual(enriched.effectiveCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(enriched.effectiveSubcategory, "Restaurant")
+        XCTAssertEqual(enriched.categoryEmoji, "🍽️")
     }
 
     func testProviderRefreshDoesNotRewriteAlreadySpecificLegacyMetadata() async throws {

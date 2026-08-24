@@ -104,7 +104,7 @@ async function main() {
         await runFeaturedCommunitySmokeChecks(client, smokeUserID, strangerUserID);
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
         await runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, private taxonomy snapshots, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -2101,6 +2101,10 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     nearby_confirmed: false,
     source_type: "manual",
     rating_score: 3,
+    category_override: "bars_nightlife",
+    subcategory_override: "Wine bar",
+    category_override_source: "user",
+    category_override_confidence: 1,
   };
   const attributes = [
     {
@@ -2123,6 +2127,7 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     (result) => Boolean(result.rows[0]?.saved?.user_place_id && result.rows[0]?.saved?.place_id),
   );
   const savedUserPlaceID = saved.rows[0].saved.user_place_id;
+  const savedPlaceID = saved.rows[0].saved.place_id;
 
   await expectQuery(
     client,
@@ -2165,6 +2170,56 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
         && cuisine.value === "Thai";
     },
   );
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "social viewer follows the semantic-save owner",
+    "select public.follow_user($1, 'profile')",
+    [smokeUserID],
+    (result) => result.rows.length === 1,
+  );
+  await expectQuery(
+    client,
+    "another viewer cannot read the owner's private category or food type",
+    `
+      select
+        primary_category,
+        subcategory,
+        category_override,
+        subcategory_override,
+        category_override_source,
+        attributes
+      from public.profile_visible_places($1, null, null)
+      where user_place_id = $2::uuid
+    `,
+    [smokeUserID, savedUserPlaceID],
+    (result) => {
+      const row = result.rows[0];
+      const questionKeys = new Set((row?.attributes ?? []).map((attribute) => attribute.question_key));
+      return result.rows.length === 1
+        && row.primary_category === "restaurants_food"
+        && row.subcategory === "Restaurant"
+        && row.category_override === null
+        && row.subcategory_override === null
+        && row.category_override_source === null
+        && !questionKeys.has("restaurant_cuisine");
+    },
+  );
+  await expectQuery(
+    client,
+    "unsaved viewer receives provider taxonomy instead of the owner's choices",
+    `
+      select primary_category, subcategory, is_frozen
+      from app.viewer_place_taxonomy($1::uuid)
+    `,
+    [savedPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0].primary_category === "restaurants_food"
+      && result.rows[0].subcategory === "Restaurant"
+      && result.rows[0].is_frozen === false,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
 
   await expectQuery(
     client,
@@ -2328,6 +2383,7 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     (result) => Boolean(result.rows[0]?.saved?.user_place_id),
   );
   const plannedUserPlaceID = plannedSave.rows[0].saved.user_place_id;
+  const plannedPlaceID = plannedSave.rows[0].saved.place_id;
 
   await expectQuery(
     client,
@@ -2345,6 +2401,45 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     (result) => result.rows.length === 1
       && result.rows[0].stored_date === plannedDate
       && result.rows[0].reconciled_date === plannedDate,
+  );
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "a later provider payload refreshes the canonical taxonomy for a new saver",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify({
+        ...plannedPlace,
+        category: "bars_nightlife",
+        primary_category: "bars_nightlife",
+        subcategory: "Wine bar",
+        category_source: "provider",
+        raw_provider_type: "wine bar",
+      }),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "self",
+        nearby_confirmed: false,
+        source_type: "manual",
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "an existing saver keeps the first provider taxonomy after a provider refresh",
+    `
+      select primary_category, subcategory, is_frozen
+      from app.viewer_place_taxonomy($1::uuid)
+    `,
+    [plannedPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0].primary_category === "restaurants_food"
+      && result.rows[0].subcategory === "Restaurant"
+      && result.rows[0].is_frozen === true,
   );
 
   await expectQuery(
@@ -4352,6 +4447,27 @@ async function runFirstVisiblePlacePhotoChecks(
 }
 
 async function assertOwnPlaceRPCMetadata(client) {
+  await expectQuery(
+    client,
+    "private taxonomy storage and helpers keep the authenticated viewer boundary",
+    `
+      select
+        not has_table_privilege('authenticated', 'public.place_taxonomy_snapshots', 'select') as snapshots_hidden,
+        viewer.prosecdef as viewer_security_definer,
+        'search_path=public, app' = any(coalesce(viewer.proconfig, array[]::text[])) as viewer_search_path,
+        global_default.prosecdef as global_security_definer,
+        'search_path=public, app' = any(coalesce(global_default.proconfig, array[]::text[])) as global_search_path,
+        has_function_privilege('authenticated', viewer.oid, 'execute') as viewer_authenticated,
+        not has_function_privilege('anon', viewer.oid, 'execute') as viewer_anon_denied
+      from pg_proc viewer
+      cross join pg_proc global_default
+      where viewer.oid = 'app.viewer_place_taxonomy(uuid)'::regprocedure
+        and global_default.oid = 'app.global_place_taxonomy(uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
   await expectQuery(
     client,
     "own-place RPC grants match the iOS auth boundary",
