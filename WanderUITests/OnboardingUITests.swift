@@ -2006,6 +2006,56 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testEditWannaDeleteActionPreservesItsConfirmationBehavior() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Elysian Picnic Steps",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
+        wanna.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Update Wanna"].exists)
+
+        let deleteButton = attachedTray.buttons["Remove from Wanna"].firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))
+
+        let editorScrollView = attachedTray.scrollViews.firstMatch
+        XCTAssertTrue(editorScrollView.exists)
+        editorScrollView.swipeUp()
+        if !deleteButton.isHittable {
+            editorScrollView.swipeUp()
+        }
+        XCTAssertTrue(deleteButton.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-361 lightweight Edit Wanna delete action"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        deleteButton.tap()
+        let confirmation = app.alerts["Remove from Wanna?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 2))
+        XCTAssertTrue(confirmation.buttons["Remove from Wanna"].exists)
+        XCTAssertTrue(confirmation.buttons["Cancel"].exists)
+        confirmation.buttons["Cancel"].tap()
+
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 2))
+        XCTAssertTrue(attachedTray.exists)
+        XCTAssertTrue(app.buttons["Update Wanna"].exists)
+    }
+
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [

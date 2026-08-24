@@ -2018,6 +2018,56 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
     }
 
+    func testEditSaveDeleteActionIsLightweightWithoutChangingRemovalFlow() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let removeSection = try sourceSection(
+            mapScreen,
+            after: "private var removeSaveSection: some View",
+            before: "private var ratingSection: some View"
+        )
+        let destructiveButton = try sourceSection(
+            mapScreen,
+            after: "private struct MapSaveDestructiveButton: View",
+            before: "private struct PlaceTypeRow: View"
+        )
+        let removalConfirmation = try sourceSection(
+            mapScreen,
+            after: ".alert(context.removeConfirmationTitle",
+            before: "} message:"
+        )
+
+        XCTAssertTrue(removeSection.contains("title: isRemoving ? \"removing...\" : \"delete\""))
+        XCTAssertTrue(
+            removeSection.contains(
+                "accessibilityLabel: isRemoving ? \"removing...\" : context.removeTitle"
+            )
+        )
+        XCTAssertTrue(removeSection.contains("systemImage: \"trash\""))
+        XCTAssertTrue(removeSection.contains("isDisabled: isSaving || isRemoving"))
+        XCTAssertTrue(removeSection.contains("isShowingRemoveConfirmation = true"))
+
+        XCTAssertTrue(destructiveButton.contains("let action: () -> Void"))
+        XCTAssertTrue(destructiveButton.contains("Button(action: action)"))
+        XCTAssertTrue(destructiveButton.contains(".font(.system(size: 14, weight: .semibold))"))
+        XCTAssertTrue(destructiveButton.contains(".foregroundStyle(WanderTheme.stateError.color)"))
+        XCTAssertTrue(
+            destructiveButton.contains(
+                ".frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)"
+            )
+        )
+        XCTAssertTrue(destructiveButton.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(destructiveButton.contains(".disabled(isDisabled)"))
+        XCTAssertTrue(destructiveButton.contains(".accessibilityLabel(accessibilityLabel)"))
+        XCTAssertFalse(destructiveButton.contains(".background(WanderTheme.stateError.color)"))
+        XCTAssertFalse(destructiveButton.contains(".clipShape(Capsule())"))
+
+        XCTAssertTrue(removalConfirmation.contains("Button(context.removeTitle, role: .destructive)"))
+        XCTAssertTrue(removalConfirmation.contains("removeSave()"))
+        XCTAssertTrue(mapScreen.contains("Text(context.removeConfirmationMessage)"))
+    }
+
     func testEveryMoreOptionsQuestionUsesTheStructuredTagShelfTileLanguage() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")

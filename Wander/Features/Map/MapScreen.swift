@@ -8778,7 +8778,8 @@ struct MapPlaceSaveEditor: View {
 
     private var removeSaveSection: some View {
         MapSaveDestructiveButton(
-            title: isRemoving ? "removing..." : context.removeTitle,
+            title: isRemoving ? "removing..." : "delete",
+            accessibilityLabel: isRemoving ? "removing..." : context.removeTitle,
             systemImage: "trash",
             isDisabled: isSaving || isRemoving
         ) {
@@ -10070,6 +10071,7 @@ private struct MapSaveChoicePill: View {
 
 private struct MapSaveDestructiveButton: View {
     let title: String
+    let accessibilityLabel: String
     let systemImage: String
     let isDisabled: Bool
     let action: () -> Void
@@ -10080,16 +10082,15 @@ private struct MapSaveDestructiveButton: View {
                 Image(systemName: systemImage)
                 Text(title)
             }
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .background(WanderTheme.stateError.color)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .clipShape(Capsule())
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(WanderTheme.stateError.color)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .contentShape(Rectangle())
             .opacity(isDisabled ? 0.52 : 1)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .accessibilityLabel(title)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
