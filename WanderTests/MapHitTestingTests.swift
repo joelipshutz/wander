@@ -267,6 +267,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusTransitionPolicy.maximumStagger, 0.12, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusPolicy.minimumOpacity, 0.24, accuracy: 0.001)
     }
 
     func testSelectedPinFocusUsesTenPointGradientStops() {
@@ -321,7 +322,7 @@ final class MapSelectionMotionTests: XCTestCase {
     func testSelectedPinFocusFadesNearToFarAndRestoresFarToNear() {
         let nearFade = MapPinFocusConfiguration(
             selectionID: "new",
-            opacity: 0.22,
+            opacity: MapPinFocusPolicy.minimumOpacity,
             normalizedDistance: MapPinFocusPolicy.innerRadius
         )
         let farFade = MapPinFocusConfiguration(
@@ -343,7 +344,7 @@ final class MapSelectionMotionTests: XCTestCase {
     func testSelectionReplacementFadesNewClusterWhileRestoringOldCluster() {
         let nearOldCluster = MapPinFocusConfiguration(
             selectionID: "old",
-            opacity: 0.22,
+            opacity: MapPinFocusPolicy.minimumOpacity,
             normalizedDistance: MapPinFocusPolicy.innerRadius
         )
         let oldClusterAfterReplacement = MapPinFocusConfiguration(
@@ -358,7 +359,7 @@ final class MapSelectionMotionTests: XCTestCase {
         )
         let nearNewCluster = MapPinFocusConfiguration(
             selectionID: "new",
-            opacity: 0.22,
+            opacity: MapPinFocusPolicy.minimumOpacity,
             normalizedDistance: MapPinFocusPolicy.innerRadius
         )
 
@@ -695,7 +696,7 @@ final class MapSelectionMotionTests: XCTestCase {
         )
         let inactiveAnnotations = try XCTUnwrap(map.range(of: "ForEach(inactiveAnnotationGroups"))
         let activeAnnotation = try XCTUnwrap(
-            map.range(of: "if highlightsCompactSelection, let group = activeAnnotationGroup")
+            map.range(of: "ForEach(activeAnnotationGroups, id: \\.key)")
         )
 
         XCTAssertLessThan(inactiveAnnotations.lowerBound, activeAnnotation.lowerBound)
@@ -742,6 +743,17 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains("MagnifyGesture(minimumScaleDelta:"))
         XCTAssertTrue(map.contains("MapGestureObserver("))
         XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
+        XCTAssertTrue(map.contains("let recognizer = UILongPressGestureRecognizer("))
+        XCTAssertTrue(
+            map.contains(
+                "recognizer.minimumPressDuration = MapHitTesting.passiveTapMinimumPressDuration"
+            )
+        )
+        XCTAssertTrue(
+            map.contains(
+                "recognizer.allowableMovement = MapHitTesting.passiveTapAllowableMovement"
+            )
+        )
         XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
         XCTAssertTrue(map.contains("recognizer.numberOfTouchesRequired = 1"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
@@ -767,8 +779,13 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains("if highlightsCompactSelection, let group = activeAnnotationGroup"))
-        XCTAssertTrue(map.contains("if highlightsCompactSelection, let candidate = activeSearchCandidate"))
+        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(
+            map.contains(
+                "pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll"
+            )
+        )
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
@@ -784,6 +801,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
         XCTAssertTrue(card.contains("Label(\"Copy coordinates\", systemImage: \"doc.on.doc\")"))
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
+    }
+
+    func testPassiveSingleTapObserverRecognizesImmediatelyWithoutBlockingMapMovement() {
+        XCTAssertEqual(MapHitTesting.passiveTapMinimumPressDuration, 0)
+        XCTAssertEqual(MapHitTesting.passiveTapAllowableMovement, 10)
     }
 
     func testWalkthroughUsesTheCanonicalHotchkissFallback() throws {
@@ -807,11 +829,19 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let emptyTitleAnnotations = map.components(
-            separatedBy: "Annotation(\n                                \"\","
-        ).count - 1
+        let activeSavedRange = try XCTUnwrap(
+            map.range(of: "ForEach(activeAnnotationGroups, id: \\.key)")
+        )
+        let activeSearchRange = try XCTUnwrap(
+            map.range(of: "ForEach(activeSearchCandidates, id: \\.id)")
+        )
+        let activeSavedSource = map[activeSavedRange.lowerBound..<activeSearchRange.lowerBound]
+        let activeSearchSource = map[activeSearchRange.lowerBound...]
 
-        XCTAssertEqual(emptyTitleAnnotations, 2)
+        XCTAssertTrue(activeSavedSource.contains("Annotation(\n                                \"\","))
+        XCTAssertTrue(activeSearchSource.contains("Annotation(\n                                    \"\","))
+        XCTAssertFalse(activeSavedSource.contains("Annotation(\n                                group.primary.place.canonicalName,"))
+        XCTAssertFalse(activeSearchSource.contains("Annotation(\n                                    candidate.name,"))
     }
 
     func testProviderPhotoTransportReusesSessionAndProtocolCaching() throws {
