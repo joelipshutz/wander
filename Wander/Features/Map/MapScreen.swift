@@ -8062,6 +8062,7 @@ private final class CheckInDateTrayPresentation: ObservableObject {
 private struct MapCheckInDateSection: View {
     @Binding var visitedAt: Date
     @ObservedObject var presentation: CheckInDateTrayPresentation
+    let onExpansionRequested: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -8071,7 +8072,11 @@ private struct MapCheckInDateSection: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !presentation.isExpanded
                     presentation.isExpanded.toggle()
+                    if isOpening {
+                        onExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -8145,9 +8150,11 @@ private struct MapCheckInDateSection: View {
 }
 
 struct MapPlaceSaveFlowSheet: View {
-    static let detent = PresentationDetent.large
+    static let compactHeight: CGFloat = 430
+    static let compactDetent = PresentationDetent.height(compactHeight)
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedDetent = MapPlaceSaveFlowSheet.compactDetent
     let context: MapPlaceSaveContext
     let draft: PlaceSaveDraft?
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
@@ -8188,6 +8195,7 @@ struct MapPlaceSaveFlowSheet: View {
                     dismiss()
                 }
             },
+            onContentExpansionRequested: expand,
             onSaveCompleted: { result in
                 if let onSaveCompleted {
                     onSaveCompleted(result)
@@ -8196,10 +8204,21 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
         )
-        .presentationDetents([Self.detent])
+        .presentationDetents(
+            [Self.compactDetent, .large],
+            selection: $selectedDetent
+        )
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(WanderTheme.radiusSheet)
         .presentationBackground(WanderTheme.canvasWarm.color)
+        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
+        .presentationContentInteraction(.resizes)
+    }
+
+    private func expand() {
+        withAnimation(.snappy(duration: 0.34, extraBounce: 0)) {
+            selectedDetent = .large
+        }
     }
 }
 
@@ -8212,6 +8231,7 @@ struct MapPlaceSaveEditor: View {
     let draftID: UUID?
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onClose: @MainActor () -> Void
+    let onContentExpansionRequested: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -8260,6 +8280,7 @@ struct MapPlaceSaveEditor: View {
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
         onClose: @escaping @MainActor () -> Void,
+        onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         sourceContext = context
@@ -8269,6 +8290,7 @@ struct MapPlaceSaveEditor: View {
         self.onSave = onSave
         self.onRemove = onRemove
         self.onClose = onClose
+        self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
@@ -8656,7 +8678,8 @@ struct MapPlaceSaveEditor: View {
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
-                    presentation: checkInDateTrayPresentation
+                    presentation: checkInDateTrayPresentation,
+                    onExpansionRequested: onContentExpansionRequested
                 )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
@@ -8810,7 +8833,11 @@ struct MapPlaceSaveEditor: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !isShowingPlannedDatePicker
                     isShowingPlannedDatePicker.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -8979,7 +9006,11 @@ struct MapPlaceSaveEditor: View {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
                     return
                 } else {
+                    let isOpening = !isShowingOptionalDetails
                     isShowingOptionalDetails.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {

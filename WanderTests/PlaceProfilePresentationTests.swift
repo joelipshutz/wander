@@ -5,8 +5,12 @@ import XCTest
 
 final class PlaceProfilePresentationTests: XCTestCase {
     @MainActor
-    func testEverySaveEntryPointUsesTheSharedLargeSheetDetent() {
-        XCTAssertEqual(MapPlaceSaveFlowSheet.detent, .large)
+    func testEverySaveEntryPointUsesTheSharedHalfSheetDetent() {
+        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 430)
+        XCTAssertEqual(
+            MapPlaceSaveFlowSheet.compactDetent,
+            .height(MapPlaceSaveFlowSheet.compactHeight)
+        )
     }
 
     func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {
