@@ -1,8 +1,112 @@
+import AVFoundation
 import CoreLocation
 import PhotosUI
 import SwiftUI
 import UIKit
 import Vision
+
+enum AddCameraAuthorization: Equatable {
+    case authorized
+    case notDetermined
+    case denied
+    case restricted
+}
+
+enum AddCameraCaptureRoute: String, Identifiable, Equatable {
+    case camera
+    case permissionDenied
+    case restricted
+    case unavailable
+
+    var id: String { rawValue }
+}
+
+struct AddCameraPresentationState: Equatable {
+    var route: AddCameraCaptureRoute?
+    private(set) var presentsPhotoLibraryAfterDismissal = false
+
+    @discardableResult
+    mutating func requestCamera(
+        isAvailable: Bool,
+        authorization: AddCameraAuthorization
+    ) -> Bool {
+        presentsPhotoLibraryAfterDismissal = false
+
+        guard isAvailable else {
+            route = .unavailable
+            return false
+        }
+
+        switch authorization {
+        case .authorized:
+            route = .camera
+            return false
+        case .notDetermined:
+            route = nil
+            return true
+        case .denied:
+            route = .permissionDenied
+            return false
+        case .restricted:
+            route = .restricted
+            return false
+        }
+    }
+
+    mutating func completePermissionRequest(granted: Bool, isAvailable: Bool) {
+        guard granted else {
+            route = .permissionDenied
+            return
+        }
+        route = isAvailable ? .camera : .unavailable
+    }
+
+    mutating func dismissCapture() {
+        route = nil
+    }
+
+    mutating func refreshAuthorization(
+        isAvailable: Bool,
+        authorization: AddCameraAuthorization
+    ) {
+        guard route == .permissionDenied else { return }
+
+        switch authorization {
+        case .authorized:
+            route = isAvailable ? .camera : .unavailable
+        case .restricted:
+            route = .restricted
+        case .notDetermined, .denied:
+            break
+        }
+    }
+
+    mutating func switchToPhotoLibrary() {
+        presentsPhotoLibraryAfterDismissal = true
+        route = nil
+    }
+
+    mutating func consumePhotoLibraryPresentation() -> Bool {
+        defer { presentsPhotoLibraryAfterDismissal = false }
+        return presentsPhotoLibraryAfterDismissal
+    }
+
+    mutating func reset() {
+        route = nil
+        presentsPhotoLibraryAfterDismissal = false
+    }
+}
+
+enum AddCameraPreviewLayout {
+    static let portraitCaptureHeightToWidthRatio: CGFloat = 4.0 / 3.0
+
+    static func aspectFillScale(for containerSize: CGSize) -> CGFloat {
+        guard containerSize.width > 0, containerSize.height > 0 else { return 1 }
+
+        let unscaledPreviewHeight = containerSize.width * portraitCaptureHeightToWidthRatio
+        return max(1, containerSize.height / unscaledPreviewHeight)
+    }
+}
 
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
@@ -44,6 +148,7 @@ enum AddSuggestedPlaces {
 }
 
 struct AddScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -73,7 +178,9 @@ struct AddScreen: View {
     @State private var resolutionMessage: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showsPhotoLibrary = false
-    @State private var showsCamera = false
+    @State private var cameraPresentation = AddCameraPresentationState()
+    @State private var cameraSessionID = UUID()
+    @State private var pendingCapturedPhoto: UIImage?
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var closesAfterSaveFlowDismiss = false
     @State private var isImportingPhoto = false
@@ -175,6 +282,13 @@ struct AddScreen: View {
             .onChange(of: resetToken) { _, _ in
                 reset()
             }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                cameraPresentation.refreshAuthorization(
+                    isAvailable: isCameraAvailable,
+                    authorization: cameraAuthorization
+                )
+            }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
                 if activeSurface == .saveFlow {
                     restoreActiveSaveFlowIfNeeded()
@@ -269,13 +383,11 @@ struct AddScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $showsCamera) {
-                AddCameraPicker { image in
-                    Task {
-                        await importCapturedPhoto(image)
-                    }
-                }
-                .ignoresSafeArea()
+            .fullScreenCover(
+                item: $cameraPresentation.route,
+                onDismiss: handleCameraPresentationDismissal
+            ) { route in
+                cameraCaptureDestination(route)
             }
             .photosPicker(
                 isPresented: $showsPhotoLibrary,
@@ -472,7 +584,6 @@ struct AddScreen: View {
             query: $quickAddQuery,
             isLoading: isResolvingCandidates || isImportingPhoto,
             isFocused: $isQuickAddFocused,
-            isCameraAvailable: isCameraAvailable,
             submit: {
                 expandSheet()
                 isQuickAddFocused = false
@@ -481,7 +592,7 @@ struct AddScreen: View {
                 }
             },
             takePhoto: {
-                showsCamera = true
+                requestCamera()
             },
             chooseFromLibrary: {
                 showsPhotoLibrary = true
@@ -871,7 +982,8 @@ struct AddScreen: View {
         isResolvingCandidates = false
         selectedPhotoItem = nil
         showsPhotoLibrary = false
-        showsCamera = false
+        cameraPresentation.reset()
+        pendingCapturedPhoto = nil
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         addSaveFlow = nil
@@ -1082,6 +1194,105 @@ struct AddScreen: View {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
 
+    private var cameraAuthorization: AddCameraAuthorization {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            .authorized
+        case .notDetermined:
+            .notDetermined
+        case .denied:
+            .denied
+        case .restricted:
+            .restricted
+        @unknown default:
+            .denied
+        }
+    }
+
+    @MainActor
+    private func requestCamera() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
+        let needsPermissionRequest = cameraPresentation.requestCamera(
+            isAvailable: isCameraAvailable,
+            authorization: cameraAuthorization
+        )
+        guard needsPermissionRequest else { return }
+
+        Task {
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            guard !Task.isCancelled else { return }
+            cameraPresentation.completePermissionRequest(
+                granted: granted,
+                isAvailable: isCameraAvailable
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func cameraCaptureDestination(_ route: AddCameraCaptureRoute) -> some View {
+        switch route {
+        case .camera:
+            let sessionID = cameraSessionID
+            AddCameraCaptureScreen(
+                onImage: { image in
+                    guard cameraPresentation.route == .camera,
+                          cameraSessionID == sessionID else { return }
+                    pendingCapturedPhoto = image
+                    cameraPresentation.dismissCapture()
+                },
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
+            )
+        case .permissionDenied:
+            AddCameraRecoveryScreen(
+                state: .permissionDenied,
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
+            )
+        case .restricted:
+            AddCameraRecoveryScreen(
+                state: .restricted,
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
+            )
+        case .unavailable:
+            AddCameraRecoveryScreen(
+                state: .unavailable,
+                onGallery: switchCameraToPhotoLibrary,
+                onCancel: cancelCameraCapture
+            )
+        }
+    }
+
+    @MainActor
+    private func switchCameraToPhotoLibrary() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
+        cameraPresentation.switchToPhotoLibrary()
+    }
+
+    @MainActor
+    private func cancelCameraCapture() {
+        cameraSessionID = UUID()
+        pendingCapturedPhoto = nil
+        cameraPresentation.dismissCapture()
+    }
+
+    @MainActor
+    private func handleCameraPresentationDismissal() {
+        if cameraPresentation.consumePhotoLibraryPresentation() {
+            showsPhotoLibrary = true
+            return
+        }
+
+        guard let image = pendingCapturedPhoto else { return }
+        pendingCapturedPhoto = nil
+        Task {
+            await importCapturedPhoto(image)
+        }
+    }
+
     private func openSuggestedCandidate(_ candidate: PlaceCandidate) {
         walkthroughs.perform(.addSearch)
         expandSheet()
@@ -1278,7 +1489,10 @@ struct AddScreen: View {
 
     @MainActor
     private func importCapturedPhoto(_ image: UIImage) async {
-        guard let data = image.jpegData(compressionQuality: 0.92) else {
+        let transferableImage = SendableCapturedImage(value: image)
+        guard let data = await Task.detached(priority: .userInitiated, operation: {
+            transferableImage.value.jpegData(compressionQuality: 0.92)
+        }).value else {
             resolutionMessage = "Could not use that photo. Try another one or search by name."
             return
         }
@@ -1486,7 +1700,6 @@ private struct AddSearchField: View {
     @Binding var query: String
     let isLoading: Bool
     let isFocused: FocusState<Bool>.Binding
-    let isCameraAvailable: Bool
     let submit: () -> Void
     let takePhoto: () -> Void
     let chooseFromLibrary: () -> Void
@@ -1528,7 +1741,6 @@ private struct AddSearchField: View {
                 Button(action: takePhoto) {
                     Label("Take a Photo", systemImage: "camera")
                 }
-                .disabled(!isCameraAvailable)
 
                 Button(action: chooseFromLibrary) {
                     Label("Photo Library", systemImage: "photo.on.rectangle")
@@ -1720,34 +1932,267 @@ private struct CategoryIcon: View {
     }
 }
 
-private struct AddCameraPicker: UIViewControllerRepresentable {
+private struct SendableCapturedImage: @unchecked Sendable {
+    let value: UIImage
+}
+
+private struct AddCameraCaptureScreen: View {
     let onImage: @MainActor (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
+    let onGallery: () -> Void
+    let onCancel: () -> Void
+
+    @State private var captureRequest = 0
+    @State private var requestedCameraDevice: UIImagePickerController.CameraDevice = .rear
+
+    private var canFlipCamera: Bool {
+        UIImagePickerController.isCameraDeviceAvailable(.rear)
+            && UIImagePickerController.isCameraDeviceAvailable(.front)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            GeometryReader { geometry in
+                AddCameraPicker(
+                    previewSize: geometry.size,
+                    captureRequest: captureRequest,
+                    requestedCameraDevice: requestedCameraDevice,
+                    onImage: onImage,
+                    onCancel: onCancel
+                )
+            }
+            .ignoresSafeArea()
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .background(.black.opacity(0.58))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close camera")
+                }
+
+                Spacer()
+
+                HStack {
+                    Button(action: onGallery) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(.black.opacity(0.58))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Choose from Photos")
+                    .accessibilityHint("Closes the camera and opens your photo library")
+
+                    Spacer()
+
+                    Button {
+                        captureRequest += 1
+                    } label: {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 72, height: 72)
+                            .overlay {
+                                Circle()
+                                    .stroke(.white.opacity(0.55), lineWidth: 3)
+                                    .padding(-6)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Take photo")
+
+                    Spacer()
+
+                    Button {
+                        requestedCameraDevice = requestedCameraDevice == .rear ? .front : .rear
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                            .font(.system(size: 23, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(.black.opacity(0.58))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canFlipCamera)
+                    .opacity(canFlipCamera ? 1 : 0)
+                    .accessibilityLabel("Flip camera")
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .safeAreaPadding(.vertical, WanderTheme.spacing2)
+        }
+        .statusBarHidden()
+    }
+}
+
+private enum AddCameraRecoveryState: Equatable {
+    case permissionDenied
+    case restricted
+    case unavailable
+
+    var title: String {
+        switch self {
+        case .permissionDenied:
+            "Camera access is off"
+        case .restricted:
+            "Camera access is restricted"
+        case .unavailable:
+            "Camera isn't available"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .permissionDenied:
+            "Allow camera access in Settings, or choose an existing photo instead."
+        case .restricted:
+            "This device doesn't allow camera access. You can choose an existing photo instead."
+        case .unavailable:
+            "You can still choose a photo without losing anything you've entered."
+        }
+    }
+}
+
+private struct AddCameraRecoveryScreen: View {
+    @Environment(\.openURL) private var openURL
+    let state: AddCameraRecoveryState
+    let onGallery: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            WanderTheme.surfaceBone.color.ignoresSafeArea()
+
+            VStack(spacing: WanderTheme.spacing4) {
+                HStack {
+                    Spacer()
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .background(WanderTheme.surfaceSand.color)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close camera")
+                }
+
+                Spacer()
+
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 88, height: 88)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+
+                VStack(spacing: WanderTheme.spacing2) {
+                    Text(state.title)
+                        .font(.title.bold())
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .multilineTextAlignment(.center)
+
+                    Text(state.message)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer()
+
+                VStack(spacing: WanderTheme.spacing2) {
+                    WanderPrimaryButton(
+                        title: "Choose from Photos",
+                        systemImage: "photo.on.rectangle",
+                        action: onGallery
+                    )
+
+                    if state == .permissionDenied {
+                        Button {
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                                return
+                            }
+                            openURL(url)
+                        } label: {
+                            Label("Open Settings", systemImage: "gear")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .background(WanderTheme.surfaceSand.color)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .safeAreaPadding(.vertical, WanderTheme.spacing2)
+        }
+    }
+}
+
+private struct AddCameraPicker: UIViewControllerRepresentable {
+    let previewSize: CGSize
+    let captureRequest: Int
+    let requestedCameraDevice: UIImagePickerController.CameraDevice
+    let onImage: @MainActor (UIImage) -> Void
+    let onCancel: () -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.allowsEditing = false
+        picker.showsCameraControls = false
         picker.delegate = context.coordinator
+        picker.modalPresentationStyle = .fullScreen
+        picker.view.backgroundColor = .black
+        updatePreviewTransform(on: picker)
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        updatePreviewTransform(on: uiViewController)
+
+        if UIImagePickerController.isCameraDeviceAvailable(requestedCameraDevice),
+           uiViewController.cameraDevice != requestedCameraDevice {
+            uiViewController.cameraDevice = requestedCameraDevice
+        }
+
+        guard context.coordinator.lastHandledCaptureRequest != captureRequest else { return }
+        context.coordinator.lastHandledCaptureRequest = captureRequest
+        uiViewController.takePicture()
+    }
+
+    private func updatePreviewTransform(on picker: UIImagePickerController) {
+        let scale = AddCameraPreviewLayout.aspectFillScale(for: previewSize)
+        picker.cameraViewTransform = CGAffineTransform(scaleX: scale, y: scale)
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onImage: onImage) {
-            dismiss()
-        }
+        Coordinator(onImage: onImage, onCancel: onCancel)
     }
 
     @MainActor
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        var lastHandledCaptureRequest = 0
         private let onImage: @MainActor (UIImage) -> Void
-        private let dismiss: () -> Void
+        private let onCancel: () -> Void
 
-        init(onImage: @escaping @MainActor (UIImage) -> Void, dismiss: @escaping () -> Void) {
+        init(onImage: @escaping @MainActor (UIImage) -> Void, onCancel: @escaping () -> Void) {
             self.onImage = onImage
-            self.dismiss = dismiss
+            self.onCancel = onCancel
         }
 
         func imagePickerController(
@@ -1756,12 +2201,13 @@ private struct AddCameraPicker: UIViewControllerRepresentable {
         ) {
             if let image = info[.originalImage] as? UIImage {
                 onImage(image)
+            } else {
+                onCancel()
             }
-            dismiss()
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            dismiss()
+            onCancel()
         }
     }
 }
