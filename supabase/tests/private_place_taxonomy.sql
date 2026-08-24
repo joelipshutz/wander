@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(28);
+select plan(30);
 
 select ok(
   position(
@@ -61,6 +61,15 @@ values
   ('taxonomy_list_viewer', 'taxonomylistviewer', 'Taxonomy List Viewer', false),
   ('taxonomy_social_viewer', 'taxonomysocialviewer', 'Taxonomy Social Viewer', false);
 
+insert into public.profiles (id, handle, display_name, is_private_profile, deleted_at)
+values (
+  'taxonomy_deleted_owner',
+  'taxonomydeletedowner',
+  'Taxonomy Deleted Owner',
+  false,
+  now()
+);
+
 insert into public.profiles (id, handle, display_name, is_private_profile)
 select
   'taxonomy_voter_' || series,
@@ -72,7 +81,8 @@ from generate_series(1, 10) series;
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
   ('taxonomy_viewer', 'taxonomy_owner', 'profile'),
-  ('taxonomy_late_viewer', 'taxonomy_owner', 'profile');
+  ('taxonomy_late_viewer', 'taxonomy_owner', 'profile'),
+  ('taxonomy_viewer', 'taxonomy_deleted_owner', 'profile');
 
 insert into public.places (
   id,
@@ -160,6 +170,23 @@ values (
   'social_save'
 );
 
+insert into public.user_places (
+  id,
+  user_id,
+  place_id,
+  status,
+  visibility,
+  source_type
+)
+values (
+  'a6210000-0000-0000-0000-000000000003',
+  'taxonomy_deleted_owner',
+  'a6200000-0000-0000-0000-000000000001',
+  'been',
+  'followers',
+  'manual'
+);
+
 insert into public.place_attributes (
   user_place_id,
   question_definition_id,
@@ -194,6 +221,17 @@ select ok(
   'a legacy copied cuisine is hidden even from the recipient projection until they select it'
 );
 
+select is(
+  (
+    select count(*)
+    from public.place_attributes
+    where user_place_id = 'a6210000-0000-0000-0000-000000000002'
+      and question_key = 'restaurant_cuisine'
+  ),
+  0::bigint,
+  'a social-save recipient cannot directly read a legacy copied cuisine'
+);
+
 reset role;
 
 select is(
@@ -206,6 +244,16 @@ select is(
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'taxonomy_viewer', true);
+
+select is(
+  (
+    select count(*)
+    from app.visible_places_in_view(34, -119, 35, -118, null, null, null)
+    where owner_user_id = 'taxonomy_deleted_owner'
+  ),
+  0::bigint,
+  'the security-definer map projection preserves deleted-profile filtering'
+);
 
 select is(
   (

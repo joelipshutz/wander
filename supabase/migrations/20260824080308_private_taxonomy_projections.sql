@@ -89,6 +89,7 @@ as $$
     cross join lateral app.viewer_place_taxonomy(place.id) viewer_default
     where own.deleted_at is null
       and app.can_read_user_place(app.current_user_id(), own.user_id, own.visibility)
+      and owner.deleted_at is null
       and place.latitude between min_lat and max_lat
       and place.longitude between min_lng and max_lng
       and (status_filter is null or own.status = any(status_filter))
@@ -1013,8 +1014,14 @@ create policy "place attributes readable without private taxonomy"
       where own.id = place_attributes.user_place_id
         and app.can_read_user_place(app.current_user_id(), own.user_id, own.visibility)
         and (
-          own.user_id = app.current_user_id()
-          or place_attributes.question_key <> 'restaurant_cuisine'
+          place_attributes.question_key <> 'restaurant_cuisine'
+          or (
+            own.user_id = app.current_user_id()
+            and (
+              own.source_type is distinct from 'social_save'
+              or place_attributes.taxonomy_is_personal is true
+            )
+          )
         )
     )
   );
