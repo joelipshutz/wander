@@ -267,7 +267,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusTransitionPolicy.maximumStagger, 0.12, accuracy: 0.001)
-        XCTAssertEqual(MapPinFocusPolicy.minimumOpacity, 0.24, accuracy: 0.001)
+        XCTAssertEqual(MapPinFocusPolicy.minimumOpacity, 0.26, accuracy: 0.001)
     }
 
     func testSelectedPinFocusUsesTenPointGradientStops() {
@@ -694,13 +694,9 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let inactiveAnnotations = try XCTUnwrap(map.range(of: "ForEach(inactiveAnnotationGroups"))
-        let activeAnnotation = try XCTUnwrap(
-            map.range(of: "ForEach(activeAnnotationGroups, id: \\.key)")
-        )
-
-        XCTAssertLessThan(inactiveAnnotations.lowerBound, activeAnnotation.lowerBound)
-        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
         XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
     }
 
@@ -743,17 +739,15 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains("MagnifyGesture(minimumScaleDelta:"))
         XCTAssertTrue(map.contains("MapGestureObserver("))
         XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
-        XCTAssertTrue(map.contains("let recognizer = UILongPressGestureRecognizer("))
+        XCTAssertTrue(map.contains("PassiveMapTapGestureRecognizer"))
+        XCTAssertTrue(map.contains("recognizer.onCompletedTap = { [weak self] point in"))
         XCTAssertTrue(
             map.contains(
-                "recognizer.minimumPressDuration = MapHitTesting.passiveTapMinimumPressDuration"
+                "recognizer.maximumMovement = MapHitTesting.passiveTapAllowableMovement"
             )
         )
-        XCTAssertTrue(
-            map.contains(
-                "recognizer.allowableMovement = MapHitTesting.passiveTapAllowableMovement"
-            )
-        )
+        XCTAssertTrue(map.contains("state = .failed"))
+        XCTAssertTrue(map.contains("callback?(completedLocation)"))
         XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
         XCTAssertTrue(map.contains("recognizer.numberOfTouchesRequired = 1"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
@@ -779,14 +773,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
+        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
         XCTAssertTrue(
             map.contains(
                 "pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll"
             )
         )
-        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertGreaterThanOrEqual(
+            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
+            2
+        )
         XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertFalse(map.contains("replacementFadeOutDuration"))
@@ -804,7 +802,6 @@ final class MapSelectionMotionTests: XCTestCase {
     }
 
     func testPassiveSingleTapObserverRecognizesImmediatelyWithoutBlockingMapMovement() {
-        XCTAssertEqual(MapHitTesting.passiveTapMinimumPressDuration, 0)
         XCTAssertEqual(MapHitTesting.passiveTapAllowableMovement, 10)
     }
 
@@ -822,26 +819,52 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
     }
 
-    func testActiveMapAnnotationsDoNotRenderDuplicateNativeTitles() throws {
+    func testInactiveMapAnnotationsHideCompetingTitlesAndActiveSelectionUsesOverlay() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let activeSavedRange = try XCTUnwrap(
-            map.range(of: "ForEach(activeAnnotationGroups, id: \\.key)")
-        )
-        let activeSearchRange = try XCTUnwrap(
-            map.range(of: "ForEach(activeSearchCandidates, id: \\.id)")
-        )
-        let activeSavedSource = map[activeSavedRange.lowerBound..<activeSearchRange.lowerBound]
-        let activeSearchSource = map[activeSearchRange.lowerBound...]
 
-        XCTAssertTrue(activeSavedSource.contains("Annotation(\n                                \"\","))
-        XCTAssertTrue(activeSearchSource.contains("Annotation(\n                                    \"\","))
-        XCTAssertFalse(activeSavedSource.contains("Annotation(\n                                group.primary.place.canonicalName,"))
-        XCTAssertFalse(activeSearchSource.contains("Annotation(\n                                    candidate.name,"))
+        XCTAssertGreaterThanOrEqual(
+            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
+            2
+        )
+        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay("))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+    }
+
+    func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: root.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-360-active-pin-layering-and-tap-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let expected = try XCTUnwrap(fixture["expected_results"] as? [String: Any])
+        let verified = try XCTUnwrap(fixture["post_fix_verification"] as? [String: Any])
+
+        XCTAssertEqual(
+            expected["selected_pin_and_title_render_above_every_other_map_annotation"] as? Bool,
+            true
+        )
+        XCTAssertEqual(
+            expected["competing_place_names_hidden_while_custom_map_content_is_shown"] as? Bool,
+            true
+        )
+        XCTAssertEqual(expected["custom_pin_selects_on_first_completed_tap"] as? Bool, true)
+        XCTAssertEqual(expected["inactive_pin_opacity_floor"] as? Double, 0.26)
+        XCTAssertEqual(verified["physical_screen_coordinate_tap_selected_place"] as? String, "Canyon Lookout Trail")
+        XCTAssertEqual(verified["selected_pin_and_title_visually_frontmost"] as? Bool, true)
+        XCTAssertEqual(verified["competing_custom_place_names_visible"] as? Bool, false)
     }
 
     func testProviderPhotoTransportReusesSessionAndProtocolCaching() throws {
