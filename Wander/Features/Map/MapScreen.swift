@@ -8266,7 +8266,7 @@ struct MapPlaceSaveEditor: View {
     @State private var didLoadSharedVisitInvitees = false
     @State private var sharedVisitInviteesError: String?
     @State private var errorMessage: String?
-    @State private var isShowingOptionalDetails = false
+    @State private var isShowingOptionalDetails = true
     @State private var isMoreOptionsArrowPulsing = false
     @State private var saveAttemptedAt: Date?
     @State private var didStartWalkthroughAutoSave = false
@@ -8360,7 +8360,7 @@ struct MapPlaceSaveEditor: View {
             initialValue: restoredAttachments ?? context.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
-        _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? false)
+        _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? true)
         var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
         if restoredForm != nil {
             initialModeDrafts.store(
@@ -8374,7 +8374,7 @@ struct MapPlaceSaveEditor: View {
                     plannedDate: initialPlannedDate,
                     photoAttachments: restoredAttachments ?? context.initialPhotoAttachments,
                     selectedInviteeUserIDs: restoredForm?.selectedInviteeUserIDs ?? [],
-                    isShowingOptionalDetails: restoredForm?.isShowingOptionalDetails ?? false,
+                    isShowingOptionalDetails: restoredForm?.isShowingOptionalDetails ?? true,
                     didLoadSharedVisitInvitees: false,
                     sharedVisitInviteesError: nil
                 ),
@@ -8488,11 +8488,16 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(isReadyForDetails ? nil : .saveStatus)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing6)
+                    .padding(
+                        .bottom,
+                        isReadyForDetails
+                            ? WanderTheme.spacing16 + WanderTheme.spacing12
+                            : WanderTheme.spacing6
+                    )
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .background(editorBackground)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .overlay(alignment: .bottom) {
                     if isReadyForDetails {
                         saveFooter
                     }
@@ -8757,7 +8762,7 @@ struct MapPlaceSaveEditor: View {
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(editorBackground)
+        .shadow(color: Color.black.opacity(0.2), radius: 16, y: 8)
         .walkthroughTarget(.saveSubmit)
         .walkthroughEmphasis(.saveSubmit)
         .walkthroughTarget(.saveReview)
@@ -9395,7 +9400,7 @@ struct MapPlaceSaveEditor: View {
         selectedInviteeUserIDs = []
         didLoadSharedVisitInvitees = false
         sharedVisitInviteesError = nil
-        isShowingOptionalDetails = false
+        isShowingOptionalDetails = true
     }
 
     private func syncAnswersForCurrentQuestions() {
