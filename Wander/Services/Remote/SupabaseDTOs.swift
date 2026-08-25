@@ -225,14 +225,17 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             throw WanderRemoteError.invalidResponse("Unknown place visibility: \(visibility)")
         }
 
-        let projectedTaxonomy = Dictionary(
-            uniqueKeysWithValues: attributes.compactMap { attribute -> (String, String)? in
-                guard ViewerTaxonomyKey.all.contains(attribute.questionKey),
-                      case .string(let value) = attribute.value
-                else { return nil }
-                return (attribute.questionKey, value)
-            }
-        )
+        var projectedTaxonomy: [String: String] = [:]
+        for attribute in attributes {
+            guard ViewerTaxonomyKey.all.contains(attribute.questionKey),
+                  case .string(let value) = attribute.value
+            else { continue }
+
+            // Viewer projections are appended after persisted attributes by the RPCs.
+            // Older builds could write a projected row back, so prefer the final
+            // server-derived value instead of trapping on a duplicate dictionary key.
+            projectedTaxonomy[attribute.questionKey] = value
+        }
         let visibleAttributes = attributes.filter {
             !ViewerTaxonomyKey.all.contains($0.questionKey)
         }

@@ -2,7 +2,20 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(30);
+select plan(33);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint constraint_row
+    where constraint_row.conrelid = 'public.place_attributes'::regclass
+      and constraint_row.conname = 'place_attributes_no_viewer_taxonomy_projection_keys'
+      and pg_get_constraintdef(constraint_row.oid) like '%__viewer_taxonomy_primary_category%'
+      and pg_get_constraintdef(constraint_row.oid) like '%__viewer_taxonomy_subcategory%'
+      and pg_get_constraintdef(constraint_row.oid) like '%__viewer_taxonomy_food_type%'
+  ),
+  'place attributes reject every reserved viewer taxonomy projection key'
+);
 
 select ok(
   position(
@@ -149,6 +162,43 @@ values (
   'restaurant_cuisine',
   'restaurant_cuisine',
   '"Steakhouse"'::jsonb
+);
+
+insert into public.place_attributes (
+  user_place_id,
+  question_definition_id,
+  question_key,
+  value_type,
+  value
+) values (
+  'a6210000-0000-0000-0000-000000000001',
+  null,
+  '__viewer_taxonomy_primary_category',
+  'text',
+  '"coffee_tea_sweets"'::jsonb
+);
+
+select is(
+  (
+    select count(*)
+    from public.place_attributes
+    where user_place_id = 'a6210000-0000-0000-0000-000000000001'
+      and question_key = '__viewer_taxonomy_primary_category'
+  ),
+  0::bigint,
+  'legacy clients can echo derived viewer taxonomy without persisting it or failing the save'
+);
+
+select throws_ok(
+  $$
+    update public.place_attributes
+    set question_key = '__viewer_taxonomy_primary_category'
+    where user_place_id = 'a6210000-0000-0000-0000-000000000001'
+      and question_key = 'restaurant_cuisine'
+  $$,
+  '23514',
+  'new row for relation "place_attributes" violates check constraint "place_attributes_no_viewer_taxonomy_projection_keys"',
+  'existing attributes cannot be changed into derived viewer taxonomy projection rows'
 );
 
 -- Simulate a cuisine copied into a social save before REC-362. The lineage
