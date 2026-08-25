@@ -2429,19 +2429,6 @@ private struct PlaceImportPhotoThumb: View {
                         }
                     }
                 )
-
-                if photo.isGooglePlacesPhoto {
-                    VStack {
-                        Spacer()
-                        Text("Google")
-                            .font(.system(size: 7, weight: .regular))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 12)
-                            .background(Color.black.opacity(0.68))
-                    }
-                    .allowsHitTesting(false)
-                }
             }
         }
         .frame(width: size, height: size)
