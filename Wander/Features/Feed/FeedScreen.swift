@@ -1280,7 +1280,12 @@ private struct FeedFeaturedCard: View {
                 openPlace(featured.visiblePlace)
             } label: {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    FeedPlaceArtwork(place: featured.visiblePlace, height: 88)
+                    FeedPlaceArtwork(
+                        place: featured.visiblePlace,
+                        height: FeedFeaturedLayout.fullBleedArtworkHeight
+                    )
+                    .padding(.horizontal, -FeedFeaturedLayout.cardContentInset)
+                    .padding(.top, -FeedFeaturedLayout.cardContentInset)
 
                     Text(featured.visiblePlace.place.canonicalName)
                         .font(WanderTypography.editorialCompactTitle)
@@ -1322,7 +1327,7 @@ private struct FeedFeaturedCard: View {
 
             Spacer(minLength: 0)
         }
-        .padding(WanderTheme.spacing3)
+        .padding(FeedFeaturedLayout.cardContentInset)
         .frame(width: FeedFeaturedLayout.cardWidth, alignment: .topLeading)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -1363,6 +1368,11 @@ private struct FeedActivityList: View {
 
 private enum FeedFeaturedLayout {
     static let cardWidth: CGFloat = 184
+    static let cardContentInset = WanderTheme.spacing3
+    static let insetArtworkHeight: CGFloat = 88
+    // Reclaiming the top inset while adding the same amount to the artwork
+    // keeps the image's lower edge and every row below it in place.
+    static let fullBleedArtworkHeight = insetArtworkHeight + cardContentInset
     static let screenEdgeBleed = WanderTheme.spacing4
 }
 
@@ -1772,7 +1782,7 @@ private struct FeedPlaceArtwork: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .clipped()
     }
 }
 
