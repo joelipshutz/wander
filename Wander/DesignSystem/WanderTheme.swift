@@ -840,6 +840,7 @@ struct WanderSegmentedSwitch: View {
 enum WanderPrimaryButtonTone: Equatable {
     case brand
     case espressoConfirmation
+    case solidBlackConfirmation
 
     var glassTone: WanderGlassTone? {
         switch self {
@@ -847,6 +848,8 @@ enum WanderPrimaryButtonTone: Equatable {
             nil
         case .espressoConfirmation:
             .deepBlackAction
+        case .solidBlackConfirmation:
+            nil
         }
     }
 }
@@ -881,7 +884,11 @@ struct WanderPrimaryButton: View {
                     .opacity(isDisabled ? 0.68 : 1)
             } else {
                 label
-                    .background(isDisabled ? WanderTheme.borderStrong.color : WanderTheme.terracotta.color)
+                    .background(
+                        isDisabled
+                            ? WanderTheme.borderStrong.color
+                            : solidFillColor
+                    )
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Capsule())
             }
@@ -899,6 +906,15 @@ struct WanderPrimaryButton: View {
         }
         .font(.system(size: 16, weight: .bold))
         .frame(maxWidth: .infinity, minHeight: 52)
+    }
+
+    private var solidFillColor: Color {
+        switch tone {
+        case .solidBlackConfirmation:
+            .black
+        case .brand, .espressoConfirmation:
+            WanderTheme.terracotta.color
+        }
     }
 }
 
