@@ -222,7 +222,7 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
+    func testDiscoverTabPresentsInlineFeedSearchWithPersistentFeedState() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
@@ -238,16 +238,29 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
         XCTAssertTrue(feed.contains("placeholders: tickerSuggestions"))
-        XCTAssertTrue(feed.contains("isShowingSearch = true"))
+        XCTAssertTrue(feed.contains("setSearchPresented(true)"))
         XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search trusted places\")"))
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
-        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
+        XCTAssertFalse(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
+        XCTAssertFalse(feed.contains(".sheet(isPresented: $isShowingSearch)"))
+        XCTAssertTrue(feed.contains("if isShowingSearch"))
+        XCTAssertTrue(feed.contains(".opacity(isShowingSearch ? 0 : 1)"))
+        XCTAssertTrue(feed.contains(".accessibilityHidden(isShowingSearch)"))
         XCTAssertTrue(feed.contains("DiscoverScreen("))
         XCTAssertTrue(feed.contains("startsInPlaceSearch: true"))
+        XCTAssertTrue(feed.contains("embedsInHostNavigation: true"))
+        XCTAssertTrue(feed.contains("searchTransitionNamespace: searchTransitionNamespace"))
         XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
+        XCTAssertTrue(feed.contains(".feedSearchMatchedGeometry("))
+        XCTAssertTrue(feed.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        XCTAssertNil(FeedSearchTransitionPolicy.animation(reduceMotion: true))
+        XCTAssertNotNil(FeedSearchTransitionPolicy.animation(reduceMotion: false))
         let discover = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
+        XCTAssertTrue(discover.contains("if embedsInHostNavigation"))
+        XCTAssertTrue(discover.contains("searchTransitionNamespace: Namespace.ID?"))
+        XCTAssertTrue(discover.contains(".feedSearchMatchedGeometry("))
         XCTAssertTrue(discover.contains("if selectedMode == .places, isPlaceSearchPresented"))
         XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
