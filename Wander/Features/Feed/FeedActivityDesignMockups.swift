@@ -37,7 +37,7 @@ enum FeedActivityDesignMockupPage: String, CaseIterable {
         case .control:
             "Actor and action first; compact and familiar."
         case .placeCard:
-            "Place and photo first; attribution becomes social proof."
+            "Place and photo first; the note carries the personality."
         case .trustedStory:
             "Person first; place preview carries the useful detail."
         }
@@ -48,10 +48,22 @@ struct FeedActivityDesignMockupRoot: View {
     let page: FeedActivityDesignMockupPage
 
     var body: some View {
-        FeedActivityDesignMockupScreen(page: page)
-            .preferredColorScheme(.light)
-            .accessibilityIdentifier("feedDesignMockup.\(page.rawValue)")
+        NavigationStack {
+            FeedActivityDesignMockupScreen(page: page)
+                .navigationDestination(for: FeedActivityMockupDestination.self) { destination in
+                    switch destination {
+                    case .placeProfile:
+                        FeedActivityMockupPlaceProfile(activity: .dunsmoor)
+                    }
+                }
+        }
+        .preferredColorScheme(.light)
+        .accessibilityIdentifier("feedDesignMockup.\(page.rawValue)")
     }
+}
+
+private enum FeedActivityMockupDestination: Hashable {
+    case placeProfile
 }
 
 private struct FeedActivityDesignMockupScreen: View {
@@ -287,7 +299,7 @@ private struct FeedActivityPlacePostcard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             FeedActivityMockupPlaceArtwork()
-                .frame(height: 176)
+                .frame(height: 154)
                 .overlay(alignment: .topLeading) {
                     Label("CHECKED IN", systemImage: "checkmark")
                         .font(.system(size: 10, weight: .black, design: .rounded))
@@ -300,12 +312,24 @@ private struct FeedActivityPlacePostcard: View {
                         .padding(WanderTheme.spacing3)
                 }
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
-                        Text(activity.placeName)
-                            .font(.system(.title2, design: .serif, weight: .bold))
-                            .lineLimit(2)
+                        NavigationLink(value: FeedActivityMockupDestination.placeProfile) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(activity.placeName)
+                                    .font(.system(.title2, design: .serif, weight: .bold))
+                                    .underline(color: WanderTheme.terracotta.color.opacity(0.55))
+                                    .lineLimit(2)
+
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open \(activity.placeName) place profile")
 
                         Spacer(minLength: WanderTheme.spacing1)
 
@@ -319,7 +343,7 @@ private struct FeedActivityPlacePostcard: View {
                 }
 
                 HStack(spacing: WanderTheme.spacing2) {
-                    FeedActivityMockupAvatar(activity: activity, size: 36)
+                    FeedActivityMockupAvatar(activity: activity, size: 32)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\(activity.actorName) checked in")
@@ -331,8 +355,13 @@ private struct FeedActivityPlacePostcard: View {
                 }
 
                 Text("“\(activity.note)”")
-                    .font(WanderTypography.body)
+                    .font(.system(size: 15, weight: .medium, design: .serif))
                     .foregroundStyle(WanderTheme.textInk.color)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Divider()
@@ -340,7 +369,8 @@ private struct FeedActivityPlacePostcard: View {
 
                 FeedActivityMockupActionRow()
             }
-            .padding(WanderTheme.spacing4)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, 14)
         }
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -348,6 +378,53 @@ private struct FeedActivityPlacePostcard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         }
+    }
+}
+
+private struct FeedActivityMockupPlaceProfile: View {
+    let activity: FeedActivityDesignFixture
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                FeedActivityMockupPlaceArtwork()
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                    Text(activity.placeName)
+                        .font(.system(.largeTitle, design: .serif, weight: .bold))
+
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    FeedActivityMockupRating(value: activity.rating)
+                }
+
+                Label(activity.placeDetail, systemImage: "fork.knife")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Text("Place profile preview")
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .frame(minHeight: 28)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Capsule())
+
+                Text("Tap the back button to return to the Feed mockup.")
+                    .font(WanderTypography.body)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            .padding(WanderTheme.spacing4)
+        }
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .foregroundStyle(WanderTheme.textInk.color)
+        .navigationTitle(activity.placeName)
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("feedDesignMockup.placeProfile")
     }
 }
 
