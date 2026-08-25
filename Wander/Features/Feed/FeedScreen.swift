@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct FeedScreen: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -18,6 +19,7 @@ struct FeedScreen: View {
     @State private var peopleQuery = ""
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @FocusState private var peopleSearchFieldFocused: Bool
+    @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
 
     init(onAdd: @escaping () -> Void = {}) {
@@ -36,29 +38,49 @@ struct FeedScreen: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                switch selectedSurface {
-                case .places:
-                    placesSurface
-                case .people:
-                    FeedPeopleSurface(
-                        memberQuery: $peopleQuery,
-                        contentTopInset: feedContentTopInset,
-                        dismissSearchFocus: { peopleSearchFieldFocused = false },
-                        openProfile: openProfile
-                    )
-                }
-
-                floatingHeader
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: FeedFloatingHeaderHeightPreferenceKey.self,
-                                value: proxy.size.height
-                            )
-                        }
+            ZStack {
+                ZStack(alignment: .top) {
+                    switch selectedSurface {
+                    case .places:
+                        placesSurface
+                    case .people:
+                        FeedPeopleSurface(
+                            memberQuery: $peopleQuery,
+                            contentTopInset: feedContentTopInset,
+                            dismissSearchFocus: { peopleSearchFieldFocused = false },
+                            openProfile: openProfile
+                        )
                     }
-                    .zIndex(1)
+
+                    floatingHeader
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: FeedFloatingHeaderHeightPreferenceKey.self,
+                                    value: proxy.size.height
+                                )
+                            }
+                        }
+                        .zIndex(1)
+                }
+                .opacity(isShowingSearch ? 0 : 1)
+                .allowsHitTesting(!isShowingSearch)
+                .accessibilityHidden(isShowingSearch)
+
+                if isShowingSearch {
+                    DiscoverScreen(
+                        startsInPlaceSearch: true,
+                        embedsInHostNavigation: true,
+                        searchTransitionNamespace: searchTransitionNamespace,
+                        onClose: closeDiscoverSearch
+                    )
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+                    .environmentObject(walkthroughs)
+                    .transition(.opacity)
+                    .zIndex(2)
+                }
             }
             .wanderScreen()
             .onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self) { height in
@@ -71,16 +93,6 @@ struct FeedScreen: View {
                 await Task.yield()
                 guard !Task.isCancelled else { return }
                 await refresh()
-            }
-            .fullScreenCover(isPresented: $isShowingSearch) {
-                DiscoverScreen(
-                    startsInPlaceSearch: true,
-                    onClose: closeDiscoverSearch
-                )
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-                    .environmentObject(walkthroughs)
             }
             .fullScreenCover(item: $selectedProfile) { route in
                 ProfileDetailView(profileID: route.id)
@@ -139,7 +151,7 @@ struct FeedScreen: View {
             }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, surface in
                 if surface == .feedSearch {
-                    isShowingSearch = true
+                    setSearchPresented(true)
                 }
             }
             .onChange(of: isShowingSearch) { _, isShowing in
@@ -167,6 +179,10 @@ struct FeedScreen: View {
                     placeholders: tickerSuggestions,
                     isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
                     action: openDiscoverSearch
+                )
+                .feedSearchMatchedGeometry(
+                    in: searchTransitionNamespace,
+                    isSource: !isShowingSearch
                 )
                 .walkthroughTarget(.feedDiscoverSearch)
             case .people:
@@ -224,18 +240,21 @@ struct FeedScreen: View {
             walkthroughs.consumeRequestedSurface(.feedSearch)
         }
         walkthroughs.transition(to: .feedSearch)
-        isShowingSearch = true
+        setSearchPresented(true)
     }
 
     private func closeDiscoverSearch() {
-        isShowingSearch = false
-        restoreFeedWalkthroughAfterDiscoverDismissal()
+        setSearchPresented(false)
     }
 
-    /// Discover is a full-screen cover above Feed, so Feed's ordinary
-    /// `onChange` observers are not guaranteed to render the destination tab
-    /// before the cover disappears on a real device. Resolve both supported
-    /// coordinator handoff states synchronously while the cover closes.
+    private func setSearchPresented(_ isPresented: Bool) {
+        withAnimation(FeedSearchTransitionPolicy.animation(reduceMotion: reduceMotion)) {
+            isShowingSearch = isPresented
+        }
+    }
+
+    /// Resolve both supported coordinator handoff states synchronously as the
+    /// inline search layer fades back to the preserved Feed state.
     private func restoreFeedWalkthroughAfterDiscoverDismissal() {
         if walkthroughs.requestedSurface == .feed {
             walkthroughs.consumeRequestedSurface(.feed)
@@ -286,7 +305,7 @@ struct FeedScreen: View {
             FeedEmptyState(
                 recommendations: peopleRecommendations,
                 followingProfileIDs: followingProfileIDs,
-                openSearch: { isShowingSearch = true },
+                openSearch: openDiscoverSearch,
                 openProfile: openProfile,
                 follow: follow
             )
@@ -1069,6 +1088,48 @@ private enum FeedFloatingHeaderMetrics {
         + WanderTheme.tapMinimum
         + WanderTheme.spacing2
         + WanderTheme.tapMinimum
+}
+
+enum FeedSearchTransitionPolicy {
+    static let geometryID = "feed.placeSearchTransition"
+
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.28, extraBounce: 0)
+    }
+}
+
+private struct FeedSearchMatchedGeometryModifier: ViewModifier {
+    let namespace: Namespace.ID?
+    let isSource: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let namespace {
+            content.matchedGeometryEffect(
+                id: FeedSearchTransitionPolicy.geometryID,
+                in: namespace,
+                properties: .frame,
+                anchor: .center,
+                isSource: isSource
+            )
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func feedSearchMatchedGeometry(
+        in namespace: Namespace.ID?,
+        isSource: Bool
+    ) -> some View {
+        modifier(
+            FeedSearchMatchedGeometryModifier(
+                namespace: namespace,
+                isSource: isSource
+            )
+        )
+    }
 }
 
 private struct FeedFloatingHeaderHeightPreferenceKey: PreferenceKey {
