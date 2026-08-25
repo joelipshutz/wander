@@ -1015,10 +1015,6 @@ private struct PlaceCardProviderRatingBadge: View {
                     Text("Yelp")
                 }
                 .foregroundStyle(Color(red: 0.84, green: 0.12, blue: 0.16))
-            case "Google Maps":
-                Image("BrandGoogleMaps")
-                    .resizable()
-                    .scaledToFit()
             case "Apple Maps":
                 Image(systemName: "apple.logo")
                     .foregroundStyle(.white)
@@ -2318,12 +2314,8 @@ private struct PlacePhotoGalleryViewer: View {
 
     @ViewBuilder
     private var attributionCard: some View {
-        if let selectedItem {
-            if let contributor = selectedItem.contributor {
-                userAttributionCard(item: selectedItem, contributor: contributor)
-            } else {
-                googleAttributionCard(photo: selectedItem.photo)
-            }
+        if let selectedItem, let contributor = selectedItem.contributor {
+            userAttributionCard(item: selectedItem, contributor: contributor)
         }
     }
 
@@ -2405,55 +2397,6 @@ private struct PlacePhotoGalleryViewer: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(WanderTheme.textMuted.color)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func googleAttributionCard(photo: PlacePhoto) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "map.fill")
-                .font(.system(size: 20, weight: .black))
-                .foregroundStyle(WanderTheme.stateSuccess.color)
-                .frame(width: 48, height: 48)
-                .background(WanderTheme.categorySage.color.opacity(0.22))
-                .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Google Maps")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-
-                if let authorName = photo.authorName, !authorName.isEmpty {
-                    if let authorURL = photo.authorProfileURL {
-                        Link("Photo by \(authorName)", destination: authorURL)
-                            .underline()
-                    } else {
-                        Text("Photo by \(authorName)")
-                    }
-                } else {
-                    Text("Place photo")
-                }
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(WanderTheme.textMuted.color)
-
-            Spacer()
-
-            if let sourceURL = photo.sourcePhotoURL {
-                Link(destination: sourceURL) {
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Open photo in Google Maps")
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.vertical, WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private func statusPill(_ status: PlaceStatus) -> some View {
@@ -2825,23 +2768,8 @@ private struct PlaceProfilePhotoThumb: View {
                     variant: .listThumbnail,
                     onLoadFailure: onLoadFailure
                 )
-                    .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
-
-                if photo.isGooglePlacesPhoto {
-                    VStack {
-                        Spacer()
-                        Text("Google Maps")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .frame(maxWidth: .infinity, minHeight: 20)
-                            .background(Color.black.opacity(0.68))
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
-                    .allowsHitTesting(false)
-                }
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
             }
         }
         .frame(width: size, height: size)

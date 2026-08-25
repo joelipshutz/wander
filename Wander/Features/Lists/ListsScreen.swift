@@ -858,7 +858,6 @@ private struct ListPreviewMosaic: View {
             place: place,
             cornerRadius: WanderTheme.radiusSmall,
             fallbackEmojiSize: 22,
-            googleAttributionFontSize: 8,
             eligibleUserIDs: list.photoContributorUserIDs
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3691,8 +3690,7 @@ private struct ListMapCompactMedia: View {
         ListPlacePhotoMedia(
             place: place,
             cornerRadius: WanderTheme.radiusMedium,
-            fallbackEmojiSize: 22,
-            googleAttributionFontSize: 7
+            fallbackEmojiSize: 22
         )
         .frame(width: 62, height: 62)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
@@ -3721,7 +3719,6 @@ private struct ListPlacePhotoMedia: View {
     let place: ListPlaceMock
     let cornerRadius: CGFloat
     let fallbackEmojiSize: CGFloat
-    let googleAttributionFontSize: CGFloat
     var eligibleUserIDs: [String]? = nil
     @State private var resolvedPhoto: ListPlaceResolvedPhoto?
     @State private var resolvedPhotoKey: String?
@@ -3762,19 +3759,6 @@ private struct ListPlacePhotoMedia: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .overlay(alignment: .bottom) {
-                if displayedPhoto?.photo.isGooglePlacesPhoto == true {
-                    Text("Google Maps")
-                        .font(.system(size: googleAttributionFontSize, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .padding(.horizontal, 3)
-                        .frame(maxWidth: .infinity, minHeight: 13)
-                        .background(Color.black.opacity(0.68))
-                        .allowsHitTesting(false)
-                }
-            }
             .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
                 if let cachedPhoto {
                     resolvedPhoto = cachedPhoto

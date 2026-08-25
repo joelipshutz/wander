@@ -551,7 +551,7 @@ private struct PlacePhotoCarouselPager: View {
     private func accessibilityLabel(for photo: PlacePhotoCarouselMockPhoto) -> String {
         switch photo.source {
         case .google:
-            "Google Maps place photo"
+            "Place photo"
         case let .user(profile):
             "Place photo by \(profile.name)"
         }
@@ -678,29 +678,7 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
         if let selectedPhoto {
             switch selectedPhoto.source {
             case .google:
-                HStack(spacing: WanderTheme.spacing3) {
-                    Image(systemName: "map.fill")
-                        .font(.system(size: 18, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Google Maps place photo")
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text("Always first in this gallery")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-
-                    Spacer()
-                }
-                .padding(WanderTheme.spacing3)
-                .frame(maxWidth: .infinity, minHeight: 88)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 24))
+                EmptyView()
             case let .user(profile):
                 HStack(spacing: WanderTheme.spacing3) {
                     PlacePhotoCarouselAvatar(profile: profile, size: 48)
@@ -965,13 +943,7 @@ private struct PlacePhotoCarouselSourceBadge: View {
     var body: some View {
         switch photo.source {
         case .google:
-            Label("Google Maps", systemImage: "map.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 36)
-                .background(Color.black.opacity(0.66))
-                .clipShape(Capsule())
+            EmptyView()
         case let .user(profile):
             HStack(spacing: 7) {
                 PlacePhotoCarouselAvatar(profile: profile, size: 24)

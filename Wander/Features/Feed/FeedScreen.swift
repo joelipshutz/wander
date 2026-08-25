@@ -1831,20 +1831,6 @@ struct FeedResolvedPlacePhoto: View {
                     variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
-                .overlay(alignment: .bottomTrailing) {
-                    if photo.isGooglePlacesPhoto {
-                        Text("Google Maps")
-                            .font(.system(size: 8, weight: .regular))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .frame(minHeight: 16)
-                            .background(Color.black.opacity(0.68))
-                            .clipShape(Capsule())
-                            .padding(4)
-                            .allowsHitTesting(false)
-                    }
-                }
             } else {
                 Color.clear
                     .accessibilityHidden(true)
