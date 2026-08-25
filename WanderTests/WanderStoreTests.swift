@@ -4399,6 +4399,11 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.reselectWant.accessibilityLabel, "Check in or Wanna")
         XCTAssertEqual(wantContext.initialStatus, .been)
         XCTAssertFalse(wantContext.hasPriorCheckIn)
+        XCTAssertEqual(wantContext.title, "Check in at Add Visit Defaults Cafe")
+        XCTAssertEqual(
+            wantContext.flowTitle(status: .been, isShowingDetails: true),
+            "Check in at Add Visit Defaults Cafe"
+        )
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "")
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
@@ -4476,6 +4481,11 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(visitContext.initialStatus, .been)
         XCTAssertTrue(visitContext.hasPriorCheckIn)
+        XCTAssertEqual(visitContext.title, CheckInCopy.againAction)
+        XCTAssertEqual(
+            visitContext.flowTitle(status: .been, isShowingDetails: true),
+            CheckInCopy.againAction
+        )
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
         XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
@@ -5562,15 +5572,23 @@ final class WanderStoreTests: XCTestCase {
             )
         )
         XCTAssertTrue(context.requiresStatusConfirmation)
-        XCTAssertTrue(context.startsOnDetails)
-        XCTAssertEqual(context.initialStatus, .been)
-        let newSaveDraft = try XCTUnwrap(PlaceSaveDraft.addFlow(
-            ownerUserID: "user-1",
-            context: context,
-            now: Date(timeIntervalSince1970: 1_700_000_000)
-        ))
-        XCTAssertEqual(newSaveDraft.form.step, .details)
-        XCTAssertTrue(newSaveDraft.form.isShowingOptionalDetails)
+        XCTAssertFalse(context.startsOnDetails)
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: false),
+            "Check in or Wanna"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: true),
+            "Wanna go"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: false),
+            "Check in or Wanna"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: true),
+            "Check in"
+        )
         XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
         XCTAssertTrue(preselectedImport.startsOnDetails)
         XCTAssertEqual(preselectedImport.initialStatus, .been)
@@ -5809,16 +5827,10 @@ final class WanderStoreTests: XCTestCase {
             ),
             defaultVisibility: .followers
         )
-        let contexts: [(
-            name: String,
-            context: MapPlaceSaveContext,
-            requiresConfirmation: Bool,
-            startsOnDetails: Bool
-        )] = [
+        let contexts: [(name: String, context: MapPlaceSaveContext, requiresConfirmation: Bool)] = [
             (
                 "new candidate",
                 .addCandidate(candidate, sourceType: .manual, defaultVisibility: .followers),
-                true,
                 true
             ),
             (
@@ -5829,8 +5841,7 @@ final class WanderStoreTests: XCTestCase {
                     status: .been,
                     defaultVisibility: .followers
                 ),
-                false,
-                true
+                false
             ),
             (
                 "social save",
@@ -5839,7 +5850,6 @@ final class WanderStoreTests: XCTestCase {
                     defaultVisibility: .followers,
                     attributes: store.attributes(for: socialPlace.userPlace.id)
                 ),
-                true,
                 true
             ),
             (
@@ -5849,20 +5859,17 @@ final class WanderStoreTests: XCTestCase {
                     attributes: store.attributes(for: ownBeenPlace.userPlace.id),
                     latestVisit: ownVisit
                 ),
-                false,
-                true
+                false
             ),
             (
                 "shared visit",
                 sharedVisitContext,
-                false,
-                true
+                false
             ),
             (
                 "edit visit",
                 .editVisit(ownVisit, visiblePlace: ownBeenPlace),
-                false,
-                true
+                false
             ),
             (
                 "edit want",
@@ -5870,8 +5877,7 @@ final class WanderStoreTests: XCTestCase {
                     ownWantPlace,
                     attributes: store.attributes(for: ownWantPlace.userPlace.id)
                 ),
-                false,
-                true
+                false
             )
         ]
 
@@ -5883,7 +5889,7 @@ final class WanderStoreTests: XCTestCase {
             )
             XCTAssertEqual(
                 entry.context.startsOnDetails,
-                entry.startsOnDetails,
+                !entry.requiresConfirmation,
                 entry.name
             )
         }
@@ -6039,10 +6045,7 @@ final class WanderStoreTests: XCTestCase {
             defaultVisibility: .followers,
             currentUserSave: existingPlace,
             latestVisit: existingVisit
-        ).resolvingInitialEditorContext(startsOnDetails: true, selection: .been)
-        guard case .addVisit = context.mode else {
-            return XCTFail("The defaulted Plus editor must normalize an existing save to add-visit")
-        }
+        ).resolvingExistingSave(selection: .been)
         let submission = MapPlaceSaveSubmission(
             context: context,
             candidate: candidate,
@@ -6068,115 +6071,6 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
         XCTAssertEqual(store.visits(for: firstSave.userPlaceID).count, visitCountBeforeSave + 1)
         XCTAssertEqual(store.visits(for: firstSave.userPlaceID).first?.note, "tutorial revisit")
-        let preservedParent = try XCTUnwrap(
-            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
-        )
-        XCTAssertEqual(preservedParent.userPlace.note, "first visit")
-    }
-
-    @MainActor
-    func testPlusRepeatCheckInDraftKeepsLatestVisitDefaults() throws {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
-        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
-        let candidate = PlaceCandidate(
-            id: "mapkit_add_tab_repeat_visit_draft",
-            name: "Repeat Visit Draft Cafe",
-            category: "coffee",
-            latitude: 34.04,
-            longitude: -118.24,
-            confidence: 0.95
-        )
-        let firstSave = store.saveCandidate(
-            candidate,
-            status: .been,
-            visibility: .followers,
-            note: "first visit",
-            sourceType: .manual,
-            ratingScore: 4,
-            attributes: [
-                PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes"),
-                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"])
-            ]
-        )
-        let existingPlace = try XCTUnwrap(
-            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
-        )
-        let latestVisit = try XCTUnwrap(store.visits(for: firstSave.userPlaceID).first)
-        let sourceContext = MapPlaceSaveContext.addCandidate(
-            candidate,
-            sourceType: .manual,
-            defaultVisibility: .followers,
-            currentUserSave: existingPlace,
-            latestVisit: latestVisit
-        )
-
-        let draft = try XCTUnwrap(
-            PlaceSaveDraft.addFlow(ownerUserID: store.currentUser.id, context: sourceContext)
-        )
-
-        XCTAssertEqual(draft.form.selectedRatingScore, 4)
-        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
-        XCTAssertTrue(draft.form.unifiedTags.isEmpty)
-        XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
-        XCTAssertEqual(draft.baselineVisitLocalID, latestVisit.localID)
-    }
-
-    @MainActor
-    func testPlusExistingWannaDraftKeepsSavedDetails() throws {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
-        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
-        let plannedDate = WannaGoDate.normalized(Date().addingTimeInterval(14 * 24 * 60 * 60))
-        let candidate = PlaceCandidate(
-            id: "mapkit_add_tab_existing_wanna_draft",
-            name: "Existing Wanna Draft Cafe",
-            category: "coffee",
-            latitude: 34.04,
-            longitude: -118.24,
-            confidence: 0.95
-        )
-        let firstSave = store.saveCandidate(
-            candidate,
-            status: .wannaGo,
-            visibility: .followers,
-            note: "Try the patio",
-            sourceType: .manual,
-            plannedDate: plannedDate,
-            attributes: [
-                PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes")
-            ]
-        )
-        let existingPlace = try XCTUnwrap(
-            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
-        )
-        let sourceContext = MapPlaceSaveContext.addCandidate(
-            candidate,
-            sourceType: .manual,
-            defaultVisibility: .followers,
-            currentUserSave: existingPlace,
-            latestVisit: nil
-        )
-
-        let draft = try XCTUnwrap(
-            PlaceSaveDraft.addFlow(ownerUserID: store.currentUser.id, context: sourceContext)
-        )
-
-        XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
-        XCTAssertEqual(draft.form.note, "Try the patio")
-        XCTAssertEqual(draft.form.plannedDate, plannedDate)
-        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
-        XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
-
-        guard case .add = sourceContext.mode else {
-            return XCTFail("A restored Plus draft must retain its unresolved source context")
-        }
-        let checkInContext = sourceContext.preselectingStatus(.been)
-        guard case .addVisit = checkInContext.mode else {
-            return XCTFail("A restored Wanna draft must be able to switch to Check in")
-        }
-        let wannaContext = sourceContext.preselectingStatus(.wannaGo)
-        guard case .editWant = wannaContext.mode else {
-            return XCTFail("A restored Wanna draft must be able to switch back to Wanna")
-        }
     }
 
     func testFollowersAndFollowingUseGraphEdges() {

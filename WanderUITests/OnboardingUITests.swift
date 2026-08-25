@@ -1614,8 +1614,7 @@ final class OnboardingUITests: XCTestCase {
             "-WanderResetWalkthroughs",
             "-WanderMapPlace",
             "Griffith Observatory Trail",
-            "-WanderMapSheetExpanded",
-            "-WanderPlaceProfileSaveTrayV1"
+            "-WanderMapSheetExpanded"
         ]
         app.launch()
 
@@ -1635,11 +1634,11 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         note.tap()
         note.typeText("Sunset draft")
 
-        app.buttons["Close"].tap()
+        app.buttons["Collapse check-in"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(checkIn.isHittable)
         checkIn.tap()
@@ -1692,11 +1691,11 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         note.tap()
         note.typeText("Wanna sunset draft")
 
-        app.buttons["save.close"].tap()
+        app.buttons["Collapse Wanna"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(wanna.isHittable)
         wanna.tap()
@@ -1717,7 +1716,7 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
-        app.buttons["save.close"].tap()
+        app.buttons["Collapse Wanna"].tap()
         XCTAssertTrue(checkIn.isHittable)
         checkIn.tap()
 
@@ -1962,7 +1961,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         XCTAssertEqual(
             note.value as? String,
             "Saved for a low-effort sunset picnic."
@@ -1973,7 +1972,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(editedNote?.contains("Saved for a low-effort sunset picnic.") == true)
         XCTAssertTrue(editedNote?.contains("Updated") == true)
 
-        app.buttons["save.close"].tap()
+        app.buttons["Collapse Wanna"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(wanna.isHittable)
         wanna.tap()
@@ -1986,7 +1985,7 @@ final class OnboardingUITests: XCTestCase {
             editedNote
         )
 
-        app.buttons["save.close"].tap()
+        app.buttons["Collapse Wanna"].tap()
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
         XCTAssertTrue(checkIn.waitForExistence(timeout: 2))
         checkIn.tap()
@@ -2230,56 +2229,11 @@ final class OnboardingUITests: XCTestCase {
 
         let checkInChoice = app.buttons["check in"]
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
-        let statusSelector = app.staticTexts["save.statusSelector"]
-        XCTAssertTrue(statusSelector.exists)
-        XCTAssertTrue(checkInChoice.isSelected)
-        let finalCheckIn = app.buttons["Check in"]
-        XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
-        XCTAssertFalse(app.buttons["continue to details"].exists)
-        XCTAssertFalse(app.buttons["back"].exists)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        checkInChoice.tap()
+        app.buttons["continue to details"].tap()
 
         let disclosure = app.buttons["save.checkInDateDisclosure"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
-        XCTAssertTrue(statusSelector.exists)
-        let rating = app.descendants(matching: .any)["place-rating-slider"]
-        XCTAssertTrue(rating.exists)
-        let note = app.textFields["save.note"]
-        XCTAssertTrue(note.exists)
-        XCTAssertLessThan(statusSelector.frame.minY, rating.frame.minY)
-        XCTAssertLessThan(rating.frame.minY, note.frame.minY)
-        XCTAssertLessThan(note.frame.minY, disclosure.frame.minY)
-        XCTAssertTrue(disclosure.isHittable)
-
-        note.tap()
-        note.typeText("Discard this draft")
-        app.buttons["save.close"].tap()
-        XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
-        saveButton.tap()
-        XCTAssertTrue(statusSelector.waitForExistence(timeout: 3))
-        XCTAssertNotEqual(app.textFields["save.note"].value as? String, "Discard this draft")
-
-        app.textFields["save.note"].tap()
-        app.textFields["save.note"].typeText("Check-in mode draft")
-        let wannaChoice = app.buttons["wanna go"]
-        XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
-        XCTAssertTrue(wannaChoice.isHittable)
-        wannaChoice.tap()
-        XCTAssertTrue(app.buttons["Add a Wanna go date"].waitForExistence(timeout: 2))
-        XCTAssertTrue(wannaChoice.isSelected)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
-        let wannaNote = app.textFields["save.note"]
-        XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
-        wannaNote.tap()
-        wannaNote.typeText("Wanna mode draft")
-        XCTAssertTrue(checkInChoice.isHittable)
-        checkInChoice.tap()
-        XCTAssertEqual(app.textFields["save.note"].value as? String, "Check-in mode draft")
-        wannaChoice.tap()
-        XCTAssertEqual(app.textFields["save.note"].value as? String, "Wanna mode draft")
-        checkInChoice.tap()
 
         let start = ProcessInfo.processInfo.systemUptime
         disclosure.tap()
@@ -2296,12 +2250,5 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-241 responsive check-in calendar tray"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-
-        disclosure.tap()
-        XCTAssertTrue((disclosure.value as? String)?.contains("Collapsed") == true)
-        finalCheckIn.tap()
-        XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 5))
     }
-
-
 }

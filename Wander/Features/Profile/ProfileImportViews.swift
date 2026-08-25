@@ -358,6 +358,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
             } onRemove: { context in
                 await removeOptionalDetailsSave(context, itemID: route.itemID)
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .task(id: duplicateSignature) {
             importStore.reconcileDuplicates(with: existingPlaces)

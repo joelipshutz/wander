@@ -600,6 +600,16 @@ struct WanderRootView: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
                     .environmentObject(walkthroughs)
+                    .presentationDetents(
+                        AddSheetLayout.detents(
+                        hasPendingImports: importStore.summary.hasPendingImports
+                        ),
+                        selection: $addSheetDetent
+                    )
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(28)
+                    .presentationBackground(WanderTheme.surfaceBone.color)
+                    .presentationContentInteraction(.resizes)
                     .interactiveDismissDisabled(
                         walkthroughs.activeSurface == .add
                             || walkthroughs.activeSurface == .saveFlow
@@ -834,6 +844,10 @@ struct WanderRootView: View {
         .onChange(of: importStore.items) { _, _ in
             guard isSessionValidated else { return }
             reconcilePlaceImports()
+        }
+        .onChange(of: importStore.summary.hasPendingImports) { _, _ in
+            guard addSheetDetent != .large else { return }
+            addSheetDetent = addSheetRestingDetent
         }
         .onChange(of: store.isSaveFlowPresented) { _, isPresented in
             if isPresented {

@@ -109,6 +109,8 @@ struct FeedScreen: View {
                 } onRemove: { _ in
                     false
                 }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .alert("Map updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
                 Button("OK", role: .cancel) { savedMessage = nil }
