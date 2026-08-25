@@ -666,51 +666,51 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
             switch selectedPhoto.source {
             case let .user(profile):
                 HStack(spacing: WanderTheme.spacing3) {
-                PlacePhotoCarouselAvatar(profile: profile, size: 48)
+                    PlacePhotoCarouselAvatar(profile: profile, size: 48)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            mockAttributionName(profile.name)
-                            mockAttributionTimestamp
+                    VStack(alignment: .leading, spacing: 0) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                mockAttributionName(profile.name)
+                                mockAttributionTimestamp
+                            }
+                            .fixedSize(horizontal: true, vertical: false)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                mockAttributionName(profile.name)
+                                mockAttributionTimestamp
+                            }
                         }
+
+                        Button {
+                            onOpenProfile(profile)
+                        } label: {
+                            Text("@\(profile.handle)")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(WanderTheme.stateSuccess.color)
+                                .underline()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                                .allowsTightening(true)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open @\(profile.handle)'s profile")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    Text("check-in")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(height: 38)
+                        .background(Color(red: 0.88, green: 0.94, blue: 0.91))
+                        .clipShape(Capsule())
                         .fixedSize(horizontal: true, vertical: false)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            mockAttributionName(profile.name)
-                            mockAttributionTimestamp
-                        }
-                    }
-
-                    Button {
-                        onOpenProfile(profile)
-                    } label: {
-                        Text("@\(profile.handle)")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(WanderTheme.stateSuccess.color)
-                            .underline()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .allowsTightening(true)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open @\(profile.handle)'s profile")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                Text("check-in")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(height: 38)
-                    .background(Color(red: 0.88, green: 0.94, blue: 0.91))
-                    .clipShape(Capsule())
-                    .fixedSize(horizontal: true, vertical: false)
-            }
                 .padding(WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 96)
                 .background(Color.white)
