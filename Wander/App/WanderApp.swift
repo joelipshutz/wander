@@ -122,9 +122,7 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let feedDesignMockupPage = FeedActivityDesignMockupPage.resolved() {
-                FeedActivityDesignMockupRoot(page: feedDesignMockupPage)
-            } else if let streakMockupPage = SaveStreakMockupPage.resolved() {
+            if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
