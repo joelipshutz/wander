@@ -1094,6 +1094,7 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -1116,6 +1117,21 @@ private struct PlaceProfileFullView: View {
                 }
             }
         )
+    }
+
+    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return attachedSaveDraft }
+        return liveDraft
+    }
+
+    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
+        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
+            ?? context.initialStatus
+        return selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
     }
 
     var body: some View {
@@ -1207,16 +1223,20 @@ private struct PlaceProfileFullView: View {
             }
         }
         .sheet(item: attachedSaveSheetContext) { context in
-            PlaceSaveAttachedSheet(
+            MapPlaceSaveFlowSheet(
                 context: context,
-                draft: attachedSaveDraft,
+                draft: resolvedAttachedSaveDraft(for: context),
                 onDraftChange: onAttachedDraftChange,
                 onSave: onAttachedSave,
                 onRemove: onAttachedRemove,
                 onClose: onAttachedClose,
-                onSaveCompleted: onAttachedSaveCompleted
+                onSaveCompleted: { result in
+                    guard attachedSaveContext?.id == context.id else { return }
+                    onAttachedSaveCompleted(result)
+                }
             )
             .id(context.id)
+            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
         }
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
@@ -2103,117 +2123,6 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
-}
-
-struct PlaceSaveAttachedSheet: View {
-    static let compactHeight: CGFloat = 430
-    static let compactDetent = PresentationDetent.height(compactHeight)
-
-    let context: MapPlaceSaveContext
-    let draft: PlaceSaveDraft?
-    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
-    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
-    let onClose: @MainActor () -> Void
-    let onSaveCompleted: @MainActor (SaveResult) -> Void
-    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
-    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
-    @State private var selectedDetent = PlaceSaveAttachedSheet.compactDetent
-
-    private var resolvedDraft: PlaceSaveDraft? {
-        guard let liveDraft = placeSaveDraftStore.draft,
-              liveDraft.candidate.id == context.candidate.id
-        else { return draft }
-        return liveDraft
-    }
-
-    private var selectedStatus: PlaceStatus {
-        resolvedDraft?.form.selectedStatus ?? context.initialStatus
-    }
-
-    private var trayTitle: String {
-        selectedStatus == .wannaGo ? "Wanna" : CheckInCopy.verb
-    }
-
-    private var traySystemImage: String {
-        selectedStatus == .wannaGo ? "bookmark.fill" : "star.fill"
-    }
-
-    private var collapseAccessibilityLabel: String {
-        selectedStatus == .wannaGo ? "Collapse Wanna" : "Collapse check-in"
-    }
-
-    private var trayAccessibilityIdentifier: String {
-        selectedStatus == .wannaGo
-            ? "place-profile.attached-wanna"
-            : "place-profile.attached-check-in"
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Label(trayTitle, systemImage: traySystemImage)
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityAddTraits(.isSelected)
-
-                Spacer()
-
-                Button(action: onClose) {
-                    Label(collapseAccessibilityLabel, systemImage: "chevron.down")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(
-                            minWidth: WanderTheme.tapMinimum,
-                            minHeight: WanderTheme.tapMinimum
-                        )
-                        .foregroundStyle(WanderTheme.textInk.color)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(collapseAccessibilityLabel)
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-
-            Divider()
-                .background(WanderTheme.borderHairline.color)
-
-            GeometryReader { proxy in
-                MapPlaceSaveEditor(
-                    context: context,
-                    draft: resolvedDraft,
-                    presentation: .attached,
-                    onDraftChange: onDraftChange,
-                    onSave: onSave,
-                    onRemove: onRemove,
-                    onClose: onClose,
-                    onContentExpansionRequested: expand,
-                    onSaveCompleted: onSaveCompleted
-                )
-                .id(context.id)
-                .frame(width: proxy.size.width, height: proxy.size.height)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(WanderTheme.surfaceBone.color)
-        .presentationDetents(
-            [Self.compactDetent, .large],
-            selection: $selectedDetent
-        )
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(WanderTheme.radiusSheet)
-        .presentationBackground(WanderTheme.surfaceBone.color)
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
-        .presentationContentInteraction(.resizes)
-        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
-        .accessibilityIdentifier(trayAccessibilityIdentifier)
-    }
-
-    private func expand() {
-        withAnimation(.snappy(duration: 0.34, extraBounce: 0)) {
-            selectedDetent = .large
-        }
-    }
 }
 
 private struct PlacePhotoGalleryViewerRoute: Identifiable {
