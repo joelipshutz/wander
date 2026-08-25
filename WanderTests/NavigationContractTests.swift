@@ -251,16 +251,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("embedsInHostNavigation: true"))
         XCTAssertTrue(feed.contains("searchTransitionNamespace: searchTransitionNamespace"))
         XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
-        XCTAssertTrue(feed.contains(".feedSearchMatchedGeometry("))
         XCTAssertTrue(feed.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
         XCTAssertNil(FeedSearchTransitionPolicy.animation(reduceMotion: true))
         XCTAssertNotNil(FeedSearchTransitionPolicy.animation(reduceMotion: false))
+        let feedSearchLauncher = try sourceSection(
+            feed,
+            after: "private var floatingHeaderContent: some View",
+            before: "private var placesSurface: some View"
+        )
+        XCTAssertTrue(feedSearchLauncher.contains(".feedSearchMatchedGeometry("))
+        XCTAssertTrue(feedSearchLauncher.contains("isSource: !isShowingSearch"))
+        let searchPresentation = try sourceSection(
+            feed,
+            after: "private func setSearchPresented(_ isPresented: Bool)",
+            before: "private func restoreFeedWalkthroughAfterDiscoverDismissal()"
+        )
+        XCTAssertTrue(
+            searchPresentation.contains(
+                "FeedSearchTransitionPolicy.animation(reduceMotion: reduceMotion)"
+            )
+        )
         let discover = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
         XCTAssertTrue(discover.contains("if embedsInHostNavigation"))
         XCTAssertTrue(discover.contains("searchTransitionNamespace: Namespace.ID?"))
-        XCTAssertTrue(discover.contains(".feedSearchMatchedGeometry("))
         XCTAssertTrue(discover.contains("if selectedMode == .places, isPlaceSearchPresented"))
         XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
@@ -271,6 +286,20 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(accessibilityIdentifier)"))
         XCTAssertFalse(discover.contains("DiscoverHeader"))
         XCTAssertTrue(discover.contains("suggestedSearchesSection"))
+        let activeSearchHeader = try sourceSection(
+            discover,
+            after: "private var activePlaceSearchHeader: some View",
+            before: "private var hidesSearchBackDuringWalkthroughChoice: Bool"
+        )
+        XCTAssertTrue(activeSearchHeader.contains(".feedSearchMatchedGeometry("))
+        XCTAssertTrue(activeSearchHeader.contains("isSource: true"))
+        let searchExit = try sourceSection(
+            discover,
+            after: "private func exitPlaceSearch()",
+            before: "private func clearPlaceSearch"
+        )
+        XCTAssertTrue(searchExit.contains("cancelPlaceSearchWork()"))
+        XCTAssertTrue(searchExit.contains("searchFieldFocused = false"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
         XCTAssertTrue(feed.contains("enum FeedSurface"))
