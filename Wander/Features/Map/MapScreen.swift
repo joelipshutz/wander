@@ -829,6 +829,7 @@ struct MapScreen: View {
                                         )
                                     )
                                 }
+                                .modifier(MapPinEntranceModifier(isVisible: true, delay: 0))
                                 .frame(minWidth: 44, minHeight: 44)
                                 .accessibilityIdentifier("map.pin.active.saved.\(group.key)")
                                 .accessibilityAddTraits(.isButton)
@@ -861,6 +862,7 @@ struct MapScreen: View {
                                                 )
                                             )
                                     }
+                                    .modifier(MapPinEntranceModifier(isVisible: true, delay: 0))
                                     .frame(minWidth: 44, minHeight: 44)
                                     .accessibilityIdentifier("map.pin.active.search.\(candidate.id)")
                                     .accessibilityAddTraits(.isButton)

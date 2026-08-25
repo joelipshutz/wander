@@ -691,6 +691,37 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains(".position(point)"))
     }
 
+    func testNewNativeActiveAnnotationsKeepTheOneShotEntranceBounce() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let savedStart = try XCTUnwrap(
+            map.range(of: "                        ForEach(activeAnnotationGroups, id: \\.key)")
+        )
+        let searchStart = try XCTUnwrap(
+            map.range(
+                of: "                        ForEach(activeSearchCandidates, id: \\.id)",
+                range: savedStart.upperBound..<map.endIndex
+            )
+        )
+        let nativeMapEnd = try XCTUnwrap(
+            map.range(of: "                    .mapStyle(", range: searchStart.upperBound..<map.endIndex)
+        )
+        let savedActiveAnnotation = map[savedStart.lowerBound..<searchStart.lowerBound]
+        let searchActiveAnnotation = map[searchStart.lowerBound..<nativeMapEnd.lowerBound]
+        let entranceModifier = "MapPinEntranceModifier(isVisible: true, delay: 0)"
+
+        XCTAssertTrue(savedActiveAnnotation.contains(entranceModifier))
+        XCTAssertTrue(searchActiveAnnotation.contains(entranceModifier))
+        XCTAssertTrue(savedActiveAnnotation.contains("MapPinReselectionBounceModifier("))
+        XCTAssertTrue(searchActiveAnnotation.contains("MapPinReselectionBounceModifier("))
+        XCTAssertFalse(savedActiveAnnotation.contains(".position("))
+        XCTAssertFalse(searchActiveAnnotation.contains(".position("))
+    }
+
     func testSelectionLifetimeAndLayeringFixtureRequiresDurableTopmostSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
