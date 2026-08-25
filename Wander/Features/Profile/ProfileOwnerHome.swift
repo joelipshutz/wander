@@ -284,6 +284,9 @@ struct ProfileOwnerHome: View {
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
+    #if DEBUG
+    @State private var showsYourMapPrototype = YourMapPrototypeLaunchConfiguration.shouldPresent()
+    #endif
     private let profileAvatarSize: CGFloat = 86
 
     var body: some View {
@@ -375,6 +378,16 @@ struct ProfileOwnerHome: View {
         }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
+        #if DEBUG
+        .fullScreenCover(isPresented: $showsYourMapPrototype) {
+            YourMapPrototypeScreen(
+                volume: YourMapPrototypeLaunchConfiguration.volume(),
+                initialMode: YourMapPrototypeLaunchConfiguration.mode(),
+                initialShowsSharePreview: YourMapPrototypeLaunchConfiguration.shouldPresentSharePreview(),
+                dismiss: { showsYourMapPrototype = false }
+            )
+        }
+        #endif
     }
 
     private var identitySection: some View {
