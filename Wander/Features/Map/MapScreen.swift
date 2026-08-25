@@ -386,6 +386,8 @@ struct MapScreen: View {
     @State private var transitioningAnnotationGroups: [VisiblePlaceGroup]?
     @State private var visibleTransitionGroupKeys: Set<String>?
     @State private var mapPinTransitionTask: Task<Void, Never>?
+    @State private var mapPinEntranceKeyState = MapPinEntranceKeyState()
+    @State private var mapPinEntranceTask: Task<Void, Never>?
     @State private var compactCardPhase = MapCompactCardPhase.hidden
     @State private var compactCardReadyIdentity: String?
     @State private var compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
@@ -616,6 +618,32 @@ struct MapScreen: View {
         }
     }
 
+    private var mapPinEntranceKeys: Set<String> {
+        mapPinEntranceKeys(in: currentSearchRegion)
+    }
+
+    private func mapPinEntranceKeys(in region: MKCoordinateRegion) -> Set<String> {
+        let viewport = MapViewportRefreshPolicy.viewport(for: region)
+        let savedKeys = visiblePlaceGroups.compactMap { group in
+            MapViewportRefreshPolicy.contains(group.primary, in: viewport)
+                ? MapPinEntranceIdentity.saved(group.key)
+                : nil
+        }
+        let searchKeys = mappableSearchCandidates.compactMap { candidate -> String? in
+            guard let latitude = candidate.latitude,
+                  let longitude = candidate.longitude,
+                  latitude >= viewport.minLatitude,
+                  latitude <= viewport.maxLatitude,
+                  longitude >= viewport.minLongitude,
+                  longitude <= viewport.maxLongitude
+            else { return nil }
+
+            return MapPinEntranceIdentity.search(candidate.id)
+        }
+
+        return Set(savedKeys).union(searchKeys)
+    }
+
     private var mapFilterEmptyMessage: String? {
         guard routedVisiblePlace == nil,
               mapSearchCandidates.isEmpty,
@@ -714,7 +742,10 @@ struct MapScreen: View {
                         }
 
                         ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
-                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
+                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key)
+                                ?? mapPinEntranceKeyState.isPresented(
+                                    MapPinEntranceIdentity.saved(group.key)
+                                )
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                             let coordinate = CLLocationCoordinate2D(
                                 latitude: group.primary.place.latitude,
@@ -758,6 +789,9 @@ struct MapScreen: View {
                         ForEach(inactiveSearchCandidates, id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
+                                let isEntranceVisible = mapPinEntranceKeyState.isPresented(
+                                    MapPinEntranceIdentity.search(candidate.id)
+                                )
                                 let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                                 let coordinate = CLLocationCoordinate2D(
                                     latitude: latitude,
@@ -784,7 +818,7 @@ struct MapScreen: View {
                                     }
                                     .modifier(
                                         MapPinEntranceModifier(
-                                            isVisible: true,
+                                            isVisible: isEntranceVisible,
                                             delay: entranceDelay
                                         )
                                     )
@@ -802,6 +836,10 @@ struct MapScreen: View {
                         // camera frames without forcing costly per-frame state updates.
                         ForEach(activeAnnotationGroups, id: \.key) { group in
                             let activeSaves = saveSummaries(for: group)
+                            let isEntranceVisible = visibleTransitionGroupKeys?.contains(group.key)
+                                ?? mapPinEntranceKeyState.isPresented(
+                                    MapPinEntranceIdentity.saved(group.key)
+                                )
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -829,7 +867,12 @@ struct MapScreen: View {
                                         )
                                     )
                                 }
-                                .modifier(MapPinEntranceModifier(isVisible: true, delay: 0))
+                                .modifier(
+                                    MapPinEntranceModifier(
+                                        isVisible: isEntranceVisible,
+                                        delay: 0
+                                    )
+                                )
                                 .frame(minWidth: 44, minHeight: 44)
                                 .accessibilityIdentifier("map.pin.active.saved.\(group.key)")
                                 .accessibilityAddTraits(.isButton)
@@ -844,6 +887,9 @@ struct MapScreen: View {
                         ForEach(activeSearchCandidates, id: \.id) { candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
+                                let isEntranceVisible = mapPinEntranceKeyState.isPresented(
+                                    MapPinEntranceIdentity.search(candidate.id)
+                                )
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(
@@ -862,7 +908,12 @@ struct MapScreen: View {
                                                 )
                                             )
                                     }
-                                    .modifier(MapPinEntranceModifier(isVisible: true, delay: 0))
+                                    .modifier(
+                                        MapPinEntranceModifier(
+                                            isVisible: isEntranceVisible,
+                                            delay: 0
+                                        )
+                                    )
                                     .frame(minWidth: 44, minHeight: 44)
                                     .accessibilityIdentifier("map.pin.active.search.\(candidate.id)")
                                     .accessibilityAddTraits(.isButton)
@@ -1208,6 +1259,9 @@ struct MapScreen: View {
                     closeAttachedSaveFlow()
                 }
             }
+            .onChange(of: mapPinEntranceKeys, initial: true) { _, keys in
+                updateMapPinEntranceKeys(keys)
+            }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
                     if let routedVisiblePlace,
@@ -1257,6 +1311,7 @@ struct MapScreen: View {
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
                 mapPinTransitionTask?.cancel()
+                mapPinEntranceTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
@@ -1599,6 +1654,28 @@ struct MapScreen: View {
         }
     }
 
+    private func updateMapPinEntranceKeys(_ keys: Set<String>) {
+        guard mapPinEntranceKeyState.needsUpdate(
+            for: keys,
+            reduceMotion: reduceMotion
+        ) else { return }
+
+        mapPinEntranceTask?.cancel()
+        mapPinEntranceTask = nil
+
+        guard let keysToPresent = mapPinEntranceKeyState.prepare(
+            for: keys,
+            reduceMotion: reduceMotion
+        ) else { return }
+
+        mapPinEntranceTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            mapPinEntranceKeyState.present(keysToPresent)
+            mapPinEntranceTask = nil
+        }
+    }
+
     private func clearMapSelection() {
         compactCardMotionTask?.cancel()
         mapFeatureResolutionTask?.cancel()
@@ -1764,6 +1841,7 @@ struct MapScreen: View {
 
     private func handleMapCameraChange(_ region: MKCoordinateRegion) {
         cameraRegionTracker.recordCameraChange(region)
+        updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))
     }
 
     private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
@@ -4956,6 +5034,52 @@ struct MapPinEntrancePresentation: Equatable {
 
     func renderedVisibility(isVisible: Bool, reduceMotion: Bool) -> Bool {
         reduceMotion ? isVisible : isPresented
+    }
+}
+
+enum MapPinEntranceIdentity {
+    static func saved(_ groupKey: String) -> String {
+        "saved:\(groupKey)"
+    }
+
+    static func search(_ candidateID: String) -> String {
+        "search:\(candidateID)"
+    }
+}
+
+struct MapPinEntranceKeyState: Equatable {
+    private(set) var visibleKeys: Set<String> = []
+    private(set) var presentedKeys: Set<String> = []
+
+    func needsUpdate(
+        for nextVisibleKeys: Set<String>,
+        reduceMotion: Bool
+    ) -> Bool {
+        nextVisibleKeys != visibleKeys
+            || (reduceMotion && presentedKeys != nextVisibleKeys)
+    }
+
+    mutating func prepare(
+        for nextVisibleKeys: Set<String>,
+        reduceMotion: Bool
+    ) -> Set<String>? {
+        let enteringKeys = nextVisibleKeys.subtracting(presentedKeys)
+        visibleKeys = nextVisibleKeys
+        guard !reduceMotion, !enteringKeys.isEmpty else {
+            presentedKeys = nextVisibleKeys
+            return nil
+        }
+
+        presentedKeys.formIntersection(nextVisibleKeys)
+        return nextVisibleKeys
+    }
+
+    mutating func present(_ keys: Set<String>) {
+        presentedKeys = keys.intersection(visibleKeys)
+    }
+
+    func isPresented(_ key: String) -> Bool {
+        presentedKeys.contains(key)
     }
 }
 

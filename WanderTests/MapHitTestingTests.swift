@@ -712,14 +712,104 @@ final class MapSelectionMotionTests: XCTestCase {
         )
         let savedActiveAnnotation = map[savedStart.lowerBound..<searchStart.lowerBound]
         let searchActiveAnnotation = map[searchStart.lowerBound..<nativeMapEnd.lowerBound]
-        let entranceModifier = "MapPinEntranceModifier(isVisible: true, delay: 0)"
 
-        XCTAssertTrue(savedActiveAnnotation.contains(entranceModifier))
-        XCTAssertTrue(searchActiveAnnotation.contains(entranceModifier))
+        XCTAssertTrue(savedActiveAnnotation.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(searchActiveAnnotation.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(savedActiveAnnotation.contains("isVisible: isEntranceVisible"))
+        XCTAssertTrue(searchActiveAnnotation.contains("isVisible: isEntranceVisible"))
         XCTAssertTrue(savedActiveAnnotation.contains("MapPinReselectionBounceModifier("))
         XCTAssertTrue(searchActiveAnnotation.contains("MapPinReselectionBounceModifier("))
         XCTAssertFalse(savedActiveAnnotation.contains(".position("))
         XCTAssertFalse(searchActiveAnnotation.contains(".position("))
+    }
+
+    func testViewportAndFilterArrivalsUseExplicitEntranceIdentityState() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(
+            map.contains("@State private var mapPinEntranceKeyState = MapPinEntranceKeyState()")
+        )
+        XCTAssertTrue(map.contains(".onChange(of: mapPinEntranceKeys, initial: true)"))
+        XCTAssertTrue(map.contains("mapPinEntranceKeyState.isPresented("))
+        XCTAssertTrue(
+            map.contains("updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))")
+        )
+        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+    }
+
+    func testEntranceIdentityStateStagesOnlyPinsNewToTheViewport() throws {
+        let retained = MapPinEntranceIdentity.saved("retained")
+        let entering = MapPinEntranceIdentity.saved("entering")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [retained], reduceMotion: true))
+        let keysToPresent = state.prepare(
+            for: [retained, entering],
+            reduceMotion: false
+        )
+
+        XCTAssertTrue(state.isPresented(retained))
+        XCTAssertFalse(state.isPresented(entering))
+        XCTAssertEqual(keysToPresent, [retained, entering])
+
+        state.present(try XCTUnwrap(keysToPresent))
+
+        XCTAssertTrue(state.isPresented(retained))
+        XCTAssertTrue(state.isPresented(entering))
+    }
+
+    func testEntranceIdentityStateForgetsPinsThatLeaveSoReentryBounces() {
+        let pin = MapPinEntranceIdentity.saved("returning")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [pin], reduceMotion: true))
+        XCTAssertNil(state.prepare(for: [], reduceMotion: false))
+        XCTAssertFalse(state.isPresented(pin))
+
+        let keysToPresent = state.prepare(for: [pin], reduceMotion: false)
+
+        XCTAssertFalse(state.isPresented(pin))
+        XCTAssertEqual(keysToPresent, [pin])
+    }
+
+    func testEntranceIdentityStateDoesNotRestartPendingBounceForEveryCameraFrame() {
+        let pin = MapPinEntranceIdentity.saved("crossing-edge")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertEqual(state.prepare(for: [pin], reduceMotion: false), [pin])
+        XCTAssertFalse(state.needsUpdate(for: [pin], reduceMotion: false))
+        XCTAssertFalse(state.isPresented(pin))
+
+        state.present([pin])
+
+        XCTAssertTrue(state.isPresented(pin))
+        XCTAssertFalse(state.needsUpdate(for: [pin], reduceMotion: false))
+    }
+
+    func testEntranceIdentityStateKeepsRetainedPinStagedWhenPendingViewportShrinks() {
+        let retained = MapPinEntranceIdentity.saved("retained")
+        let departing = MapPinEntranceIdentity.saved("departing")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertEqual(
+            state.prepare(for: [retained, departing], reduceMotion: false),
+            [retained, departing]
+        )
+        XCTAssertEqual(state.prepare(for: [retained], reduceMotion: false), [retained])
+        XCTAssertFalse(state.isPresented(retained))
+    }
+
+    func testEntranceIdentityStatePresentsImmediatelyForReduceMotion() {
+        let pin = MapPinEntranceIdentity.search("candidate")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [pin], reduceMotion: true))
+        XCTAssertTrue(state.isPresented(pin))
     }
 
     func testSelectionLifetimeAndLayeringFixtureRequiresDurableTopmostSelection() throws {
