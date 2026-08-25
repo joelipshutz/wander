@@ -229,7 +229,6 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
-
         XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
@@ -336,8 +335,9 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(fixture["issue"], "REC-268")
         XCTAssertEqual(fixture["destructive_gesture_policy"], "full-swipe deletion is disabled")
-        XCTAssertTrue(activityViews.contains("Button {\n                onOpen(first.id)"))
-        XCTAssertTrue(activityViews.contains(".padding(.bottom, 9)"))
+        XCTAssertTrue(activityViews.contains("artworkAction: artworkAction"))
+        XCTAssertTrue(activityViews.contains("photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID)"))
+        XCTAssertTrue(activityViews.contains("context.media.count == 1 ? \"Open activity photo\" : \"Open activity photos\""))
         XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute)"))
         XCTAssertTrue(activityViews.contains("TabView(selection: $selectedMediaID)"))
         XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))
@@ -367,9 +367,12 @@ final class NavigationContractTests: XCTestCase {
         let commentsScreen = try sourceSection(
             activityViews,
             after: "struct ActivityCommentsScreen: View",
-            before: "private struct ActivityCommentsMediaThumbnail"
+            before: "private struct ActivityCommentsPhotoViewerRoute"
         )
         XCTAssertFalse(commentsScreen.contains("NavigationStack"))
+        XCTAssertTrue(commentsScreen.contains("ActivityPostcardView("))
+        XCTAssertTrue(commentsScreen.contains("showsCommentButton: false"))
+        XCTAssertTrue(commentsScreen.contains("postcardAccessibilityIdentifier: \"comments.activity.postcard\""))
     }
 
     func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {
@@ -633,6 +636,11 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
+        let activityViews = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Activity/ActivityEngagementViews.swift"
+            )
+        )
 
         XCTAssertTrue(feed.contains("MapPlaceSaveFlowSheet(context: context)"))
         XCTAssertTrue(feed.contains("MapPlaceSaveContext.addVisiblePlace("))
@@ -655,34 +663,45 @@ final class NavigationContractTests: XCTestCase {
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
-        XCTAssertTrue(activityModule.contains("private var activityCard: some View"))
-        XCTAssertTrue(activityModule.contains("activity.resolvedTicketKind"))
-        XCTAssertTrue(activityModule.contains("FeedActivityLayout.artworkHeight"))
-        XCTAssertTrue(activityModule.contains("WanderTypography.editorialTitle"))
+        let postcard = try sourceSection(
+            activityViews,
+            after: "struct ActivityPostcardView: View",
+            before: "private struct ActivityPostcardArtwork"
+        )
+        let postcardArtwork = try sourceSection(
+            activityViews,
+            after: "private struct ActivityPostcardArtwork: View",
+            before: "struct ActivityCommentsScreen: View"
+        )
+        XCTAssertTrue(activityModule.contains("ActivityPostcardView("))
+        XCTAssertTrue(activityModule.contains("postcardContext"))
         XCTAssertTrue(activityModule.contains("activity.note"))
         XCTAssertTrue(activityModule.contains("activity.rating"))
-        XCTAssertTrue(activityModule.contains("Text(\"“\\(note)”\")"))
-        XCTAssertTrue(activityModule.contains("design: .serif, weight: .medium"))
-        XCTAssertTrue(activityModule.contains(".background(WanderTheme.terracottaTint.color)"))
-        XCTAssertTrue(activityModule.contains("FeedActivityArtwork(activity: activity)"))
-        XCTAssertTrue(activityModule.contains("Button(action: openActivityDestination)"))
-        XCTAssertTrue(activityModule.contains(".frame(height: FeedActivityLayout.artworkHeight)"))
-        XCTAssertTrue(activityModule.contains(".clipped()"))
-        XCTAssertTrue(activityModule.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(postcard.contains("WanderTypography.editorialTitle"))
+        XCTAssertTrue(postcard.contains("Text(\"“\\(note)”\")"))
+        XCTAssertTrue(postcard.contains("design: .serif, weight: .medium"))
+        XCTAssertTrue(postcard.contains(".background(WanderTheme.terracottaTint.color)"))
+        XCTAssertTrue(postcard.contains("ActivityPostcardArtwork("))
+        XCTAssertTrue(postcard.contains("Button(action: artworkAction)"))
+        XCTAssertTrue(postcard.contains(".frame(height: ActivityPostcardLayout.artworkHeight)"))
+        XCTAssertTrue(postcard.contains(".clipped()"))
+        XCTAssertTrue(postcard.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(postcard.contains("context.ticketKind == .wanna ? 12 : 10"))
+        XCTAssertTrue(postcardArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace)"))
         XCTAssertTrue(activityModule.contains("if let place = activity.place"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
-        XCTAssertTrue(activityModule.contains("private var actorAttribution: some View"))
         XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
         XCTAssertTrue(activityModule.contains("feed.activity.\\(activity.id).actor"))
         XCTAssertTrue(activityModule.contains("feed.activity.\\(activity.id).place"))
-        XCTAssertTrue(activityModule.contains("private var destinationHeader: some View"))
-        XCTAssertTrue(activityModule.contains(".clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))"))
-        XCTAssertTrue(activityModule.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
+        XCTAssertTrue(postcard.contains("private var actorAttribution: some View"))
+        XCTAssertTrue(postcard.contains("private var destinationHeader: some View"))
+        XCTAssertTrue(postcard.contains(".clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))"))
+        XCTAssertTrue(postcard.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
+        XCTAssertTrue(postcard.contains("showsCommentButton: showsCommentButton"))
         XCTAssertFalse(activityModule.contains("lightweightActivityRow"))
         XCTAssertFalse(activityModule.contains("Label(\"View place\""))
         XCTAssertFalse(activityModule.contains("FeedMediaRail"))
-        XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
         XCTAssertFalse(activityModule.contains(".checkInTicketSurface("))
         XCTAssertFalse(activityModule.contains("arrow.up.right"))
         XCTAssertFalse(activityModule.contains(".underline("))
@@ -721,6 +740,11 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
+        let activityViews = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Activity/ActivityEngagementViews.swift"
+            )
+        )
         let featuredArtwork = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedPlaceArtwork: View").last?
                 .components(separatedBy: "struct FeedResolvedPlacePhoto: View").first
@@ -743,10 +767,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(resolvedPhoto.contains("Text(\"Google Maps\")"))
 
         let activityArtwork = try XCTUnwrap(
-            feed.components(separatedBy: "private struct FeedActivityArtwork: View").last?
-                .components(separatedBy: "private struct FeedActivityArtworkFallback: View").first
+            activityViews.components(separatedBy: "private struct ActivityPostcardArtwork: View").last?
+                .components(separatedBy: "struct ActivityCommentsScreen: View").first
         )
-        XCTAssertTrue(activityArtwork.contains("FeedResolvedPlacePhoto(place: place)"))
+        XCTAssertTrue(activityArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace)"))
 
         let mapSurface = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
@@ -786,6 +810,9 @@ final class NavigationContractTests: XCTestCase {
 
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
         let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
+        let activityEngagement = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Activity/ActivityEngagementViews.swift")
+        )
         let featuredRail = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedFeaturedRail: View").last?
                 .components(separatedBy: "private struct FeedFeaturedCard: View").first
@@ -818,9 +845,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityList.contains("let save:"))
         XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
-        XCTAssertTrue(activityModule.contains("Text(\"\\(activity.actor.displayName) \\(attributionAction)\")"))
-        XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
-        XCTAssertTrue(activityModule.contains("private var primaryDestinationTitle: some View"))
+        XCTAssertTrue(activityModule.contains("ActivityPostcardView("))
+        XCTAssertTrue(activityEngagement.contains("Text(\"\\(context.actor.displayName) \\(context.attributionAction)\")"))
+        XCTAssertTrue(activityEngagement.contains("Text(context.placeName)"))
+        XCTAssertTrue(activityEngagement.contains("private var primaryDestinationTitle: some View"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
         XCTAssertFalse(activityModule.contains("private var actionButton"))
         XCTAssertFalse(activityModule.contains("Label(\"View place\""))
@@ -1303,11 +1331,16 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
+        let activityViews = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Activity/ActivityEngagementViews.swift"
+            )
+        )
         XCTAssertTrue(feed.contains("WanderTheme.stateInfo.color"))
-        XCTAssertTrue(feed.contains("FeedActivityLayout.artworkHeight"))
-        XCTAssertTrue(feed.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
+        XCTAssertTrue(activityViews.contains("ActivityPostcardLayout.artworkHeight"))
+        XCTAssertTrue(activityViews.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
         XCTAssertTrue(feed.contains("activity.resolvedTicketKind"))
-        XCTAssertFalse(feed.contains(".checkInTicketSurface("))
+        XCTAssertFalse(activityViews.contains(".checkInTicketSurface("))
         XCTAssertFalse(feed.contains("DROPPED A PIN"))
     }
 

@@ -84,6 +84,10 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(commentButton.isHittable)
         commentButton.tap()
         XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.otherElements["comments.activity.postcard"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["Open comments"].exists)
+        capture("rec-337-comments-postcard")
         app.navigationBars["comments"].buttons.firstMatch.tap()
 
         let saveButton = app.buttons.matching(
@@ -127,6 +131,14 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertFalse(profileApp.buttons["place-profile.back"].exists)
     }
 
+    func testWannaBadgeVisualScale() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
+
+        app.swipeUp()
+        capture("rec-337-wanna-badge")
+    }
+
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -144,5 +156,12 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         for _ in 0..<3 where !element.isHittable {
             app.swipeUp()
         }
+    }
+
+    private func capture(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
