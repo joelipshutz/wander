@@ -41,17 +41,23 @@ struct DiscoverScreen: View {
     @State private var lastHandledVisiblePlaceRevision: UInt64?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
+    private let embedsInHostNavigation: Bool
+    private let searchTransitionNamespace: Namespace.ID?
     private let onClose: (() -> Void)?
 
     init(
         requestedSection: Binding<DiscoverSection?> = .constant(nil),
         startsInPlaceSearch: Bool = false,
+        embedsInHostNavigation: Bool = false,
+        searchTransitionNamespace: Namespace.ID? = nil,
         onClose: (() -> Void)? = nil
     ) {
         let initialQuery = Self.resolvedInitialPlaceSearchQuery()
         _requestedSection = requestedSection
         _placesQuery = State(initialValue: initialQuery)
         _isPlaceSearchPresented = State(initialValue: startsInPlaceSearch || !initialQuery.isEmpty)
+        self.embedsInHostNavigation = embedsInHostNavigation
+        self.searchTransitionNamespace = searchTransitionNamespace
         self.onClose = onClose
     }
 
@@ -202,8 +208,20 @@ struct DiscoverScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
+        Group {
+            if embedsInHostNavigation {
+                discoverContent
+            } else {
+                NavigationStack {
+                    discoverContent
+                }
+            }
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .feedSearch)
+    }
+
+    private var discoverContent: some View {
+        VStack(spacing: 0) {
                 if selectedMode == .places, isPlaceSearchPresented {
                     activePlaceSearchHeader
                         .padding(.horizontal, WanderTheme.spacing4)
@@ -406,8 +424,6 @@ struct DiscoverScreen: View {
                 Text(listMessage ?? "")
             }
             .onDisappear(perform: cancelPlaceSearchWork)
-        }
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: .feedSearch)
     }
 
     private func applyRequestedSection() {
@@ -848,6 +864,10 @@ struct DiscoverScreen: View {
                 onClear: { clearPlaceSearch() }
             )
             .focused($searchFieldFocused)
+            .feedSearchMatchedGeometry(
+                in: searchTransitionNamespace,
+                isSource: true
+            )
             .walkthroughTargets([.feedSearchField, .feedSmartSearch])
         }
     }
