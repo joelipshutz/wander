@@ -12,11 +12,9 @@ Geometry used in the mockup:
   photo's lower edge and the card's lower edge in place
 - Text/social content: 12 pt inset below the photo (unchanged)
 
-Launch the debug-only SwiftUI mockup with:
-
-```text
--WanderFeedFeaturedFullBleedMockup
-```
+`FeedFeaturedFullBleedMockup.swift` is intentionally kept outside the app target.
+The screenshots were rendered from this view in a temporary debug-only launch
+harness, then that harness was removed so the branch changes no production code.
 
 Rendered references:
 

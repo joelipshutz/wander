@@ -1,9 +1,8 @@
 #if DEBUG
 import SwiftUI
 
-/// Design-only REC-373 checkpoint. This intentionally does not reuse or alter
-/// `FeedFeaturedCard`; it exists only so the proposed geometry can be rendered
-/// on a simulator before the production implementation changes.
+/// Design-only REC-373 checkpoint. This intentionally lives outside the app
+/// target and does not reuse or alter `FeedFeaturedCard`.
 struct FeedFeaturedFullBleedMockupRoot: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -259,5 +258,9 @@ private enum FeedFeaturedFullBleedMockupMetrics {
     static let cardWidth: CGFloat = 184
     static let cardHeight: CGFloat = 226
     static let fullBleedPhotoHeight: CGFloat = 100
+}
+
+#Preview {
+    FeedFeaturedFullBleedMockupRoot()
 }
 #endif
