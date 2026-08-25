@@ -2377,13 +2377,11 @@ private extension PlaceImportReceiptEntry {
 
 private struct PlaceImportPhotoThumb: View {
     let item: PlaceImportItem
+    let loadsRemotePhoto: Bool
     var size: CGFloat = 52
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
     @State private var presentedMapLocation: PlaceImportMapLocation?
-
-    init(item: PlaceImportItem, loadsRemotePhoto _: Bool, size: CGFloat = 52) {
-        self.item = item
-        self.size = size
-    }
 
     var body: some View {
         Group {
@@ -2401,6 +2399,9 @@ private struct PlaceImportPhotoThumb: View {
                     .accessibilityHidden(true)
             }
         }
+        .task(id: photoTaskID) {
+            await loadPhoto()
+        }
         .sheet(item: $presentedMapLocation) { location in
             PlaceImportLocationMapSheet(location: location)
         }
@@ -2415,9 +2416,44 @@ private struct PlaceImportPhotoThumb: View {
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(item.source.accent)
 
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    canonicalPlaceKey: item.reviewPhotoRequest?.canonicalPhotoCacheKey ?? "import:\(item.id)",
+                    placeName: item.displayName,
+                    photoRequest: item.reviewPhotoRequest,
+                    variant: .listThumbnail,
+                    onLoadFailure: { failedPhoto in
+                        if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
+                            self.photo = nil
+                        }
+                    }
+                )
+            }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+    }
+
+    private var photoTaskID: String {
+        "\(loadsRemotePhoto)|\(item.reviewPhotoRequest?.lookupKey ?? "none")"
+    }
+
+    private func loadPhoto() async {
+        guard loadsRemotePhoto, let request = item.reviewPhotoRequest else {
+            photo = nil
+            return
+        }
+        do {
+            let resolvedPhoto = try await backend.placePhoto(
+                for: request.rendering(.listThumbnail)
+            )
+            try Task.checkCancellation()
+            photo = resolvedPhoto
+        } catch {
+            guard !Task.isCancelled else { return }
+            photo = nil
+        }
     }
 }
 

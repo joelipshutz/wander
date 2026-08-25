@@ -1719,13 +1719,14 @@ struct FeedResolvedPlacePhoto: View {
     let place: VisiblePlace
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
+    @State private var failedGooglePhotoID: String?
 
     private var sheetPlace: PlaceSheetPlace {
         PlaceSheetPlace(visiblePlace: place)
     }
 
     private var photoResolutionKey: String {
-        sheetPlace.photoLookupKey
+        "\(sheetPlace.photoLookupKey)|\(failedGooglePhotoID ?? "ready")"
     }
 
     var body: some View {
@@ -1735,7 +1736,7 @@ struct FeedResolvedPlacePhoto: View {
                     photo: photo,
                     canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
-                    photoRequest: nil,
+                    photoRequest: sheetPlace.photoRequest,
                     variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
@@ -1754,11 +1755,19 @@ struct FeedResolvedPlacePhoto: View {
         photo = nil
 
         do {
-            let resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: sheetPlace.photoRequest.rendering(.feed)
+            )
             try Task.checkCancellation()
-            guard resolutionKey == photoResolutionKey,
-                  resolvedPhoto.isUserVisitPhoto
-            else { return }
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
             photo = resolvedPhoto
         } catch is CancellationError {
             return
@@ -1770,7 +1779,11 @@ struct FeedResolvedPlacePhoto: View {
 
     private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
         guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
-        photo = nil
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else {
+            photo = nil
+        }
     }
 }
 

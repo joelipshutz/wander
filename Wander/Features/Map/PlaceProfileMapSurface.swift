@@ -765,12 +765,31 @@ private struct PlaceProfilePreviewCard: View {
         }
 
         do {
-            let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.card)
+            )
             try Task.checkCancellation()
-            if visibleUserPhoto.isUserVisitPhoto,
-               await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
+
+            if remotePhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: remotePhoto.providerPrimaryType,
+                    types: remotePhoto.providerTypes ?? [],
+                    backend: backend
+                )
+            }
+
+            if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
                 return
             }
+
+            if remotePhoto.isGooglePlacesPhoto {
+                let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+                if await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
+                    return
+                }
+            }
+
             await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         } catch is CancellationError {
             return
@@ -833,7 +852,10 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var synchronouslyCachedPhoto: ListPlaceResolvedPhoto? {
-        guard let candidate = localPhoto,
+        let candidate = place.isDroppedPin
+            ? localPhoto
+            : backend.cachedPlacePhoto(for: place.photoRequest.rendering(.card))
+        guard let candidate,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                   photoKey: candidate.cacheKey,
@@ -1069,6 +1091,7 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
     @State private var galleryHasMore = true
@@ -1211,6 +1234,9 @@ private struct PlaceProfileFullView: View {
             .id(context.id)
             .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
         }
+        .task(id: place.photoLookupKey) {
+            await reloadProviderPhoto()
+        }
         .task(id: place.id) {
             await reloadVisibleUserPhotos()
         }
@@ -1315,9 +1341,24 @@ private struct PlaceProfileFullView: View {
 
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
+            providerPhoto: providerPhoto,
             userPhotos: userPhotos,
             excludingUserPhotoIDs: store.deletedVisitPhotoReferenceIDs
         )
+    }
+
+    private func reloadProviderPhoto() async {
+        if place.id.hasPrefix("walkthrough_place_") {
+            providerPhoto = nil
+            reconcileSelectedPhoto()
+            return
+        }
+
+        providerPhoto = nil
+        let resolvedProvider = await resolvedProviderPhoto()
+        guard !Task.isCancelled else { return }
+        providerPhoto = resolvedProvider
+        reconcileSelectedPhoto()
     }
 
     private func reloadVisibleUserPhotos() async {
@@ -1341,6 +1382,34 @@ private struct PlaceProfileFullView: View {
         galleryHasMore = firstPage?.hasMore ?? false
         isLoadingGallery = false
         reconcileSelectedPhoto()
+    }
+
+    private func resolvedProviderPhoto() async -> PlacePhoto? {
+        do {
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.profile)
+            )
+            try Task.checkCancellation()
+            if remotePhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: remotePhoto.providerPrimaryType,
+                    types: remotePhoto.providerTypes ?? [],
+                    backend: backend
+                )
+                return remotePhoto
+            }
+            return nil
+        } catch is CancellationError {
+            return nil
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.debug(
+                "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            return nil
+        }
     }
 
     private func resolvedUserPhotoPage(
@@ -1404,8 +1473,14 @@ private struct PlaceProfileFullView: View {
     }
 
     private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
-        userPhotos.removeAll {
-            $0.photo.providerPlaceID == failedPhoto.providerPlaceID
+        if failedPhoto.isGooglePlacesPhoto {
+            if providerPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+                providerPhoto = nil
+            }
+        } else {
+            userPhotos.removeAll {
+                $0.photo.providerPlaceID == failedPhoto.providerPlaceID
+            }
         }
         reconcileSelectedPhoto()
     }
@@ -2673,6 +2748,32 @@ struct PlaceProfilePhotoImage: View {
 private struct PlaceProfileLoadedImage {
     let key: String
     let image: UIImage
+}
+
+private struct PlaceProfilePhotoThumb: View {
+    let place: PlaceSheetPlace
+    let photo: PlacePhoto?
+    let size: CGFloat
+    let onLoadFailure: (PlacePhoto) -> Void
+
+    var body: some View {
+        ZStack {
+            PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: size)
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                    placeName: place.name,
+                    photoRequest: place.photoRequest,
+                    variant: .listThumbnail,
+                    onLoadFailure: onLoadFailure
+                )
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+            }
+        }
+        .frame(width: size, height: size)
+    }
 }
 
 private struct PlaceProfileMapFallback: View {

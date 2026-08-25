@@ -1039,7 +1039,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testFeedResolvedPhotoLoadsVisibleCheckInWithoutRequestingGoogleImage() async throws {
+    func testFeedResolvedPhotoFallsBackFromBrokenGoogleImageToVisibleCheckInPhoto() async throws {
         let checkInPhotoLoaded = expectation(description: "Visible check-in photo loaded")
         let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
             UIColor.systemTeal.setFill()
@@ -1065,9 +1065,9 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
         await fulfillment(of: [checkInPhotoLoaded], timeout: 2.0)
 
-        XCTAssertEqual(repository.metadataRequestCount, 0)
+        XCTAssertEqual(repository.metadataRequestCount, 1)
         XCTAssertEqual(repository.visibleUserPhotoRequestCount, 1)
-        XCTAssertEqual(repository.requestedImageProviders, ["visit_photo"])
+        XCTAssertEqual(repository.requestedImageProviders, ["google_places", "visit_photo"])
         window.isHidden = true
     }
 

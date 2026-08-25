@@ -1235,7 +1235,6 @@ struct PlacePhoto: Decodable, Equatable {
     var authorAvatarURL: URL? { authorAvatarURLString.flatMap(URL.init(string:)) }
     var sourcePhotoURL: URL? { sourcePhotoURLString.flatMap(URL.init(string:)) }
     var isGooglePlacesPhoto: Bool { provider == "google_places" }
-    var isUserVisitPhoto: Bool { provider == "visit_photo" }
 
     var cacheKey: String {
         [provider, providerPlaceID, storageBucket, storagePath, localAssetRef]

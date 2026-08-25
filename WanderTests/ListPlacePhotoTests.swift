@@ -115,7 +115,7 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
-    func testResolverUsesCategoryArtworkWhenNoUserPhotoExists() async throws {
+    func testResolverFallsBackToGoogleMapsWhenNoUserPhotoExists() async throws {
         let googlePhoto = photo(provider: "google_places", id: "google-photo")
         let repository = RecordingListPlacePhotoRepository(
             visibleUserResult: .failure(TestError.missing),
@@ -132,9 +132,9 @@ final class ListPlacePhotoTests: XCTestCase {
             backend: backend
         )
 
-        XCTAssertNil(resolved)
-        XCTAssertEqual(repository.metadataCalls, [.visibleUser])
-        XCTAssertEqual(repository.imageRequests, [])
+        XCTAssertEqual(resolved?.photo, googlePhoto)
+        XCTAssertEqual(repository.metadataCalls, [.visibleUser, .provider])
+        XCTAssertEqual(repository.imageRequests, [googlePhoto.providerPlaceID])
     }
 
     @MainActor
@@ -186,13 +186,13 @@ final class ListPlacePhotoTests: XCTestCase {
             backend: backend
         )
 
-        XCTAssertNil(resolved)
-        XCTAssertEqual(repository.metadataCalls, [])
-        XCTAssertEqual(repository.imageRequests, [])
+        XCTAssertEqual(resolved?.photo, googlePhoto)
+        XCTAssertEqual(repository.metadataCalls, [.provider])
+        XCTAssertEqual(repository.imageRequests, [googlePhoto.providerPlaceID])
     }
 
     @MainActor
-    func testResolverUsesCategoryArtworkWhenUserPhotoCannotRender() async throws {
+    func testResolverFallsBackToGoogleMapsWhenUserPhotoCannotRender() async throws {
         let userPhoto = photo(provider: "visit_photo", id: "broken-user-photo")
         let googlePhoto = photo(provider: "google_places", id: "fallback-google-photo")
         let repository = RecordingListPlacePhotoRepository(
@@ -213,11 +213,11 @@ final class ListPlacePhotoTests: XCTestCase {
             backend: backend
         )
 
-        XCTAssertNil(resolved)
-        XCTAssertEqual(repository.metadataCalls, [.visibleUser])
+        XCTAssertEqual(resolved?.photo, googlePhoto)
+        XCTAssertEqual(repository.metadataCalls, [.visibleUser, .provider])
         XCTAssertEqual(
             repository.imageRequests,
-            [userPhoto.providerPlaceID]
+            [userPhoto.providerPlaceID, googlePhoto.providerPlaceID]
         )
     }
 
@@ -245,7 +245,7 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
-    func testResolverReturnsNilAfterMissingUserPhoto() async {
+    func testResolverReturnsNilAfterTerminalProviderFailure() async {
         let repository = RecordingListPlacePhotoRepository(
             visibleUserResult: .failure(TestError.missing),
             providerResult: .failure(TestError.missing),
@@ -262,7 +262,7 @@ final class ListPlacePhotoTests: XCTestCase {
         )
 
         XCTAssertNil(resolved)
-        XCTAssertEqual(repository.metadataCalls, [.visibleUser])
+        XCTAssertEqual(repository.metadataCalls, [.visibleUser, .provider])
         XCTAssertEqual(repository.imageRequests, [])
     }
 

@@ -51,22 +51,19 @@ enum PlaceCardPresentation {
               (1 ... 5).contains(providerScore)
         else { return nil }
 
-        guard let providerDisplayName = providerDisplayName(providerName) else {
-            return nil
-        }
         return PlaceCardRatingPresentation(
             score: providerScore,
             count: providerCount.flatMap { $0 >= 0 ? $0 : nil },
-            source: .provider(displayName: providerDisplayName)
+            source: .provider(displayName: providerDisplayName(providerName))
         )
     }
 
-    private static func providerDisplayName(_ value: String?) -> String? {
+    private static func providerDisplayName(_ value: String?) -> String {
         switch value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "yelp":
             "Yelp"
         case "google", "google_maps", "google_places":
-            nil
+            "Google Maps"
         case "apple", "apple_maps", "mapkit":
             "Apple Maps"
         default:

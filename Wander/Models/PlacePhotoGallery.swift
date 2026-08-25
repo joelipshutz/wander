@@ -36,6 +36,18 @@ struct PlacePhotoGalleryItem: Identifiable, Equatable {
         "\(photo.provider)|\(photo.providerPlaceID)"
     }
 
+    var isGooglePlacesPhoto: Bool {
+        photo.isGooglePlacesPhoto
+    }
+
+    static func google(_ photo: PlacePhoto) -> PlacePhotoGalleryItem {
+        PlacePhotoGalleryItem(
+            photo: photo,
+            contributor: nil,
+            capturedAt: nil,
+            status: nil
+        )
+    }
 }
 
 struct PlacePhotoGalleryPage: Equatable {
@@ -46,15 +58,21 @@ struct PlacePhotoGalleryPage: Equatable {
 
 enum PlacePhotoGalleryPresenter {
     static func items(
+        providerPhoto: PlacePhoto?,
         userPhotos: [PlacePhotoGalleryItem],
         excludingUserPhotoIDs: Set<String> = []
     ) -> [PlacePhotoGalleryItem] {
         var seen = Set<String>()
         var result: [PlacePhotoGalleryItem] = []
 
+        if let providerPhoto, providerPhoto.isGooglePlacesPhoto {
+            let item = PlacePhotoGalleryItem.google(providerPhoto)
+            seen.insert(item.id)
+            result.append(item)
+        }
+
         for item in userPhotos
-        where item.photo.isUserVisitPhoto
-            && item.contributor != nil
+        where item.contributor != nil
             && !excludingUserPhotoIDs.contains(item.photo.providerPlaceID) {
             guard !seen.contains(item.id) else { continue }
             seen.insert(item.id)

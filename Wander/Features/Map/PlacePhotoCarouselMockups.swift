@@ -88,6 +88,7 @@ struct PlacePhotoCarouselMockProfile: Identifiable, Hashable {
 }
 
 enum PlacePhotoCarouselMockPhotoSource: Equatable {
+    case google
     case user(PlacePhotoCarouselMockProfile)
 }
 
@@ -108,6 +109,13 @@ struct PlacePhotoCarouselMockPhoto: Identifiable, Equatable {
 
 enum PlacePhotoCarouselMockPrivacyFilter {
     static func visiblePhotos(from candidates: [PlacePhotoCarouselMockCandidate]) -> [PlacePhotoCarouselMockPhoto] {
+        let googlePhoto = candidates.first { candidate in
+            if case .google = candidate.source {
+                return true
+            }
+            return false
+        }
+
         let userPhotos = candidates.filter { candidate in
             guard case .user = candidate.source else {
                 return false
@@ -117,13 +125,14 @@ enum PlacePhotoCarouselMockPrivacyFilter {
                 && !candidate.isBlocked
         }
 
-        return userPhotos.map {
-            PlacePhotoCarouselMockPhoto(
-                id: $0.id,
-                source: $0.source,
-                imageTileIndex: $0.imageTileIndex
-            )
-        }
+        return ([googlePhoto].compactMap { $0 } + userPhotos)
+            .map {
+                PlacePhotoCarouselMockPhoto(
+                    id: $0.id,
+                    source: $0.source,
+                    imageTileIndex: $0.imageTileIndex
+                )
+            }
     }
 }
 
@@ -191,8 +200,8 @@ enum PlacePhotoCarouselMockData {
             isBlocked: false
         ),
         PlacePhotoCarouselMockCandidate(
-            id: "current-user-photo",
-            source: .user(currentUser),
+            id: "google-photo",
+            source: .google,
             imageTileIndex: 0,
             saveVisibility: .shared,
             profileVisibility: .publicProfile,
@@ -246,14 +255,16 @@ enum PlacePhotoCarouselMockData {
     }
 
     static let hundredVisiblePhotos: [PlacePhotoCarouselMockPhoto] = {
-        (0..<100).map { index in
-            let source = visiblePhotos[index % visiblePhotos.count]
+        let userPhotos = Array(visiblePhotos.dropFirst())
+        let repeatedUserPhotos = (0..<99).map { index in
+            let source = userPhotos[index % userPhotos.count]
             return PlacePhotoCarouselMockPhoto(
-                id: "gallery-photo-\(index + 1)",
+                id: "gallery-photo-\(index + 2)",
                 source: source.source,
                 imageTileIndex: source.imageTileIndex
             )
         }
+        return [visiblePhotos[0]] + repeatedUserPhotos
     }()
 }
 
@@ -539,8 +550,10 @@ private struct PlacePhotoCarouselPager: View {
 
     private func accessibilityLabel(for photo: PlacePhotoCarouselMockPhoto) -> String {
         switch photo.source {
+        case .google:
+            "Place photo"
         case let .user(profile):
-            return "Place photo by \(profile.name)"
+            "Place photo by \(profile.name)"
         }
     }
 }
@@ -664,6 +677,8 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
     private var attribution: some View {
         if let selectedPhoto {
             switch selectedPhoto.source {
+            case .google:
+                EmptyView()
             case let .user(profile):
                 HStack(spacing: WanderTheme.spacing3) {
                     PlacePhotoCarouselAvatar(profile: profile, size: 48)
@@ -927,6 +942,8 @@ private struct PlacePhotoCarouselSourceBadge: View {
 
     var body: some View {
         switch photo.source {
+        case .google:
+            EmptyView()
         case let .user(profile):
             HStack(spacing: 7) {
                 PlacePhotoCarouselAvatar(profile: profile, size: 24)
