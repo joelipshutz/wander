@@ -707,13 +707,24 @@ final class NavigationContractTests: XCTestCase {
         )
         let featuredArtwork = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedPlaceArtwork: View").last?
+                .components(separatedBy: "struct FeedResolvedPlacePhoto: View").first
+        )
+        XCTAssertTrue(featuredArtwork.contains("FeedResolvedPlacePhoto(place: place)"))
+
+        let resolvedPhoto = try XCTUnwrap(
+            feed.components(separatedBy: "struct FeedResolvedPlacePhoto: View").last?
                 .components(separatedBy: "private struct FeedLoadingState: View").first
         )
-        XCTAssertTrue(featuredArtwork.contains("@EnvironmentObject private var backend: WanderBackend"))
-        XCTAssertTrue(featuredArtwork.contains("@State private var photo: PlacePhoto?"))
-        XCTAssertTrue(featuredArtwork.contains("await backend.placePhoto("))
-        XCTAssertTrue(featuredArtwork.contains("PlaceProfilePhotoImage("))
-        XCTAssertTrue(featuredArtwork.contains("onLoadFailure:"))
+        XCTAssertTrue(resolvedPhoto.contains("@EnvironmentObject private var backend: WanderBackend"))
+        XCTAssertTrue(resolvedPhoto.contains("@State private var photo: PlacePhoto?"))
+        XCTAssertTrue(resolvedPhoto.contains("@State private var failedGooglePhotoID: String?"))
+        XCTAssertTrue(resolvedPhoto.contains("await backend.placePhoto("))
+        XCTAssertTrue(resolvedPhoto.contains("await backend.visibleUserPlacePhoto("))
+        XCTAssertTrue(resolvedPhoto.contains("photoRequest: sheetPlace.photoRequest"))
+        XCTAssertTrue(resolvedPhoto.contains("variant: .feed"))
+        XCTAssertTrue(resolvedPhoto.contains("PlaceProfilePhotoImage("))
+        XCTAssertTrue(resolvedPhoto.contains("onLoadFailure:"))
+        XCTAssertFalse(resolvedPhoto.contains("Text(\"Google Maps\")"))
 
         let activityThumbnail = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityThumbnail: View").last?
@@ -1415,10 +1426,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(viewerAttribution.contains("userAttributionCard(item: selectedItem, contributor: contributor)"))
-        XCTAssertTrue(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
-        XCTAssertTrue(placeProfile.contains("private func googleAttributionCard"))
-        XCTAssertTrue(placeProfile.contains("Link(\"Photo by \\(authorName)\", destination: authorURL)"))
-        XCTAssertTrue(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
+        XCTAssertFalse(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
+        XCTAssertFalse(placeProfile.contains("private func googleAttributionCard"))
+        XCTAssertFalse(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
 
         XCTAssertTrue(headerAttribution.contains("if let contributor = item.contributor"))
         XCTAssertTrue(headerAttribution.contains("Photo by \\(contributor.displayName)"))

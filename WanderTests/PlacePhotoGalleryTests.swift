@@ -2,6 +2,44 @@ import XCTest
 @testable import Wander
 
 final class PlacePhotoGalleryTests: XCTestCase {
+    func testSharedPreviewSourcesKeepGooglePhotosButRemoveVisibleWatermarks() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourcePaths = [
+            "Wander/Features/Feed/FeedScreen.swift",
+            "Wander/Features/Lists/ListsScreen.swift",
+            "Wander/Features/Profile/ProfileImportViews.swift",
+            "Wander/Features/Map/PlaceProfileMapSurface.swift",
+            "Wander/Features/Map/PlacePhotoCarouselMockups.swift"
+        ]
+        let sources = try sourcePaths.map {
+            try String(
+                contentsOf: projectRoot.appendingPathComponent($0),
+                encoding: .utf8
+            )
+        }
+
+        for source in sources {
+            XCTAssertFalse(source.contains("Text(\"Google Maps\")"))
+            XCTAssertFalse(source.contains("Text(\"Google\")"))
+            XCTAssertFalse(source.contains("Label(\"Google Maps\""))
+        }
+
+        let listResolver = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Lists/ListPlacePhotoResolver.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(sources[0].contains("backend.placePhoto("))
+        XCTAssertTrue(sources[2].contains("backend.placePhoto("))
+        XCTAssertTrue(sources[3].contains("reloadProviderPhoto"))
+        XCTAssertTrue(sources[3].contains("providerPhoto: providerPhoto"))
+        XCTAssertTrue(sources[4].contains("case google"))
+        XCTAssertTrue(listResolver.contains("backend.placePhotos(for: providerRequests)"))
+    }
+
     func testProviderCompletionCanProduceHeaderContentBeforeUserGalleryCompletes() {
         let providerPhoto = photo(provider: "google_places", id: "provider")
 
