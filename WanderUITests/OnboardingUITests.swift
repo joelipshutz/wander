@@ -2252,7 +2252,16 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(disclosure.isHittable)
 
         note.tap()
-        note.typeText("Check-in mode draft")
+        note.typeText("Discard this draft")
+        app.buttons["save.close"].tap()
+        XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
+        saveButton.tap()
+        XCTAssertTrue(statusSelector.waitForExistence(timeout: 3))
+        XCTAssertNotEqual(app.textFields["save.note"].value as? String, "Discard this draft")
+
+        app.textFields["save.note"].tap()
+        app.textFields["save.note"].typeText("Check-in mode draft")
         let wannaChoice = app.buttons["wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)

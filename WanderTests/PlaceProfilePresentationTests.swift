@@ -506,19 +506,11 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(checkIn.initialStatus, .been)
         XCTAssertFalse(checkIn.requiresStatusConfirmation)
         XCTAssertTrue(checkIn.startsOnDetails)
-        XCTAssertEqual(
-            checkIn.flowTitle(status: .been, isShowingDetails: true),
-            "Check in"
-        )
 
         let wanna = base.preselectingStatus(.wannaGo)
         XCTAssertEqual(wanna.initialStatus, .wannaGo)
         XCTAssertFalse(wanna.requiresStatusConfirmation)
         XCTAssertTrue(wanna.startsOnDetails)
-        XCTAssertEqual(
-            wanna.flowTitle(status: .wannaGo, isShowingDetails: true),
-            "Wanna go"
-        )
     }
 
     func testFloatingStatusSelectionPreservesExistingWannaConversionSemantics() {
@@ -553,16 +545,73 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     func testUnifiedSaveModeDraftCacheRestoresBothSwitchDirections() {
-        var cache = MapPlaceSaveModeDraftCache<String>()
-        cache.store("check-in draft", for: .been)
-        cache.store("wanna draft", for: .wannaGo)
+        let checkInPhoto = MapPlaceSavePhotoAttachment(
+            id: UUID(),
+            image: UIImage(),
+            contentType: "image/jpeg",
+            localAssetRef: "check-in-photo",
+            sourcePhotoID: "source-photo",
+            byteSize: 42
+        )
+        let checkIn = MapPlaceSaveModeDraft(
+            visibility: .followers,
+            ratingScore: 4.5,
+            selectedAnswers: ["occasion": ["date night"]],
+            unifiedTags: ["cozy"],
+            note: "check-in draft",
+            visitedAt: Date(timeIntervalSince1970: 100),
+            plannedDate: nil,
+            photoAttachments: [checkInPhoto],
+            selectedInviteeUserIDs: ["friend-1"],
+            isShowingOptionalDetails: true,
+            didLoadSharedVisitInvitees: true,
+            sharedVisitInviteesError: "retry invitees"
+        )
+        let wanna = MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>(
+            visibility: .selfOnly,
+            ratingScore: 2,
+            selectedAnswers: ["occasion": ["solo"]],
+            unifiedTags: ["patio"],
+            note: "wanna draft",
+            visitedAt: Date(timeIntervalSince1970: 200),
+            plannedDate: Date(timeIntervalSince1970: 300),
+            photoAttachments: [],
+            selectedInviteeUserIDs: [],
+            isShowingOptionalDetails: false,
+            didLoadSharedVisitInvitees: false,
+            sharedVisitInviteesError: nil
+        )
+        var cache = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
+        cache.store(checkIn, for: .been)
+        cache.store(wanna, for: .wannaGo)
 
-        XCTAssertEqual(cache.draft(for: .been), "check-in draft")
-        XCTAssertEqual(cache.draft(for: .wannaGo), "wanna draft")
+        let restoredCheckIn = cache.draft(for: .been)
+        XCTAssertEqual(restoredCheckIn?.visibility, checkIn.visibility)
+        XCTAssertEqual(restoredCheckIn?.ratingScore, checkIn.ratingScore)
+        XCTAssertEqual(restoredCheckIn?.selectedAnswers, checkIn.selectedAnswers)
+        XCTAssertEqual(restoredCheckIn?.unifiedTags, checkIn.unifiedTags)
+        XCTAssertEqual(restoredCheckIn?.note, checkIn.note)
+        XCTAssertEqual(restoredCheckIn?.visitedAt, checkIn.visitedAt)
+        XCTAssertEqual(restoredCheckIn?.plannedDate, checkIn.plannedDate)
+        XCTAssertEqual(restoredCheckIn?.photoAttachments.map(\.id), [checkInPhoto.id])
+        XCTAssertEqual(restoredCheckIn?.selectedInviteeUserIDs, checkIn.selectedInviteeUserIDs)
+        XCTAssertEqual(restoredCheckIn?.isShowingOptionalDetails, checkIn.isShowingOptionalDetails)
+        XCTAssertEqual(restoredCheckIn?.didLoadSharedVisitInvitees, checkIn.didLoadSharedVisitInvitees)
+        XCTAssertEqual(restoredCheckIn?.sharedVisitInviteesError, checkIn.sharedVisitInviteesError)
 
-        cache.store("updated check-in draft", for: .been)
-        XCTAssertEqual(cache.draft(for: .been), "updated check-in draft")
-        XCTAssertEqual(cache.draft(for: .wannaGo), "wanna draft")
+        let restoredWanna = cache.draft(for: .wannaGo)
+        XCTAssertEqual(restoredWanna?.visibility, wanna.visibility)
+        XCTAssertEqual(restoredWanna?.ratingScore, wanna.ratingScore)
+        XCTAssertEqual(restoredWanna?.selectedAnswers, wanna.selectedAnswers)
+        XCTAssertEqual(restoredWanna?.unifiedTags, wanna.unifiedTags)
+        XCTAssertEqual(restoredWanna?.note, wanna.note)
+        XCTAssertEqual(restoredWanna?.visitedAt, wanna.visitedAt)
+        XCTAssertEqual(restoredWanna?.plannedDate, wanna.plannedDate)
+        XCTAssertTrue(restoredWanna?.photoAttachments.isEmpty == true)
+        XCTAssertEqual(restoredWanna?.selectedInviteeUserIDs, wanna.selectedInviteeUserIDs)
+        XCTAssertEqual(restoredWanna?.isShowingOptionalDetails, wanna.isShowingOptionalDetails)
+        XCTAssertEqual(restoredWanna?.didLoadSharedVisitInvitees, wanna.didLoadSharedVisitInvitees)
+        XCTAssertNil(restoredWanna?.sharedVisitInviteesError)
     }
 
     func testUnifiedSaveSubmissionPolicyExcludesHiddenModeValues() {

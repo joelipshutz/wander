@@ -7266,50 +7266,6 @@ struct MapPlaceSaveContext: Identifiable {
         return nil
     }
 
-    var title: String {
-        switch mode {
-        case .add:
-            "Check in or Wanna"
-        case .addVisit:
-            hasPriorCheckIn
-                ? CheckInCopy.againAction
-                : "Check in at \(candidate.name)"
-        case .sharedVisit:
-            "Check in from invite"
-        case .editVisit:
-            CheckInCopy.editAction
-        case .editWant:
-            "Edit Wanna"
-        }
-    }
-
-    func flowTitle(status: PlaceStatus, isShowingDetails: Bool) -> String {
-        guard isShowingDetails else {
-            return title
-        }
-
-        if case .add = mode {
-            return status == .wannaGo ? "Wanna go" : "Check in"
-        }
-
-        return title
-    }
-
-    var subtitle: String {
-        switch mode {
-        case .add:
-            "Choose whether to check in or mark it Wanna."
-        case .addVisit:
-            "capture what happened this time."
-        case .sharedVisit(let invitation):
-            "\(invitation.sourceOwnerDisplayName) shared their version. Make yours your own."
-        case .editVisit:
-            "adjust this check-in."
-        case .editWant:
-            "update why this is on your radar."
-        }
-    }
-
     var saveTitle: String {
         switch mode {
         case .add:
