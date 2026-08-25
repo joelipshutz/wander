@@ -2057,7 +2057,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Update Wanna"].exists)
     }
 
-    func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
+    func testFeedInlineSearchCoversEntryEmptyResultsNavigationAndBack() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2077,6 +2077,7 @@ final class OnboardingUITests: XCTestCase {
         let backButton = app.buttons["discover.searchBack"]
         XCTAssertTrue(backButton.waitForExistence(timeout: 2))
         XCTAssertEqual(backButton.label, "Back to Feed")
+        XCTAssertFalse(launcher.isHittable)
         XCTAssertFalse(app.staticTexts["Discover"].exists)
         XCTAssertTrue(app.staticTexts["Try a search"].exists)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
@@ -2098,6 +2099,22 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(searchField.value as? String, "coffee")
         searchField.typeText("\n")
         XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 4))
+
+        let firstPlaceResult = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "rec.me rating")
+        ).firstMatch
+        XCTAssertTrue(firstPlaceResult.waitForExistence(timeout: 4))
+        XCTAssertTrue(firstPlaceResult.isHittable)
+        firstPlaceResult.tap()
+
+        let placeBackButton = app.buttons["place-profile.back"]
+        XCTAssertTrue(placeBackButton.waitForExistence(timeout: 4))
+        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5))
+        leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+        XCTAssertTrue(placeBackButton.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        XCTAssertEqual(searchField.value as? String, "coffee")
 
         app.swipeUp()
         XCTAssertTrue(backButton.exists)
