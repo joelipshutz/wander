@@ -383,6 +383,13 @@ struct PlaceVisibilityStealthToggle: View {
 struct WanderSegmentOption: Identifiable, Equatable {
     let id: String
     let title: String
+    let accessibilityLabel: String?
+
+    init(id: String, title: String, accessibilityLabel: String? = nil) {
+        self.id = id
+        self.title = title
+        self.accessibilityLabel = accessibilityLabel
+    }
 }
 
 enum WanderGlassTone: Equatable {
@@ -795,6 +802,7 @@ struct WanderGlassSegmentedSwitch: View {
                         .modifier(WanderSelectedGlassModifier(isSelected: isSelected))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(option.accessibilityLabel ?? option.title)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }

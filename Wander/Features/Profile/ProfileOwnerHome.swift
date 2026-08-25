@@ -868,42 +868,27 @@ struct ProfileActivityFilterControl: View {
     let wannaCount: Int
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(ProfileActivityFilter.allCases) { filter in
-                Button {
-                    selection = filter
-                } label: {
-                    Text(title(for: filter))
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(
-                            selection == filter
-                                ? WanderTheme.terracottaDark.color
-                                : WanderTheme.textMuted.color
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                        .background(
-                            selection == filter
-                                ? WanderTheme.sunTint.color.opacity(0.72)
-                                : WanderTheme.surfaceBone.color
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                                .stroke(
-                                    selection == filter
-                                        ? WanderTheme.terracotta.color.opacity(0.32)
-                                        : WanderTheme.borderHairline.color,
-                                    lineWidth: 1
-                                )
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(for: filter))
-                .accessibilityAddTraits(selection == filter ? .isSelected : [])
+        WanderGlassSegmentedSwitch(
+            options: ProfileActivityFilter.allCases.map { filter in
+                WanderSegmentOption(
+                    id: filter.rawValue,
+                    title: title(for: filter),
+                    accessibilityLabel: accessibilityLabel(for: filter)
+                )
+            },
+            selection: selectedFilterID
+        )
+        .accessibilityIdentifier("profile.activityFilter")
+    }
+
+    private var selectedFilterID: Binding<String> {
+        Binding(
+            get: { selection.rawValue },
+            set: { id in
+                guard let filter = ProfileActivityFilter(rawValue: id) else { return }
+                selection = filter
             }
-        }
+        )
     }
 
     private func title(for filter: ProfileActivityFilter) -> String {
