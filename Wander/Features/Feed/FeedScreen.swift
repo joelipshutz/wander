@@ -1306,7 +1306,9 @@ private enum FeedFeaturedLayout {
 }
 
 private enum FeedActivityLayout {
-    static let photoSize: CGFloat = 72
+    static let artworkHeight: CGFloat = 154
+    static let contentSpacing: CGFloat = 10
+    static let contentVerticalPadding: CGFloat = 14
 }
 
 private struct FeedActivityModule: View {
@@ -1316,63 +1318,69 @@ private struct FeedActivityModule: View {
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
-        activityTicket
-            .padding(.horizontal, WanderTheme.spacing2)
+        activityCard
     }
 
-    private var activityTicket: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            ticketHeader
-
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    primaryDestinationTitle
-                    compactMetadata
-
-                    if let note = normalizedNote {
-                        Text("“\(note)”")
-                            .font(.system(size: 13, weight: .medium))
-                            .italic()
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+    private var activityCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            activityArtworkDestination
+                .overlay(alignment: .topLeading) {
+                    ticketBadge
+                        .padding(WanderTheme.spacing3)
+                        .allowsHitTesting(false)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                activityThumbnailDestination
-            }
+            VStack(alignment: .leading, spacing: FeedActivityLayout.contentSpacing) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    destinationHeader
+                    compactMetadata
+                }
 
-            if let engagementContext {
-                ActivityEngagementActionRow(
-                    context: engagementContext,
-                    visiblePlace: activity.place
-                )
-                .padding(.top, WanderTheme.spacing1)
+                actorAttribution
+
+                if let note = normalizedNote {
+                    Text("“\(note)”")
+                        .font(.system(.subheadline, design: .serif, weight: .medium))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let engagementContext {
+                    Divider()
+                        .overlay(WanderTheme.borderHairline.color)
+
+                    ActivityEngagementActionRow(
+                        context: engagementContext,
+                        visiblePlace: activity.place
+                    )
+                }
             }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, FeedActivityLayout.contentVerticalPadding)
         }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .checkInTicketSurface(
-            accent: ticketAccent,
-            surface: WanderTheme.surfaceBone.color,
-            surroundingSurface: WanderTheme.canvasWarm.color,
-            notchEdges: .trailing,
-            castsShadow: false,
-            borderWidth: 1.5
-        )
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
     }
 
     @ViewBuilder
-    private var activityThumbnailDestination: some View {
+    private var activityArtworkDestination: some View {
         if activity.place != nil || activity.list != nil {
             Button(action: openActivityDestination) {
-                FeedActivityThumbnail(activity: activity)
+                FeedActivityArtwork(activity: activity)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(activityDestinationAccessibilityLabel)
         } else {
-            FeedActivityThumbnail(activity: activity)
+            FeedActivityArtwork(activity: activity)
         }
     }
 
@@ -1394,48 +1402,66 @@ private struct FeedActivityModule: View {
         return "Activity preview"
     }
 
-    private var ticketHeader: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            Button {
-                openProfile(activity.actor)
-            } label: {
-                HStack(spacing: WanderTheme.spacing2) {
-                    WanderAvatar(
-                        initials: initials(for: activity.actor.displayName),
-                        avatarURL: activity.actor.avatarURL,
-                        size: 32,
-                        color: WanderTheme.skyTint.color
-                    )
+    private var ticketBadge: some View {
+        Label(ticketEyebrow, systemImage: ticketIcon)
+            .font(.system(size: 10, weight: .black, design: .rounded))
+            .tracking(0.7)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(WanderTheme.surfaceBone.color.opacity(0.94))
+            .clipShape(Capsule())
+            .accessibilityLabel(ticketEyebrow.localizedCapitalized)
+    }
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(activity.actor.displayName)
-                            .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .lineLimit(1)
+    private var destinationHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                primaryDestinationTitle
 
-                        Text("\(ticketEyebrow) · \(FeedPresentation.timestampText(for: activity.occurredAt).uppercased())")
-                            .font(.system(size: 9, weight: .black, design: .rounded))
-                            .tracking(0.9)
-                            .foregroundStyle(ticketAccent)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                    }
-                }
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+                Spacer(minLength: WanderTheme.spacing1)
+
+                ratingBadge
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
 
-            Spacer(minLength: WanderTheme.spacing1)
-
-            Image(systemName: ticketIcon)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(ticketAccent)
-                .frame(width: 30, height: 30)
-                .background(ticketAccent.opacity(0.13))
-                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                primaryDestinationTitle
+                ratingBadge
+            }
         }
+    }
+
+    private var actorAttribution: some View {
+        Button {
+            openProfile(activity.actor)
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                WanderAvatar(
+                    initials: initials(for: activity.actor.displayName),
+                    avatarURL: activity.actor.avatarURL,
+                    size: 32,
+                    color: WanderTheme.skyTint.color
+                )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(activity.actor.displayName) \(attributionAction)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(2)
+
+                    Text("\(FeedPresentation.timestampText(for: activity.occurredAt)) · someone you follow")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
     }
 
     @ViewBuilder
@@ -1445,11 +1471,11 @@ private struct FeedActivityModule: View {
                 openPlace(place)
             } label: {
                 Text(place.place.canonicalName)
-                    .font(WanderTypography.editorialCardTitle)
+                    .font(WanderTypography.editorialTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1459,18 +1485,18 @@ private struct FeedActivityModule: View {
                 openList(list)
             } label: {
                 Text(list.name)
-                    .font(WanderTypography.editorialCardTitle)
+                    .font(WanderTypography.editorialTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("View list \(list.name)")
         } else {
             Text("Map activity")
-                .font(WanderTypography.editorialCardTitle)
+                .font(WanderTypography.editorialTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
         }
     }
@@ -1494,8 +1520,6 @@ private struct FeedActivityModule: View {
                     .accessibilityHidden(true)
                 listDestination(list)
             }
-
-            ratingLabel
         }
     }
 
@@ -1505,8 +1529,6 @@ private struct FeedActivityModule: View {
                 Label(metadata, systemImage: metadataIcon)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-
-                ratingLabel
             }
 
             if let list = activity.list, activity.place != nil {
@@ -1528,14 +1550,17 @@ private struct FeedActivityModule: View {
     }
 
     @ViewBuilder
-    private var ratingLabel: some View {
+    private var ratingBadge: some View {
         if let rating = activity.rating {
-            Spacer(minLength: 0)
             Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
-                .fontWeight(.black)
+                .font(.system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(WanderTheme.terracottaDark.color)
+                .padding(.horizontal, 9)
+                .frame(minHeight: 30)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Capsule())
                 .fixedSize(horizontal: true, vertical: false)
-                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating))")
+                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
         }
     }
 
@@ -1579,12 +1604,16 @@ private struct FeedActivityModule: View {
         }
     }
 
-    private var ticketAccent: Color {
+    private var attributionAction: String {
         switch activity.resolvedTicketKind {
-        case .checkIn: WanderTheme.pinSocial.color
-        case .wanna: WanderTheme.stateWarning.color
-        case .list: WanderTheme.terracotta.color
-        case .saved: WanderTheme.categorySage.color
+        case .checkIn:
+            "checked in"
+        case .wanna:
+            "added to Wanna"
+        case .list:
+            activity.kind == .listCreated ? "created a list" : "added this to a list"
+        case .saved:
+            "saved this place"
         }
     }
 
@@ -1632,7 +1661,7 @@ private extension FeedActivity {
     }
 }
 
-private struct FeedActivityThumbnail: View {
+private struct FeedActivityArtwork: View {
     let activity: FeedActivity
 
     var body: some View {
@@ -1664,8 +1693,9 @@ private struct FeedActivityThumbnail: View {
                     .padding(4)
             }
         }
-        .frame(width: FeedActivityLayout.photoSize, height: FeedActivityLayout.photoSize)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .frame(maxWidth: .infinity)
+        .frame(height: FeedActivityLayout.artworkHeight)
+        .clipped()
     }
 }
 

@@ -316,17 +316,11 @@ private struct FeedActivityPlacePostcard: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
                         NavigationLink(value: FeedActivityMockupDestination.placeProfile) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(activity.placeName)
-                                    .font(.system(.title2, design: .serif, weight: .bold))
-                                    .underline(color: WanderTheme.terracotta.color.opacity(0.55))
-                                    .lineLimit(2)
-
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 12, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                            }
-                            .contentShape(Rectangle())
+                            Text(activity.placeName)
+                                .font(.system(.title2, design: .serif, weight: .bold))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .lineLimit(2)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open \(activity.placeName) place profile")

@@ -587,7 +587,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(typeahead.contains(".background(WanderTheme.surfaceRaised.color)"))
     }
 
-    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityACompactTicket() throws {
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityAPlacePostcard() throws {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -613,24 +613,31 @@ final class NavigationContractTests: XCTestCase {
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
-        XCTAssertTrue(activityModule.contains("private var activityTicket: some View"))
+        XCTAssertTrue(activityModule.contains("private var activityCard: some View"))
         XCTAssertTrue(activityModule.contains("activity.resolvedTicketKind"))
-        XCTAssertTrue(activityModule.contains(".checkInTicketSurface("))
-        XCTAssertTrue(activityModule.contains("WanderTypography.editorialCardTitle"))
+        XCTAssertTrue(activityModule.contains("FeedActivityLayout.artworkHeight"))
+        XCTAssertTrue(activityModule.contains("WanderTypography.editorialTitle"))
         XCTAssertTrue(activityModule.contains("activity.note"))
         XCTAssertTrue(activityModule.contains("activity.rating"))
         XCTAssertTrue(activityModule.contains("Text(\"“\\(note)”\")"))
-        XCTAssertTrue(activityModule.contains("FeedActivityThumbnail(activity: activity)"))
+        XCTAssertTrue(activityModule.contains("design: .serif, weight: .medium"))
+        XCTAssertTrue(activityModule.contains(".background(WanderTheme.terracottaTint.color)"))
+        XCTAssertTrue(activityModule.contains("FeedActivityArtwork(activity: activity)"))
         XCTAssertTrue(activityModule.contains("Button(action: openActivityDestination)"))
         XCTAssertTrue(activityModule.contains("if let place = activity.place"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
-        XCTAssertTrue(activityModule.contains("castsShadow: false"))
+        XCTAssertTrue(activityModule.contains("private var actorAttribution: some View"))
+        XCTAssertTrue(activityModule.contains("private var destinationHeader: some View"))
+        XCTAssertTrue(activityModule.contains(".clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))"))
+        XCTAssertTrue(activityModule.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
         XCTAssertFalse(activityModule.contains("lightweightActivityRow"))
         XCTAssertFalse(activityModule.contains("Label(\"View place\""))
         XCTAssertFalse(activityModule.contains("FeedMediaRail"))
         XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
-        XCTAssertFalse(activityModule.contains("maxHeight:"))
+        XCTAssertFalse(activityModule.contains(".checkInTicketSurface("))
+        XCTAssertFalse(activityModule.contains("arrow.up.right"))
+        XCTAssertFalse(activityModule.contains(".underline("))
 
         let featuredCard = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedFeaturedCard: View").last?
@@ -673,11 +680,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(featuredArtwork.contains("PlaceProfilePhotoImage("))
         XCTAssertTrue(featuredArtwork.contains("onLoadFailure:"))
 
-        let activityThumbnail = try XCTUnwrap(
-            feed.components(separatedBy: "private struct FeedActivityThumbnail: View").last?
+        let activityArtwork = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityArtwork: View").last?
                 .components(separatedBy: "private struct FeedActivityArtworkFallback: View").first
         )
-        XCTAssertTrue(activityThumbnail.contains("FeedResolvedPlacePhoto(place: place)"))
+        XCTAssertTrue(activityArtwork.contains("FeedResolvedPlacePhoto(place: place)"))
 
         let mapSurface = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
@@ -749,7 +756,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityList.contains("let save:"))
         XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
-        XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
+        XCTAssertTrue(activityModule.contains("Text(\"\\(activity.actor.displayName) \\(attributionAction)\")"))
         XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
         XCTAssertTrue(activityModule.contains("private var primaryDestinationTitle: some View"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
@@ -1132,7 +1139,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activitySection.contains("LazyVStack"))
     }
 
-    func testMapPlaceCardUsesPhotoBackedRoundedSurfaceWhileHistoryKeepsTickets() throws {
+    func testMapPlaceCardUsesPhotoBackedRoundedSurfaceWhileHistoryKeepsTicketsAndFeedUsesPostcards() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -1235,8 +1242,10 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
         XCTAssertTrue(feed.contains("WanderTheme.stateInfo.color"))
-        XCTAssertTrue(feed.contains("borderWidth: 1.5"))
+        XCTAssertTrue(feed.contains("FeedActivityLayout.artworkHeight"))
+        XCTAssertTrue(feed.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
         XCTAssertTrue(feed.contains("activity.resolvedTicketKind"))
+        XCTAssertFalse(feed.contains(".checkInTicketSurface("))
         XCTAssertFalse(feed.contains("DROPPED A PIN"))
     }
 
