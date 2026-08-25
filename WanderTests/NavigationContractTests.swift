@@ -4046,6 +4046,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("guard addSaveFlow?.id == sourceContextID else { return }"))
         XCTAssertTrue(addScreen.contains("return [MapPlaceSaveFlowSheet.compactDetent, .large]"))
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
+        let restoredAddFlow = try sourceSection(
+            addScreen,
+            after: "private func restoreActiveSaveFlowIfNeeded()",
+            before: "private func restoreLegacyWalkthroughSaveWithoutDraftIfNeeded()"
+        )
+        XCTAssertFalse(restoredAddFlow.contains("resolvingExistingSave"))
 
         XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
         XCTAssertFalse(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))

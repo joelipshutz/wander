@@ -6165,6 +6165,18 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(draft.form.plannedDate, plannedDate)
         XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
         XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
+
+        guard case .add = sourceContext.mode else {
+            return XCTFail("A restored Plus draft must retain its unresolved source context")
+        }
+        let checkInContext = sourceContext.preselectingStatus(.been)
+        guard case .addVisit = checkInContext.mode else {
+            return XCTFail("A restored Wanna draft must be able to switch to Check in")
+        }
+        let wannaContext = sourceContext.preselectingStatus(.wannaGo)
+        guard case .editWant = wannaContext.mode else {
+            return XCTFail("A restored Wanna draft must be able to switch back to Wanna")
+        }
     }
 
     func testFollowersAndFollowingUseGraphEdges() {

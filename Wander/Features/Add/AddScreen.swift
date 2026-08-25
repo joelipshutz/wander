@@ -1161,15 +1161,12 @@ struct AddScreen: View {
         pendingVisitPhotoAttachments = draft.form.photoAttachments.compactMap(
             MapPlaceSavePhotoAttachment.restore
         )
-        var context = addCandidateContext(
+        let context = addCandidateContext(
             draft.candidate,
             sourceType: draft.sourceType,
             defaultVisibility: draft.form.selectedVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
         )
-        if draft.form.step == .details {
-            context = context.resolvingExistingSave(selection: draft.form.selectedStatus)
-        }
         addSaveFlow = context
         selectedDetent = MapPlaceSaveFlowSheet.compactDetent
     }
