@@ -326,7 +326,6 @@ final class ListPlacePhotoSelectionCache {
 final class ListPlacePhotoBatcher {
     struct Resolution {
         let photo: PlacePhoto?
-        let providerLookupAttempted: Bool
         let wasCancelled: Bool
     }
 
@@ -389,10 +388,10 @@ final class ListPlacePhotoBatcher {
 
         let resolutions = await pending.task?.value ?? [:]
         guard !Task.isCancelled else {
-            return Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: true)
+            return Resolution(photo: nil, wasCancelled: true)
         }
         return resolutions[request.canonicalPhotoCacheKey]
-            ?? Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: false)
+            ?? Resolution(photo: nil, wasCancelled: false)
     }
 
     private func resolve(
@@ -412,39 +411,21 @@ final class ListPlacePhotoBatcher {
             }
             do {
                 let visiblePhotos = try await backend.visibleUserPlacePhotos(for: userRequests)
-                for result in visiblePhotos {
+                for result in visiblePhotos where result.photo.isUserVisitPhoto {
                     photosByCanonicalKey[result.canonicalPlaceKey] = result.photo
                 }
             } catch is CancellationError {
                 return cancelledResolutions(for: requests)
             } catch {
-                // A missing user photo is expected; provider coverage follows.
+                // Missing user photos fall through to category artwork.
             }
         }
-
-        let providerRequests = requests.filter {
-            photosByCanonicalKey[$0.canonicalPhotoCacheKey] == nil
-        }
-        if !providerRequests.isEmpty {
-            do {
-                let providerPhotos = try await backend.placePhotos(for: providerRequests)
-                for result in providerPhotos {
-                    photosByCanonicalKey[result.canonicalPlaceKey] = result.photo
-                }
-            } catch is CancellationError {
-                return cancelledResolutions(for: requests)
-            } catch {
-                // Preserve any user photos already selected for this batch.
-            }
-        }
-        let providerKeys = Set(providerRequests.map(\.canonicalPhotoCacheKey))
         return Dictionary(
             uniqueKeysWithValues: requests.map {
                 (
                     $0.canonicalPhotoCacheKey,
                     Resolution(
                         photo: photosByCanonicalKey[$0.canonicalPhotoCacheKey],
-                        providerLookupAttempted: providerKeys.contains($0.canonicalPhotoCacheKey),
                         wasCancelled: false
                     )
                 )
@@ -459,7 +440,7 @@ final class ListPlacePhotoBatcher {
             uniqueKeysWithValues: requests.map {
                 (
                     $0.canonicalPhotoCacheKey,
-                    Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: true)
+                    Resolution(photo: nil, wasCancelled: true)
                 )
             }
         )
@@ -487,6 +468,7 @@ enum ListPlacePhotoResolver {
         )
         let selectedPhoto = selectionCache.photo(for: key) ?? preferredUserPhoto
         guard let selectedPhoto,
+              selectedPhoto.isUserVisitPhoto,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: request.canonicalPhotoCacheKey,
                   photoKey: selectedPhoto.cacheKey,
@@ -563,22 +545,6 @@ enum ListPlacePhotoResolver {
             if let resolved { return resolved }
         }
 
-        guard !batchResolution.providerLookupAttempted else { return nil }
-
-        // A selected user photo can disappear between metadata and Storage.
-        // Provider fallback is deliberately individual because this is a rare
-        // recovery path, not normal list loading.
-        if let providerPhoto = try? await backend.placePhoto(for: request),
-           let resolved = await render(
-               providerPhoto,
-               canonicalPlaceKey: request.canonicalPhotoCacheKey,
-               backend: backend,
-               targetPixelSize: targetPixelSize,
-               attemptedPhotoKeys: &attemptedPhotoKeys
-           ) {
-            selectionCache.insert(resolved.photo, for: selectionKey)
-            return resolved
-        }
         return nil
     }
 
@@ -589,6 +555,7 @@ enum ListPlacePhotoResolver {
         targetPixelSize: Int,
         attemptedPhotoKeys: inout Set<String>
     ) async -> ListPlaceResolvedPhoto? {
+        guard photo.isUserVisitPhoto else { return nil }
         guard attemptedPhotoKeys.insert(photo.cacheKey).inserted else { return nil }
 
         if let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(

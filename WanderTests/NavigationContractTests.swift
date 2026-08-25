@@ -648,7 +648,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(featuredCard.contains("Label(\"View place\""))
     }
 
-    func testFeedFeaturedRailAndMapTicketResolveRealPhotosBeforeFallbackArtwork() throws {
+    func testFeedFeaturedRailAndMapTicketResolveUserPhotosBeforeFallbackArtwork() throws {
         let fixtureURL = projectRoot
             .appendingPathComponent("WanderTests/Fixtures/rec-161-photo-fallback-pre.json")
         let fixtureData = try Data(contentsOf: fixtureURL)
@@ -665,13 +665,23 @@ final class NavigationContractTests: XCTestCase {
         )
         let featuredArtwork = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedPlaceArtwork: View").last?
+                .components(separatedBy: "struct FeedResolvedPlacePhoto: View").first
+        )
+        XCTAssertTrue(featuredArtwork.contains("FeedResolvedPlacePhoto(place: place)"))
+
+        let resolvedPhoto = try XCTUnwrap(
+            feed.components(separatedBy: "struct FeedResolvedPlacePhoto: View").last?
                 .components(separatedBy: "private struct FeedLoadingState: View").first
         )
-        XCTAssertTrue(featuredArtwork.contains("@EnvironmentObject private var backend: WanderBackend"))
-        XCTAssertTrue(featuredArtwork.contains("@State private var photo: PlacePhoto?"))
-        XCTAssertTrue(featuredArtwork.contains("await backend.placePhoto("))
-        XCTAssertTrue(featuredArtwork.contains("PlaceProfilePhotoImage("))
-        XCTAssertTrue(featuredArtwork.contains("onLoadFailure:"))
+        XCTAssertTrue(resolvedPhoto.contains("@EnvironmentObject private var backend: WanderBackend"))
+        XCTAssertTrue(resolvedPhoto.contains("@State private var photo: PlacePhoto?"))
+        XCTAssertTrue(resolvedPhoto.contains("await backend.visibleUserPlacePhoto("))
+        XCTAssertTrue(resolvedPhoto.contains("resolvedPhoto.isUserVisitPhoto"))
+        XCTAssertFalse(resolvedPhoto.contains("await backend.placePhoto("))
+        XCTAssertTrue(resolvedPhoto.contains("photoRequest: nil"))
+        XCTAssertTrue(resolvedPhoto.contains("variant: .feed"))
+        XCTAssertTrue(resolvedPhoto.contains("PlaceProfilePhotoImage("))
+        XCTAssertTrue(resolvedPhoto.contains("onLoadFailure:"))
 
         let activityThumbnail = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityThumbnail: View").last?
@@ -1373,10 +1383,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(viewerAttribution.contains("userAttributionCard(item: selectedItem, contributor: contributor)"))
-        XCTAssertTrue(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
-        XCTAssertTrue(placeProfile.contains("private func googleAttributionCard"))
-        XCTAssertTrue(placeProfile.contains("Link(\"Photo by \\(authorName)\", destination: authorURL)"))
-        XCTAssertTrue(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
+        XCTAssertFalse(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
+        XCTAssertFalse(placeProfile.contains("private func googleAttributionCard"))
+        XCTAssertFalse(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
 
         XCTAssertTrue(headerAttribution.contains("if let contributor = item.contributor"))
         XCTAssertTrue(headerAttribution.contains("Photo by \\(contributor.displayName)"))
@@ -3804,17 +3813,17 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(placeProfile.contains("place.photoRequest.rendering(.card)"))
+        XCTAssertFalse(placeProfile.contains("place.photoRequest.rendering(.card)"))
         XCTAssertTrue(placeProfile.contains("variant: .card"))
-        XCTAssertTrue(placeProfile.contains("place.photoRequest.rendering(.profile)"))
+        XCTAssertTrue(placeProfile.contains("place.photoRequest"))
         XCTAssertTrue(placeProfile.contains("variant: .profile"))
         XCTAssertTrue(placeProfile.contains("variant: .fullscreen"))
-        XCTAssertTrue(lists.contains("request.rendering(.listThumbnail)"))
+        XCTAssertFalse(lists.contains("request.rendering(.listThumbnail)"))
         XCTAssertTrue(lists.contains("variant: .listThumbnail"))
-        XCTAssertTrue(feed.contains("sheetPlace.photoRequest.rendering(.feed)"))
+        XCTAssertFalse(feed.contains("sheetPlace.photoRequest.rendering(.feed)"))
         XCTAssertTrue(feed.contains("variant: .feed"))
-        XCTAssertTrue(imports.contains("request.rendering(.listThumbnail)"))
-        XCTAssertTrue(imports.contains("variant: .listThumbnail"))
+        XCTAssertFalse(imports.contains("request.rendering(.listThumbnail)"))
+        XCTAssertFalse(imports.contains("variant: .listThumbnail"))
     }
 
     func testPlaceProfileActionsKeepTheStandardRailAndExposeEveryWalkthroughAction() throws {

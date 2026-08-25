@@ -88,7 +88,6 @@ struct PlacePhotoCarouselMockProfile: Identifiable, Hashable {
 }
 
 enum PlacePhotoCarouselMockPhotoSource: Equatable {
-    case google
     case user(PlacePhotoCarouselMockProfile)
 }
 
@@ -109,13 +108,6 @@ struct PlacePhotoCarouselMockPhoto: Identifiable, Equatable {
 
 enum PlacePhotoCarouselMockPrivacyFilter {
     static func visiblePhotos(from candidates: [PlacePhotoCarouselMockCandidate]) -> [PlacePhotoCarouselMockPhoto] {
-        let googlePhoto = candidates.first { candidate in
-            if case .google = candidate.source {
-                return true
-            }
-            return false
-        }
-
         let userPhotos = candidates.filter { candidate in
             guard case .user = candidate.source else {
                 return false
@@ -125,14 +117,13 @@ enum PlacePhotoCarouselMockPrivacyFilter {
                 && !candidate.isBlocked
         }
 
-        return ([googlePhoto].compactMap { $0 } + userPhotos)
-            .map {
-                PlacePhotoCarouselMockPhoto(
-                    id: $0.id,
-                    source: $0.source,
-                    imageTileIndex: $0.imageTileIndex
-                )
-            }
+        return userPhotos.map {
+            PlacePhotoCarouselMockPhoto(
+                id: $0.id,
+                source: $0.source,
+                imageTileIndex: $0.imageTileIndex
+            )
+        }
     }
 }
 
@@ -200,8 +191,8 @@ enum PlacePhotoCarouselMockData {
             isBlocked: false
         ),
         PlacePhotoCarouselMockCandidate(
-            id: "google-photo",
-            source: .google,
+            id: "current-user-photo",
+            source: .user(currentUser),
             imageTileIndex: 0,
             saveVisibility: .shared,
             profileVisibility: .publicProfile,
@@ -255,16 +246,14 @@ enum PlacePhotoCarouselMockData {
     }
 
     static let hundredVisiblePhotos: [PlacePhotoCarouselMockPhoto] = {
-        let userPhotos = Array(visiblePhotos.dropFirst())
-        let repeatedUserPhotos = (0..<99).map { index in
-            let source = userPhotos[index % userPhotos.count]
+        (0..<100).map { index in
+            let source = visiblePhotos[index % visiblePhotos.count]
             return PlacePhotoCarouselMockPhoto(
-                id: "gallery-photo-\(index + 2)",
+                id: "gallery-photo-\(index + 1)",
                 source: source.source,
                 imageTileIndex: source.imageTileIndex
             )
         }
-        return [visiblePhotos[0]] + repeatedUserPhotos
     }()
 }
 
@@ -550,10 +539,8 @@ private struct PlacePhotoCarouselPager: View {
 
     private func accessibilityLabel(for photo: PlacePhotoCarouselMockPhoto) -> String {
         switch photo.source {
-        case .google:
-            "Google Maps place photo"
         case let .user(profile):
-            "Place photo by \(profile.name)"
+            return "Place photo by \(profile.name)"
         }
     }
 }
@@ -677,77 +664,53 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
     private var attribution: some View {
         if let selectedPhoto {
             switch selectedPhoto.source {
-            case .google:
-                HStack(spacing: WanderTheme.spacing3) {
-                    Image(systemName: "map.fill")
-                        .font(.system(size: 18, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Google Maps place photo")
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text("Always first in this gallery")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-
-                    Spacer()
-                }
-                .padding(WanderTheme.spacing3)
-                .frame(maxWidth: .infinity, minHeight: 88)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 24))
             case let .user(profile):
                 HStack(spacing: WanderTheme.spacing3) {
-                    PlacePhotoCarouselAvatar(profile: profile, size: 48)
+                PlacePhotoCarouselAvatar(profile: profile, size: 48)
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                mockAttributionName(profile.name)
-                                mockAttributionTimestamp
-                            }
-                            .fixedSize(horizontal: true, vertical: false)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                mockAttributionName(profile.name)
-                                mockAttributionTimestamp
-                            }
+                VStack(alignment: .leading, spacing: 0) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            mockAttributionName(profile.name)
+                            mockAttributionTimestamp
                         }
-
-                        Button {
-                            onOpenProfile(profile)
-                        } label: {
-                            Text("@\(profile.handle)")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.stateSuccess.color)
-                                .underline()
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                                .allowsTightening(true)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open @\(profile.handle)'s profile")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .layoutPriority(1)
-
-                    Spacer(minLength: WanderTheme.spacing2)
-
-                    Text("check-in")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(height: 38)
-                        .background(Color(red: 0.88, green: 0.94, blue: 0.91))
-                        .clipShape(Capsule())
                         .fixedSize(horizontal: true, vertical: false)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            mockAttributionName(profile.name)
+                            mockAttributionTimestamp
+                        }
+                    }
+
+                    Button {
+                        onOpenProfile(profile)
+                    } label: {
+                        Text("@\(profile.handle)")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WanderTheme.stateSuccess.color)
+                            .underline()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .allowsTightening(true)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open @\(profile.handle)'s profile")
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                Text("check-in")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(height: 38)
+                    .background(Color(red: 0.88, green: 0.94, blue: 0.91))
+                    .clipShape(Capsule())
+                    .fixedSize(horizontal: true, vertical: false)
+            }
                 .padding(WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 96)
                 .background(Color.white)
@@ -964,14 +927,6 @@ private struct PlacePhotoCarouselSourceBadge: View {
 
     var body: some View {
         switch photo.source {
-        case .google:
-            Label("Google Maps", systemImage: "map.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 36)
-                .background(Color.black.opacity(0.66))
-                .clipShape(Capsule())
         case let .user(profile):
             HStack(spacing: 7) {
                 PlacePhotoCarouselAvatar(profile: profile, size: 24)

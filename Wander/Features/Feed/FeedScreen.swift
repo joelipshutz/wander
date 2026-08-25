@@ -1721,14 +1721,13 @@ struct FeedResolvedPlacePhoto: View {
     let place: VisiblePlace
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
-    @State private var failedGooglePhotoID: String?
 
     private var sheetPlace: PlaceSheetPlace {
         PlaceSheetPlace(visiblePlace: place)
     }
 
     private var photoResolutionKey: String {
-        "\(sheetPlace.photoLookupKey)|\(failedGooglePhotoID ?? "ready")"
+        sheetPlace.photoLookupKey
     }
 
     var body: some View {
@@ -1738,24 +1737,10 @@ struct FeedResolvedPlacePhoto: View {
                     photo: photo,
                     canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
-                    photoRequest: sheetPlace.photoRequest,
+                    photoRequest: nil,
                     variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
-                .overlay(alignment: .bottomTrailing) {
-                    if photo.isGooglePlacesPhoto {
-                        Text("Google Maps")
-                            .font(.system(size: 8, weight: .regular))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .frame(minHeight: 16)
-                            .background(Color.black.opacity(0.68))
-                            .clipShape(Capsule())
-                            .padding(4)
-                            .allowsHitTesting(false)
-                    }
-                }
             } else {
                 Color.clear
                     .accessibilityHidden(true)
@@ -1771,19 +1756,11 @@ struct FeedResolvedPlacePhoto: View {
         photo = nil
 
         do {
-            let remotePhoto = try await backend.placePhoto(
-                for: sheetPlace.photoRequest.rendering(.feed)
-            )
+            let resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
             try Task.checkCancellation()
-            let resolvedPhoto: PlacePhoto
-            if remotePhoto.isGooglePlacesPhoto,
-               remotePhoto.providerPlaceID == failedGooglePhotoID {
-                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
-            } else {
-                resolvedPhoto = remotePhoto
-            }
-            try Task.checkCancellation()
-            guard resolutionKey == photoResolutionKey else { return }
+            guard resolutionKey == photoResolutionKey,
+                  resolvedPhoto.isUserVisitPhoto
+            else { return }
             photo = resolvedPhoto
         } catch is CancellationError {
             return
@@ -1795,11 +1772,7 @@ struct FeedResolvedPlacePhoto: View {
 
     private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
         guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
-        if failedPhoto.isGooglePlacesPhoto {
-            failedGooglePhotoID = failedPhoto.providerPlaceID
-        } else {
-            photo = nil
-        }
+        photo = nil
     }
 }
 

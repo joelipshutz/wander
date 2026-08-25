@@ -37,8 +37,8 @@ final class PlaceCardPresentationTests: XCTestCase {
         XCTAssertEqual(rating.providerDisplayName, "Yelp")
     }
 
-    func testMissingRecmeRatingFallsBackToActualProvider() throws {
-        let rating = try XCTUnwrap(
+    func testMissingRecmeRatingDoesNotExposeGoogleProviderRating() {
+        XCTAssertNil(
             PlaceCardPresentation.rating(
                 providerScore: 4.6,
                 providerCount: 51,
@@ -46,10 +46,6 @@ final class PlaceCardPresentationTests: XCTestCase {
                 providerName: "google_places"
             )
         )
-
-        XCTAssertEqual(rating.score, 4.6)
-        XCTAssertEqual(rating.count, 51)
-        XCTAssertEqual(rating.source, .provider(displayName: "Google Maps"))
     }
 
     func testMissingRecmeAndProviderRatingsOmitRating() {

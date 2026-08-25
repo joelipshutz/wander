@@ -55,61 +55,42 @@ final class PlacePhotoCarouselMockupTests: XCTestCase {
         )
     }
 
-    func testPrivacyFilterPlacesGoogleFirstAndExcludesIneligibleUserPhotos() {
+    func testPrivacyFilterKeepsEligibleUserPhotosAndExcludesPrivatePhotos() {
         let visible = PlacePhotoCarouselMockPrivacyFilter.visiblePhotos(
             from: PlacePhotoCarouselMockData.candidates
         )
 
         XCTAssertEqual(
             visible.map(\.id),
-            ["google-photo", "maya-photo", "sofia-photo", "andrew-photo"]
+            ["maya-photo", "current-user-photo", "sofia-photo", "andrew-photo"]
         )
-        guard case .google = visible.first?.source else {
-            return XCTFail("The Google Maps place photo must lead every gallery")
-        }
         XCTAssertFalse(visible.contains { $0.id == "stealth-photo" })
         XCTAssertFalse(visible.contains { $0.id == "private-profile-photo" })
         XCTAssertFalse(visible.contains { $0.id == "blocked-photo" })
     }
 
-    func testPrivacyFilterStillReturnsEligibleUserPhotosWithoutGoogle() {
-        let candidates = PlacePhotoCarouselMockData.candidates.filter { candidate in
-            if case .google = candidate.source {
-                return false
-            }
-            return true
-        }
-
+    func testPrivacyFilterReturnsOnlyUserPhotos() {
         XCTAssertEqual(
-            PlacePhotoCarouselMockPrivacyFilter.visiblePhotos(from: candidates).map(\.id),
-            ["maya-photo", "sofia-photo", "andrew-photo"]
+            PlacePhotoCarouselMockPrivacyFilter.visiblePhotos(
+                from: PlacePhotoCarouselMockData.candidates
+            ).map(\.source).count,
+            4
         )
     }
 
-    func testHundredPhotoFixtureKeepsOneGooglePhotoAtFront() {
+    func testHundredPhotoFixtureContainsOnlyUniqueUserPhotos() {
         let photos = PlacePhotoCarouselMockData.hundredVisiblePhotos
 
         XCTAssertEqual(photos.count, 100)
-        guard case .google = photos[0].source else {
-            return XCTFail("The Google Maps place photo must remain first")
-        }
-        XCTAssertEqual(
-            photos.dropFirst().filter {
-                if case .google = $0.source {
-                    return true
-                }
-                return false
-            }.count,
-            0
-        )
+        XCTAssertFalse(photos.contains { $0.id.localizedCaseInsensitiveContains("google") })
         XCTAssertEqual(Set(photos.map(\.id)).count, photos.count)
     }
 
     func testViewerFixtureExercisesLongCurrentUserAttribution() {
         let photos = PlacePhotoCarouselMockData.viewerPhotos
 
-        XCTAssertEqual(photos[1].id, "maya-photo")
-        guard case let .user(profile) = photos[1].source else {
+        XCTAssertEqual(photos[0].id, "maya-photo")
+        guard case let .user(profile) = photos[0].source else {
             return XCTFail("The viewer should start on a representative user photo")
         }
         XCTAssertEqual(profile.name, "You")

@@ -765,31 +765,12 @@ private struct PlaceProfilePreviewCard: View {
         }
 
         do {
-            let remotePhoto = try await backend.placePhoto(
-                for: place.photoRequest.rendering(.card)
-            )
+            let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
             try Task.checkCancellation()
-
-            if remotePhoto.isGooglePlacesPhoto {
-                await store.applyProviderCategoryEnrichment(
-                    placeID: place.id,
-                    primaryType: remotePhoto.providerPrimaryType,
-                    types: remotePhoto.providerTypes ?? [],
-                    backend: backend
-                )
-            }
-
-            if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
+            if visibleUserPhoto.isUserVisitPhoto,
+               await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
                 return
             }
-
-            if remotePhoto.isGooglePlacesPhoto {
-                let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
-                if await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
-                    return
-                }
-            }
-
             await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         } catch is CancellationError {
             return
@@ -852,10 +833,7 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var synchronouslyCachedPhoto: ListPlaceResolvedPhoto? {
-        let candidate = place.isDroppedPin
-            ? localPhoto
-            : backend.cachedPlacePhoto(for: place.photoRequest.rendering(.card))
-        guard let candidate,
+        guard let candidate = localPhoto,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                   photoKey: candidate.cacheKey,
@@ -1015,10 +993,6 @@ private struct PlaceCardProviderRatingBadge: View {
                     Text("Yelp")
                 }
                 .foregroundStyle(Color(red: 0.84, green: 0.12, blue: 0.16))
-            case "Google Maps":
-                Image("BrandGoogleMaps")
-                    .resizable()
-                    .scaledToFit()
             case "Apple Maps":
                 Image(systemName: "apple.logo")
                     .foregroundStyle(.white)
@@ -1094,7 +1068,6 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
-    @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
     @State private var galleryHasMore = true
@@ -1218,9 +1191,6 @@ private struct PlaceProfileFullView: View {
             )
             .id(context.id)
         }
-        .task(id: place.photoLookupKey) {
-            await reloadProviderPhoto()
-        }
         .task(id: place.id) {
             await reloadVisibleUserPhotos()
         }
@@ -1325,24 +1295,9 @@ private struct PlaceProfileFullView: View {
 
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
-            providerPhoto: providerPhoto,
             userPhotos: userPhotos,
             excludingUserPhotoIDs: store.deletedVisitPhotoReferenceIDs
         )
-    }
-
-    private func reloadProviderPhoto() async {
-        if place.id.hasPrefix("walkthrough_place_") {
-            providerPhoto = nil
-            reconcileSelectedPhoto()
-            return
-        }
-
-        providerPhoto = nil
-        let resolvedProvider = await resolvedProviderPhoto()
-        guard !Task.isCancelled else { return }
-        providerPhoto = resolvedProvider
-        reconcileSelectedPhoto()
     }
 
     private func reloadVisibleUserPhotos() async {
@@ -1366,34 +1321,6 @@ private struct PlaceProfileFullView: View {
         galleryHasMore = firstPage?.hasMore ?? false
         isLoadingGallery = false
         reconcileSelectedPhoto()
-    }
-
-    private func resolvedProviderPhoto() async -> PlacePhoto? {
-        do {
-            let remotePhoto = try await backend.placePhoto(
-                for: place.photoRequest.rendering(.profile)
-            )
-            try Task.checkCancellation()
-            if remotePhoto.isGooglePlacesPhoto {
-                await store.applyProviderCategoryEnrichment(
-                    placeID: place.id,
-                    primaryType: remotePhoto.providerPrimaryType,
-                    types: remotePhoto.providerTypes ?? [],
-                    backend: backend
-                )
-                return remotePhoto
-            }
-            return nil
-        } catch is CancellationError {
-            return nil
-        } catch {
-            #if DEBUG
-            WanderDebugLog.remote.debug(
-                "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
-            )
-            #endif
-            return nil
-        }
     }
 
     private func resolvedUserPhotoPage(
@@ -1457,14 +1384,8 @@ private struct PlaceProfileFullView: View {
     }
 
     private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
-        if failedPhoto.isGooglePlacesPhoto {
-            if providerPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
-                providerPhoto = nil
-            }
-        } else {
-            userPhotos.removeAll {
-                $0.photo.providerPlaceID == failedPhoto.providerPlaceID
-            }
+        userPhotos.removeAll {
+            $0.photo.providerPlaceID == failedPhoto.providerPlaceID
         }
         reconcileSelectedPhoto()
     }
@@ -2409,12 +2330,8 @@ private struct PlacePhotoGalleryViewer: View {
 
     @ViewBuilder
     private var attributionCard: some View {
-        if let selectedItem {
-            if let contributor = selectedItem.contributor {
-                userAttributionCard(item: selectedItem, contributor: contributor)
-            } else {
-                googleAttributionCard(photo: selectedItem.photo)
-            }
+        if let selectedItem, let contributor = selectedItem.contributor {
+            userAttributionCard(item: selectedItem, contributor: contributor)
         }
     }
 
@@ -2496,55 +2413,6 @@ private struct PlacePhotoGalleryViewer: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(WanderTheme.textMuted.color)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func googleAttributionCard(photo: PlacePhoto) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "map.fill")
-                .font(.system(size: 20, weight: .black))
-                .foregroundStyle(WanderTheme.stateSuccess.color)
-                .frame(width: 48, height: 48)
-                .background(WanderTheme.categorySage.color.opacity(0.22))
-                .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Google Maps")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-
-                if let authorName = photo.authorName, !authorName.isEmpty {
-                    if let authorURL = photo.authorProfileURL {
-                        Link("Photo by \(authorName)", destination: authorURL)
-                            .underline()
-                    } else {
-                        Text("Photo by \(authorName)")
-                    }
-                } else {
-                    Text("Place photo")
-                }
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(WanderTheme.textMuted.color)
-
-            Spacer()
-
-            if let sourceURL = photo.sourcePhotoURL {
-                Link(destination: sourceURL) {
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Open photo in Google Maps")
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.vertical, WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private func statusPill(_ status: PlaceStatus) -> some View {
@@ -2896,47 +2764,6 @@ struct PlaceProfilePhotoImage: View {
 private struct PlaceProfileLoadedImage {
     let key: String
     let image: UIImage
-}
-
-private struct PlaceProfilePhotoThumb: View {
-    let place: PlaceSheetPlace
-    let photo: PlacePhoto?
-    let size: CGFloat
-    let onLoadFailure: (PlacePhoto) -> Void
-
-    var body: some View {
-        ZStack {
-            PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: size)
-            if let photo {
-                PlaceProfilePhotoImage(
-                    photo: photo,
-                    canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
-                    placeName: place.name,
-                    photoRequest: place.photoRequest,
-                    variant: .listThumbnail,
-                    onLoadFailure: onLoadFailure
-                )
-                    .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
-
-                if photo.isGooglePlacesPhoto {
-                    VStack {
-                        Spacer()
-                        Text("Google Maps")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .frame(maxWidth: .infinity, minHeight: 20)
-                            .background(Color.black.opacity(0.68))
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
-                    .allowsHitTesting(false)
-                }
-            }
-        }
-        .frame(width: size, height: size)
-    }
 }
 
 private struct PlaceProfileMapFallback: View {
