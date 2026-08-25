@@ -186,6 +186,7 @@ struct YourMapPrototypeDataset {
     let volume: YourMapPrototypeDataVolume
     let places: [YourMapPrototypePlace]
     let now: Date
+    let initialLens: YourMapPrototypeLens
 
     static func make(
         volume: YourMapPrototypeDataVolume,
@@ -239,16 +240,132 @@ struct YourMapPrototypeDataset {
             )
         }
 
-        return Self(volume: volume, places: places, now: now)
+        let initialLens: YourMapPrototypeLens
+        if volume == .medium || volume == .large {
+            initialLens = YourMapPrototypeLens(
+                statuses: [.been],
+                categories: ["Coffee"],
+                cities: ["Los Angeles"]
+            )
+        } else {
+            initialLens = YourMapPrototypeLens()
+        }
+
+        return Self(
+            volume: volume,
+            places: places,
+            now: now,
+            initialLens: initialLens
+        )
     }
 
-    var initialLens: YourMapPrototypeLens {
-        guard volume == .medium || volume == .large else { return YourMapPrototypeLens() }
-        return YourMapPrototypeLens(
-            statuses: [.been],
-            categories: ["Coffee"],
-            cities: ["Los Angeles"]
+    static func make(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        now: Date = .now
+    ) -> Self {
+        var placesByReferenceID: [String: LocalPlace] = [:]
+        for place in places {
+            var referenceIDs = [place.id, place.localID]
+            if let serverID = place.serverID {
+                referenceIDs.append(serverID)
+            }
+            for referenceID in referenceIDs {
+                placesByReferenceID[referenceID] = place
+            }
+        }
+
+        var latestSaveByPlaceID: [String: (userPlace: LocalUserPlace, place: LocalPlace)] = [:]
+        for userPlace in userPlaces where userPlace.userID == ownerID && userPlace.deletedAt == nil {
+            guard let place = placesByReferenceID[userPlace.placeID],
+                  validCoordinate(latitude: place.latitude, longitude: place.longitude)
+            else { continue }
+
+            if let existing = latestSaveByPlaceID[place.id],
+               existing.userPlace.updatedAt >= userPlace.updatedAt {
+                continue
+            }
+            latestSaveByPlaceID[place.id] = (userPlace, place)
+        }
+
+        let mappedPlaces = latestSaveByPlaceID.values.compactMap { saved -> YourMapPrototypePlace? in
+            let userPlace = saved.userPlace
+            let place = saved.place
+            var savedReferenceIDs = [userPlace.id, userPlace.localID]
+            if let serverID = userPlace.serverID {
+                savedReferenceIDs.append(serverID)
+            }
+            let referenceIDs = Set(savedReferenceIDs)
+            let matchingVisits = visits.filter {
+                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+            }
+            let latestRatedVisit = matchingVisits
+                .filter { $0.ratingScore != nil }
+                .max { $0.visitedAt < $1.visitedAt }
+            let tags = Set(
+                matchingVisits.flatMap(\.tags)
+                    + userPlace.historicalWantTags
+            )
+            let resolvedCategory = userPlace.categoryOverride
+                ?? userPlace.viewerPrimaryCategory
+                ?? place.primaryCategory
+            let city = normalized(place.locality, fallback: "Unknown city")
+            let country = CountryCanonicalizer.canonicalName(place.country)
+                ?? normalized(place.country, fallback: "Unknown country")
+            let status: YourMapPrototypeStatus = userPlace.status == .been ? .been : .wanna
+            let lastVisitedAt = matchingVisits.map(\.visitedAt).max()
+                ?? userPlace.visitedAt
+                ?? userPlace.savedAt
+
+            return YourMapPrototypePlace(
+                id: place.id,
+                name: place.canonicalName,
+                latitude: place.latitude,
+                longitude: place.longitude,
+                status: status,
+                category: WanderPlaceCategory.broadCategory(for: resolvedCategory),
+                city: city,
+                country: country,
+                tags: tags,
+                rating: latestRatedVisit?.ratingScore ?? userPlace.ratingScore ?? 0,
+                visitCount: status == .been ? max(matchingVisits.count, 1) : 0,
+                lastVisitedAt: lastVisitedAt
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+
+        return Self(
+            volume: representativeVolume(for: mappedPlaces.count),
+            places: mappedPlaces,
+            now: now,
+            initialLens: YourMapPrototypeLens()
         )
+    }
+
+    private static func representativeVolume(for count: Int) -> YourMapPrototypeDataVolume {
+        switch count {
+        case 0: .empty
+        case 1...6: .small
+        case 7...60: .medium
+        default: .large
+        }
+    }
+
+    private static func normalized(_ value: String?, fallback: String) -> String {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return fallback }
+        return value
+    }
+
+    private static func validCoordinate(latitude: Double, longitude: Double) -> Bool {
+        (-90...90).contains(latitude)
+            && (-180...180).contains(longitude)
+            && !(latitude == 0 && longitude == 0)
     }
 }
 

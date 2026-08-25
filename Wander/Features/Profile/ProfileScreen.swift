@@ -24,6 +24,10 @@ struct ProfileScreen: View {
     @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
+    #if DEBUG
+    @State private var showsYourMapPrototype = false
+    @State private var handledYourMapPrototypeLaunch = false
+    #endif
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -100,6 +104,11 @@ struct ProfileScreen: View {
                 mapSummaryAction: { kind, item in
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
                 },
+                yourMapAction: {
+                    #if DEBUG
+                    showsYourMapPrototype = true
+                    #endif
+                },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
             )
@@ -118,6 +127,12 @@ struct ProfileScreen: View {
                     }
                 }
                 .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
+                #if DEBUG
+                .toolbar(
+                    showsSettings || showsYourMapPrototype ? .hidden : .visible,
+                    for: .tabBar
+                )
+                #endif
                 .sheet(item: $socialGraphTab, onDismiss: {
                     walkthroughs.activate(.profile)
                 }) { tab in
@@ -175,6 +190,16 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
+                #if DEBUG
+                .navigationDestination(isPresented: $showsYourMapPrototype) {
+                    YourMapPrototypeScreen(
+                        dataset: yourMapPrototypeDataset,
+                        initialMode: YourMapPrototypeLaunchConfiguration.mode(),
+                        initialShowsSharePreview: YourMapPrototypeLaunchConfiguration.shouldPresentSharePreview()
+                    )
+                    .toolbar(.hidden, for: .tabBar)
+                }
+                #endif
                 .navigationDestination(isPresented: $showsVisitInvitations) {
                     SharedVisitInvitationInboxScreen { invitation in
                         showsVisitInvitations = false
@@ -206,6 +231,17 @@ struct ProfileScreen: View {
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
         }
+        #if DEBUG
+        .task {
+            guard !handledYourMapPrototypeLaunch,
+                  YourMapPrototypeLaunchConfiguration.shouldPresent()
+            else { return }
+
+            handledYourMapPrototypeLaunch = true
+            await Task.yield()
+            showsYourMapPrototype = true
+        }
+        #endif
         .task(id: calendarLaunchRequest?.id) {
             guard let request = calendarLaunchRequest else {
                 activeCalendarLaunchRequest = nil
@@ -319,6 +355,18 @@ struct ProfileScreen: View {
             dataRevision: store.presentationRevision
         )
     }
+
+    #if DEBUG
+    private var yourMapPrototypeDataset: YourMapPrototypeDataset {
+        let projection = store.currentUserCalendarProjection
+        return YourMapPrototypeDataset.make(
+            ownerID: store.currentUser.id,
+            userPlaces: projection.userPlaces,
+            visits: projection.visits,
+            places: projection.places
+        )
+    }
+    #endif
 
     private var profileStats: ProfileStats {
         store.currentUserCalendarProjection.profileStats(
@@ -703,6 +751,7 @@ struct ProfileDetailView: View {
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
                             },
+                            yourMapAction: nil,
                             calendarScrollRequestID: nil,
                             onCalendarScrollRequestHandled: { _ in }
                         )

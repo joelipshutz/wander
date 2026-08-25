@@ -164,4 +164,80 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(mediumLens.categories, ["Coffee"])
         XCTAssertEqual(mediumLens.cities, ["Los Angeles"])
     }
+
+    func testProfileDatasetUsesTheOwnersRealPlacesVisitsAndTags() throws {
+        let now = Date(timeIntervalSince1970: 1_787_623_200)
+        let place = LocalPlace(
+            localID: "place-local",
+            canonicalName: "Juniper Coffee",
+            category: "cafe",
+            locality: "Los Angeles",
+            country: "United States",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let userPlace = LocalUserPlace(
+            localID: "save-local",
+            userID: "owner",
+            placeID: place.id,
+            status: .been,
+            visibility: .selfOnly,
+            ratingScore: 4.5,
+            visitedAt: now,
+            sourceType: "manual"
+        )
+        let visit = LocalPlaceVisit(
+            localID: "visit-local",
+            userPlaceID: userPlace.id,
+            visitedAt: now,
+            ratingScore: 4.5,
+            tags: ["calm", "morning"]
+        )
+
+        let dataset = YourMapPrototypeDataset.make(
+            ownerID: "owner",
+            userPlaces: [userPlace],
+            visits: [visit],
+            places: [place],
+            now: now
+        )
+        let result = try XCTUnwrap(dataset.places.first)
+
+        XCTAssertEqual(dataset.volume, .small)
+        XCTAssertEqual(dataset.initialLens, YourMapPrototypeLens())
+        XCTAssertEqual(result.id, place.id)
+        XCTAssertEqual(result.name, "Juniper Coffee")
+        XCTAssertEqual(result.city, "Los Angeles")
+        XCTAssertEqual(result.country, "United States")
+        XCTAssertEqual(result.tags, ["calm", "morning"])
+        XCTAssertEqual(result.rating, 4.5)
+        XCTAssertEqual(result.visitCount, 1)
+    }
+
+    func testProfilePreviewPushesAFullMapWithoutReplicaBottomNavigation() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let yourMapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeScreen.swift")
+        )
+        let sharedScheme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/xcshareddata/xcschemes/Wander.xcscheme")
+        )
+
+        XCTAssertTrue(profileHome.contains("ProfileYourMapPreview"))
+        XCTAssertTrue(profileScreen.contains(".navigationDestination(isPresented: $showsYourMapPrototype)"))
+        XCTAssertTrue(profileScreen.contains("showsSettings || showsYourMapPrototype"))
+        XCTAssertTrue(profileScreen.contains(".toolbar(.hidden, for: .tabBar)"))
+        XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? \"Your Map\" : \"Patterns\")"))
+        XCTAssertFalse(yourMapScreen.contains("YourMapPrototypeTabBar"))
+        XCTAssertFalse(yourMapScreen.contains("navigationBarBackButtonHidden"))
+        XCTAssertFalse(sharedScheme.contains("-WanderShowYourMapPrototype"))
+    }
 }

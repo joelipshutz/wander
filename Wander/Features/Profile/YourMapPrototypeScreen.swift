@@ -4,7 +4,6 @@ import SwiftUI
 #if DEBUG
 struct YourMapPrototypeScreen: View {
     let dataset: YourMapPrototypeDataset
-    let dismiss: () -> Void
 
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
@@ -14,18 +13,27 @@ struct YourMapPrototypeScreen: View {
     @State private var isLensSaved = false
 
     init(
-        volume: YourMapPrototypeDataVolume = .medium,
+        dataset: YourMapPrototypeDataset,
         initialMode: YourMapPrototypeMode = .map,
-        initialShowsSharePreview: Bool = false,
-        dismiss: @escaping () -> Void
+        initialShowsSharePreview: Bool = false
     ) {
-        let dataset = YourMapPrototypeDataset.make(volume: volume)
         self.dataset = dataset
-        self.dismiss = dismiss
         _mode = State(initialValue: initialMode)
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
         _cameraPosition = State(initialValue: .region(Self.initialRegion(for: dataset.places)))
+    }
+
+    init(
+        volume: YourMapPrototypeDataVolume = .medium,
+        initialMode: YourMapPrototypeMode = .map,
+        initialShowsSharePreview: Bool = false
+    ) {
+        self.init(
+            dataset: YourMapPrototypeDataset.make(volume: volume),
+            initialMode: initialMode,
+            initialShowsSharePreview: initialShowsSharePreview
+        )
     }
 
     var body: some View {
@@ -56,6 +64,23 @@ struct YourMapPrototypeScreen: View {
         }
         .onChange(of: lens) { _, _ in
             isLensSaved = false
+        }
+        .navigationTitle(mode == .map ? "Your Map" : "Patterns")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if mode == .map {
+                        showsSharePreview = true
+                    } else {
+                        showsFilters = true
+                    }
+                } label: {
+                    Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
+                }
+                .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
+            }
         }
         .accessibilityIdentifier("yourMap.prototype")
     }
@@ -97,11 +122,6 @@ struct YourMapPrototypeScreen: View {
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing2)
                 lensDeck
-                YourMapPrototypeTabBar(
-                    selectedTab: .map,
-                    mapAction: { mode = .map },
-                    profileAction: dismiss
-                )
             }
         }
         .accessibilityIdentifier("yourMap.prototype.map")
@@ -109,37 +129,30 @@ struct YourMapPrototypeScreen: View {
 
     private var mapHeader: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            YourMapPrototypeCircleButton(systemImage: "xmark", label: "Close", action: dismiss)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("your map")
-                    .font(WanderTypography.editorialDisplay)
-                    .lineLimit(1)
-                Button {
-                    showsFilters = true
-                } label: {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Image(systemName: "calendar")
-                        Text(lens.timeRange.title)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .black))
-                    }
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
+            Button {
+                showsFilters = true
+            } label: {
+                HStack(spacing: WanderTheme.spacing1) {
+                    Image(systemName: "calendar")
+                    Text(lens.timeRange.title)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .black))
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("yourMap.prototype.time")
+                .font(WanderTypography.metadata)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("yourMap.prototype.time")
 
             Spacer(minLength: 0)
 
             YourMapPrototypeCircleButton(
-                systemImage: "square.and.arrow.up",
-                label: "Share this lens",
-                action: { showsSharePreview = true }
+                systemImage: "slider.horizontal.3",
+                label: "Filters",
+                action: { showsFilters = true }
             )
         }
         .padding(.horizontal, WanderTheme.spacing4)
@@ -248,7 +261,9 @@ struct YourMapPrototypeScreen: View {
 
     private var patternsWorkspace: some View {
         VStack(spacing: 0) {
-            patternsHeader
+            modePicker
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing3)
             ScrollView {
                 VStack(spacing: WanderTheme.spacing3) {
                     yearComparisonPicker
@@ -273,36 +288,9 @@ struct YourMapPrototypeScreen: View {
                 .padding(.bottom, WanderTheme.spacing6)
             }
             .scrollIndicators(.hidden)
-
-            YourMapPrototypeTabBar(
-                selectedTab: .map,
-                mapAction: { mode = .map },
-                profileAction: dismiss
-            )
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .accessibilityIdentifier("yourMap.prototype.patterns")
-    }
-
-    private var patternsHeader: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            YourMapPrototypeCircleButton(
-                systemImage: "chevron.left",
-                label: "Back to map",
-                action: { mode = .map }
-            )
-            Spacer()
-            Text("patterns")
-                .font(WanderTypography.editorialDisplay)
-            Spacer()
-            YourMapPrototypeCircleButton(
-                systemImage: "slider.horizontal.3",
-                label: "Filters",
-                action: { showsFilters = true }
-            )
-        }
-        .padding(.horizontal, WanderTheme.spacing4)
-        .padding(.vertical, WanderTheme.spacing3)
     }
 
     private var yearComparisonPicker: some View {
@@ -827,12 +815,6 @@ private struct YourMapPrototypeSharePreview: View {
                 .padding(.bottom, WanderTheme.spacing6)
             }
             .scrollIndicators(.hidden)
-
-            YourMapPrototypeTabBar(
-                selectedTab: .map,
-                mapAction: dismiss,
-                profileAction: dismiss
-            )
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
@@ -1080,67 +1062,6 @@ private struct YourMapPrototypeCircleButton: View {
     }
 }
 
-private enum YourMapPrototypeTab: String, CaseIterable, Identifiable {
-    case map
-    case add
-    case discover
-    case profile
-
-    var id: String { rawValue }
-
-    var title: String { rawValue.capitalized }
-
-    var systemImage: String {
-        switch self {
-        case .map: "mappin"
-        case .add: "plus"
-        case .discover: "magnifyingglass"
-        case .profile: "person"
-        }
-    }
-}
-
-private struct YourMapPrototypeTabBar: View {
-    let selectedTab: YourMapPrototypeTab
-    let mapAction: () -> Void
-    let profileAction: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(YourMapPrototypeTab.allCases) { tab in
-                Button {
-                    switch tab {
-                    case .map: mapAction()
-                    case .profile: profileAction()
-                    case .add, .discover: break
-                    }
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: tab == .add ? 19 : 17, weight: .semibold))
-                            .frame(width: tab == .add ? 46 : 30, height: tab == .add ? 46 : 30)
-                            .background(tab == .add ? WanderTheme.terracotta.color : Color.clear, in: Circle())
-                            .foregroundStyle(
-                                tab == .add
-                                    ? WanderTheme.textOnAction.color
-                                    : (tab == selectedTab ? WanderTheme.categoryMoss.color : WanderTheme.textInk.color)
-                            )
-                        Text(tab.title)
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 66)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(tab == selectedTab ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceBone.color)
-        .overlay(alignment: .top) { Divider().overlay(WanderTheme.borderHairline.color) }
-        .accessibilityIdentifier("yourMap.prototype.tabBar")
-    }
-}
-
 private struct YourMapPrototypeBarRow: View {
     let item: YourMapPrototypeBreakdownItem
 
@@ -1315,10 +1236,14 @@ private func categoryColor(_ category: String) -> Color {
 }
 
 #Preview("Your Map Prototype") {
-    YourMapPrototypeScreen(volume: .medium, dismiss: {})
+    NavigationStack {
+        YourMapPrototypeScreen(volume: .medium)
+    }
 }
 
 #Preview("Your Map Prototype Empty") {
-    YourMapPrototypeScreen(volume: .empty, dismiss: {})
+    NavigationStack {
+        YourMapPrototypeScreen(volume: .empty)
+    }
 }
 #endif
