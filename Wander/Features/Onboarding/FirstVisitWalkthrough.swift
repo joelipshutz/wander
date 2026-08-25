@@ -123,7 +123,7 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 13
+    static let version = 14
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
@@ -186,7 +186,6 @@ enum FirstVisitWalkthroughContent {
                 "Have you been here before?",
                 "If so, select Check In. If not, select Wanna Go."
             ),
-            step(.saveFlow, .saveContinue, "Continue to the details", "We’ll fill in an example you can recognize on your map."),
             step(
                 .saveFlow,
                 .saveDate,

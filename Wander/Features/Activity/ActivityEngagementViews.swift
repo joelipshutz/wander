@@ -46,8 +46,6 @@ struct ActivityEngagementActionRow: View {
             } onRemove: { _ in
                 false
             }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
         }
         .fullScreenCover(item: $sharePreviewPresentation) { presentation in
             ActivitySharePreviewScreen(
