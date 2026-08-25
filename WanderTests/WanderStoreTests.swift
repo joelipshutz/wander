@@ -6065,7 +6065,10 @@ final class WanderStoreTests: XCTestCase {
             defaultVisibility: .followers,
             currentUserSave: existingPlace,
             latestVisit: existingVisit
-        ).resolvingExistingSave(selection: .been)
+        ).resolvingInitialEditorContext(startsOnDetails: true, selection: .been)
+        guard case .addVisit = context.mode else {
+            return XCTFail("The defaulted Plus editor must normalize an existing save to add-visit")
+        }
         let submission = MapPlaceSaveSubmission(
             context: context,
             candidate: candidate,
@@ -6091,6 +6094,103 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
         XCTAssertEqual(store.visits(for: firstSave.userPlaceID).count, visitCountBeforeSave + 1)
         XCTAssertEqual(store.visits(for: firstSave.userPlaceID).first?.note, "tutorial revisit")
+        let preservedParent = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        XCTAssertEqual(preservedParent.userPlace.note, "first visit")
+    }
+
+    @MainActor
+    func testPlusRepeatCheckInDraftKeepsLatestVisitDefaults() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_repeat_visit_draft",
+            name: "Repeat Visit Draft Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let firstSave = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes"),
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"])
+            ]
+        )
+        let existingPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        let latestVisit = try XCTUnwrap(store.visits(for: firstSave.userPlaceID).first)
+        let sourceContext = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers,
+            currentUserSave: existingPlace,
+            latestVisit: latestVisit
+        )
+
+        let draft = try XCTUnwrap(
+            PlaceSaveDraft.addFlow(ownerUserID: store.currentUser.id, context: sourceContext)
+        )
+
+        XCTAssertEqual(draft.form.selectedRatingScore, 4)
+        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
+        XCTAssertTrue(draft.form.unifiedTags.isEmpty)
+        XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
+        XCTAssertEqual(draft.baselineVisitLocalID, latestVisit.localID)
+    }
+
+    @MainActor
+    func testPlusExistingWannaDraftKeepsSavedDetails() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let plannedDate = WannaGoDate.normalized(Date().addingTimeInterval(14 * 24 * 60 * 60))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_existing_wanna_draft",
+            name: "Existing Wanna Draft Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let firstSave = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "Try the patio",
+            sourceType: .manual,
+            plannedDate: plannedDate,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes")
+            ]
+        )
+        let existingPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        let sourceContext = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers,
+            currentUserSave: existingPlace,
+            latestVisit: nil
+        )
+
+        let draft = try XCTUnwrap(
+            PlaceSaveDraft.addFlow(ownerUserID: store.currentUser.id, context: sourceContext)
+        )
+
+        XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
+        XCTAssertEqual(draft.form.note, "Try the patio")
+        XCTAssertEqual(draft.form.plannedDate, plannedDate)
+        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
+        XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
     }
 
     func testFollowersAndFollowingUseGraphEdges() {

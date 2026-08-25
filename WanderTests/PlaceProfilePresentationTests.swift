@@ -6,7 +6,7 @@ import XCTest
 final class PlaceProfilePresentationTests: XCTestCase {
     @MainActor
     func testEverySaveEntryPointUsesTheSharedHalfSheetDetent() {
-        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 430)
+        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 560)
         XCTAssertEqual(
             MapPlaceSaveFlowSheet.compactDetent,
             .height(MapPlaceSaveFlowSheet.compactHeight)
@@ -506,11 +506,19 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(checkIn.initialStatus, .been)
         XCTAssertFalse(checkIn.requiresStatusConfirmation)
         XCTAssertTrue(checkIn.startsOnDetails)
+        XCTAssertEqual(
+            checkIn.flowTitle(status: .been, isShowingDetails: true),
+            "Check in"
+        )
 
         let wanna = base.preselectingStatus(.wannaGo)
         XCTAssertEqual(wanna.initialStatus, .wannaGo)
         XCTAssertFalse(wanna.requiresStatusConfirmation)
         XCTAssertTrue(wanna.startsOnDetails)
+        XCTAssertEqual(
+            wanna.flowTitle(status: .wannaGo, isShowingDetails: true),
+            "Wanna go"
+        )
     }
 
     func testFloatingStatusSelectionPreservesExistingWannaConversionSemantics() {

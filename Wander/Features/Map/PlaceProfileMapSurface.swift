@@ -1230,7 +1230,10 @@ private struct PlaceProfileFullView: View {
                 onSave: onAttachedSave,
                 onRemove: onAttachedRemove,
                 onClose: onAttachedClose,
-                onSaveCompleted: onAttachedSaveCompleted
+                onSaveCompleted: { result in
+                    guard attachedSaveContext?.id == context.id else { return }
+                    onAttachedSaveCompleted(result)
+                }
             )
             .id(context.id)
             .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))

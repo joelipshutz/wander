@@ -1408,10 +1408,9 @@ final class NavigationContractTests: XCTestCase {
                 "actionScreenTitle = Font.system(.title, design: .default, weight: .bold)"
             )
         )
-        XCTAssertTrue(saveFlow.contains("Text(flowTitle)\n                    .font(WanderTypography.actionScreenTitle)"))
         XCTAssertTrue(
             saveFlow.contains(
-                "Text(droppedPinDisplayName)\n                        .font(WanderTypography.editorialNamedContent)"
+                "Text(droppedPinDisplayName)\n                    .font(WanderTypography.editorialNamedContent)"
             )
         )
         XCTAssertEqual(saveFlow.components(separatedBy: "WanderTypography.editorial").count - 1, 1)
@@ -2003,7 +2002,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.statusSelector\")"))
         XCTAssertTrue(mapScreen.contains("private struct MapSaveChoiceButton: View"))
         XCTAssertTrue(mapScreen.contains("HStack(spacing: WanderTheme.spacing2)"))
-        XCTAssertTrue(mapScreen.contains(".frame(maxWidth: .infinity, minHeight: 52)"))
+        XCTAssertTrue(mapScreen.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(mapScreen.contains(".frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)"))
+        XCTAssertTrue(mapScreen.contains(".wanderGlassCapsule(tone: isSelected ? .selected : .neutral)"))
         XCTAssertFalse(mapScreen.contains("private struct MapSaveChoicePill: View"))
         XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus)"))
         XCTAssertTrue(mapScreen.contains("sourceContext.preselectingStatus(status)"))
@@ -2014,11 +2015,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains("title: \"continue to details\""))
         XCTAssertFalse(mapScreen.contains("returnToStatusSelection"))
         XCTAssertTrue(mapScreen.contains("walkthroughs.activeSurface != .saveFlow"))
-        XCTAssertEqual(mapScreen.components(separatedBy: "Text(flowTitle)").count - 1, 1)
-        XCTAssertTrue(mapScreen.contains("ZStack {"))
-        XCTAssertTrue(mapScreen.contains(".multilineTextAlignment(.center)"))
-        XCTAssertTrue(mapScreen.contains("alignment: .center"))
-        XCTAssertTrue(mapScreen.contains("Spacer(minLength: 0)"))
+        XCTAssertFalse(mapScreen.contains("Text(flowTitle)"))
+        XCTAssertFalse(mapScreen.contains("private var candidateCard: some View"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.placeHeader\")"))
+        XCTAssertTrue(mapScreen.contains("CategoryThumb("))
+        XCTAssertTrue(mapScreen.contains("Text(candidateSubtitle)"))
+        XCTAssertTrue(mapScreen.contains("Spacer(minLength: WanderTheme.spacing1)"))
         XCTAssertTrue(mapScreen.contains("minWidth: WanderTheme.tapMinimum"))
         XCTAssertTrue(mapScreen.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(mapScreen.contains(".frame(width: 32, height: 32)"))
@@ -3958,7 +3960,7 @@ final class NavigationContractTests: XCTestCase {
             mapScreen
                 .components(separatedBy: "struct MapPlaceSaveEditor: View")
                 .last?
-                .components(separatedBy: "private struct MapSaveChoicePill: View")
+                .components(separatedBy: "private struct MapSaveVisitPhotoSection: View")
                 .first
         )
         let adaptiveImport = try XCTUnwrap(
@@ -4040,7 +4042,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains(".sheet(item: $addSaveFlow"))
         XCTAssertTrue(addScreen.contains("onClose: dismissInlineSaveFlow"))
         XCTAssertTrue(addScreen.contains("onContentExpansionRequested: expandSheet"))
-        XCTAssertTrue(addScreen.contains("onSaveCompleted: completeInlineSaveFlow"))
+        XCTAssertTrue(addScreen.contains("completeInlineSaveFlow(result, sourceContextID: context.id)"))
+        XCTAssertTrue(addScreen.contains("guard addSaveFlow?.id == sourceContextID else { return }"))
         XCTAssertTrue(addScreen.contains("return [MapPlaceSaveFlowSheet.compactDetent, .large]"))
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
 
@@ -4066,7 +4069,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
         XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.resizes)"))
         XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
-        XCTAssertTrue(placeProfile.contains("onSaveCompleted: onAttachedSaveCompleted"))
+        XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))
         XCTAssertFalse(placeProfile.contains("compactDetent"))
         XCTAssertFalse(placeProfile.contains("presentationBackgroundInteraction"))
 
@@ -4076,8 +4079,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
         XCTAssertTrue(sharedEditor.contains("guard saveAttemptedAt == nil else { return }"))
+        XCTAssertTrue(sharedEditor.contains("walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving"))
+        XCTAssertTrue(sharedEditor.contains(".disabled(isSaving || isRemoving)"))
         XCTAssertTrue(sharedEditor.contains(".overlay(alignment: .bottom)"))
-        XCTAssertTrue(sharedEditor.contains("candidateCard"))
+        XCTAssertTrue(sharedEditor.contains(".accessibilityIdentifier(\"save.placeHeader\")"))
         XCTAssertTrue(sharedEditor.contains("placeTypeSection"))
         XCTAssertTrue(sharedEditor.contains("visitParticipationSections"))
         XCTAssertFalse(sharedEditor.contains("presentation == .attached"))
@@ -4186,7 +4191,7 @@ final class NavigationContractTests: XCTestCase {
         let placeTypeSection = try sourceSection(
             mapScreen,
             after: "private var placeTypeSection: some View {",
-            before: "private var candidateCard: some View {"
+            before: "private var candidateSubtitle: String {"
         )
 
         XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))

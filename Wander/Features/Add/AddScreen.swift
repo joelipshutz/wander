@@ -461,7 +461,9 @@ struct AddScreen: View {
             onRemove: { _ in false },
             onClose: dismissInlineSaveFlow,
             onContentExpansionRequested: expandSheet,
-            onSaveCompleted: completeInlineSaveFlow
+            onSaveCompleted: { result in
+                completeInlineSaveFlow(result, sourceContextID: context.id)
+            }
         )
         .id(context.id)
         .onDisappear {
@@ -1219,7 +1221,11 @@ struct AddScreen: View {
         }
     }
 
-    private func completeInlineSaveFlow(_: SaveResult) {
+    private func completeInlineSaveFlow(
+        _: SaveResult,
+        sourceContextID: UUID
+    ) {
+        guard addSaveFlow?.id == sourceContextID else { return }
         placeSaveDraftStore.clear()
         addSaveFlow = nil
         onClose()

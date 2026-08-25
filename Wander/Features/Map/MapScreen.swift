@@ -7288,7 +7288,7 @@ struct MapPlaceSaveContext: Identifiable {
             return title
         }
 
-        if requiresStatusConfirmation {
+        if case .add = mode {
             return status == .wannaGo ? "Wanna go" : "Check in"
         }
 
@@ -7479,7 +7479,9 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: defaultAttributes),
-            initialPhotoAttachments: initialPhotoAttachments
+            initialPhotoAttachments: initialPhotoAttachments,
+            existingCurrentUserSave: visiblePlace,
+            existingLatestVisit: latestVisit
         )
     }
 
@@ -7514,6 +7516,14 @@ struct MapPlaceSaveContext: Identifiable {
             latestVisit: existingLatestVisit,
             initialPhotoAttachments: initialPhotoAttachments
         )
+    }
+
+    func resolvingInitialEditorContext(
+        startsOnDetails: Bool,
+        selection: PlaceStatus
+    ) -> MapPlaceSaveContext {
+        guard startsOnDetails else { return self }
+        return resolvingExistingSave(selection: selection)
     }
 
     func preselectingStatus(_ selection: PlaceStatus) -> MapPlaceSaveContext {
@@ -7912,9 +7922,13 @@ extension PlaceSaveDraft {
         now: Date = .now
     ) -> PlaceSaveDraft? {
         guard case .add = context.mode else { return nil }
+        let initialContext = context.resolvingInitialEditorContext(
+            startsOnDetails: context.startsOnDetails,
+            selection: context.initialStatus
+        )
         return restorableFlow(
             ownerUserID: ownerUserID,
-            context: context,
+            context: initialContext,
             walkthroughContentVersion: walkthroughContentVersion,
             now: now
         )
@@ -8672,8 +8686,17 @@ struct MapPlaceSaveEditor: View {
         onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
+        let restoredForm = draft?.form
+        let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
+            ? .details
+            : (context.startsOnDetails ? .details : .confirm)
+        let initialStatus = restoredForm?.selectedStatus ?? context.initialStatus
+        let initialContext = context.resolvingInitialEditorContext(
+            startsOnDetails: initialStep == .details,
+            selection: initialStatus
+        )
         sourceContext = context
-        _context = State(initialValue: context)
+        _context = State(initialValue: initialContext)
         draftID = draft?.id
         self.onDraftChange = onDraftChange
         self.onSave = onSave
@@ -8681,30 +8704,25 @@ struct MapPlaceSaveEditor: View {
         self.onClose = onClose
         self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
-        let restoredForm = draft?.form
-        let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
-            ? .details
-            : (context.startsOnDetails ? .details : .confirm)
-        let initialAssignment = restoredForm?.selectedAssignment ?? context.candidate.categoryAssignment
-        let initialStatus = restoredForm?.selectedStatus ?? context.initialStatus
+        let initialAssignment = restoredForm?.selectedAssignment ?? initialContext.candidate.categoryAssignment
         let initialVisibility = restoredForm?.selectedVisibility
-            ?? context.initialVisibility.normalizedForStealthMode
+            ?? initialContext.initialVisibility.normalizedForStealthMode
         let initialRatingScore = restoredForm?.selectedRatingScore
-            ?? context.initialRatingScore
+            ?? initialContext.initialRatingScore
             ?? PlaceRating.defaultScore
-        let initialCuisine = restoredForm?.selectedCuisine ?? Self.initialCuisine(for: context)
-        let initialUnifiedTags = restoredForm?.unifiedTags ?? context.initialAnswers
+        let initialCuisine = restoredForm?.selectedCuisine ?? Self.initialCuisine(for: initialContext)
+        let initialUnifiedTags = restoredForm?.unifiedTags ?? initialContext.initialAnswers
             .filter { Self.isUnifiedTagKey($0.key) }
             .values
-            .reduce(into: context.initialPersonalLabels) { result, values in
+            .reduce(into: initialContext.initialPersonalLabels) { result, values in
                 result.formUnion(values)
             }
         let initialAnswers = restoredForm?.selectedAnswers
-            ?? context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+            ?? initialContext.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
         let initialDroppedPinName: String = if restoredForm != nil {
             restoredForm?.droppedPinName ?? ""
         } else {
-            context.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
+            initialContext.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
         }
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
             primaryCategory: initialAssignment.primaryCategory,
@@ -8739,19 +8757,19 @@ struct MapPlaceSaveEditor: View {
         )
         _selectedCuisine = State(initialValue: initialCuisine)
         _droppedPinName = State(initialValue: initialDroppedPinName)
-        _note = State(initialValue: restoredForm?.note ?? context.initialNote)
-        _visitedAt = State(initialValue: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now)
+        _note = State(initialValue: restoredForm?.note ?? initialContext.initialNote)
+        _visitedAt = State(initialValue: restoredForm?.visitedAt ?? initialContext.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
-        let initialPlannedDate = (restoredForm?.plannedDate ?? context.initialPlannedDate)
+        let initialPlannedDate = (restoredForm?.plannedDate ?? initialContext.initialPlannedDate)
             .map { WannaGoDate.normalized($0) }
             .flatMap { $0 >= today ? $0 : nil }
         _plannedDate = State(initialValue: initialPlannedDate)
         let restoredAttachments = restoredForm?.photoAttachments.compactMap(MapPlaceSavePhotoAttachment.restore)
         _visitPhotoAttachments = State(
-            initialValue: restoredAttachments ?? context.initialPhotoAttachments
+            initialValue: restoredAttachments ?? initialContext.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
-        let initialShowsOptionalDetails = context.isNewPlaceAdd
+        let initialShowsOptionalDetails = initialContext.isNewPlaceAdd
             ? true
             : restoredForm?.isShowingOptionalDetails ?? true
         _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
@@ -8763,10 +8781,10 @@ struct MapPlaceSaveEditor: View {
                     ratingScore: initialRatingScore,
                     selectedAnswers: initialAnswers,
                     unifiedTags: initialUnifiedTags,
-                    note: restoredForm?.note ?? context.initialNote,
-                    visitedAt: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now,
+                    note: restoredForm?.note ?? initialContext.initialNote,
+                    visitedAt: restoredForm?.visitedAt ?? initialContext.editedVisit?.visitedAt ?? .now,
                     plannedDate: initialPlannedDate,
-                    photoAttachments: restoredAttachments ?? context.initialPhotoAttachments,
+                    photoAttachments: restoredAttachments ?? initialContext.initialPhotoAttachments,
                     selectedInviteeUserIDs: restoredForm?.selectedInviteeUserIDs ?? [],
                     isShowingOptionalDetails: initialShowsOptionalDetails,
                     didLoadSharedVisitInvitees: false,
@@ -8964,7 +8982,9 @@ struct MapPlaceSaveEditor: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
-        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
+        .interactiveDismissDisabled(
+            walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving
+        )
     }
 
     private var editorBackground: Color {
@@ -8972,67 +8992,65 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            ZStack {
-                Text(flowTitle)
-                    .font(WanderTypography.actionScreenTitle)
+        HStack(spacing: WanderTheme.spacing3) {
+            CategoryThumb(
+                emoji: WanderPlaceCategory.emoji(
+                    for: selectedAssignment,
+                    cuisine: selectedCuisine,
+                    name: context.candidate.name
+                ),
+                size: 44
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(droppedPinDisplayName)
+                    .font(WanderTypography.editorialNamedContent)
                     .foregroundStyle(WanderTheme.textInk.color)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.center)
-                    .frame(
-                        maxWidth: .infinity,
-                        minHeight: WanderTheme.tapMinimum,
-                        alignment: .center
-                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                    Spacer(minLength: 0)
-
-                    if walkthroughs.activeSurface != .saveFlow {
-                        Button {
-                            onClose()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .black))
-                                .frame(
-                                    minWidth: WanderTheme.tapMinimum,
-                                    minHeight: WanderTheme.tapMinimum
-                                )
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .background(WanderTheme.surfaceSand.color)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close")
-                    }
-                }
-            }
-
-            if !isReadyForDetails {
-                Text(context.subtitle)
+                Text(candidateSubtitle)
                     .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: WanderTheme.spacing1)
+
+            if walkthroughs.activeSurface != .saveFlow {
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .black))
+                        .frame(
+                            minWidth: WanderTheme.tapMinimum,
+                            minHeight: WanderTheme.tapMinimum
+                        )
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("save.close")
+                .disabled(isSaving || isRemoving)
             }
         }
         .padding(.top, WanderTheme.spacing1)
-    }
-
-    private var flowTitle: String {
-        return sourceContext.flowTitle(
-            status: selectedStatus,
-            isShowingDetails: isReadyForDetails
-        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("save.placeHeader")
     }
 
     private var singleScreenContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            candidateCard
-
             if sourceContext.requiresStatusConfirmation {
                 MapSavePickerBlock(title: "what do you want to do?") {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        checkInStatusChoice
-                        wannaGoStatusChoice
+                    WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            checkInStatusChoice
+                            wannaGoStatusChoice
+                        }
                     }
                     .walkthroughEmphasis(.saveStatus)
                 }
@@ -9579,50 +9597,6 @@ struct MapPlaceSaveEditor: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color)
         )
-    }
-
-    private var candidateCard: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            CategoryThumb(
-                emoji: WanderPlaceCategory.emoji(
-                    for: selectedAssignment,
-                    cuisine: selectedCuisine,
-                    name: context.candidate.name
-                ),
-                size: 40
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Text(droppedPinDisplayName)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.84)
-
-                    Spacer(minLength: WanderTheme.spacing1)
-
-                    if isReadyForDetails {
-                        Text(selectedStatus.displayTitle)
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .padding(.horizontal, WanderTheme.spacing2)
-                            .padding(.vertical, WanderTheme.spacing1)
-                            .background(WanderTheme.terracottaTint.color)
-                            .clipShape(Capsule())
-                    }
-                }
-
-                Text(candidateSubtitle)
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(2)
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var candidateSubtitle: String {
@@ -10837,17 +10811,17 @@ private struct MapSaveChoiceButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(WanderTypography.label)
+                .font(.system(.subheadline, design: .default, weight: .black))
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, minHeight: 52)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
-                .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color)
+                .foregroundStyle(
+                    isSelected
+                        ? WanderTheme.terracottaDark.color
+                        : WanderTheme.textInk.color
                 )
+                .contentShape(Capsule())
+                .wanderGlassCapsule(tone: isSelected ? .selected : .neutral)
         }
         .buttonStyle(.plain)
         .accessibilityValue(isSelected ? "selected" : "not selected")

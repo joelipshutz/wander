@@ -1692,11 +1692,11 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Show more options"].exists)
+        XCTAssertTrue(app.buttons["Hide more options"].exists)
         note.tap()
         note.typeText("Wanna sunset draft")
 
-        app.buttons["Collapse Wanna"].tap()
+        app.buttons["save.close"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(wanna.isHittable)
         wanna.tap()
@@ -1717,7 +1717,7 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
-        app.buttons["Collapse Wanna"].tap()
+        app.buttons["save.close"].tap()
         XCTAssertTrue(checkIn.isHittable)
         checkIn.tap()
 
@@ -1962,7 +1962,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Show more options"].exists)
+        XCTAssertTrue(app.buttons["Hide more options"].exists)
         XCTAssertEqual(
             note.value as? String,
             "Saved for a low-effort sunset picnic."
@@ -1973,7 +1973,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(editedNote?.contains("Saved for a low-effort sunset picnic.") == true)
         XCTAssertTrue(editedNote?.contains("Updated") == true)
 
-        app.buttons["Collapse Wanna"].tap()
+        app.buttons["save.close"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(wanna.isHittable)
         wanna.tap()
@@ -1986,7 +1986,7 @@ final class OnboardingUITests: XCTestCase {
             editedNote
         )
 
-        app.buttons["Collapse Wanna"].tap()
+        app.buttons["save.close"].tap()
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
         XCTAssertTrue(checkIn.waitForExistence(timeout: 2))
         checkIn.tap()
@@ -2293,4 +2293,6 @@ final class OnboardingUITests: XCTestCase {
         finalCheckIn.tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 5))
     }
+
+
 }

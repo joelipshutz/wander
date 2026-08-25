@@ -6,6 +6,5 @@
   "observed": "Check in requires a status-selection screen, a Continue to details action, and then a separate final Check in action.",
   "expected": "Status selection expands the Check in fields inline on one surface, with only the final Check in submission action.",
   "existing_ui_test": "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
-  "pre_fix_screenshot": "rec-354-single-screen-check-in-pre.png",
-  "pre_fix_video": "/private/tmp/rec354-pre.mov"
+  "pre_fix_screenshot": "rec-354-single-screen-check-in-pre.png"
 }
