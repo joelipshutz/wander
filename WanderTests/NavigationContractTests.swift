@@ -666,10 +666,16 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityModule.contains(".background(WanderTheme.terracottaTint.color)"))
         XCTAssertTrue(activityModule.contains("FeedActivityArtwork(activity: activity)"))
         XCTAssertTrue(activityModule.contains("Button(action: openActivityDestination)"))
+        XCTAssertTrue(activityModule.contains(".frame(height: FeedActivityLayout.artworkHeight)"))
+        XCTAssertTrue(activityModule.contains(".clipped()"))
+        XCTAssertTrue(activityModule.contains(".contentShape(Rectangle())"))
         XCTAssertTrue(activityModule.contains("if let place = activity.place"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
         XCTAssertTrue(activityModule.contains("private var actorAttribution: some View"))
+        XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
+        XCTAssertTrue(activityModule.contains("feed.activity.\\(activity.id).actor"))
+        XCTAssertTrue(activityModule.contains("feed.activity.\\(activity.id).place"))
         XCTAssertTrue(activityModule.contains("private var destinationHeader: some View"))
         XCTAssertTrue(activityModule.contains(".clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))"))
         XCTAssertTrue(activityModule.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
@@ -680,6 +686,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityModule.contains(".checkInTicketSurface("))
         XCTAssertFalse(activityModule.contains("arrow.up.right"))
         XCTAssertFalse(activityModule.contains(".underline("))
+        XCTAssertTrue(activityModule.contains("case .wanna: \"Wanna\""))
+        XCTAssertTrue(feed.contains("private var selectedPlaceDestination: some View"))
+        XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
 
         let featuredCard = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedFeaturedCard: View").last?

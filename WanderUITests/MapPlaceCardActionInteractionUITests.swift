@@ -63,3 +63,86 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         add(attachment)
     }
 }
+
+@MainActor
+final class FeedPostcardInteractionUITests: XCTestCase {
+    func testActionsDoNotOpenTheNextPlace() {
+        let app = launch()
+
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
+
+        let likeButton = app.buttons["Like activity"].firstMatch
+        reveal(likeButton, in: app)
+        XCTAssertTrue(likeButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(likeButton.isHittable)
+        likeButton.tap()
+
+        XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["place-profile.back"].exists)
+
+        let commentButton = app.buttons["Open comments"].firstMatch
+        XCTAssertTrue(commentButton.isHittable)
+        commentButton.tap()
+        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        app.navigationBars["comments"].buttons.firstMatch.tap()
+
+        let saveButton = app.buttons.matching(
+            NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")
+        ).firstMatch
+        reveal(saveButton, in: app)
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(saveButton.isHittable)
+        saveButton.tap()
+
+        let closeSaveButton = app.buttons["save.close"]
+        XCTAssertTrue(closeSaveButton.waitForExistence(timeout: 4))
+        closeSaveButton.tap()
+        XCTAssertFalse(app.buttons["place-profile.back"].exists)
+    }
+
+    func testPlaceAndPersonOpenTheirFullPageDestinations() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
+
+        let placeButton = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.place"]
+        reveal(placeButton, in: app)
+        XCTAssertTrue(placeButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(placeButton.isHittable)
+        placeButton.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 4))
+
+        app.terminate()
+
+        let profileApp = launch()
+        XCTAssertTrue(profileApp.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
+
+        let actorButton = profileApp.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"]
+        reveal(actorButton, in: profileApp)
+        XCTAssertTrue(actorButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(actorButton.isHittable)
+        actorButton.tap()
+
+        XCTAssertTrue(profileApp.staticTexts["Mina"].waitForExistence(timeout: 4))
+        XCTAssertTrue(profileApp.buttons["Back"].firstMatch.exists)
+        XCTAssertFalse(profileApp.buttons["place-profile.back"].exists)
+    }
+
+    private func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab", "discover",
+        ]
+        app.launch()
+        return app
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<3 where !element.isHittable {
+            app.swipeUp()
+        }
+    }
+}

@@ -1437,8 +1437,13 @@ private struct FeedActivityModule: View {
         if activity.place != nil || activity.list != nil {
             Button(action: openActivityDestination) {
                 FeedActivityArtwork(activity: activity)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .frame(height: FeedActivityLayout.artworkHeight)
+            .clipped()
+            .contentShape(Rectangle())
             .accessibilityLabel(activityDestinationAccessibilityLabel)
         } else {
             FeedActivityArtwork(activity: activity)
@@ -1523,6 +1528,7 @@ private struct FeedActivityModule: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
+        .accessibilityIdentifier("feed.activity.\(activity.id).actor")
     }
 
     @ViewBuilder
@@ -1541,6 +1547,7 @@ private struct FeedActivityModule: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(place.place.canonicalName)")
+            .accessibilityIdentifier("feed.activity.\(activity.id).place")
         } else if let list = activity.list {
             Button {
                 openList(list)
@@ -1649,7 +1656,7 @@ private struct FeedActivityModule: View {
     private var ticketEyebrow: String {
         switch activity.resolvedTicketKind {
         case .checkIn: "CHECKED IN"
-        case .wanna: "ADDED TO WANNA"
+        case .wanna: "Wanna"
         case .list:
             activity.kind == .listCreated ? "CREATED A LIST" : "ADDED TO LIST"
         case .saved: "SAVED A PLACE"
@@ -1757,6 +1764,7 @@ private struct FeedActivityArtwork: View {
         .frame(maxWidth: .infinity)
         .frame(height: FeedActivityLayout.artworkHeight)
         .clipped()
+        .contentShape(Rectangle())
     }
 }
 
