@@ -4,12 +4,11 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
-    @MainActor
-    func testEverySaveEntryPointUsesTheSharedHalfSheetDetent() {
-        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 560)
+    func testAttachedSheetUsesCompactAndSystemLargeDetents() {
+        XCTAssertEqual(PlaceSaveAttachedSheet.compactHeight, 430)
         XCTAssertEqual(
-            MapPlaceSaveFlowSheet.compactDetent,
-            .height(MapPlaceSaveFlowSheet.compactHeight)
+            PlaceSaveAttachedSheet.compactDetent,
+            PresentationDetent.height(430)
         )
     }
 
@@ -542,95 +541,6 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
         XCTAssertEqual(wanna.initialStatus, .wannaGo)
         XCTAssertTrue(wanna.startsOnDetails)
-    }
-
-    func testUnifiedSaveModeDraftCacheRestoresBothSwitchDirections() {
-        let checkInPhoto = MapPlaceSavePhotoAttachment(
-            id: UUID(),
-            image: UIImage(),
-            contentType: "image/jpeg",
-            localAssetRef: "check-in-photo",
-            sourcePhotoID: "source-photo",
-            byteSize: 42
-        )
-        let checkIn = MapPlaceSaveModeDraft(
-            visibility: .followers,
-            ratingScore: 4.5,
-            selectedAnswers: ["occasion": ["date night"]],
-            unifiedTags: ["cozy"],
-            note: "check-in draft",
-            visitedAt: Date(timeIntervalSince1970: 100),
-            plannedDate: nil,
-            photoAttachments: [checkInPhoto],
-            selectedInviteeUserIDs: ["friend-1"],
-            isShowingOptionalDetails: true,
-            didLoadSharedVisitInvitees: true,
-            sharedVisitInviteesError: "retry invitees"
-        )
-        let wanna = MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>(
-            visibility: .selfOnly,
-            ratingScore: 2,
-            selectedAnswers: ["occasion": ["solo"]],
-            unifiedTags: ["patio"],
-            note: "wanna draft",
-            visitedAt: Date(timeIntervalSince1970: 200),
-            plannedDate: Date(timeIntervalSince1970: 300),
-            photoAttachments: [],
-            selectedInviteeUserIDs: [],
-            isShowingOptionalDetails: false,
-            didLoadSharedVisitInvitees: false,
-            sharedVisitInviteesError: nil
-        )
-        var cache = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
-        cache.store(checkIn, for: .been)
-        cache.store(wanna, for: .wannaGo)
-
-        let restoredCheckIn = cache.draft(for: .been)
-        XCTAssertEqual(restoredCheckIn?.visibility, checkIn.visibility)
-        XCTAssertEqual(restoredCheckIn?.ratingScore, checkIn.ratingScore)
-        XCTAssertEqual(restoredCheckIn?.selectedAnswers, checkIn.selectedAnswers)
-        XCTAssertEqual(restoredCheckIn?.unifiedTags, checkIn.unifiedTags)
-        XCTAssertEqual(restoredCheckIn?.note, checkIn.note)
-        XCTAssertEqual(restoredCheckIn?.visitedAt, checkIn.visitedAt)
-        XCTAssertEqual(restoredCheckIn?.plannedDate, checkIn.plannedDate)
-        XCTAssertEqual(restoredCheckIn?.photoAttachments.map(\.id), [checkInPhoto.id])
-        XCTAssertEqual(restoredCheckIn?.selectedInviteeUserIDs, checkIn.selectedInviteeUserIDs)
-        XCTAssertEqual(restoredCheckIn?.isShowingOptionalDetails, checkIn.isShowingOptionalDetails)
-        XCTAssertEqual(restoredCheckIn?.didLoadSharedVisitInvitees, checkIn.didLoadSharedVisitInvitees)
-        XCTAssertEqual(restoredCheckIn?.sharedVisitInviteesError, checkIn.sharedVisitInviteesError)
-
-        let restoredWanna = cache.draft(for: .wannaGo)
-        XCTAssertEqual(restoredWanna?.visibility, wanna.visibility)
-        XCTAssertEqual(restoredWanna?.ratingScore, wanna.ratingScore)
-        XCTAssertEqual(restoredWanna?.selectedAnswers, wanna.selectedAnswers)
-        XCTAssertEqual(restoredWanna?.unifiedTags, wanna.unifiedTags)
-        XCTAssertEqual(restoredWanna?.note, wanna.note)
-        XCTAssertEqual(restoredWanna?.visitedAt, wanna.visitedAt)
-        XCTAssertEqual(restoredWanna?.plannedDate, wanna.plannedDate)
-        XCTAssertTrue(restoredWanna?.photoAttachments.isEmpty == true)
-        XCTAssertEqual(restoredWanna?.selectedInviteeUserIDs, wanna.selectedInviteeUserIDs)
-        XCTAssertEqual(restoredWanna?.isShowingOptionalDetails, wanna.isShowingOptionalDetails)
-        XCTAssertEqual(restoredWanna?.didLoadSharedVisitInvitees, wanna.didLoadSharedVisitInvitees)
-        XCTAssertNil(restoredWanna?.sharedVisitInviteesError)
-    }
-
-    func testUnifiedSaveSubmissionPolicyExcludesHiddenModeValues() {
-        XCTAssertEqual(MapPlaceSaveSubmissionPolicy.checkInValue(4.5, status: .been), 4.5)
-        XCTAssertNil(MapPlaceSaveSubmissionPolicy.checkInValue(4.5, status: .wannaGo))
-        XCTAssertEqual(
-            MapPlaceSaveSubmissionPolicy.checkInValues(["photo", "friend"], status: .been),
-            ["photo", "friend"]
-        )
-        XCTAssertEqual(
-            MapPlaceSaveSubmissionPolicy.checkInValues(["photo", "friend"], status: .wannaGo),
-            []
-        )
-        let plannedDate = Date(timeIntervalSince1970: 400)
-        XCTAssertNil(MapPlaceSaveSubmissionPolicy.wannaGoValue(plannedDate, status: .been))
-        XCTAssertEqual(
-            MapPlaceSaveSubmissionPolicy.wannaGoValue(plannedDate, status: .wannaGo),
-            plannedDate
-        )
     }
 
     func testCandidateProfilePreservesProviderPhotoIdentityAndChooseAction() {

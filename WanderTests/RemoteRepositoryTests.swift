@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
-    func testVisiblePlaceDecodesPrivateViewerTaxonomyEnvelopeWithoutPersistingItAsSaveContent() throws {
+    func testVisiblePlaceDecodesDuplicatePrivateViewerTaxonomyEnvelopeWithoutPersistingItAsSaveContent() throws {
         let data = """
         {
           "user_place_id": "up_owner_noun",
@@ -38,6 +38,15 @@ final class RemoteRepositoryTests: XCTestCase {
           "category_override_confidence": null,
           "source_type": "manual",
           "attributes": [
+            {
+              "question_definition_id": null,
+              "question_key": "__viewer_taxonomy_primary_category",
+              "value_type": "text",
+              "value": "bars_nightlife",
+              "prompt": null,
+              "options": [],
+              "is_system": true
+            },
             {
               "question_definition_id": null,
               "question_key": "__viewer_taxonomy_primary_category",

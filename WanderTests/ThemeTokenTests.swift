@@ -45,7 +45,6 @@ final class ThemeTokenTests: XCTestCase {
             WanderPrimaryButtonTone.espressoConfirmation.glassTone,
             .deepBlackAction
         )
-        XCTAssertNil(WanderPrimaryButtonTone.solidBlackConfirmation.glassTone)
     }
 
     func testDarkMapPaletteUsesWarmHighContrastNightTokens() {

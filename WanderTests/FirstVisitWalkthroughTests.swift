@@ -17,7 +17,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
     }
 
     func testCondensedWalkthroughKeepsDormantLessonsButLimitsTheLiveJourney() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 25)
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 26)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -38,6 +38,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?.map(\.target),
             [
                 .saveStatus,
+                .saveContinue,
                 .saveDate,
                 .saveNote,
                 .saveRating,
@@ -494,6 +495,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.forceActivate(.saveStatus)
         coordinator.recordTutorialSelectedStatus(.been)
         coordinator.perform(.saveStatus)
+        coordinator.perform(.saveContinue)
         XCTAssertEqual(coordinator.currentStep?.target, .saveDate)
         XCTAssertFalse(coordinator.canGoBack)
         XCTAssertFalse(try XCTUnwrap(coordinator.currentStep).allowsBackNavigation)
@@ -1535,6 +1537,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.addSearch, transitioningTo: .saveFlow)
         for target in [
             WalkthroughTargetID.saveStatus,
+            .saveContinue,
             .saveDate,
             .saveNote,
             .saveRating,
