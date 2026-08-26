@@ -67,6 +67,69 @@ enum MapSearchPerformancePolicy {
     }
 }
 
+enum MapSearchQueryPolicy {
+    static func fallbackQuery(
+        for query: String,
+        primaryResultNames: [String]
+    ) -> String? {
+        guard lexicalScore(forName: primaryResultNames, query: query) == 0 else {
+            return nil
+        }
+
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard tokens.count > 1 else { return nil }
+
+        var fallback: String?
+        var fallbackLength = 0
+        for token in tokens {
+            let trimmed = token.trimmingCharacters(in: .punctuationCharacters)
+            let length = canonicalText(trimmed).count
+            guard length >= 4, length > fallbackLength else { continue }
+            fallback = trimmed
+            fallbackLength = length
+        }
+
+        return fallback
+    }
+
+    static func lexicalScore(forName name: String, query: String) -> Double {
+        lexicalScore(forName: [name], query: query)
+    }
+
+    private static func lexicalScore(forName names: [String], query: String) -> Double {
+        let normalizedQuery = canonicalText(query)
+        guard !normalizedQuery.isEmpty else { return 0 }
+
+        return names.reduce(0) { bestScore, name in
+            let normalizedName = canonicalText(name)
+            let score: Double
+            if normalizedName == normalizedQuery {
+                score = 1_000
+            } else if normalizedName.hasPrefix(normalizedQuery) {
+                score = 750
+            } else if normalizedName.contains(normalizedQuery) {
+                score = 500
+            } else {
+                score = 0
+            }
+            return max(bestScore, score)
+        }
+    }
+
+    private static func canonicalText(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "’", with: "")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .lowercased()
+    }
+}
+
 struct MapSearchSelectionSession: Equatable {
     private(set) var isActive = false
     private var selectedPlaceGroupKeyAtEntry: String?
@@ -3041,17 +3104,36 @@ struct MapScreen: View {
     }
 
     private func mapKitCandidates(for query: String, limit: Int = 8) async throws -> [PlaceCandidate] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.region = currentSearchRegion
-        request.resultTypes = [.pointOfInterest, .address]
+        let searchRegion = currentSearchRegion
+        var items = try await mapKitItems(for: query, region: searchRegion)
+
+        if let fallbackQuery = MapSearchQueryPolicy.fallbackQuery(
+            for: query,
+            primaryResultNames: items.compactMap(\.name)
+        ) {
+            do {
+                items.append(contentsOf: try await mapKitItems(for: fallbackQuery, region: searchRegion))
+            } catch {
+                guard !Task.isCancelled else { throw CancellationError() }
+            }
+        }
+
         let origin = MapSearchPerformancePolicy.rankingOrigin(
             viewerLocation: mapCardViewerLocation,
-            mapRegion: currentSearchRegion
+            mapRegion: searchRegion
         )
+        return mapKitCandidates(from: items, query: query, origin: origin, limit: limit)
+    }
 
-        let response = try await MKLocalSearch(request: request).start()
-        return mapKitCandidates(from: response.mapItems, query: query, origin: origin, limit: limit)
+    private func mapKitItems(
+        for query: String,
+        region: MKCoordinateRegion
+    ) async throws -> [MKMapItem] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = region
+        request.resultTypes = [.pointOfInterest, .address]
+        return try await MKLocalSearch(request: request).start().mapItems
     }
 
     private func mapKitCandidates(from items: [MKMapItem], query: String?, origin: CLLocation, limit: Int) -> [PlaceCandidate] {
@@ -4083,19 +4165,10 @@ struct MapScreen: View {
     }
 
     private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {
-        let normalizedQuery = Self.normalized(query ?? "")
-        let normalizedName = Self.normalized(item.name ?? "")
-        var score = 0.0
-
-        if !normalizedQuery.isEmpty {
-            if normalizedName == normalizedQuery {
-                score += 1_000
-            } else if normalizedName.hasPrefix(normalizedQuery) {
-                score += 750
-            } else if normalizedName.contains(normalizedQuery) {
-                score += 500
-            }
-        }
+        var score = MapSearchQueryPolicy.lexicalScore(
+            forName: item.name ?? "",
+            query: query ?? ""
+        )
 
         if item.pointOfInterestCategory != nil {
             score += 120

@@ -98,6 +98,66 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertEqual(fallbackOrigin.coordinate.longitude, region.center.longitude)
     }
 
+    func testMapSearchRetriesWithDistinctiveQueryWhenPrimaryResultsMissTheBusinessName() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(map.contains("MapSearchQueryPolicy.fallbackQuery("))
+    }
+
+    func testMapSearchQueryPolicyUsesDistinctiveTokenAfterUnrelatedFuzzyResult() {
+        XCTAssertEqual(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "So Sentimental",
+                primaryResultNames: ["Sorento"]
+            ),
+            "Sentimental"
+        )
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "So Sentimental",
+                query: "So Sentimental"
+            ),
+            1_000
+        )
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "Sorento",
+                query: "So Sentimental"
+            ),
+            0
+        )
+    }
+
+    func testMapSearchQueryPolicyKeepsStrongPrimaryAndSingleWordSearchesUnchanged() {
+        XCTAssertNil(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "So Sentimental",
+                primaryResultNames: ["So Sentimental Coffee"]
+            )
+        )
+        XCTAssertNil(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "Sentimental",
+                primaryResultNames: ["Sorento"]
+            )
+        )
+    }
+
+    func testMapSearchQueryPolicyNormalizesPunctuationAndDiacritics() {
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "J’s Kitchen Café",
+                query: "j's kitchen cafe"
+            ),
+            1_000
+        )
+    }
+
     func testFeaturedRefreshPolicyOnlyFetchesForFeaturedSource() {
         XCTAssertTrue(MapSearchPerformancePolicy.shouldFetchFeatured(for: .featured))
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .friends))
