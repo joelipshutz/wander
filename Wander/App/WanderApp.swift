@@ -135,6 +135,8 @@ struct WanderApp: App {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
+            } else if let inCommonMockupPage = InCommonDesignMockupPage.resolved() {
+                InCommonDesignMockupRoot(page: inCommonMockupPage)
             } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
                 ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let carouselMockupPage = PlacePhotoCarouselMockupPage.resolved() {
