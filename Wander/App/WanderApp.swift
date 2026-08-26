@@ -126,6 +126,8 @@ struct WanderApp: App {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
+            } else if let mapListMockupPage = MapListEntryMockupPage.resolved() {
+                MapListEntryMockupRoot(page: mapListMockupPage)
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
                 InviteMockupRoot(page: inviteMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
