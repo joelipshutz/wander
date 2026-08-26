@@ -2,6 +2,31 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testCancelingMapSearchDoesNotRevealAnUnrelatedPlaceCard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderResetWalkthroughs",
+        ]
+        app.launch()
+
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        XCTAssertFalse(card.exists)
+
+        searchField.tap()
+        searchField.typeText("coffee")
+
+        let cancelButton = app.buttons["map.searchCancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
+        cancelButton.tap()
+
+        XCTAssertFalse(card.waitForExistence(timeout: 2))
+    }
+
     func testMapCardAndSearchDockShareSafeAreaAwareContainerInsets() {
         let app = XCUIApplication()
         app.launchArguments = [

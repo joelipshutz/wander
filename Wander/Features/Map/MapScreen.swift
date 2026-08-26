@@ -71,8 +71,11 @@ struct MapSearchSelectionSession: Equatable {
     private(set) var isActive = false
     private var selectedPlaceGroupKeyAtEntry: String?
 
-    mutating func begin(selectedPlaceGroupKey: String?) {
-        guard !isActive else { return }
+    mutating func focusDidChange(
+        isFocused: Bool,
+        selectedPlaceGroupKey: String?
+    ) {
+        guard isFocused, !isActive else { return }
         isActive = true
         selectedPlaceGroupKeyAtEntry = selectedPlaceGroupKey
     }
@@ -1210,13 +1213,12 @@ struct MapScreen: View {
                 }
             }
             .onChange(of: isMapSearchFocused) { _, isFocused in
+                mapSearchSelectionSession.focusDidChange(
+                    isFocused: isFocused,
+                    selectedPlaceGroupKey: selectedPlaceGroupKey
+                )
                 if isFocused {
-                    mapSearchSelectionSession.begin(
-                        selectedPlaceGroupKey: selectedPlaceGroupKey
-                    )
                     dismissMoreFilters()
-                } else {
-                    mapSearchSelectionSession.finish()
                 }
             }
             .task {
@@ -2523,6 +2525,7 @@ struct MapScreen: View {
                 || walkthroughs.activeSurface == .placeDetail
         else { return }
 
+        mapSearchSelectionSession.finish()
         isMapSearchFocused = false
         mapQuery = ""
         mapSearchCandidates = []
@@ -2736,6 +2739,7 @@ struct MapScreen: View {
 
     private func submitMapSearch() {
         walkthroughs.perform(.mapSearch)
+        mapSearchSelectionSession.finish()
         dismissKeyboard()
         suppressedTypeaheadQuery = Self.normalized(mapQuery)
         typeaheadTask?.cancel()
@@ -2795,6 +2799,7 @@ struct MapScreen: View {
         transitioningAnnotationGroups = nil
         visibleTransitionGroupKeys = nil
         mapSearchFocusRequestID = nil
+        mapSearchSelectionSession.finish()
         isMapSearchFocused = false
         isMoreFiltersPresented = false
         mapFilterState.reset(to: defaultMapSource)
@@ -3800,6 +3805,7 @@ struct MapScreen: View {
 
     private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
         trackMapSearchSelection(suggestion)
+        mapSearchSelectionSession.finish()
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
@@ -3826,6 +3832,7 @@ struct MapScreen: View {
 
     private func addTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
         trackMapSearchSelection(suggestion)
+        mapSearchSelectionSession.finish()
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
