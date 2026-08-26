@@ -726,6 +726,12 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertFalse(featuredCard.contains("height: FeedFeaturedLayout.cardHeight"))
         XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
+        XCTAssertTrue(featuredCard.contains("height: FeedFeaturedLayout.fullBleedArtworkHeight"))
+        XCTAssertTrue(
+            featuredCard.contains(".padding(.horizontal, -FeedFeaturedLayout.cardContentInset)")
+        )
+        XCTAssertTrue(featuredCard.contains(".padding(.top, -FeedFeaturedLayout.cardContentInset)"))
+        XCTAssertTrue(featuredCard.contains(".padding(FeedFeaturedLayout.cardContentInset)"))
         XCTAssertTrue(featuredCard.contains("private var featuredActivity: String"))
         XCTAssertTrue(featuredCard.contains("WanderAvatar("))
         XCTAssertTrue(featuredCard.contains("openProfile(featured.actor)"))
@@ -734,6 +740,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(featuredCard.contains("avatarURL: featured.visiblePlace.owner.avatarURL"))
         XCTAssertTrue(featuredCard.contains(".fixedSize(horizontal: false, vertical: true)"))
         XCTAssertFalse(featuredCard.contains("Label(\"View place\""))
+
+        let featuredLayout = try XCTUnwrap(
+            feed.components(separatedBy: "private enum FeedFeaturedLayout").last?
+                .components(separatedBy: "private enum FeedActivityLayout").first
+        )
+        XCTAssertTrue(featuredLayout.contains("static let insetArtworkHeight: CGFloat = 88"))
+        XCTAssertTrue(
+            featuredLayout.contains(
+                "static let fullBleedArtworkHeight = insetArtworkHeight + cardContentInset"
+            )
+        )
     }
 
     func testFeedFeaturedRailAndMapTicketResolveRealPhotosBeforeFallbackArtwork() throws {
@@ -761,6 +778,8 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "struct FeedResolvedPlacePhoto: View").first
         )
         XCTAssertTrue(featuredArtwork.contains("FeedResolvedPlacePhoto(place: place)"))
+        XCTAssertTrue(featuredArtwork.contains(".clipped()"))
+        XCTAssertFalse(featuredArtwork.contains(".clipShape(RoundedRectangle"))
 
         let resolvedPhoto = try XCTUnwrap(
             feed.components(separatedBy: "struct FeedResolvedPlacePhoto: View").last?
