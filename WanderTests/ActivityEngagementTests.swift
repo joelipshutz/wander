@@ -522,10 +522,21 @@ final class ActivityEngagementTests: XCTestCase {
             placeServerID: nil,
             placeDetail: "12 places",
             ticketKind: .list,
-            occurredAt: .now
+            occurredAt: .now,
+            rating: 4.5,
+            listContext: ActivityEngagementListContext(id: "list-chicago", name: "Best of Chicago")
         )
         XCTAssertEqual(list.actionTitle, "saved to")
         XCTAssertTrue(list.shareMessage.contains("list activity"))
+        XCTAssertEqual(list.rating, 4.5)
+        XCTAssertEqual(list.listContext, ActivityEngagementListContext(id: "list-chicago", name: "Best of Chicago"))
+    }
+
+    func testWannaBadgeOpticallyMatchesTheAllCapsTicketBadges() {
+        XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .wanna), 12)
+        XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .checkIn), 10)
+        XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .list), 10)
+        XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .saved), 10)
     }
 
     func testCommentsContextPreservesNoteAndPhotosForEveryTicketKind() {

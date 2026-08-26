@@ -13274,7 +13274,14 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var ratingText: String? {
-        let ratingScore: Double? = switch kind {
+        guard let ratingScore else {
+            return nil
+        }
+        return "\(PlaceRating.display(ratingScore))/5"
+    }
+
+    var ratingScore: Double? {
+        switch kind {
         case .visit:
             visit?.ratingScore
         case .legacyBeenSummary:
@@ -13282,10 +13289,6 @@ struct PlaceActivityEntry: Identifiable {
         case .currentWant, .historicalWant:
             nil
         }
-        guard let ratingScore else {
-            return nil
-        }
-        return "\(PlaceRating.display(ratingScore))/5"
     }
 
     var canAddPhotos: Bool {
@@ -13792,6 +13795,7 @@ private struct PlaceActivityCard: View {
             status: entry.status,
             occurredAt: entry.timestamp,
             note: entry.note,
+            rating: entry.ratingScore,
             media: photos.map {
                 ActivityEngagementMedia(
                     id: $0.id,

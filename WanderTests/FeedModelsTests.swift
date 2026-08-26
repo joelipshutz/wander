@@ -40,7 +40,7 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(activity.rating, 4.5)
     }
 
-    func testEveryFeedActivityMapsToTheCompactTicketFamily() {
+    func testEveryFeedActivityMapsToTheActivityKindFamily() {
         XCTAssertEqual(FeedActivityKind.placeBeen.ticketKind, .checkIn)
         XCTAssertEqual(FeedActivityKind.placeWannaGo.ticketKind, .wanna)
         XCTAssertEqual(FeedActivityKind.listCreated.ticketKind, .list)
