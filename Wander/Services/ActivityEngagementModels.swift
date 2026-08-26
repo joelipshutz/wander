@@ -88,6 +88,11 @@ struct ActivityCommentPostResult: Equatable {
     let engagement: ActivityEngagementSummary
 }
 
+struct ActivityEngagementListContext: Equatable {
+    let id: String
+    let name: String
+}
+
 struct PlaceActivityEngagementMatch: Identifiable, Equatable {
     let activityID: String
     let userPlaceID: String
@@ -122,6 +127,10 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let ticketKind: FeedTicketKind
     let occurredAt: Date
     let note: String?
+    let rating: Double?
+    let ticketEyebrow: String
+    let attributionAction: String
+    let listContext: ActivityEngagementListContext?
     let media: [ActivityEngagementMedia]
 
     init(
@@ -133,6 +142,10 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         status: PlaceStatus,
         occurredAt: Date,
         note: String? = nil,
+        rating: Double? = nil,
+        ticketEyebrow: String? = nil,
+        attributionAction: String? = nil,
+        listContext: ActivityEngagementListContext? = nil,
         media: [ActivityEngagementMedia] = []
     ) {
         self.init(
@@ -144,6 +157,10 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             ticketKind: status == .been ? .checkIn : .wanna,
             occurredAt: occurredAt,
             note: note,
+            rating: rating,
+            ticketEyebrow: ticketEyebrow,
+            attributionAction: attributionAction,
+            listContext: listContext,
             media: media
         )
     }
@@ -157,6 +174,10 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         ticketKind: FeedTicketKind,
         occurredAt: Date,
         note: String? = nil,
+        rating: Double? = nil,
+        ticketEyebrow: String? = nil,
+        attributionAction: String? = nil,
+        listContext: ActivityEngagementListContext? = nil,
         media: [ActivityEngagementMedia] = []
     ) {
         self.activityID = activityID
@@ -168,6 +189,10 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         self.occurredAt = occurredAt
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.note = trimmedNote?.isEmpty == false ? trimmedNote : nil
+        self.rating = rating
+        self.ticketEyebrow = ticketEyebrow ?? ticketKind.defaultTicketEyebrow
+        self.attributionAction = attributionAction ?? ticketKind.defaultAttributionAction
+        self.listContext = listContext
         self.media = media
     }
 
@@ -192,6 +217,26 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             "See \(actor.displayName)'s list activity for \(placeName) on rec.me"
         case .saved:
             "See \(actor.displayName)'s save for \(placeName) on rec.me"
+        }
+    }
+}
+
+extension FeedTicketKind {
+    var defaultTicketEyebrow: String {
+        switch self {
+        case .checkIn: "CHECKED IN"
+        case .wanna: "Wanna"
+        case .list: "ADDED TO LIST"
+        case .saved: "SAVED A PLACE"
+        }
+    }
+
+    var defaultAttributionAction: String {
+        switch self {
+        case .checkIn: "checked in"
+        case .wanna: "added to Wanna"
+        case .list: "added this to a list"
+        case .saved: "saved this place"
         }
     }
 }

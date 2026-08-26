@@ -252,13 +252,372 @@ struct ActivityEngagementActionRow: View {
     }
 }
 
+private enum ActivityPostcardLayout {
+    static let artworkHeight: CGFloat = 154
+    static let contentSpacing: CGFloat = 10
+    static let contentVerticalPadding: CGFloat = 14
+}
+
+enum ActivityPostcardTypographyPolicy {
+    static func ticketBadgeFontSize(for ticketKind: FeedTicketKind) -> CGFloat {
+        // Mixed-case glyphs have a smaller optical height than the all-caps
+        // labels, so Wanna needs a two-point compensation to match CHECKED IN.
+        ticketKind == .wanna ? 12 : 10
+    }
+}
+
+struct ActivityPostcardView: View {
+    let context: ActivityEngagementContext
+    let visiblePlace: VisiblePlace?
+    let metadataIcon: String
+    let secondaryMetadataTitle: String?
+    let secondaryMetadataAction: (() -> Void)?
+    let secondaryMetadataAccessibilityLabel: String?
+    let artworkAction: (() -> Void)?
+    let artworkAccessibilityLabel: String?
+    let destinationAction: (() -> Void)?
+    let destinationAccessibilityLabel: String?
+    let openProfile: (() -> Void)?
+    let actorAccessibilityIdentifier: String
+    let destinationAccessibilityIdentifier: String
+    let postcardAccessibilityIdentifier: String
+    var artworkAccessibilityValue: String? = nil
+    var artworkAccessibilityHint: String? = nil
+    var showsCommentButton = true
+    var showsEngagementActions = true
+    var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            artworkDestination
+                .overlay(alignment: .topLeading) {
+                    ticketBadge
+                        .padding(WanderTheme.spacing3)
+                        .allowsHitTesting(false)
+                }
+
+            VStack(alignment: .leading, spacing: ActivityPostcardLayout.contentSpacing) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    destinationHeader
+                    compactMetadata
+                }
+
+                actorAttribution
+
+                if let note = context.note {
+                    Text("“\(note)”")
+                        .font(.system(.subheadline, design: .serif, weight: .medium))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Note: \(note)")
+                }
+
+                if showsEngagementActions {
+                    Divider()
+                        .overlay(WanderTheme.borderHairline.color)
+
+                    ActivityEngagementActionRow(
+                        context: context,
+                        visiblePlace: visiblePlace,
+                        showsCommentButton: showsCommentButton,
+                        onSharePreviewPresentation: onSharePreviewPresentation
+                    )
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, ActivityPostcardLayout.contentVerticalPadding)
+        }
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(postcardAccessibilityIdentifier)
+    }
+
+    @ViewBuilder
+    private var artworkDestination: some View {
+        if let artworkAction {
+            Button(action: artworkAction) {
+                postcardArtwork
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .frame(height: ActivityPostcardLayout.artworkHeight)
+            .clipped()
+            .contentShape(Rectangle())
+            .accessibilityLabel(artworkAccessibilityLabel ?? "Open activity")
+            .accessibilityValue(artworkAccessibilityValue ?? "")
+            .accessibilityHint(artworkAccessibilityHint ?? "")
+        } else {
+            postcardArtwork
+        }
+    }
+
+    private var postcardArtwork: some View {
+        ActivityPostcardArtwork(
+            visiblePlace: visiblePlace,
+            media: context.media,
+            fallbackIcon: metadataIcon
+        )
+    }
+
+    private var ticketBadge: some View {
+        Label(context.ticketEyebrow, systemImage: ticketIcon)
+            .font(.system(size: ticketBadgeFontSize, weight: .black, design: .rounded))
+            .tracking(0.7)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(WanderTheme.surfaceBone.color.opacity(0.94))
+            .clipShape(Capsule())
+            .accessibilityLabel(context.ticketEyebrow.localizedCapitalized)
+            .accessibilityIdentifier("\(postcardAccessibilityIdentifier).badge")
+    }
+
+    private var ticketBadgeFontSize: CGFloat {
+        ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: context.ticketKind)
+    }
+
+    private var ticketIcon: String {
+        switch context.ticketKind {
+        case .checkIn: "checkmark"
+        case .wanna: "plus"
+        case .list: "list.bullet"
+        case .saved: "mappin"
+        }
+    }
+
+    private var destinationHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                primaryDestinationTitle
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                ratingBadge
+            }
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                primaryDestinationTitle
+                ratingBadge
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryDestinationTitle: some View {
+        if let destinationAction {
+            Button(action: destinationAction) {
+                destinationTitle
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(destinationAccessibilityLabel ?? "Open \(context.placeName)")
+            .accessibilityIdentifier(destinationAccessibilityIdentifier)
+        } else {
+            destinationTitle
+        }
+    }
+
+    private var destinationTitle: some View {
+        Text(context.placeName)
+            .font(WanderTypography.editorialTitle)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .lineLimit(2)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var ratingBadge: some View {
+        if let rating = context.rating {
+            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .padding(.horizontal, 9)
+                .frame(minHeight: 30)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
+        }
+    }
+
+    private var compactMetadata: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: WanderTheme.spacing1) {
+                Label(context.placeDetail, systemImage: metadataIcon)
+                    .lineLimit(1)
+
+                if secondaryMetadataTitle != nil {
+                    Text("·")
+                        .accessibilityHidden(true)
+                    secondaryMetadata
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Label(context.placeDetail, systemImage: metadataIcon)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                secondaryMetadata
+            }
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(WanderTheme.textMuted.color)
+    }
+
+    @ViewBuilder
+    private var secondaryMetadata: some View {
+        if let secondaryMetadataTitle {
+            if let secondaryMetadataAction {
+                Button(action: secondaryMetadataAction) {
+                    Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                        .fontWeight(.bold)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(secondaryMetadataAccessibilityLabel ?? secondaryMetadataTitle)
+                .frame(minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                .contentShape(Rectangle())
+            } else {
+                Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                    .fontWeight(.bold)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actorAttribution: some View {
+        if let openProfile {
+            Button(action: openProfile) {
+                actorContent
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(actorAccessibilityLabel)
+            .accessibilityHint("Opens profile")
+            .accessibilityIdentifier(actorAccessibilityIdentifier)
+        } else {
+            actorContent
+        }
+    }
+
+    private var actorContent: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            WanderAvatar(
+                initials: activityInitials(for: context.actor.displayName),
+                avatarURL: context.actor.avatarURL,
+                size: 32,
+                color: WanderTheme.skyTint.color
+            )
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(context.actor.displayName) \(context.attributionAction)")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+
+                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · someone you follow")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var actorAccessibilityLabel: String {
+        "\(context.actor.displayName) \(context.attributionAction), "
+            + "\(FeedPresentation.timestampText(for: context.occurredAt)), someone you follow"
+    }
+}
+
+private struct ActivityPostcardArtwork: View {
+    let visiblePlace: VisiblePlace?
+    let media: [ActivityEngagementMedia]
+    let fallbackIcon: String
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            LinearGradient(
+                colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay {
+                Image(systemName: fallbackIcon)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
+            }
+            .accessibilityHidden(true)
+
+            if let visiblePlace {
+                FeedResolvedPlacePhoto(place: visiblePlace)
+            }
+
+            if let preview = media.first {
+                activityImage(preview)
+            }
+
+            if media.count > 1 {
+                Text("+\(media.count - 1)")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .frame(minHeight: 20)
+                    .background(Color.black.opacity(0.68))
+                    .clipShape(Capsule())
+                    .padding(4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: ActivityPostcardLayout.artworkHeight)
+        .clipped()
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func activityImage(_ media: ActivityEngagementMedia) -> some View {
+        if let localImage = VisitPhotoLocalFileStore.image(from: media.localAssetRef) {
+            Image(uiImage: localImage)
+                .resizable()
+                .scaledToFill()
+                .accessibilityLabel(media.accessibilityLabel)
+        } else if let remoteURL = media.urlString.flatMap(URL.init(string:)) {
+            AsyncImage(url: remoteURL) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Color.clear
+            }
+            .accessibilityLabel(media.accessibilityLabel)
+        }
+    }
+}
+
 struct ActivityCommentsScreen: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
+    let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
+    let openList: (String) -> Void
     @State private var draft = ""
     @State private var isLoading = true
     @State private var isPosting = false
@@ -400,110 +759,86 @@ struct ActivityCommentsScreen: View {
     }
 
     private var activityHeader: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            activitySummary
-
-            ActivityEngagementActionRow(
-                context: context,
-                visiblePlace: visiblePlace,
-                showsCommentButton: false,
-                onSharePreviewPresentation: { presentation in
-                    sharePreviewPresentation = presentation
-                }
-            )
-        }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .checkInTicketSurface(
-            accent: ticketAccent,
-            surface: WanderTheme.surfaceBone.color,
-            surroundingSurface: WanderTheme.canvasWarm.color,
-            notchEdges: .trailing,
-            castsShadow: false,
-            borderWidth: 1.5
+        ActivityPostcardView(
+            context: context,
+            visiblePlace: visiblePlace,
+            metadataIcon: metadataIcon,
+            secondaryMetadataTitle: secondaryListContext?.name,
+            secondaryMetadataAction: secondaryMetadataAction,
+            secondaryMetadataAccessibilityLabel: secondaryListContext.map { "View list \($0.name)" },
+            artworkAction: artworkAction,
+            artworkAccessibilityLabel: artworkAccessibilityLabel,
+            destinationAction: destinationAction,
+            destinationAccessibilityLabel: destinationAccessibilityLabel,
+            openProfile: { openProfile(context.actor) },
+            actorAccessibilityIdentifier: "comments.activity.actor",
+            destinationAccessibilityIdentifier: "comments.activity.place",
+            postcardAccessibilityIdentifier: "comments.activity.postcard",
+            artworkAccessibilityValue: artworkAccessibilityValue,
+            artworkAccessibilityHint: artworkAccessibilityHint,
+            showsCommentButton: false,
+            onSharePreviewPresentation: { presentation in
+                sharePreviewPresentation = presentation
+            }
         )
     }
 
-    @ViewBuilder
-    private var activitySummary: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                    activityAvatar
-                    activityCopy
-                }
-
-                if !context.media.isEmpty {
-                    HStack {
-                        Spacer(minLength: 0)
-                        activityMediaThumbnail
-                    }
-                }
-            }
-        } else {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                activityAvatar
-                activityCopy
-
-                if !context.media.isEmpty {
-                    Spacer(minLength: WanderTheme.spacing1)
-                    activityMediaThumbnail
-                }
-            }
+    private var metadataIcon: String {
+        if let visiblePlace {
+            return categorySymbol(for: visiblePlace.effectiveCategory)
+        }
+        return switch context.ticketKind {
+        case .list: "list.bullet"
+        case .saved, .checkIn, .wanna: "mappin"
         }
     }
 
-    private var activityMediaThumbnail: some View {
-        ActivityCommentsMediaThumbnail(media: context.media) { mediaID in
-            photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: mediaID)
+    private var artworkAction: (() -> Void)? {
+        if let firstMediaID = context.media.first?.id {
+            return { photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID) }
         }
+        return destinationAction
     }
 
-    private var activityAvatar: some View {
-        WanderAvatar(
-            initials: activityInitials(for: context.actor.displayName),
-            avatarURL: context.actor.avatarURL,
-            size: 48,
-            color: WanderTheme.skyTint.color
-        )
+    private var artworkAccessibilityLabel: String? {
+        if !context.media.isEmpty {
+            return context.media.count == 1 ? "Open activity photo" : "Open activity photos"
+        }
+        return visiblePlace.map { "Open activity at \($0.place.canonicalName)" }
     }
 
-    private var activityCopy: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-            (Text(context.actor.displayName).fontWeight(.black)
-                + Text(" \(context.actionTitle) ")
-                + Text(context.placeName).fontWeight(.black))
-                .font(.system(size: 16))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(context.placeDetail)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            Text(FeedPresentation.timestampText(for: context.occurredAt))
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textFaint.color)
-
-            if let note = context.note {
-                Text("“\(note)”")
-                    .font(.system(size: 14, weight: .medium))
-                    .italic()
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Note: \(note)")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private var artworkAccessibilityValue: String? {
+        guard !context.media.isEmpty else { return nil }
+        return context.media.count == 1 ? "1 photo" : "\(context.media.count) photos"
     }
 
-    private var ticketAccent: Color {
-        switch context.ticketKind {
-        case .checkIn: WanderTheme.pinSocial.color
-        case .wanna: WanderTheme.stateWarning.color
-        case .list: WanderTheme.terracotta.color
-        case .saved: WanderTheme.categorySage.color
+    private var artworkAccessibilityHint: String? {
+        context.media.isEmpty ? nil : "Opens a full-screen photo viewer"
+    }
+
+    private var secondaryListContext: ActivityEngagementListContext? {
+        guard visiblePlace != nil else { return nil }
+        return context.listContext
+    }
+
+    private var secondaryMetadataAction: (() -> Void)? {
+        guard let listContext = secondaryListContext else { return nil }
+        return { openList(listContext.id) }
+    }
+
+    private var destinationAccessibilityLabel: String? {
+        if let visiblePlace {
+            return "Open \(visiblePlace.place.canonicalName)"
         }
+        return context.listContext.map { "Open list \($0.name)" }
+    }
+
+    private var destinationAction: (() -> Void)? {
+        if let visiblePlace {
+            return { openPlace(visiblePlace) }
+        }
+        guard let listContext = context.listContext else { return nil }
+        return { openList(listContext.id) }
     }
 
     private var emptyState: some View {
@@ -614,71 +949,6 @@ struct ActivityCommentsScreen: View {
                 reportedUserID: comment.author.id,
                 context: "Report \(comment.author.displayName)’s comment."
             )
-        }
-    }
-}
-
-private struct ActivityCommentsMediaThumbnail: View {
-    let media: [ActivityEngagementMedia]
-    let onOpen: (String) -> Void
-    private let size: CGFloat = 76
-
-    var body: some View {
-        if let first = media.first {
-            Button {
-                onOpen(first.id)
-            } label: {
-                ZStack(alignment: .bottomTrailing) {
-                    LinearGradient(
-                        colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color.opacity(0.55))
-                    }
-
-                    if let localImage = VisitPhotoLocalFileStore.image(from: first.localAssetRef) {
-                        Image(uiImage: localImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: size, height: size)
-                    } else if let remoteURL = first.urlString.flatMap(URL.init(string:)) {
-                        AsyncImage(url: remoteURL) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: size, height: size)
-                        } placeholder: {
-                            ProgressView()
-                                .tint(WanderTheme.terracotta.color)
-                        }
-                    }
-
-                    if media.count > 1 {
-                        Text("+\(media.count - 1)")
-                            .font(.system(size: 10, weight: .black))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .frame(minHeight: 20)
-                            .background(Color.black.opacity(0.72))
-                            .clipShape(Capsule())
-                            .padding(.trailing, 6)
-                            .padding(.bottom, 9)
-                    }
-                }
-                .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-            .buttonStyle(.plain)
-            .frame(minWidth: size, minHeight: size)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Open activity photos")
-            .accessibilityValue(media.count == 1 ? "1 photo" : "\(media.count) photos")
-            .accessibilityHint("Opens a full-screen photo viewer")
         }
     }
 }
@@ -839,6 +1109,9 @@ struct ActivityCommentsRouteScreen: View {
     @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     let requestID: UUID
     let retry: @MainActor () async -> Void
+    let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
+    let openList: (String) -> Void
     @State private var isRetrying = false
 
     var body: some View {
@@ -846,7 +1119,10 @@ struct ActivityCommentsRouteScreen: View {
             if let route = currentRoute, let context = route.context {
                 ActivityCommentsScreen(
                     context: context,
-                    visiblePlace: route.visiblePlace
+                    visiblePlace: route.visiblePlace,
+                    openProfile: openProfile,
+                    openPlace: openPlace,
+                    openList: openList
                 )
             } else {
                 resolutionState
