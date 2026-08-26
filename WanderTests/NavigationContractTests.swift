@@ -4524,6 +4524,44 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: -1).isVisible)
     }
 
+    func testProfileActivityFilterUsesSharedLiquidGlassWithoutChangingYearMapPicker() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let activityFilter = try sourceSection(
+            home,
+            after: "struct ProfileActivityFilterControl: View",
+            before: "private struct ProfileRecentActivitySection: View"
+        )
+        let mapPicker = try sourceSection(
+            home,
+            after: "private struct ProfileMapSummaryPicker: View",
+            before: "private struct ProfileMapSnapshotView: View"
+        )
+        let glassSegmentedSwitch = try sourceSection(
+            theme,
+            after: "struct WanderGlassSegmentedSwitch: View",
+            before: "struct WanderSegmentedSwitch: View"
+        )
+
+        XCTAssertTrue(activityFilter.contains("WanderGlassSegmentedSwitch("))
+        XCTAssertTrue(activityFilter.contains("ProfileActivityFilter.allCases.map"))
+        XCTAssertTrue(activityFilter.contains("accessibilityLabel: accessibilityLabel(for: filter)"))
+        XCTAssertTrue(activityFilter.contains("selection: selectedFilterID"))
+        XCTAssertTrue(activityFilter.contains(".accessibilityIdentifier(\"profile.activityFilter\")"))
+        XCTAssertFalse(activityFilter.contains("RoundedRectangle"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".accessibilityLabel(option.accessibilityLabel ?? option.title)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".padding(.vertical, 4)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".padding(.horizontal, 4)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".contentShape(Rectangle())"))
+        XCTAssertFalse(glassSegmentedSwitch.contains(".padding(4)"))
+        XCTAssertTrue(mapPicker.contains("WanderGlassButtonCluster"))
+        XCTAssertFalse(mapPicker.contains("WanderGlassSegmentedSwitch("))
+    }
+
     func testOtherUserProfileUsesPersistentStandaloneInCommonGlassRowAndOwnerParity() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
