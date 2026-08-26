@@ -332,7 +332,6 @@ final class NavigationContractTests: XCTestCase {
                 "Wander/Features/Activity/ActivityEngagementViews.swift"
             )
         )
-
         XCTAssertEqual(fixture["issue"], "REC-268")
         XCTAssertEqual(fixture["destructive_gesture_policy"], "full-swipe deletion is disabled")
         XCTAssertTrue(activityViews.contains("artworkAction: artworkAction"))
@@ -357,6 +356,9 @@ final class NavigationContractTests: XCTestCase {
                 "Wander/Features/Activity/ActivityEngagementViews.swift"
             )
         )
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
 
         XCTAssertTrue(feed.contains(".navigationDestination(item: commentsRouteBinding)"))
         XCTAssertFalse(feed.contains(".fullScreenCover(item: commentsRouteBinding)"))
@@ -373,6 +375,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(commentsScreen.contains("ActivityPostcardView("))
         XCTAssertTrue(commentsScreen.contains("showsCommentButton: false"))
         XCTAssertTrue(commentsScreen.contains("postcardAccessibilityIdentifier: \"comments.activity.postcard\""))
+        XCTAssertTrue(commentsScreen.contains("secondaryMetadataTitle: secondaryListContext?.name"))
+        XCTAssertTrue(commentsScreen.contains("openList(listContext.id)"))
+        XCTAssertTrue(mapScreen.contains("rating: entry.ratingScore"))
     }
 
     func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {
@@ -641,6 +646,11 @@ final class NavigationContractTests: XCTestCase {
                 "Wander/Features/Activity/ActivityEngagementViews.swift"
             )
         )
+        let activityModels = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Services/ActivityEngagementModels.swift"
+            )
+        )
 
         XCTAssertTrue(feed.contains("MapPlaceSaveFlowSheet(context: context)"))
         XCTAssertTrue(feed.contains("MapPlaceSaveContext.addVisiblePlace("))
@@ -686,7 +696,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(postcard.contains(".frame(height: ActivityPostcardLayout.artworkHeight)"))
         XCTAssertTrue(postcard.contains(".clipped()"))
         XCTAssertTrue(postcard.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(postcard.contains("context.ticketKind == .wanna ? 12 : 10"))
+        XCTAssertTrue(postcard.contains("ActivityPostcardTypographyPolicy.ticketBadgeFontSize"))
         XCTAssertTrue(postcardArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace)"))
         XCTAssertTrue(activityModule.contains("if let place = activity.place"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
@@ -705,7 +715,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityModule.contains(".checkInTicketSurface("))
         XCTAssertFalse(activityModule.contains("arrow.up.right"))
         XCTAssertFalse(activityModule.contains(".underline("))
-        XCTAssertTrue(activityModule.contains("case .wanna: \"Wanna\""))
+        XCTAssertTrue(activityModule.contains("resolvedTicketKind.defaultTicketEyebrow"))
+        XCTAssertTrue(activityModels.contains("case .wanna: \"Wanna\""))
         XCTAssertTrue(feed.contains("private var selectedPlaceDestination: some View"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
 

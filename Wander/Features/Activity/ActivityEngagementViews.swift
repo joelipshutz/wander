@@ -258,6 +258,14 @@ private enum ActivityPostcardLayout {
     static let contentVerticalPadding: CGFloat = 14
 }
 
+enum ActivityPostcardTypographyPolicy {
+    static func ticketBadgeFontSize(for ticketKind: FeedTicketKind) -> CGFloat {
+        // Mixed-case glyphs have a smaller optical height than the all-caps
+        // labels, so Wanna needs a two-point compensation to match CHECKED IN.
+        ticketKind == .wanna ? 12 : 10
+    }
+}
+
 struct ActivityPostcardView: View {
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
@@ -273,6 +281,8 @@ struct ActivityPostcardView: View {
     let actorAccessibilityIdentifier: String
     let destinationAccessibilityIdentifier: String
     let postcardAccessibilityIdentifier: String
+    var artworkAccessibilityValue: String? = nil
+    var artworkAccessibilityHint: String? = nil
     var showsCommentButton = true
     var showsEngagementActions = true
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
@@ -344,6 +354,8 @@ struct ActivityPostcardView: View {
             .clipped()
             .contentShape(Rectangle())
             .accessibilityLabel(artworkAccessibilityLabel ?? "Open activity")
+            .accessibilityValue(artworkAccessibilityValue ?? "")
+            .accessibilityHint(artworkAccessibilityHint ?? "")
         } else {
             postcardArtwork
         }
@@ -371,9 +383,7 @@ struct ActivityPostcardView: View {
     }
 
     private var ticketBadgeFontSize: CGFloat {
-        // Mixed-case glyphs have a smaller optical height than the all-caps
-        // labels, so Wanna needs a two-point compensation to match CHECKED IN.
-        context.ticketKind == .wanna ? 12 : 10
+        ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: context.ticketKind)
     }
 
     private var ticketIcon: String {
@@ -477,6 +487,8 @@ struct ActivityPostcardView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(secondaryMetadataAccessibilityLabel ?? secondaryMetadataTitle)
+                .frame(minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                .contentShape(Rectangle())
             } else {
                 Label(secondaryMetadataTitle, systemImage: "list.bullet")
                     .fontWeight(.bold)
@@ -492,7 +504,8 @@ struct ActivityPostcardView: View {
                 actorContent
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(context.actor.displayName)'s profile")
+            .accessibilityLabel(actorAccessibilityLabel)
+            .accessibilityHint("Opens profile")
             .accessibilityIdentifier(actorAccessibilityIdentifier)
         } else {
             actorContent
@@ -524,6 +537,11 @@ struct ActivityPostcardView: View {
         }
         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private var actorAccessibilityLabel: String {
+        "\(context.actor.displayName) \(context.attributionAction), "
+            + "\(FeedPresentation.timestampText(for: context.occurredAt)), someone you follow"
     }
 }
 
@@ -599,6 +617,7 @@ struct ActivityCommentsScreen: View {
     let visiblePlace: VisiblePlace?
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
+    let openList: (String) -> Void
     @State private var draft = ""
     @State private var isLoading = true
     @State private var isPosting = false
@@ -744,17 +763,19 @@ struct ActivityCommentsScreen: View {
             context: context,
             visiblePlace: visiblePlace,
             metadataIcon: metadataIcon,
-            secondaryMetadataTitle: nil,
-            secondaryMetadataAction: nil,
-            secondaryMetadataAccessibilityLabel: nil,
+            secondaryMetadataTitle: secondaryListContext?.name,
+            secondaryMetadataAction: secondaryMetadataAction,
+            secondaryMetadataAccessibilityLabel: secondaryListContext.map { "View list \($0.name)" },
             artworkAction: artworkAction,
             artworkAccessibilityLabel: artworkAccessibilityLabel,
             destinationAction: destinationAction,
-            destinationAccessibilityLabel: visiblePlace.map { "Open \($0.place.canonicalName)" },
+            destinationAccessibilityLabel: destinationAccessibilityLabel,
             openProfile: { openProfile(context.actor) },
             actorAccessibilityIdentifier: "comments.activity.actor",
             destinationAccessibilityIdentifier: "comments.activity.place",
             postcardAccessibilityIdentifier: "comments.activity.postcard",
+            artworkAccessibilityValue: artworkAccessibilityValue,
+            artworkAccessibilityHint: artworkAccessibilityHint,
             showsCommentButton: false,
             onSharePreviewPresentation: { presentation in
                 sharePreviewPresentation = presentation
@@ -786,10 +807,38 @@ struct ActivityCommentsScreen: View {
         return visiblePlace.map { "Open activity at \($0.place.canonicalName)" }
     }
 
-    private var destinationAction: (() -> Void)? {
-        visiblePlace.map { place in
-            { openPlace(place) }
+    private var artworkAccessibilityValue: String? {
+        guard !context.media.isEmpty else { return nil }
+        return context.media.count == 1 ? "1 photo" : "\(context.media.count) photos"
+    }
+
+    private var artworkAccessibilityHint: String? {
+        context.media.isEmpty ? nil : "Opens a full-screen photo viewer"
+    }
+
+    private var secondaryListContext: ActivityEngagementListContext? {
+        guard visiblePlace != nil else { return nil }
+        return context.listContext
+    }
+
+    private var secondaryMetadataAction: (() -> Void)? {
+        guard let listContext = secondaryListContext else { return nil }
+        return { openList(listContext.id) }
+    }
+
+    private var destinationAccessibilityLabel: String? {
+        if let visiblePlace {
+            return "Open \(visiblePlace.place.canonicalName)"
         }
+        return context.listContext.map { "Open list \($0.name)" }
+    }
+
+    private var destinationAction: (() -> Void)? {
+        if let visiblePlace {
+            return { openPlace(visiblePlace) }
+        }
+        guard let listContext = context.listContext else { return nil }
+        return { openList(listContext.id) }
     }
 
     private var emptyState: some View {
@@ -1062,6 +1111,7 @@ struct ActivityCommentsRouteScreen: View {
     let retry: @MainActor () async -> Void
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
+    let openList: (String) -> Void
     @State private var isRetrying = false
 
     var body: some View {
@@ -1071,7 +1121,8 @@ struct ActivityCommentsRouteScreen: View {
                     context: context,
                     visiblePlace: route.visiblePlace,
                     openProfile: openProfile,
-                    openPlace: openPlace
+                    openPlace: openPlace,
+                    openList: openList
                 )
             } else {
                 resolutionState

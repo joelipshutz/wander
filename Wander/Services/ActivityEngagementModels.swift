@@ -88,6 +88,11 @@ struct ActivityCommentPostResult: Equatable {
     let engagement: ActivityEngagementSummary
 }
 
+struct ActivityEngagementListContext: Equatable {
+    let id: String
+    let name: String
+}
+
 struct PlaceActivityEngagementMatch: Identifiable, Equatable {
     let activityID: String
     let userPlaceID: String
@@ -125,6 +130,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let rating: Double?
     let ticketEyebrow: String
     let attributionAction: String
+    let listContext: ActivityEngagementListContext?
     let media: [ActivityEngagementMedia]
 
     init(
@@ -139,6 +145,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         rating: Double? = nil,
         ticketEyebrow: String? = nil,
         attributionAction: String? = nil,
+        listContext: ActivityEngagementListContext? = nil,
         media: [ActivityEngagementMedia] = []
     ) {
         self.init(
@@ -153,6 +160,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             rating: rating,
             ticketEyebrow: ticketEyebrow,
             attributionAction: attributionAction,
+            listContext: listContext,
             media: media
         )
     }
@@ -169,6 +177,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         rating: Double? = nil,
         ticketEyebrow: String? = nil,
         attributionAction: String? = nil,
+        listContext: ActivityEngagementListContext? = nil,
         media: [ActivityEngagementMedia] = []
     ) {
         self.activityID = activityID
@@ -183,6 +192,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         self.rating = rating
         self.ticketEyebrow = ticketEyebrow ?? ticketKind.defaultTicketEyebrow
         self.attributionAction = attributionAction ?? ticketKind.defaultAttributionAction
+        self.listContext = listContext
         self.media = media
     }
 
@@ -211,7 +221,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     }
 }
 
-private extension FeedTicketKind {
+extension FeedTicketKind {
     var defaultTicketEyebrow: String {
         switch self {
         case .checkIn: "CHECKED IN"

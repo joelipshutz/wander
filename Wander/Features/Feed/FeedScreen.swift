@@ -108,7 +108,8 @@ struct FeedScreen: View {
                     requestID: route.id,
                     retry: resolveCommentsRouteIfNeeded,
                     openProfile: openProfile,
-                    openPlace: openPlace
+                    openPlace: openPlace,
+                    openList: openListByID
                 )
                 .environmentObject(store)
                 .environmentObject(auth)
@@ -393,6 +394,11 @@ struct FeedScreen: View {
     private func openList(_ list: LocalPlaceList) {
         walkthroughs.perform(.feedActivity)
         pushNotifications.route(to: .list(id: list.id))
+    }
+
+    private func openListByID(_ listID: String) {
+        walkthroughs.perform(.feedActivity)
+        pushNotifications.route(to: .list(id: listID))
     }
 
     private func beginSave(visiblePlace: VisiblePlace) {
@@ -1458,6 +1464,7 @@ private struct FeedActivityModule: View {
             rating: activity.rating,
             ticketEyebrow: activity.postcardTicketEyebrow,
             attributionAction: activity.postcardAttributionAction,
+            listContext: activity.list?.activityEngagementListContext,
             media: activity.media.map(\.activityEngagementMedia)
         )
     }
@@ -1498,28 +1505,23 @@ private extension FeedActivity {
             rating: rating,
             ticketEyebrow: postcardTicketEyebrow,
             attributionAction: postcardAttributionAction,
+            listContext: list?.activityEngagementListContext,
             media: media.map(\.activityEngagementMedia)
         )
     }
 
     var postcardTicketEyebrow: String {
-        switch resolvedTicketKind {
-        case .checkIn: "CHECKED IN"
-        case .wanna: "Wanna"
-        case .list:
-            kind == .listCreated ? "CREATED A LIST" : "ADDED TO LIST"
-        case .saved: "SAVED A PLACE"
-        }
+        kind == .listCreated ? "CREATED A LIST" : resolvedTicketKind.defaultTicketEyebrow
     }
 
     var postcardAttributionAction: String {
-        switch resolvedTicketKind {
-        case .checkIn: "checked in"
-        case .wanna: "added to Wanna"
-        case .list:
-            kind == .listCreated ? "created a list" : "added this to a list"
-        case .saved: "saved this place"
-        }
+        kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
+    }
+}
+
+private extension LocalPlaceList {
+    var activityEngagementListContext: ActivityEngagementListContext {
+        ActivityEngagementListContext(id: id, name: name)
     }
 }
 

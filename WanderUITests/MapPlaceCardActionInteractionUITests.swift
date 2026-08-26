@@ -136,6 +136,10 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
 
         app.swipeUp()
+        let wannaBadge = app.descendants(matching: .any)[
+            "feed.activity.fixture-feed-ryan-wanna-noodles.postcard.badge"
+        ]
+        XCTAssertTrue(wannaBadge.waitForExistence(timeout: 4))
         capture("rec-337-wanna-badge")
     }
 
