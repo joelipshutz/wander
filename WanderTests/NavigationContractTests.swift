@@ -4522,6 +4522,11 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct ProfileMapSummaryPicker: View",
             before: "private struct ProfileMapSnapshotView: View"
         )
+        let glassSegmentedSwitch = try sourceSection(
+            theme,
+            after: "struct WanderGlassSegmentedSwitch: View",
+            before: "struct WanderSegmentedSwitch: View"
+        )
 
         XCTAssertTrue(activityFilter.contains("WanderGlassSegmentedSwitch("))
         XCTAssertTrue(activityFilter.contains("ProfileActivityFilter.allCases.map"))
@@ -4529,7 +4534,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityFilter.contains("selection: selectedFilterID"))
         XCTAssertTrue(activityFilter.contains(".accessibilityIdentifier(\"profile.activityFilter\")"))
         XCTAssertFalse(activityFilter.contains("RoundedRectangle"))
-        XCTAssertTrue(theme.contains(".accessibilityLabel(option.accessibilityLabel ?? option.title)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".accessibilityLabel(option.accessibilityLabel ?? option.title)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".padding(.vertical, 4)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".padding(.horizontal, 4)"))
+        XCTAssertTrue(glassSegmentedSwitch.contains(".contentShape(Rectangle())"))
+        XCTAssertFalse(glassSegmentedSwitch.contains(".padding(4)"))
         XCTAssertTrue(mapPicker.contains("WanderGlassButtonCluster"))
         XCTAssertFalse(mapPicker.contains("WanderGlassSegmentedSwitch("))
     }

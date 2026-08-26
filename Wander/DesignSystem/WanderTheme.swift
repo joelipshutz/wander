@@ -798,15 +798,16 @@ struct WanderGlassSegmentedSwitch: View {
                                 ? WanderTheme.terracottaDark.color
                                 : WanderTheme.textMuted.color
                         )
-                        .contentShape(Capsule())
                         .modifier(WanderSelectedGlassModifier(isSelected: isSelected))
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(option.accessibilityLabel ?? option.title)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(4)
+        .padding(.horizontal, 4)
         .wanderGlassCapsule(interactive: false, showsBorder: false)
     }
 }
