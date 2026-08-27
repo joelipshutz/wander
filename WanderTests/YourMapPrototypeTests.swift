@@ -28,41 +28,6 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(YourMapPrototypeDataVolume.resolved(from: ["Wander"]), .medium)
     }
 
-    func testPrototypeLaunchIsExplicit() {
-        XCTAssertTrue(
-            YourMapPrototypeLaunchConfiguration.shouldPresent(
-                arguments: ["Wander", "-WanderShowYourMapPrototype"]
-            )
-        )
-        XCTAssertFalse(YourMapPrototypeLaunchConfiguration.shouldPresent(arguments: ["Wander"]))
-    }
-
-    func testPrototypeModeLaunchArgumentFallsBackToMap() {
-        XCTAssertEqual(
-            YourMapPrototypeLaunchConfiguration.mode(
-                arguments: ["Wander", "-WanderYourMapPrototypeMode", "patterns"]
-            ),
-            .patterns
-        )
-        XCTAssertEqual(
-            YourMapPrototypeLaunchConfiguration.mode(
-                arguments: ["Wander", "-WanderYourMapPrototypeMode", "unknown"]
-            ),
-            .map
-        )
-    }
-
-    func testSharePreviewLaunchIsExplicit() {
-        XCTAssertTrue(
-            YourMapPrototypeLaunchConfiguration.shouldPresentSharePreview(
-                arguments: ["Wander", "-WanderShowYourMapPrototypeSharePreview"]
-            )
-        )
-        XCTAssertFalse(
-            YourMapPrototypeLaunchConfiguration.shouldPresentSharePreview(arguments: ["Wander"])
-        )
-    }
-
     func testLensUsesOrWithinDimensionAndAndAcrossDimensions() {
         let dataset = YourMapPrototypeDataset.make(volume: .large)
         let baseLens = YourMapPrototypeLens(
@@ -152,7 +117,48 @@ final class YourMapPrototypeTests: XCTestCase {
             accuracy: 0.000_001
         )
         XCTAssertEqual(insights.categoryBreakdown.map(\.count), insights.categoryBreakdown.map(\.count).sorted(by: >))
-        XCTAssertFalse(insights.insight.isEmpty)
+        XCTAssertEqual(insights.monthlyActivity.count, 12)
+        XCTAssertEqual(insights.monthlyActivity.map(\.count).reduce(0, +), dataset.places.count)
+        XCTAssertEqual(insights.cityBreakdown.map(\.count).reduce(0, +), dataset.places.count)
+        XCTAssertEqual(insights.countryBreakdown.map(\.count).reduce(0, +), dataset.places.count)
+        XCTAssertTrue(insights.returnMagnets.allSatisfy { $0.status == .been && $0.visitCount > 1 })
+        XCTAssertEqual(insights.returnMagnets.map(\.visitCount), insights.returnMagnets.map(\.visitCount).sorted(by: >))
+    }
+
+    func testSavedLensKeepsTheExactFilterRecipeAndExplainsIt() {
+        let lens = YourMapPrototypeLens(
+            timeRange: .thisYear,
+            statuses: [.been],
+            categories: ["Coffee"],
+            cities: ["Los Angeles"],
+            repeatOnly: true
+        )
+        let saved = YourMapPrototypeSavedLens(
+            lens: lens,
+            ordinal: 1,
+            id: UUID(uuidString: "2F41DB41-399F-4C36-8F7E-CFD87C66A57A")!
+        )
+
+        XCTAssertEqual(saved.lens, lens)
+        XCTAssertEqual(saved.title, "Coffee · Los Angeles")
+        XCTAssertEqual(saved.detail, "5 selected options")
+    }
+
+    func testShareLinksAreOpaqueAndDistinguishStaticFromLive() {
+        let token = UUID(uuidString: "A94D4A30-31A3-48CB-B5BB-744F8F83B013")!
+        let staticLink = YourMapPrototypeShareLink.make(format: .staticSnapshot, token: token)
+        let liveLink = YourMapPrototypeShareLink.make(format: .liveLens, token: token)
+
+        XCTAssertEqual(
+            staticLink.url.absoluteString,
+            "https://rec.me/maps/a94d4a30-31a3-48cb-b5bb-744f8f83b013?type=static"
+        )
+        XCTAssertEqual(
+            liveLink.url.absoluteString,
+            "https://rec.me/maps/a94d4a30-31a3-48cb-b5bb-744f8f83b013?type=live"
+        )
+        XCTAssertFalse(staticLink.url.absoluteString.contains("Coffee"))
+        XCTAssertNotEqual(staticLink.url, liveLink.url)
     }
 
     func testInitialCuratedLensOnlyAppliesToUsefulDataVolumes() {
@@ -235,7 +241,19 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains(".navigationDestination(isPresented: $showsYourMapPrototype)"))
         XCTAssertTrue(profileScreen.contains("showsSettings || showsYourMapPrototype"))
         XCTAssertTrue(profileScreen.contains(".toolbar(.hidden, for: .tabBar)"))
+        XCTAssertTrue(profileScreen.contains("YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)"))
+        XCTAssertFalse(profileScreen.contains("handledYourMapPrototypeLaunch"))
+        XCTAssertFalse(profileScreen.contains("WanderShowYourMapPrototype"))
         XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? \"Your Map\" : \"Patterns\")"))
+        XCTAssertTrue(yourMapScreen.contains("MapPinOutlineStroke"))
+        XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.monthHeatMap"))
+        XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.citiesCountries"))
+        XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.returnMagnets"))
+        XCTAssertTrue(yourMapScreen.contains("Anyone with the link"))
+        XCTAssertFalse(yourMapScreen.contains("Share with"))
+        XCTAssertFalse(yourMapScreen.contains("private var lensDeck"))
+        XCTAssertFalse(yourMapScreen.contains("private var yearComparisonPicker"))
+        XCTAssertFalse(yourMapScreen.contains("private var patternFilterRow"))
         XCTAssertFalse(yourMapScreen.contains("YourMapPrototypeTabBar"))
         XCTAssertFalse(yourMapScreen.contains("navigationBarBackButtonHidden"))
         XCTAssertFalse(sharedScheme.contains("-WanderShowYourMapPrototype"))

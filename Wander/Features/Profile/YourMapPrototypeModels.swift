@@ -133,6 +133,70 @@ struct YourMapPrototypeLens: Equatable {
     }
 }
 
+struct YourMapPrototypeSavedLens: Identifiable, Equatable {
+    let id: UUID
+    let lens: YourMapPrototypeLens
+    let title: String
+    let detail: String
+
+    init(
+        lens: YourMapPrototypeLens,
+        ordinal: Int,
+        id: UUID = UUID()
+    ) {
+        self.id = id
+        self.lens = lens
+
+        let primaryTokens = [
+            lens.categories.sorted().first,
+            lens.cities.sorted().first,
+            lens.statuses.sorted { $0.rawValue < $1.rawValue }.first?.title,
+            lens.timeRange == .all ? nil : lens.timeRange.title
+        ]
+        .compactMap { $0 }
+
+        title = primaryTokens.prefix(2).isEmpty
+            ? "Saved lens \(ordinal)"
+            : primaryTokens.prefix(2).joined(separator: " · ")
+        detail = "\(lens.activeOptionCount) selected \(lens.activeOptionCount == 1 ? "option" : "options")"
+    }
+}
+
+enum YourMapPrototypeShareFormat: String, CaseIterable, Identifiable {
+    case staticSnapshot = "static"
+    case liveLens = "live"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .staticSnapshot: "Static"
+        case .liveLens: "Live"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .staticSnapshot: "camera.fill"
+        case .liveLens: "dot.radiowaves.left.and.right"
+        }
+    }
+}
+
+struct YourMapPrototypeShareLink: Equatable {
+    let format: YourMapPrototypeShareFormat
+    let url: URL
+
+    static func make(
+        format: YourMapPrototypeShareFormat,
+        token: UUID = UUID()
+    ) -> Self {
+        let tokenValue = token.uuidString.lowercased()
+        let url = URL(string: "https://rec.me/maps/\(tokenValue)?type=\(format.rawValue)")!
+        return Self(format: format, url: url)
+    }
+}
+
 struct YourMapPrototypePlace: Identifiable, Equatable {
     let id: String
     let name: String
@@ -377,14 +441,36 @@ struct YourMapPrototypeBreakdownItem: Identifiable, Equatable {
     var id: String { title }
 }
 
+struct YourMapPrototypeMonthActivity: Identifiable, Equatable {
+    let month: Int
+    let count: Int
+    let intensity: Double
+
+    var id: Int { month }
+
+    var title: String {
+        Self.monthTitles[month - 1]
+    }
+
+    var shortTitle: String {
+        String(title.prefix(3))
+    }
+
+    private static let monthTitles = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+}
+
 struct YourMapPrototypeInsights: Equatable {
     let totalCount: Int
     let repeatCount: Int
     let repeatRate: Double
     let categoryBreakdown: [YourMapPrototypeBreakdownItem]
-    let thisYearCount: Int
-    let previousYearCount: Int
-    let insight: String
+    let cityBreakdown: [YourMapPrototypeBreakdownItem]
+    let countryBreakdown: [YourMapPrototypeBreakdownItem]
+    let monthlyActivity: [YourMapPrototypeMonthActivity]
+    let returnMagnets: [YourMapPrototypePlace]
 
     init(
         places: [YourMapPrototypePlace],
@@ -409,54 +495,50 @@ struct YourMapPrototypeInsights: Equatable {
             return lhs.title < rhs.title
         }
 
-        let currentYear = calendar.component(.year, from: now)
-        thisYearCount = places.filter { calendar.component(.year, from: $0.lastVisitedAt) == currentYear }.count
-        previousYearCount = places.filter { calendar.component(.year, from: $0.lastVisitedAt) == currentYear - 1 }.count
+        cityBreakdown = Self.breakdown(places.map(\.city), totalCount: places.count)
+        countryBreakdown = Self.breakdown(places.map(\.country), totalCount: places.count)
 
-        if let topCategory = categoryBreakdown.first?.title.lowercased(), repeatRate >= 0.35 {
-            insight = "You returned to \(topCategory) places more this year"
-        } else if let topCategory = categoryBreakdown.first?.title.lowercased() {
-            insight = "\(topCategory.capitalized) shaped this slice of your map"
-        } else {
-            insight = "Your patterns will appear as your map grows"
+        let monthCounts = Dictionary(
+            grouping: places,
+            by: { calendar.component(.month, from: $0.lastVisitedAt) }
+        )
+        .mapValues(\.count)
+        let maximumMonthCount = max(monthCounts.values.max() ?? 0, 1)
+        monthlyActivity = (1...12).map { month in
+            let count = monthCounts[month] ?? 0
+            return YourMapPrototypeMonthActivity(
+                month: month,
+                count: count,
+                intensity: Double(count) / Double(maximumMonthCount)
+            )
         }
-    }
-}
 
-enum YourMapPrototypeLaunchConfiguration {
-    static func shouldPresent(
-        arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> Bool {
-        #if DEBUG
-        arguments.contains("-WanderShowYourMapPrototype")
-        #else
-        false
-        #endif
+        returnMagnets = beenPlaces
+            .filter { $0.visitCount > 1 }
+            .sorted { lhs, rhs in
+                if lhs.visitCount != rhs.visitCount { return lhs.visitCount > rhs.visitCount }
+                if lhs.rating != rhs.rating { return lhs.rating > rhs.rating }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+
     }
 
-    static func volume(
-        arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> YourMapPrototypeDataVolume {
-        YourMapPrototypeDataVolume.resolved(from: arguments)
-    }
-
-    static func mode(
-        arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> YourMapPrototypeMode {
-        guard
-            let flagIndex = arguments.firstIndex(of: "-WanderYourMapPrototypeMode"),
-            arguments.indices.contains(flagIndex + 1),
-            let mode = YourMapPrototypeMode(rawValue: arguments[flagIndex + 1])
-        else {
-            return .map
-        }
-        return mode
-    }
-
-    static func shouldPresentSharePreview(
-        arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> Bool {
-        arguments.contains("-WanderShowYourMapPrototypeSharePreview")
+    private static func breakdown(
+        _ values: [String],
+        totalCount: Int
+    ) -> [YourMapPrototypeBreakdownItem] {
+        Dictionary(grouping: values, by: { $0 })
+            .map { title, values in
+                YourMapPrototypeBreakdownItem(
+                    title: title,
+                    count: values.count,
+                    fraction: totalCount == 0 ? 0 : Double(values.count) / Double(totalCount)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.title < rhs.title
+            }
     }
 }
 #endif

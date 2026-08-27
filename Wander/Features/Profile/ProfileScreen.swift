@@ -26,7 +26,6 @@ struct ProfileScreen: View {
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
     #if DEBUG
     @State private var showsYourMapPrototype = false
-    @State private var handledYourMapPrototypeLaunch = false
     #endif
 
     @Binding private var visitInvitationInboxRequestID: UUID?
@@ -192,11 +191,7 @@ struct ProfileScreen: View {
                 }
                 #if DEBUG
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
-                    YourMapPrototypeScreen(
-                        dataset: yourMapPrototypeDataset,
-                        initialMode: YourMapPrototypeLaunchConfiguration.mode(),
-                        initialShowsSharePreview: YourMapPrototypeLaunchConfiguration.shouldPresentSharePreview()
-                    )
+                    YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
                     .toolbar(.hidden, for: .tabBar)
                 }
                 #endif
@@ -231,17 +226,6 @@ struct ProfileScreen: View {
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
         }
-        #if DEBUG
-        .task {
-            guard !handledYourMapPrototypeLaunch,
-                  YourMapPrototypeLaunchConfiguration.shouldPresent()
-            else { return }
-
-            handledYourMapPrototypeLaunch = true
-            await Task.yield()
-            showsYourMapPrototype = true
-        }
-        #endif
         .task(id: calendarLaunchRequest?.id) {
             guard let request = calendarLaunchRequest else {
                 activeCalendarLaunchRequest = nil

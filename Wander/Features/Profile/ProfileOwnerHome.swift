@@ -1546,20 +1546,11 @@ private struct ProfileYourMapPreview: View {
                     .foregroundStyle(WanderTheme.terracottaDark.color)
                 }
 
-                ZStack(alignment: .bottomLeading) {
-                    ProfileMapSnapshotView(
-                        points: insights.mapPoints,
-                        shareImageFileURL: .constant(nil)
-                    )
-                    .frame(height: 178)
-
-                    HStack(spacing: WanderTheme.spacing2) {
-                        previewChip("Time", systemImage: "calendar")
-                        previewChip("Places", systemImage: "fork.knife")
-                        previewChip("Tags", systemImage: "tag.fill")
-                    }
-                    .padding(WanderTheme.spacing3)
-                }
+                ProfileMapSnapshotView(
+                    points: insights.mapPoints,
+                    shareImageFileURL: .constant(nil)
+                )
+                .frame(height: 178)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
                 Text("Slice your place diary by time, status, category, city, country, tags, ratings, and repeat visits.")
@@ -1584,16 +1575,6 @@ private struct ProfileYourMapPreview: View {
         .accessibilityIdentifier("profile.yourMap.preview")
         .walkthroughTarget(.profileMap)
         .walkthroughEmphasis(.profileMap)
-    }
-
-    private func previewChip(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(WanderTypography.metadata)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .padding(.horizontal, WanderTheme.spacing2)
-            .frame(minHeight: 32)
-            .background(WanderTheme.surfaceBone.color.opacity(0.95), in: Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
     }
 
     private var countSummary: String {

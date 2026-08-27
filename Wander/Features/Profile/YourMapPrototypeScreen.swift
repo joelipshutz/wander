@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 #if DEBUG
 struct YourMapPrototypeScreen: View {
@@ -10,7 +11,7 @@ struct YourMapPrototypeScreen: View {
     @State private var cameraPosition: MapCameraPosition
     @State private var showsFilters = false
     @State private var showsSharePreview: Bool
-    @State private var isLensSaved = false
+    @State private var savedLenses: [YourMapPrototypeSavedLens] = []
 
     init(
         dataset: YourMapPrototypeDataset,
@@ -49,6 +50,7 @@ struct YourMapPrototypeScreen: View {
         .sheet(isPresented: $showsFilters) {
             YourMapPrototypeFilterSheet(
                 lens: $lens,
+                savedLenses: $savedLenses,
                 places: dataset.places,
                 resultCount: filteredPlaces.count
             )
@@ -58,12 +60,10 @@ struct YourMapPrototypeScreen: View {
         .fullScreenCover(isPresented: $showsSharePreview) {
             YourMapPrototypeSharePreview(
                 places: filteredPlaces,
+                lens: lens,
                 now: dataset.now,
                 dismiss: { showsSharePreview = false }
             )
-        }
-        .onChange(of: lens) { _, _ in
-            isLensSaved = false
         }
         .navigationTitle(mode == .map ? "Your Map" : "Patterns")
         .navigationBarTitleDisplayMode(.inline)
@@ -120,8 +120,7 @@ struct YourMapPrototypeScreen: View {
                 Spacer(minLength: WanderTheme.spacing4)
                 modePicker
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing2)
-                lensDeck
+                    .padding(.bottom, WanderTheme.spacing4)
             }
         }
         .accessibilityIdentifier("yourMap.prototype.map")
@@ -129,31 +128,31 @@ struct YourMapPrototypeScreen: View {
 
     private var mapHeader: some View {
         HStack(spacing: WanderTheme.spacing2) {
+            Spacer(minLength: 0)
+
             Button {
                 showsFilters = true
             } label: {
-                HStack(spacing: WanderTheme.spacing1) {
-                    Image(systemName: "calendar")
-                    Text(lens.timeRange.title)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .black))
-                }
-                .font(WanderTypography.metadata)
-                .foregroundStyle(WanderTheme.textInk.color)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Circle())
+                    .overlay(Circle().stroke(WanderTheme.borderHairline.color))
+                    .overlay(alignment: .topTrailing) {
+                        if lens.activeSectionCount > 0 {
+                            Text("\(lens.activeSectionCount)")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .frame(width: 19, height: 19)
+                                .background(WanderTheme.terracotta.color, in: Circle())
+                                .offset(x: 4, y: -4)
+                        }
+                    }
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("yourMap.prototype.time")
-
-            Spacer(minLength: 0)
-
-            YourMapPrototypeCircleButton(
-                systemImage: "slider.horizontal.3",
-                label: "Filters",
-                action: { showsFilters = true }
-            )
+            .accessibilityLabel("Filters, \(lens.activeSectionCount) active")
+            .accessibilityIdentifier("yourMap.prototype.filters")
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
@@ -192,128 +191,40 @@ struct YourMapPrototypeScreen: View {
         .accessibilityIdentifier("yourMap.prototype.mode")
     }
 
-    private var lensDeck: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Capsule()
-                .fill(WanderTheme.borderStrong.color)
-                .frame(width: 38, height: 4)
-                .frame(maxWidth: .infinity)
-                .accessibilityHidden(true)
-
-            ScrollView(.horizontal) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(activeLensChips, id: \YourMapPrototypeLensChip.id) { chip in
-                        YourMapPrototypeLensChipView(chip: chip)
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text("\(filteredPlaces.count)")
-                    .font(WanderTypography.editorialDisplay)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .contentTransition(.numericText())
-                Text("of \(dataset.places.count) places")
-                    .font(WanderTypography.emphasizedBody)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(filteredPlaces.count) of \(dataset.places.count) places")
-
-            HStack(spacing: WanderTheme.spacing2) {
-                YourMapPrototypeActionButton(title: "Filters", systemImage: "slider.horizontal.3") {
-                    showsFilters = true
-                }
-                .accessibilityIdentifier("yourMap.prototype.filters")
-
-                YourMapPrototypeActionButton(
-                    title: isLensSaved ? "Saved" : "Save lens",
-                    systemImage: isLensSaved ? "checkmark" : "bookmark"
-                ) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isLensSaved.toggle()
-                    }
-                }
-                .accessibilityIdentifier("yourMap.prototype.saveLens")
-
-                YourMapPrototypeActionButton(
-                    title: "Share",
-                    systemImage: "square.and.arrow.up",
-                    isProminent: true
-                ) {
-                    showsSharePreview = true
-                }
-                .accessibilityIdentifier("yourMap.prototype.share")
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing4)
-        .padding(.top, WanderTheme.spacing2)
-        .padding(.bottom, WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color.opacity(0.97))
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: WanderTheme.radiusSheet, topTrailingRadius: WanderTheme.radiusSheet))
-        .overlay(alignment: .top) {
-            UnevenRoundedRectangle(topLeadingRadius: WanderTheme.radiusSheet, topTrailingRadius: WanderTheme.radiusSheet)
-                .stroke(WanderTheme.borderHairline.color)
-        }
-        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, y: -3)
-    }
-
     private var patternsWorkspace: some View {
-        VStack(spacing: 0) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                if filteredPlaces.isEmpty {
+                    patternsEmptyState
+                } else {
+                    HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                        categoryMixCard
+                        repeatRateCard
+                    }
+                    locationFootprintCard
+                    monthlyRhythmCard
+                    returnMagnetsCard
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, 104)
+        }
+        .scrollIndicators(.hidden)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             modePicker
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.vertical, WanderTheme.spacing3)
-            ScrollView {
-                VStack(spacing: WanderTheme.spacing3) {
-                    yearComparisonPicker
-                    YourMapPrototypeMiniMap(places: filteredPlaces)
-                        .frame(height: 190)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-
-                    if filteredPlaces.isEmpty {
-                        patternsEmptyState
-                    } else {
-                        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                            categoryMixCard
-                            repeatRateCard
-                        }
-                        yearComparisonCard
-                        insightCard
-                    }
-
-                    patternFilterRow
-                }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .scrollIndicators(.hidden)
+                .background(
+                    LinearGradient(
+                        colors: [WanderTheme.canvasWarm.color.opacity(0), WanderTheme.canvasWarm.color],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
         }
-        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .accessibilityIdentifier("yourMap.prototype.patterns")
-    }
-
-    private var yearComparisonPicker: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            Text("\(currentYear)")
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.categoryMoss.color, in: Capsule())
-            Text("vs")
-                .font(WanderTypography.metadata)
-                .foregroundStyle(WanderTheme.textMuted.color)
-            Text("\(currentYear - 1)")
-                .font(WanderTypography.label)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceBone.color, in: Capsule())
-                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Comparing \(currentYear) with \(currentYear - 1)")
     }
 
     private var categoryMixCard: some View {
@@ -354,68 +265,126 @@ struct YourMapPrototypeScreen: View {
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
     }
 
-    private var yearComparisonCard: some View {
+
+    private var locationFootprintCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("\(currentYear) vs \(currentYear - 1)")
-                .font(WanderTypography.editorialCardTitle)
-            YourMapPrototypeComparisonRow(
-                title: "Places",
-                current: insights.thisYearCount,
-                previous: insights.previousYearCount,
-                maximum: max(insights.thisYearCount, insights.previousYearCount, 1)
-            )
-            YourMapPrototypeComparisonRow(
-                title: "Repeats",
-                current: insights.repeatCount,
-                previous: max(insights.repeatCount - max(insights.repeatCount / 4, 1), 0),
-                maximum: max(insights.repeatCount, 1)
-            )
+            HStack(alignment: .firstTextBaseline) {
+                Label("cities & countries", systemImage: "globe.americas.fill")
+                    .font(WanderTypography.editorialCardTitle)
+                Spacer()
+                Text("\(insights.cityBreakdown.count) · \(insights.countryBreakdown.count)")
+                    .font(WanderTypography.metadata.monospacedDigit())
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            ForEach(insights.cityBreakdown.prefix(4)) { item in
+                YourMapPrototypeBarRow(item: item)
+            }
+
+            ScrollView(.horizontal) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(insights.countryBreakdown) { item in
+                        Label("\(item.title) · \(item.count)", systemImage: "flag.fill")
+                            .font(WanderTypography.metadata)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .frame(minHeight: 36)
+                            .background(WanderTheme.surfaceRaised.color, in: Capsule())
+                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
         }
         .padding(WanderTheme.spacing4)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .accessibilityIdentifier("yourMap.prototype.citiesCountries")
     }
 
-    private var insightCard: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "sun.max.fill")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(WanderTheme.categorySun.color)
-                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .background(WanderTheme.sunTint.color, in: Circle())
-            Text(insights.insight)
-                .font(WanderTypography.emphasizedBody)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.sunTint.color.opacity(0.7))
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.categorySun.color.opacity(0.45)))
-    }
+    private var monthlyRhythmCard: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Label("month by month", systemImage: "calendar")
+                .font(WanderTypography.editorialCardTitle)
 
-    private var patternFilterRow: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: WanderTheme.spacing2)], spacing: WanderTheme.spacing2) {
-            ForEach(["Time", "Category", "City", "Tags", "Rating"], id: \.self) { title in
-                Button {
-                    showsFilters = true
-                } label: {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Text(title)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .black))
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6),
+                spacing: WanderTheme.spacing2
+            ) {
+                ForEach(insights.monthlyActivity) { month in
+                    VStack(spacing: 5) {
+                        Text(month.shortTitle)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(
+                                WanderTheme.terracotta.color.opacity(
+                                    month.count == 0 ? 0.10 : 0.28 + (0.72 * month.intensity)
+                                )
+                            )
+                            .frame(height: 30)
+                            .overlay {
+                                Text("\(month.count)")
+                                    .font(.system(size: 11, weight: .black).monospacedDigit())
+                                    .foregroundStyle(month.intensity > 0.55 ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+                            }
                     }
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceBone.color, in: Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(month.title), \(month.count) places")
                 }
-                .buttonStyle(.plain)
             }
         }
-        .accessibilityIdentifier("yourMap.prototype.patternFilters")
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .accessibilityIdentifier("yourMap.prototype.monthHeatMap")
+    }
+
+    private var returnMagnetsCard: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Label("return magnets", systemImage: "arrow.triangle.2.circlepath")
+                .font(WanderTypography.editorialCardTitle)
+
+            if insights.returnMagnets.isEmpty {
+                Text("Places you revisit will collect here.")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            } else {
+                ForEach(Array(insights.returnMagnets.prefix(4).enumerated()), id: \.element.id) { index, place in
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Text("\(index + 1)")
+                            .font(WanderTypography.label.monospacedDigit())
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .frame(width: 24, height: 24)
+                            .background(WanderTheme.terracottaTint.color, in: Circle())
+                        WanderCategoryEmoji(category: place.category, name: place.name, size: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(place.name)
+                                .font(WanderTypography.label)
+                                .lineLimit(1)
+                            Text(place.city)
+                                .font(WanderTypography.metadata)
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+                        Spacer(minLength: 0)
+                        Text("\(place.visitCount) visits")
+                            .font(WanderTypography.metadata.monospacedDigit())
+                            .foregroundStyle(WanderTheme.categoryMoss.color)
+                    }
+                    .frame(minHeight: WanderTheme.tapMinimum)
+
+                    if index < min(insights.returnMagnets.count, 4) - 1 {
+                        Divider().overlay(WanderTheme.borderHairline.color)
+                    }
+                }
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .accessibilityIdentifier("yourMap.prototype.returnMagnets")
     }
 
     private var mapEmptyState: some View {
@@ -447,7 +416,7 @@ struct YourMapPrototypeScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
         .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, y: 6)
-        .padding(.bottom, 280)
+        .padding(.bottom, 84)
     }
 
     private var patternsEmptyState: some View {
@@ -467,41 +436,6 @@ struct YourMapPrototypeScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
-    private var activeLensChips: [YourMapPrototypeLensChip] {
-        var chips: [YourMapPrototypeLensChip] = []
-        if lens.timeRange != .all {
-            chips.append(.init(id: "time", title: lens.timeRange.title, systemImage: "calendar"))
-        }
-        chips.append(contentsOf: lens.statuses.sorted { $0.rawValue < $1.rawValue }.map {
-            .init(id: "status-\($0.rawValue)", title: $0.title, systemImage: $0.systemImage)
-        })
-        chips.append(contentsOf: lens.categories.sorted().map {
-            .init(id: "category-\($0)", title: $0, systemImage: categorySystemImage($0))
-        })
-        chips.append(contentsOf: lens.cities.sorted().map {
-            .init(id: "city-\($0)", title: $0, systemImage: "mappin")
-        })
-        chips.append(contentsOf: lens.countries.sorted().map {
-            .init(id: "country-\($0)", title: $0, systemImage: "globe.americas.fill")
-        })
-        chips.append(contentsOf: lens.tags.sorted().map {
-            .init(id: "tag-\($0)", title: $0, systemImage: "tag.fill")
-        })
-        if let minimumRating = lens.minimumRating {
-            chips.append(.init(id: "rating", title: "\(minimumRating.formatted())+", systemImage: "star.fill"))
-        }
-        if lens.repeatOnly {
-            chips.append(.init(id: "repeat", title: "Repeat visits", systemImage: "arrow.triangle.2.circlepath"))
-        }
-        return chips.isEmpty
-            ? [.init(id: "all", title: "All places", systemImage: "map.fill")]
-            : chips
-    }
-
-    private var currentYear: Int {
-        Calendar.current.component(.year, from: dataset.now)
-    }
-
     private var repeatRatePercentage: Int {
         Int((insights.repeatRate * 100).rounded())
     }
@@ -518,6 +452,7 @@ struct YourMapPrototypeScreen: View {
 
 private struct YourMapPrototypeFilterSheet: View {
     @Binding var lens: YourMapPrototypeLens
+    @Binding var savedLenses: [YourMapPrototypeSavedLens]
     let places: [YourMapPrototypePlace]
     let resultCount: Int
     @Environment(\.dismiss) private var dismiss
@@ -542,6 +477,8 @@ private struct YourMapPrototypeFilterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                    savedLensSection
+
                     filterSection(title: "Time", detail: "Choose one") {
                         optionGrid {
                             ForEach(YourMapPrototypeTimeRange.allCases) { range in
@@ -673,16 +610,39 @@ private struct YourMapPrototypeFilterSheet: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
                     Divider().overlay(WanderTheme.borderHairline.color)
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Show \(resultCount) \(resultCount == 1 ? "place" : "places")")
-                            .font(WanderTypography.control)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                            .background(WanderTheme.terracotta.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Button {
+                            guard !isCurrentLensSaved else { return }
+                            savedLenses.append(
+                                YourMapPrototypeSavedLens(
+                                    lens: lens,
+                                    ordinal: savedLenses.count + 1
+                                )
+                            )
+                        } label: {
+                            Label(isCurrentLensSaved ? "Saved" : "Save lens", systemImage: isCurrentLensSaved ? "checkmark" : "bookmark")
+                                .font(WanderTypography.control)
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .background(WanderTheme.surfaceRaised.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(lens.activeSectionCount == 0 || isCurrentLensSaved)
+                        .opacity(lens.activeSectionCount == 0 ? 0.5 : 1)
+                        .accessibilityIdentifier("yourMap.prototype.saveLens")
+
+                        Button {
+                            dismiss()
+                        } label: {
+                            Text("Show \(resultCount)")
+                                .font(WanderTypography.control)
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .background(WanderTheme.terracotta.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     .padding(WanderTheme.spacing4)
                 }
                 .background(WanderTheme.surfaceBone.color)
@@ -690,6 +650,68 @@ private struct YourMapPrototypeFilterSheet: View {
         }
         .tint(WanderTheme.terracottaDark.color)
         .accessibilityIdentifier("yourMap.prototype.filterSheet")
+    }
+
+    private var savedLensSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Saved lenses")
+                    .font(WanderTypography.editorialSectionTitle)
+                Spacer()
+                Text("Reusable filters")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Text("Save lens stores this exact filter recipe. Tap it later to reapply the same slice; it does not share any places.")
+                .font(WanderTypography.metadata)
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if savedLenses.isEmpty {
+                Label("No saved lenses yet", systemImage: "bookmark")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
+            } else {
+                ForEach(savedLenses) { savedLens in
+                    Button {
+                        lens = savedLens.lens
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing3) {
+                            Image(systemName: "bookmark.fill")
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(savedLens.title)
+                                    .font(WanderTypography.label)
+                                    .lineLimit(1)
+                                Text(savedLens.detail)
+                                    .font(WanderTypography.metadata)
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if savedLens.lens == lens {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(WanderTheme.categoryMoss.color)
+                            }
+                        }
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+                        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var isCurrentLensSaved: Bool {
+        savedLenses.contains { $0.lens == lens }
     }
 
     private func filterSection<Content: View>(
@@ -751,12 +773,13 @@ private struct YourMapPrototypeFilterSheet: View {
 
 private struct YourMapPrototypeSharePreview: View {
     let places: [YourMapPrototypePlace]
+    let lens: YourMapPrototypeLens
     let now: Date
     let dismiss: () -> Void
 
-    @State private var audience: YourMapPrototypeShareAudience = .friends
-    @State private var format: YourMapPrototypeShareFormat = .staticImage
-    @State private var showsPrototypeNotice = false
+    @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
+    @State private var createdLink: YourMapPrototypeShareLink?
+    @State private var didCopyLink = false
 
     private var insights: YourMapPrototypeInsights {
         YourMapPrototypeInsights(places: places, now: now)
@@ -767,8 +790,10 @@ private struct YourMapPrototypeSharePreview: View {
             HStack(spacing: WanderTheme.spacing2) {
                 YourMapPrototypeCircleButton(systemImage: "xmark", label: "Close share preview", action: dismiss)
                 Spacer()
-                Text("share your map")
-                    .font(WanderTypography.editorialDisplay)
+                Text("Share your map")
+                    .font(WanderTypography.editorialSectionTitle)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer()
                 Color.clear.frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             }
@@ -778,16 +803,10 @@ private struct YourMapPrototypeSharePreview: View {
             ScrollView {
                 VStack(spacing: WanderTheme.spacing3) {
                     shareStoryCard
-                    audienceRow
                     privacyRow(
-                        title: "Private notes excluded",
-                        detail: "Your personal notes won't be shared.",
-                        systemImage: "lock.fill"
-                    )
-                    privacyRow(
-                        title: "Exact locations hidden",
-                        detail: "Only approximate areas are shown.",
-                        systemImage: "location.slash.fill"
+                        title: "Anyone with the link",
+                        detail: "No account is required to open and explore this map.",
+                        systemImage: "link"
                     )
 
                     Picker("Share format", selection: $format) {
@@ -798,9 +817,20 @@ private struct YourMapPrototypeSharePreview: View {
                     .pickerStyle(.segmented)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .accessibilityIdentifier("yourMap.prototype.shareFormat")
+                    .onChange(of: format) { _, _ in
+                        createdLink = nil
+                        didCopyLink = false
+                    }
+
+                    Text(formatDescription)
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Button {
-                        showsPrototypeNotice = true
+                        createdLink = YourMapPrototypeShareLink.make(format: format)
+                        didCopyLink = false
                     } label: {
                         Label("Create share link", systemImage: "link")
                             .font(WanderTypography.control)
@@ -810,6 +840,17 @@ private struct YourMapPrototypeSharePreview: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("yourMap.prototype.createShare")
+
+                    if let createdLink {
+                        createdLinkCard(createdLink)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
+                    privacyRow(
+                        title: "Private notes stay private",
+                        detail: "The link contains the map view, never your personal notes.",
+                        systemImage: "lock.fill"
+                    )
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing6)
@@ -818,17 +859,12 @@ private struct YourMapPrototypeSharePreview: View {
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
-        .alert("Prototype only", isPresented: $showsPrototypeNotice) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("This review build does not create a public link or send place data.")
-        }
         .accessibilityIdentifier("yourMap.prototype.sharePreview")
     }
 
     private var shareStoryCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("Coffee I’d go back to")
+            Text(lensTitle)
                 .font(WanderTypography.editorialDisplay)
                 .fixedSize(horizontal: false, vertical: true)
             YourMapPrototypeMiniMap(places: places)
@@ -855,35 +891,6 @@ private struct YourMapPrototypeSharePreview: View {
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
     }
 
-    private var audienceRow: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Label("Share with", systemImage: "person.2.fill")
-                .font(WanderTypography.label)
-            Spacer()
-            Menu {
-                ForEach(YourMapPrototypeShareAudience.allCases) { option in
-                    Button(option.title) {
-                        audience = option
-                    }
-                }
-            } label: {
-                HStack(spacing: WanderTheme.spacing1) {
-                    Text(audience.title)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .black))
-                }
-                .font(WanderTypography.metadata)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .frame(minHeight: WanderTheme.tapMinimum)
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 58)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
-    }
-
     private func privacyRow(title: String, detail: String, systemImage: String) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
@@ -905,6 +912,57 @@ private struct YourMapPrototypeSharePreview: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
+    }
+
+    private func createdLinkCard(_ link: YourMapPrototypeShareLink) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Label("Your \(link.format.title.lowercased()) link is ready", systemImage: "checkmark.circle.fill")
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.categoryMoss.color)
+
+            Text(link.url.absoluteString)
+                .font(WanderTypography.metadata.monospaced())
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Button {
+                UIPasteboard.general.url = link.url
+                didCopyLink = true
+            } label: {
+                Label(didCopyLink ? "Copied" : "Copy link", systemImage: didCopyLink ? "checkmark" : "doc.on.doc")
+                    .font(WanderTypography.control)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                    .background(WanderTheme.terracottaTint.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("yourMap.prototype.copyShareLink")
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.categoryMoss.color.opacity(0.5)))
+    }
+
+    private var lensTitle: String {
+        if let category = lens.categories.sorted().first {
+            return "Your \(category.lowercased()) map"
+        }
+        if let city = lens.cities.sorted().first {
+            return "Your \(city) map"
+        }
+        return "Your saved places"
+    }
+
+    private var formatDescription: String {
+        switch format {
+        case .staticSnapshot:
+            "Static freezes these \(places.count) places exactly as they are when the link is created."
+        case .liveLens:
+            "Live keeps this lens connected, so future places that match it appear automatically."
+        }
     }
 
     private func shareStat(
@@ -935,10 +993,8 @@ private struct YourMapPrototypeMiniMap: View {
         Map(position: .constant(.region(region)), interactionModes: []) {
             ForEach(Array(places.prefix(28))) { place in
                 Annotation(place.name, coordinate: place.coordinate) {
-                    Circle()
-                        .fill(categoryColor(place.category))
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+                    YourMapPrototypePin(place: place)
+                        .scaleEffect(0.58)
                 }
                 .annotationTitles(.hidden)
             }
@@ -967,79 +1023,25 @@ private struct YourMapPrototypePin: View {
     let place: YourMapPrototypePlace
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(place.status == .been ? WanderTheme.terracotta.color : WanderTheme.surfaceBone.color)
-            Circle()
-                .stroke(
-                    WanderTheme.terracotta.color,
-                    style: StrokeStyle(lineWidth: 2, dash: place.status == .wanna ? [3, 2] : [])
-                )
-            if place.visitCount > 1 {
-                Text("\(place.visitCount)")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(place.status == .been ? WanderTheme.textOnAction.color : WanderTheme.terracottaDark.color)
-            }
-        }
-        .frame(width: 28, height: 28)
-        .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 3, y: 2)
-        .accessibilityLabel("\(place.name), \(place.status.title), \(place.visitCount) visits")
-    }
-}
-
-private struct YourMapPrototypeLensChip: Identifiable {
-    let id: String
-    let title: String
-    let systemImage: String
-}
-
-private struct YourMapPrototypeLensChipView: View {
-    let chip: YourMapPrototypeLensChip
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: chip.systemImage)
-            Text(chip.title)
-                .lineLimit(1)
-        }
-        .font(WanderTypography.metadata)
-        .foregroundStyle(WanderTheme.textOnAction.color)
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.terracotta.color, in: Capsule())
-    }
-}
-
-private struct YourMapPrototypeActionButton: View {
-    let title: String
-    let systemImage: String
-    var isProminent = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .bold))
-                Text(title)
-                    .font(WanderTypography.metadata)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .foregroundStyle(isProminent ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .background(
-                isProminent ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color,
-                in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+        WanderCategoryEmoji(
+            category: place.category,
+            name: place.name,
+            size: MapPinVisualMetrics.emojiDiameter
+        )
+        .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(Circle())
+        .overlay(
+            MapPinOutlineStroke(
+                outline: MapPinOutline(
+                    ownership: .currentUser,
+                    status: place.status == .been ? .been : .wannaGo
+                ),
+                lineWidth: MapPinVisualMetrics.outlineWidth
             )
-            .overlay {
-                if !isProminent {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .stroke(WanderTheme.borderHairline.color)
-                }
-            }
-        }
-        .buttonStyle(.plain)
+        )
+        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+        .accessibilityLabel("\(place.name), \(place.status.title), \(place.visitCount) visits")
     }
 }
 
@@ -1090,37 +1092,6 @@ private struct YourMapPrototypeBarRow: View {
     }
 }
 
-private struct YourMapPrototypeComparisonRow: View {
-    let title: String
-    let current: Int
-    let previous: Int
-    let maximum: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-            HStack {
-                Text(title).font(WanderTypography.label)
-                Spacer()
-                Text("\(current) / \(previous)")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .monospacedDigit()
-            }
-            GeometryReader { geometry in
-                VStack(alignment: .leading, spacing: 3) {
-                    Capsule()
-                        .fill(WanderTheme.categoryMoss.color)
-                        .frame(width: geometry.size.width * CGFloat(current) / CGFloat(maximum), height: 7)
-                    Capsule()
-                        .fill(WanderTheme.surfaceSand.color)
-                        .frame(width: geometry.size.width * CGFloat(previous) / CGFloat(maximum), height: 7)
-                }
-            }
-            .frame(height: 17)
-        }
-    }
-}
-
 private struct YourMapPrototypeSparkline: View {
     var body: some View {
         GeometryReader { geometry in
@@ -1166,43 +1137,6 @@ private enum YourMapPrototypeRatingOption: String, CaseIterable, Identifiable {
         case .any: nil
         case .fourPlus: 4
         case .fourPointFivePlus: 4.5
-        }
-    }
-}
-
-private enum YourMapPrototypeShareAudience: String, CaseIterable, Identifiable {
-    case onlyMe
-    case friends
-    case peopleWithLink
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .onlyMe: "Only me"
-        case .friends: "Friends"
-        case .peopleWithLink: "People with link"
-        }
-    }
-}
-
-private enum YourMapPrototypeShareFormat: String, CaseIterable, Identifiable {
-    case staticImage
-    case liveView
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .staticImage: "Static image"
-        case .liveView: "Live view"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .staticImage: "photo"
-        case .liveView: "dot.radiowaves.left.and.right"
         }
     }
 }

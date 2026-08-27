@@ -265,7 +265,13 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - WanderTests
+      - path: WanderTests
+        excludes:
+          - Fixtures/ios-fix/rec-354-followup-layout-pre.json
+          - Fixtures/ios-fix/rec-354-followup-layout-pre.png
+          - Fixtures/ios-fix/rec-354-single-screen-check-in-post.png
+          - Fixtures/ios-fix/rec-354-single-screen-check-in-pre.json
+          - Fixtures/ios-fix/rec-354-single-screen-check-in-pre.png
     dependencies:
       - target: Wander
     settings:
