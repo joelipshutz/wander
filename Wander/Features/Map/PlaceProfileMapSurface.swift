@@ -559,7 +559,7 @@ private struct PlaceProfilePreviewCard: View {
             }
 
             if onAddToList != nil {
-                actionButtonGlyph(systemName: WanderTab.lists.systemImage, size: 17)
+                actionButtonGlyph(systemName: MapPlaceListActionSymbol.systemImage, size: 17)
             }
 
             if shareContent != nil {
@@ -602,7 +602,7 @@ private struct PlaceProfilePreviewCard: View {
                     activeCardAction = .addToList
                     onAddToList()
                 } label: {
-                    Image(systemName: WanderTab.lists.systemImage)
+                    Image(systemName: MapPlaceListActionSymbol.systemImage)
                         .font(.system(size: 17, weight: .black))
                 }
                 .buttonStyle(
@@ -1338,7 +1338,7 @@ private struct PlaceProfileFullView: View {
 
             if let onAddToList {
                 Button(action: onAddToList) {
-                    headerNavigationLabel(systemImage: WanderTab.lists.systemImage)
+                    headerNavigationLabel(systemImage: MapPlaceListActionSymbol.systemImage)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add place to lists")

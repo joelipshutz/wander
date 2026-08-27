@@ -12,7 +12,6 @@ final class MapPlaceListPickerTests: XCTestCase {
 
         selection.togglePending(listID: "weekend")
         XCTAssertEqual(selection.pendingListIDs, ["weekend"])
-        XCTAssertEqual(selection.selectedListIDs, ["already-there", "weekend"])
 
         selection.togglePending(listID: "weekend")
         XCTAssertTrue(selection.pendingListIDs.isEmpty)
@@ -149,6 +148,33 @@ final class MapPlaceListPickerTests: XCTestCase {
         )
     }
 
+    func testNewListCountUsesItsAddedPlaceEvenWhenCachedSummaryIsStale() async throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "New Test",
+                description: "",
+                visibility: .followers
+            )
+        )
+
+        let result = await store.addCandidate(
+            candidate(id: "new-list-place", name: "First Stop"),
+            to: list,
+            backend: nil,
+            analyticsSurface: "map"
+        )
+
+        let refreshed = try XCTUnwrap(store.visiblePlaceLists.first { $0.id == list.id })
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertEqual(refreshed.cachedItemCount, 1)
+        XCTAssertEqual(store.visiblePlaces(in: refreshed).count, 1)
+        XCTAssertEqual(
+            PlaceListDisplayCount.resolve(cachedCount: 0, visibleCount: 1),
+            1
+        )
+    }
+
     func testPickerSummaryPrefersCreatedWannaAcrossMultipleLists() {
         let result = MapPlaceListPickerResult.summarize([
             ListPlaceAddResult(
@@ -166,8 +192,8 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
-    func testMapListActionUsesExactBottomNavigationSymbol() {
-        XCTAssertEqual(WanderTab.lists.systemImage, "bookmark.square")
+    func testMapListActionUsesTrimlessBookmarkSymbol() {
+        XCTAssertEqual(MapPlaceListActionSymbol.systemImage, "bookmark.fill")
     }
 
     private func makeStore(

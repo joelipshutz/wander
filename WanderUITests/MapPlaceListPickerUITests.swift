@@ -28,6 +28,12 @@ final class MapPlaceListPickerUITests: XCTestCase {
             app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Only yours")).count,
             0
         )
+        XCTAssertTrue(app.buttons["map-list-picker.apply"].label.contains("Done"))
+        let existingRow = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@", "map-list-picker.list.", "already in list")
+        ).firstMatch
+        XCTAssertTrue(existingRow.exists)
+        XCTAssertFalse(existingRow.isEnabled)
         capture("REC-342 collapsed add-to-list picker")
 
         let availableRow = app.buttons.matching(

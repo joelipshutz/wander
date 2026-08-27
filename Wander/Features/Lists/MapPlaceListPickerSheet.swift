@@ -1,6 +1,10 @@
 import SwiftUI
 import UIKit
 
+enum MapPlaceListActionSymbol {
+    static let systemImage = "bookmark.fill"
+}
+
 enum MapPlaceListTarget: Identifiable {
     case candidate(PlaceCandidate)
     case visiblePlace(VisiblePlace)
@@ -75,10 +79,6 @@ enum MapPlaceListTarget: Identifiable {
 struct MapPlaceListPickerSelection: Equatable {
     let existingListIDs: Set<String>
     private(set) var pendingListIDs: Set<String> = []
-
-    var selectedListIDs: Set<String> {
-        existingListIDs.union(pendingListIDs)
-    }
 
     mutating func togglePending(listID: String) {
         guard !existingListIDs.contains(listID) else { return }
@@ -396,7 +396,7 @@ struct MapPlaceListPickerSheet: View {
     private func listRow(_ list: LocalPlaceList) -> some View {
         let isExisting = target.isAlreadyInList(list, store: store)
             || selection.existingListIDs.contains(list.id)
-        let isSelected = isExisting || selection.pendingListIDs.contains(list.id)
+        let isPending = selection.pendingListIDs.contains(list.id)
 
         return Button {
             guard !isExisting else { return }
@@ -427,20 +427,24 @@ struct MapPlaceListPickerSheet: View {
 
                 Spacer(minLength: WanderTheme.spacing2)
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isExisting || isPending ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(isSelected
-                        ? WanderTheme.terracotta.color
-                        : WanderTheme.borderStrong.color)
+                    .foregroundStyle(
+                        isExisting
+                            ? Color(uiColor: .systemGray3)
+                            : isPending
+                                ? WanderTheme.terracotta.color
+                                : WanderTheme.borderStrong.color
+                    )
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 58)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isApplying)
+        .disabled(isApplying || isExisting)
         .accessibilityIdentifier("map-list-picker.list.\(list.id)")
-        .accessibilityLabel("\(list.name), \(isExisting ? "already in list" : isSelected ? "selected" : "not selected")")
+        .accessibilityLabel("\(list.name), \(isExisting ? "already in list" : isPending ? "selected" : "not selected")")
         .accessibilityHint(isExisting ? "This place is already in the list" : "Double tap to toggle this list")
     }
 
