@@ -210,8 +210,8 @@ final class MapHitTestingTests: XCTestCase {
     func testCancelingMapSearchRestoresTheSelectionCapturedAtSearchEntry() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: "sushi-fumi")
-        session.begin(selectedPlaceGroupKey: "boulevard")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "sushi-fumi")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "boulevard")
         let restoredSelection = session.cancel(
             currentSelectedPlaceGroupKey: "boulevard"
         )
@@ -223,7 +223,34 @@ final class MapHitTestingTests: XCTestCase {
     func testCancelingMapSearchKeepsSelectionEmptyWhenSearchStartedEmpty() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertNil(restoredSelection)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCancelingMapSearchKeepsEntrySelectionAfterCancelButtonBlursField() {
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: false, selectedPlaceGroupKey: "boulevard")
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertNil(restoredSelection)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCancelingMapSearchKeepsEntrySelectionAfterBlurAndRefocus() {
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: false, selectedPlaceGroupKey: "boulevard")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "boulevard")
         let restoredSelection = session.cancel(
             currentSelectedPlaceGroupKey: "boulevard"
         )
@@ -235,7 +262,7 @@ final class MapHitTestingTests: XCTestCase {
     func testCompletingMapSearchKeepsAnExplicitlySelectedResult() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: "sushi-fumi")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "sushi-fumi")
         session.finish()
         let selectedResult = session.cancel(
             currentSelectedPlaceGroupKey: "rvr"
