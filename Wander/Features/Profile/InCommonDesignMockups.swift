@@ -131,7 +131,10 @@ struct InCommonDesignMockupRoot: View {
                 InCommonDestinationMockup(
                     direction: direction,
                     relationship: relationship,
-                    loadState: loadState
+                    loadState: loadState,
+                    openSharedMap: {
+                        path.append(.sharedMap)
+                    }
                 )
             }
         }
@@ -299,6 +302,7 @@ private struct InCommonDestinationMockup: View {
     let direction: InCommonMockupDirection
     let relationship: InCommonMockupRelationship
     let loadState: InCommonMockupLoadState
+    let openSharedMap: () -> Void
 
     @State private var searchText = ""
     @State private var selectedType = InCommonPlaceType.all
@@ -391,7 +395,11 @@ private struct InCommonDestinationMockup: View {
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            InCommonPrimaryButton(title: "Open your shared map", systemImage: "map.fill", action: performPrimaryAction)
+            InCommonPrimaryButton(
+                title: "Open your shared map",
+                systemImage: "map.fill",
+                action: openSharedMap
+            )
         }
     }
 

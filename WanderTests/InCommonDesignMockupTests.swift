@@ -105,5 +105,24 @@ final class InCommonDesignMockupTests: XCTestCase {
         XCTAssertTrue(source.contains("ForEach(InCommonPlaceTag.allCases"))
         XCTAssertTrue(source.contains("withAnimation(.easeOut(duration: 1.2))"))
     }
+
+    func testOverlapPrimaryActionNavigatesToTheSharedMap() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/InCommonDesignMockups.swift"
+            )
+        )
+
+        XCTAssertTrue(source.contains("path.append(.sharedMap)"))
+        XCTAssertTrue(source.contains("action: openSharedMap"))
+        XCTAssertFalse(
+            source.contains(
+                "InCommonPrimaryButton(title: \"Open your shared map\", systemImage: \"map.fill\", action: performPrimaryAction)"
+            )
+        )
+    }
 }
 #endif
