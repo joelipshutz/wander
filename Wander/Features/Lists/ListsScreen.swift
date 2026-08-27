@@ -3930,6 +3930,30 @@ private struct ListPlaceProfileDestination: View {
     }
 }
 
+struct NewPlaceListDraft {
+    let title: String
+    let description: String
+    let isStealth: Bool
+    let collaboratorUserIDs: [String]
+}
+
+struct NewPlaceListEditorSheet: View {
+    let onSave: (NewPlaceListDraft) -> Void
+
+    var body: some View {
+        ListEditorSheet(presentation: .create) { draft in
+            onSave(
+                NewPlaceListDraft(
+                    title: draft.title,
+                    description: draft.description,
+                    isStealth: draft.isStealth,
+                    collaboratorUserIDs: draft.collaborators.map(\.id)
+                )
+            )
+        }
+    }
+}
+
 private enum ListEditorPresentation: Identifiable, Hashable {
     case create
     case edit(PlaceListMock)

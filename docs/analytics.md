@@ -50,7 +50,7 @@ engagement_action_performed
 | Human need | Current action values | Product behavior |
 |---|---|---|
 | Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
-| Expression | `place_saved`, `check_in_created`, `list_created`, `recommendation_shared` | Record and communicate personal taste and place memory. |
+| Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
 Status was the blank area in the original card. These are deliberately product-native status signals, not public follower counts or leaderboard mechanics.
@@ -77,6 +77,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
 | `place_list_created` | A list is created | `visibility`, `collaborator_count` |
+| `place_list_item_added` | A place is successfully added to a list from an instrumented surface | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |

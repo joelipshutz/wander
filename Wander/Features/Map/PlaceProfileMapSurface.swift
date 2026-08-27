@@ -20,7 +20,32 @@ struct PlaceProfileMapSurface: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    let onAddToList: (() -> Void)?
     let onReady: () -> Void
+
+    init(
+        place: PlaceSheetPlace,
+        saves: [PlaceSaveSummary],
+        tasteSaves: [PlaceSaveSummary],
+        currentUserID: String,
+        viewerLocation: CLLocation?,
+        action: PlaceSheetAction,
+        onOpen: @escaping () -> Void,
+        onAction: @escaping () -> Void,
+        onAddToList: (() -> Void)? = nil,
+        onReady: @escaping () -> Void
+    ) {
+        self.place = place
+        self.saves = saves
+        self.tasteSaves = tasteSaves
+        self.currentUserID = currentUserID
+        self.viewerLocation = viewerLocation
+        self.action = action
+        self.onOpen = onOpen
+        self.onAction = onAction
+        self.onAddToList = onAddToList
+        self.onReady = onReady
+    }
 
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
@@ -49,6 +74,7 @@ struct PlaceProfileMapSurface: View {
                     action: action,
                     onOpen: onOpen,
                     onAction: onAction,
+                    onAddToList: onAddToList,
                     onReady: onReady
                 )
                 .walkthroughTarget(.mapMemory)
@@ -75,6 +101,7 @@ struct PlaceProfileFullScreen: View {
     let usesInteractiveHorizontalDismissal: Bool
     let onBack: () -> Void
     let onAction: () -> Void
+    let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
@@ -99,6 +126,7 @@ struct PlaceProfileFullScreen: View {
         usesInteractiveHorizontalDismissal: Bool = false,
         onBack: @escaping () -> Void,
         onAction: @escaping () -> Void,
+        onAddToList: (() -> Void)? = nil,
         onFloatingAction: ((PlaceProfileSaveAction) -> Void)? = nil,
         onAttachedDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onAttachedSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult? = { _ in nil },
@@ -115,6 +143,7 @@ struct PlaceProfileFullScreen: View {
         self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
         self.onBack = onBack
         self.onAction = onAction
+        self.onAddToList = onAddToList
         self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
@@ -160,6 +189,7 @@ struct PlaceProfileFullScreen: View {
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
+            onAddToList: onAddToList,
             onFloatingAction: onFloatingAction,
             onAttachedDraftChange: onAttachedDraftChange,
             onAttachedSave: onAttachedSave,
@@ -286,6 +316,7 @@ private struct PlaceProfilePreviewCard: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    let onAddToList: (() -> Void)?
     let onReady: () -> Void
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
@@ -527,6 +558,10 @@ private struct PlaceProfilePreviewCard: View {
                 actionButtonGlyph(systemName: action.systemImage, size: 17)
             }
 
+            if onAddToList != nil {
+                actionButtonGlyph(systemName: WanderTab.lists.systemImage, size: 17)
+            }
+
             if shareContent != nil {
                 actionButtonGlyph(systemName: "square.and.arrow.up", size: 16)
             }
@@ -560,6 +595,24 @@ private struct PlaceProfilePreviewCard: View {
                 )
                 .accessibilityIdentifier("map.selectedPlaceAction")
                 .accessibilityLabel(action.accessibilityLabel)
+            }
+
+            if let onAddToList {
+                Button {
+                    activeCardAction = .addToList
+                    onAddToList()
+                } label: {
+                    Image(systemName: WanderTab.lists.systemImage)
+                        .font(.system(size: 17, weight: .black))
+                }
+                .buttonStyle(
+                    PlaceCardGlassActionButtonStyle(
+                        actionID: .addToList,
+                        activeAction: $activeCardAction
+                    )
+                )
+                .accessibilityIdentifier("map.selectedPlaceAddToList")
+                .accessibilityLabel("Add place to lists")
             }
 
             if shareContent != nil {
@@ -633,7 +686,7 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var hasCardActions: Bool {
-        action != .none || shareContent != nil
+        action != .none || onAddToList != nil || shareContent != nil
     }
 
     private var shareContent: WanderShareContent? {
@@ -880,6 +933,7 @@ private struct PlaceProfilePreviewCard: View {
 
 private enum PlaceCardPreviewAction: Hashable {
     case primary
+    case addToList
     case share
 }
 
@@ -1078,6 +1132,7 @@ private struct PlaceProfileFullView: View {
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+    let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
@@ -1280,6 +1335,15 @@ private struct PlaceProfileFullView: View {
             }
 
             Spacer(minLength: 0)
+
+            if let onAddToList {
+                Button(action: onAddToList) {
+                    headerNavigationLabel(systemImage: WanderTab.lists.systemImage)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add place to lists")
+                .accessibilityIdentifier("place-profile.add-to-list")
+            }
 
             if let shareURL {
                 WanderShareButton(
@@ -1796,7 +1860,17 @@ private struct PlaceProfileFullView: View {
     }
 
     private var shareURL: URL? {
-        PlaceProfileCopy.shareURL(for: place)
+        if let deepLink = PlaceProfileCopy.shareURL(for: place) {
+            return deepLink
+        }
+        guard let latitude = place.latitude,
+              let longitude = place.longitude
+        else { return nil }
+        return PlaceExternalLinks.directionsAction(
+            placeName: place.name,
+            latitude: latitude,
+            longitude: longitude
+        )?.url
     }
 
     private var shareText: String {

@@ -93,6 +93,7 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(card.label.contains("Rated 4.0"))
         XCTAssertFalse(app.descendants(matching: .any)["map.selectedPlaceRatingProvider"].exists)
         XCTAssertTrue(app.buttons["map.selectedPlaceAction"].exists)
+        XCTAssertTrue(app.buttons["map.selectedPlaceAddToList"].exists)
         let shareButton = app.buttons["map.selectedPlaceShare"]
         XCTAssertTrue(shareButton.exists)
         XCTAssertFalse(app.descendants(matching: .any)["map.selectedPlaceAttribution"].exists)
