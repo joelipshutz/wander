@@ -107,8 +107,8 @@ final class MapHitTestingTests: XCTestCase {
     func testCancelingMapSearchRestoresTheSelectionCapturedAtSearchEntry() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: "sushi-fumi")
-        session.begin(selectedPlaceGroupKey: "boulevard")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "sushi-fumi")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "boulevard")
         let restoredSelection = session.cancel(
             currentSelectedPlaceGroupKey: "boulevard"
         )
@@ -120,7 +120,34 @@ final class MapHitTestingTests: XCTestCase {
     func testCancelingMapSearchKeepsSelectionEmptyWhenSearchStartedEmpty() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertNil(restoredSelection)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCancelingMapSearchKeepsEntrySelectionAfterCancelButtonBlursField() {
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: false, selectedPlaceGroupKey: "boulevard")
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertNil(restoredSelection)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCancelingMapSearchKeepsEntrySelectionAfterBlurAndRefocus() {
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: nil)
+        session.focusDidChange(isFocused: false, selectedPlaceGroupKey: "boulevard")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "boulevard")
         let restoredSelection = session.cancel(
             currentSelectedPlaceGroupKey: "boulevard"
         )
@@ -132,7 +159,7 @@ final class MapHitTestingTests: XCTestCase {
     func testCompletingMapSearchKeepsAnExplicitlySelectedResult() {
         var session = MapSearchSelectionSession()
 
-        session.begin(selectedPlaceGroupKey: "sushi-fumi")
+        session.focusDidChange(isFocused: true, selectedPlaceGroupKey: "sushi-fumi")
         session.finish()
         let selectedResult = session.cancel(
             currentSelectedPlaceGroupKey: "rvr"
@@ -672,6 +699,146 @@ final class MapSelectionMotionTests: XCTestCase {
         )
     }
 
+    func testSelectedAnnotationStaysInsideMapKitsCameraLayer() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let nativeMapStart = try XCTUnwrap(map.range(of: "                    Map(\n"))
+        let nativeMapEnd = try XCTUnwrap(
+            map.range(of: "                    .mapStyle(", range: nativeMapStart.upperBound..<map.endIndex)
+        )
+        let nativeMapContent = map[nativeMapStart.lowerBound..<nativeMapEnd.lowerBound]
+
+        XCTAssertTrue(nativeMapContent.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertTrue(nativeMapContent.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertFalse(map.contains(".position(point)"))
+    }
+
+    func testNewNativeActiveAnnotationsKeepTheOneShotEntranceBounce() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let savedStart = try XCTUnwrap(
+            map.range(of: "                        ForEach(activeAnnotationGroups, id: \\.key)")
+        )
+        let searchStart = try XCTUnwrap(
+            map.range(
+                of: "                        ForEach(activeSearchCandidates, id: \\.id)",
+                range: savedStart.upperBound..<map.endIndex
+            )
+        )
+        let nativeMapEnd = try XCTUnwrap(
+            map.range(of: "                    .mapStyle(", range: searchStart.upperBound..<map.endIndex)
+        )
+        let savedActiveAnnotation = map[savedStart.lowerBound..<searchStart.lowerBound]
+        let searchActiveAnnotation = map[searchStart.lowerBound..<nativeMapEnd.lowerBound]
+
+        XCTAssertTrue(savedActiveAnnotation.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(searchActiveAnnotation.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(savedActiveAnnotation.contains("isVisible: isEntranceVisible"))
+        XCTAssertTrue(searchActiveAnnotation.contains("isVisible: isEntranceVisible"))
+        XCTAssertTrue(savedActiveAnnotation.contains("MapPinReselectionBounceModifier("))
+        XCTAssertTrue(searchActiveAnnotation.contains("MapPinReselectionBounceModifier("))
+        XCTAssertFalse(savedActiveAnnotation.contains(".position("))
+        XCTAssertFalse(searchActiveAnnotation.contains(".position("))
+    }
+
+    func testViewportAndFilterArrivalsUseExplicitEntranceIdentityState() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(
+            map.contains("@State private var mapPinEntranceKeyState = MapPinEntranceKeyState()")
+        )
+        XCTAssertTrue(map.contains(".onChange(of: mapPinEntranceKeys, initial: true)"))
+        XCTAssertTrue(map.contains("mapPinEntranceKeyState.isPresented("))
+        XCTAssertTrue(
+            map.contains("updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))")
+        )
+        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+    }
+
+    func testEntranceIdentityStateStagesOnlyPinsNewToTheViewport() throws {
+        let retained = MapPinEntranceIdentity.saved("retained")
+        let entering = MapPinEntranceIdentity.saved("entering")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [retained], reduceMotion: true))
+        let keysToPresent = state.prepare(
+            for: [retained, entering],
+            reduceMotion: false
+        )
+
+        XCTAssertTrue(state.isPresented(retained))
+        XCTAssertFalse(state.isPresented(entering))
+        XCTAssertEqual(keysToPresent, [retained, entering])
+
+        state.present(try XCTUnwrap(keysToPresent))
+
+        XCTAssertTrue(state.isPresented(retained))
+        XCTAssertTrue(state.isPresented(entering))
+    }
+
+    func testEntranceIdentityStateForgetsPinsThatLeaveSoReentryBounces() {
+        let pin = MapPinEntranceIdentity.saved("returning")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [pin], reduceMotion: true))
+        XCTAssertNil(state.prepare(for: [], reduceMotion: false))
+        XCTAssertFalse(state.isPresented(pin))
+
+        let keysToPresent = state.prepare(for: [pin], reduceMotion: false)
+
+        XCTAssertFalse(state.isPresented(pin))
+        XCTAssertEqual(keysToPresent, [pin])
+    }
+
+    func testEntranceIdentityStateDoesNotRestartPendingBounceForEveryCameraFrame() {
+        let pin = MapPinEntranceIdentity.saved("crossing-edge")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertEqual(state.prepare(for: [pin], reduceMotion: false), [pin])
+        XCTAssertFalse(state.needsUpdate(for: [pin], reduceMotion: false))
+        XCTAssertFalse(state.isPresented(pin))
+
+        state.present([pin])
+
+        XCTAssertTrue(state.isPresented(pin))
+        XCTAssertFalse(state.needsUpdate(for: [pin], reduceMotion: false))
+    }
+
+    func testEntranceIdentityStateKeepsRetainedPinStagedWhenPendingViewportShrinks() {
+        let retained = MapPinEntranceIdentity.saved("retained")
+        let departing = MapPinEntranceIdentity.saved("departing")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertEqual(
+            state.prepare(for: [retained, departing], reduceMotion: false),
+            [retained, departing]
+        )
+        XCTAssertEqual(state.prepare(for: [retained], reduceMotion: false), [retained])
+        XCTAssertFalse(state.isPresented(retained))
+    }
+
+    func testEntranceIdentityStatePresentsImmediatelyForReduceMotion() {
+        let pin = MapPinEntranceIdentity.search("candidate")
+        var state = MapPinEntranceKeyState()
+
+        XCTAssertNil(state.prepare(for: [pin], reduceMotion: true))
+        XCTAssertTrue(state.isPresented(pin))
+    }
+
     func testSelectionLifetimeAndLayeringFixtureRequiresDurableTopmostSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -694,9 +861,11 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
-        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
-        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
+        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(map.contains("prioritizedAnnotationCoordinate: activePinFocusSelection?.coordinate"))
+        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
+        XCTAssertGreaterThan(MapAnnotationPriorityPolicy.coordinateTolerance, 0)
         XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
     }
 
@@ -776,9 +945,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains("activeMapAnnotationOverlay("))
-        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(map.contains("prioritizedAnnotationCoordinate: activePinFocusSelection?.coordinate"))
+        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
         XCTAssertTrue(
             map.contains(
                 "pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll"
@@ -822,7 +993,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
     }
 
-    func testInactiveMapAnnotationsHideCompetingTitlesAndActiveSelectionUsesOverlay() throws {
+    func testInactiveMapAnnotationsHideCompetingTitlesAndActiveSelectionUsesNativeMapLayer() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -832,12 +1003,44 @@ final class MapSelectionMotionTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(
             map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
-            2
+            4
         )
-        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay("))
-        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
-        XCTAssertFalse(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertFalse(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertFalse(map.contains(".position(point)"))
+        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
+        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
+    }
+
+    func testNativeAnnotationPriorityMatchesOnlyTheSelectedCoordinate() {
+        let selected = CLLocationCoordinate2D(latitude: 33.770_050_1, longitude: -118.193_739_5)
+        let withinTolerance = CLLocationCoordinate2D(
+            latitude: selected.latitude + (MapAnnotationPriorityPolicy.coordinateTolerance / 2),
+            longitude: selected.longitude - (MapAnnotationPriorityPolicy.coordinateTolerance / 2)
+        )
+        let anotherPin = CLLocationCoordinate2D(
+            latitude: selected.latitude + 0.001,
+            longitude: selected.longitude
+        )
+
+        XCTAssertTrue(
+            MapAnnotationPriorityPolicy.matches(
+                selected,
+                selectedCoordinate: selected
+            )
+        )
+        XCTAssertTrue(
+            MapAnnotationPriorityPolicy.matches(
+                withinTolerance,
+                selectedCoordinate: selected
+            )
+        )
+        XCTAssertFalse(
+            MapAnnotationPriorityPolicy.matches(
+                anotherPin,
+                selectedCoordinate: selected
+            )
+        )
     }
 
     func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
