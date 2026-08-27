@@ -130,6 +130,22 @@ enum MapSearchQueryPolicy {
     }
 }
 
+enum MapSearchResultIdentity {
+    static func locationKey(
+        name: String,
+        latitude: Double,
+        longitude: Double
+    ) -> String {
+        let latitudeKey = Int((latitude * 100_000).rounded())
+        let longitudeKey = Int((longitude * 100_000).rounded())
+        let slug = name
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return "\(slug)_\(latitudeKey)_\(longitudeKey)"
+    }
+}
+
 struct MapSearchSelectionSession: Equatable {
     private(set) var isActive = false
     private var selectedPlaceGroupKeyAtEntry: String?
@@ -3851,10 +3867,8 @@ struct MapScreen: View {
             let candidates = (try? await mapKitCandidates(for: query, limit: 6)) ?? []
             guard !Task.isCancelled, Self.normalized(mapQuery) == normalized else { return }
 
-            let seenTitles = Set(immediateSavedSuggestions.map { Self.normalized($0.title) })
             let mapSuggestions = candidates
                 .filter { !isAlreadyVisible(candidate: $0) }
-                .filter { !seenTitles.contains(Self.normalized($0.name)) }
                 .prefix(max(0, 6 - immediateSavedSuggestions.count))
                 .map(MapSearchSuggestion.mapKit)
 
@@ -4190,21 +4204,15 @@ struct MapScreen: View {
     }
 
     private func mapKitSourceID(for item: MKMapItem, name: String) -> String {
-        let latitude = Int((item.placemark.coordinate.latitude * 100_000).rounded())
-        let longitude = Int((item.placemark.coordinate.longitude * 100_000).rounded())
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "mapkit_\(slug)_\(latitude)_\(longitude)"
+        "mapkit_\(mapKitDuplicateKey(for: item, name: name))"
     }
 
     private func mapKitDuplicateKey(for item: MKMapItem, name: String) -> String {
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "\(slug)_\(item.placemark.locality?.lowercased() ?? "")"
+        MapSearchResultIdentity.locationKey(
+            name: name,
+            latitude: item.placemark.coordinate.latitude,
+            longitude: item.placemark.coordinate.longitude
+        )
     }
 
     private func category(for item: MKMapItem) -> String {

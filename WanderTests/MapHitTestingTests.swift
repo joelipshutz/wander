@@ -158,6 +158,49 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
+    func testMapSearchResultIdentityKeepsSameNamedLocationsSeparate() {
+        let downtown = MapSearchResultIdentity.locationKey(
+            name: "Sonoratown",
+            latitude: 34.04446,
+            longitude: -118.25231
+        )
+        let midCity = MapSearchResultIdentity.locationKey(
+            name: "Sonoratown",
+            latitude: 34.03792,
+            longitude: -118.34510
+        )
+
+        XCTAssertNotEqual(downtown, midCity)
+        XCTAssertEqual(
+            downtown,
+            MapSearchResultIdentity.locationKey(
+                name: "Sonoratown",
+                latitude: 34.04446,
+                longitude: -118.25231
+            )
+        )
+    }
+
+    func testMapSearchTypeaheadOnlySuppressesTheAlreadyVisiblePhysicalLocation() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let scheduleStart = try XCTUnwrap(map.range(of: "private func scheduleTypeahead(for query: String)"))
+        let scheduleEnd = try XCTUnwrap(
+            map.range(
+                of: "private func savedTypeaheadSuggestions(",
+                range: scheduleStart.upperBound..<map.endIndex
+            )
+        )
+        let schedule = map[scheduleStart.lowerBound..<scheduleEnd.lowerBound]
+
+        XCTAssertTrue(schedule.contains(".filter { !isAlreadyVisible(candidate: $0) }"))
+        XCTAssertFalse(schedule.contains("seenTitles"))
+    }
+
     func testFeaturedRefreshPolicyOnlyFetchesForFeaturedSource() {
         XCTAssertTrue(MapSearchPerformancePolicy.shouldFetchFeatured(for: .featured))
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .friends))
