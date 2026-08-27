@@ -300,7 +300,9 @@ private struct InCommonDestinationMockup: View {
     let relationship: InCommonMockupRelationship
     let loadState: InCommonMockupLoadState
 
-    @State private var selectedFilter = InCommonPlaceFilter.all
+    @State private var searchText = ""
+    @State private var selectedType = InCommonPlaceType.all
+    @State private var selectedTag = InCommonPlaceTag.all
     @State private var selectedCategory: String?
     @State private var expandedPlaceID: String?
     @State private var selectedMapPlaceID = InCommonMockData.places[0].id
@@ -353,13 +355,7 @@ private struct InCommonDestinationMockup: View {
         }
         .onAppear {
             guard loadState == .loaded else { return }
-            if reduceMotion {
-                didRevealScore = true
-            } else {
-                withAnimation(.spring(response: 0.65, dampingFraction: 0.72)) {
-                    didRevealScore = true
-                }
-            }
+            revealScore()
         }
     }
 
@@ -382,11 +378,12 @@ private struct InCommonDestinationMockup: View {
                 InCommonOverlapHero(
                     score: relationship.score,
                     isRevealed: didRevealScore,
-                    relationship: relationship
+                    relationship: relationship,
+                    replayScore: revealScore
                 )
                 similaritySignals
-                filterChips
-                placeList(filteredPlaces)
+                overlapFilters
+                overlapPlaceResults
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
@@ -543,32 +540,177 @@ private struct InCommonDestinationMockup: View {
         }
     }
 
-    private var filterChips: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(InCommonPlaceFilter.allCases, id: \.self) { filter in
-                Button {
-                    withAnimation(.easeOut(duration: reduceMotion ? 0 : 0.18)) {
-                        selectedFilter = filter
+    private var overlapFilters: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    TextField("search in common", text: $searchText)
+                        .font(.system(size: 15, weight: .semibold))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(WanderTheme.textFaint.color)
+                                .frame(width: 32, height: WanderTheme.tapMinimum)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .padding(.leading, WanderTheme.spacing3)
+                .padding(.trailing, searchText.isEmpty ? WanderTheme.spacing3 : 2)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+
+                Menu {
+                    ForEach(InCommonPlaceTag.allCases, id: \.self) { tag in
+                        Button {
+                            withAnimation(.easeOut(duration: reduceMotion ? 0 : 0.18)) {
+                                selectedTag = tag
+                            }
+                        } label: {
+                            if selectedTag == tag {
+                                Label(tag.title, systemImage: "checkmark")
+                            } else {
+                                Text(tag.title)
+                            }
+                        }
                     }
                 } label: {
-                    Text(filter.title(visibleCount: relationship.visiblePlaceCount))
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(
-                            selectedFilter == filter
-                                ? WanderTheme.textOnAction.color
-                                : WanderTheme.textMuted.color
-                        )
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                        .background(
-                            selectedFilter == filter
-                                ? WanderTheme.textInk.color
-                                : WanderTheme.surfaceSand.color
-                        )
-                        .clipShape(Capsule())
+                    HStack(spacing: WanderTheme.spacing1) {
+                        Image(systemName: "tag.fill")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(selectedTag.title)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .black))
+                    }
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .frame(minWidth: 112, minHeight: 48)
+                    .background(
+                        selectedTag == .all
+                            ? WanderTheme.surfaceBone.color
+                            : WanderTheme.sunTint.color
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.plain)
+                .accessibilityLabel("Tag filter, \(selectedTag.title)")
+            }
+
+            ScrollView(.horizontal) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(InCommonPlaceType.allCases, id: \.self) { type in
+                        typeFilterChip(type)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func typeFilterChip(_ type: InCommonPlaceType) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: reduceMotion ? 0 : 0.18)) {
+                selectedType = type
+            }
+        } label: {
+            HStack(spacing: WanderTheme.spacing1) {
+                if let emoji = type.emoji {
+                    Text(emoji)
+                }
+                Text(type.title)
+            }
+            .font(.system(size: 12, weight: .black))
+            .foregroundStyle(
+                selectedType == type
+                    ? WanderTheme.textOnAction.color
+                    : WanderTheme.textInk.color
+            )
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .background(
+                selectedType == type
+                    ? WanderTheme.textInk.color
+                    : WanderTheme.surfaceSand.color
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(type.title) type filter")
+        .accessibilityAddTraits(selectedType == type ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var overlapPlaceResults: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("places you agree on")
+                    .font(WanderTypography.editorialCardTitle)
+
+                Spacer()
+
+                if hasActiveOverlapFilters {
+                    Button("clear") {
+                        withAnimation(.easeOut(duration: reduceMotion ? 0 : 0.18)) {
+                            searchText = ""
+                            selectedType = .all
+                            selectedTag = .all
+                        }
+                    }
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                } else {
+                    Text("\(filteredPlaces.count) shown")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+
+            if filteredPlaces.isEmpty {
+                VStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text("No shared places match")
+                        .font(.system(size: 15, weight: .black))
+                    Text("Try another type, tag, or search.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                .frame(maxWidth: .infinity, minHeight: 132)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            } else {
+                placeList(filteredPlaces)
             }
         }
+    }
+
+    private var hasActiveOverlapFilters: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedType != .all
+            || selectedTag != .all
     }
 
     private func placeList(_ places: [InCommonMockPlace]) -> some View {
@@ -627,15 +769,14 @@ private struct InCommonDestinationMockup: View {
     }
 
     private var filteredPlaces: [InCommonMockPlace] {
-        InCommonMockData.places.filter { place in
-            switch selectedFilter {
-            case .all:
-                true
-            case .bothBeen:
-                place.sharedState == .bothBeen
-            case .wannaGo:
-                place.sharedState == .sharedWanna
-            }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return InCommonMockData.places.filter { place in
+            let matchesSearch = query.isEmpty
+                || place.searchableText.localizedCaseInsensitiveContains(query)
+            let matchesType = selectedType == .all || place.type == selectedType
+            let matchesTag = selectedTag == .all || place.tags.contains(selectedTag)
+            return matchesSearch && matchesType && matchesTag
         }
     }
 
@@ -670,41 +811,41 @@ private struct InCommonDestinationMockup: View {
             }
         }
     }
+
+    private func revealScore() {
+        if reduceMotion {
+            didRevealScore = true
+            return
+        }
+
+        didRevealScore = false
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 1.2)) {
+                didRevealScore = true
+            }
+        }
+    }
 }
 
 private struct InCommonOverlapHero: View {
     let score: Int
     let isRevealed: Bool
     let relationship: InCommonMockupRelationship
+    let replayScore: () -> Void
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing4) {
-                ZStack {
-                    Circle()
-                        .stroke(WanderTheme.surfaceSand.color, lineWidth: 10)
-
-                    Circle()
-                        .trim(from: 0, to: isRevealed ? CGFloat(score) / 100 : 0)
-                        .stroke(
-                            AngularGradient(
-                                colors: [WanderTheme.terracotta.color, WanderTheme.categorySun.color, WanderTheme.pinSocial.color],
-                                center: .center
-                            ),
-                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-
-                    VStack(spacing: 0) {
-                        Text("\(score)%")
-                            .font(.system(size: 29, weight: .black, design: .rounded))
-                            .contentTransition(.numericText())
-                        Text("overlap")
-                            .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
+                Button(action: replayScore) {
+                    InCommonAnimatedScoreRing(
+                        score: score,
+                        progress: isRevealed ? 1 : 0
+                    )
                 }
+                .buttonStyle(.plain)
                 .frame(width: 112, height: 112)
+                .accessibilityLabel("\(score) percent map overlap")
+                .accessibilityHint("Replays the score animation")
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     InCommonAvatarPair(size: 38)
@@ -725,6 +866,58 @@ private struct InCommonOverlapHero: View {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+    }
+}
+
+private struct InCommonAnimatedScoreRing: View, @MainActor Animatable {
+    let score: Int
+    var progress: Double
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(WanderTheme.surfaceSand.color, lineWidth: 10)
+
+            Circle()
+                .trim(from: 0, to: CGFloat(clampedProgress) * CGFloat(score) / 100)
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            WanderTheme.terracotta.color,
+                            WanderTheme.categorySun.color,
+                            WanderTheme.pinSocial.color
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 0) {
+                Text("\(InCommonScoreAnimation.displayedScore(target: score, progress: clampedProgress))%")
+                    .font(.system(size: 29, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                Text("overlap")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+    }
+
+    private var clampedProgress: Double {
+        min(max(progress, 0), 1)
+    }
+}
+
+enum InCommonScoreAnimation {
+    static func displayedScore(target: Int, progress: Double) -> Int {
+        let clampedProgress = min(max(progress, 0), 1)
+        return Int((Double(target) * clampedProgress).rounded())
     }
 }
 
@@ -1131,16 +1324,47 @@ private struct InCommonSkeleton: View {
     }
 }
 
-private enum InCommonPlaceFilter: CaseIterable {
+private enum InCommonPlaceType: CaseIterable {
     case all
-    case bothBeen
-    case wannaGo
+    case coffee
+    case dinner
+    case outdoors
 
-    func title(visibleCount: Int) -> String {
+    var title: String {
         switch self {
-        case .all: "all \(visibleCount)"
-        case .bothBeen: "both been"
-        case .wannaGo: "wanna go"
+        case .all: "all"
+        case .coffee: "coffee & sweets"
+        case .dinner: "dinner & drinks"
+        case .outdoors: "outdoors & nature"
+        }
+    }
+
+    var emoji: String? {
+        switch self {
+        case .all: nil
+        case .coffee: "☕️"
+        case .dinner: "🍝"
+        case .outdoors: "🥾"
+        }
+    }
+}
+
+private enum InCommonPlaceTag: CaseIterable {
+    case all
+    case patio
+    case workFriendly
+    case spicy
+    case goodForGroups
+    case weekend
+
+    var title: String {
+        switch self {
+        case .all: "all tags"
+        case .patio: "patio"
+        case .workFriendly: "work-friendly"
+        case .spicy: "spicy"
+        case .goodForGroups: "good for groups"
+        case .weekend: "weekend"
         }
     }
 }
@@ -1184,6 +1408,12 @@ private struct InCommonMockPlace: Identifiable {
     let reason: String
     let sharedState: InCommonSharedState
     let tint: Color
+    let type: InCommonPlaceType
+    let tags: [InCommonPlaceTag]
+
+    var searchableText: String {
+        ([name, category, area, reason] + tags.map(\.title)).joined(separator: " ")
+    }
 }
 
 private enum InCommonMockData {
@@ -1196,7 +1426,9 @@ private enum InCommonMockData {
             emoji: "☕️",
             reason: "You both saved it for bright coffee and an easy catch-up.",
             sharedState: .bothBeen,
-            tint: WanderTheme.sunTint.color
+            tint: WanderTheme.sunTint.color,
+            type: .coffee,
+            tags: [.patio, .workFriendly]
         ),
         InCommonMockPlace(
             id: "maru",
@@ -1206,7 +1438,9 @@ private enum InCommonMockData {
             emoji: "🫘",
             reason: "Maya called it a reliable morning stop; it’s on your wanna-go map.",
             sharedState: .crossedPaths,
-            tint: WanderTheme.terracottaTint.color
+            tint: WanderTheme.terracottaTint.color,
+            type: .coffee,
+            tags: [.workFriendly, .weekend]
         ),
         InCommonMockPlace(
             id: "bestia",
@@ -1216,7 +1450,9 @@ private enum InCommonMockData {
             emoji: "🍝",
             reason: "You both picked it for a lively dinner with friends.",
             sharedState: .bothBeen,
-            tint: WanderTheme.skyTint.color
+            tint: WanderTheme.skyTint.color,
+            type: .dinner,
+            tags: [.goodForGroups, .weekend]
         ),
         InCommonMockPlace(
             id: "griffith",
@@ -1226,7 +1462,9 @@ private enum InCommonMockData {
             emoji: "🥾",
             reason: "It’s on both of your maps for an easy weekend walk.",
             sharedState: .sharedWanna,
-            tint: WanderTheme.categorySage.color.opacity(0.28)
+            tint: WanderTheme.categorySage.color.opacity(0.28),
+            type: .outdoors,
+            tags: [.weekend]
         ),
         InCommonMockPlace(
             id: "nightmarket",
@@ -1236,7 +1474,9 @@ private enum InCommonMockData {
             emoji: "🌶️",
             reason: "You both tagged it spicy, loud, and good for groups.",
             sharedState: .bothBeen,
-            tint: WanderTheme.terracottaTint.color
+            tint: WanderTheme.terracottaTint.color,
+            type: .dinner,
+            tags: [.spicy, .goodForGroups]
         )
     ]
 

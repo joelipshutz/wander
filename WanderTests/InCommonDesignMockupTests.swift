@@ -52,6 +52,25 @@ final class InCommonDesignMockupTests: XCTestCase {
         )
     }
 
+    func testAnimatedScoreUsesTheSameProgressAsTheRing() {
+        XCTAssertEqual(
+            InCommonScoreAnimation.displayedScore(target: 86, progress: 0),
+            0
+        )
+        XCTAssertEqual(
+            InCommonScoreAnimation.displayedScore(target: 86, progress: 0.5),
+            43
+        )
+        XCTAssertEqual(
+            InCommonScoreAnimation.displayedScore(target: 86, progress: 1),
+            86
+        )
+        XCTAssertEqual(
+            InCommonScoreAnimation.displayedScore(target: 86, progress: 2),
+            86
+        )
+    }
+
     func testMockupKeepsNativeNavigationStackBackGestureContract() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -69,6 +88,22 @@ final class InCommonDesignMockupTests: XCTestCase {
             )
         )
         XCTAssertFalse(source.contains(".navigationBarBackButtonHidden(true)"))
+    }
+
+    func testOverlapMockupKeepsSearchTypeAndTagFiltersCompact() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/InCommonDesignMockups.swift"
+            )
+        )
+
+        XCTAssertTrue(source.contains("TextField(\"search in common\""))
+        XCTAssertTrue(source.contains("ForEach(InCommonPlaceType.allCases"))
+        XCTAssertTrue(source.contains("ForEach(InCommonPlaceTag.allCases"))
+        XCTAssertTrue(source.contains("withAnimation(.easeOut(duration: 1.2))"))
     }
 }
 #endif
