@@ -363,8 +363,14 @@ final class WanderStore: ObservableObject {
         userID: String,
         photos: [String: LocalVisitPhoto]
     )?
+    private var activityBookmarkStateByPlaceAliasCache: (
+        revision: UInt64,
+        userID: String,
+        states: [String: ActivityBookmarkState]
+    )?
     private(set) var presentationRevision: UInt64 = 0
     private(set) var firstVisitPhotoIndexBuildCount = 0
+    private(set) var activityBookmarkIndexBuildCount = 0
 
     private struct RankedVisiblePlace {
         let index: Int
@@ -684,6 +690,7 @@ final class WanderStore: ObservableObject {
         visiblePlaceCountsByOwnerIDCache = nil
         visiblePlacesByListIDCache = nil
         firstVisitPhotosByPlaceIDCache = nil
+        activityBookmarkStateByPlaceAliasCache = nil
         visiblePlaceListLookupCache = nil
         presentationRevision &+= 1
     }
@@ -1642,14 +1649,26 @@ final class WanderStore: ObservableObject {
 
         do {
             let summaries = try await repository.summaries(activityIDs: remoteIDs)
+            var refreshedEngagement = activityEngagementByID
+            var refreshedErrors = activityEngagementErrorByID
             for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
-                activityEngagementByID[summary.activityID] = summary
-                activityEngagementErrorByID[summary.activityID] = nil
+                refreshedEngagement[summary.activityID] = summary
+                refreshedErrors[summary.activityID] = nil
+            }
+            if refreshedEngagement != activityEngagementByID {
+                activityEngagementByID = refreshedEngagement
+            }
+            if refreshedErrors != activityEngagementErrorByID {
+                activityEngagementErrorByID = refreshedErrors
             }
         } catch {
             let message = remoteErrorMessage(error)
+            var refreshedErrors = activityEngagementErrorByID
             for activityID in remoteIDs {
-                activityEngagementErrorByID[activityID] = message
+                refreshedErrors[activityID] = message
+            }
+            if refreshedErrors != activityEngagementErrorByID {
+                activityEngagementErrorByID = refreshedErrors
             }
         }
     }
@@ -1665,14 +1684,26 @@ final class WanderStore: ObservableObject {
             let refreshedIDs = Set(remoteIDs)
             placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID) }
             placeActivityEngagementMatches.append(contentsOf: matches)
+            var refreshedEngagement = activityEngagementByID
+            var refreshedErrors = activityEngagementErrorByID
             for match in matches where !pendingActivityLikeIDs.contains(match.activityID) {
-                activityEngagementByID[match.activityID] = match.engagement
-                activityEngagementErrorByID[match.activityID] = nil
+                refreshedEngagement[match.activityID] = match.engagement
+                refreshedErrors[match.activityID] = nil
+            }
+            if refreshedEngagement != activityEngagementByID {
+                activityEngagementByID = refreshedEngagement
+            }
+            if refreshedErrors != activityEngagementErrorByID {
+                activityEngagementErrorByID = refreshedErrors
             }
         } catch {
             let message = remoteErrorMessage(error)
+            var refreshedErrors = activityEngagementErrorByID
             for userPlaceID in remoteIDs {
-                activityEngagementErrorByID["user-place:\(userPlaceID)"] = message
+                refreshedErrors["user-place:\(userPlaceID)"] = message
+            }
+            if refreshedErrors != activityEngagementErrorByID {
+                activityEngagementErrorByID = refreshedErrors
             }
         }
     }
@@ -1901,10 +1932,12 @@ final class WanderStore: ObservableObject {
     }
 
     func activityBookmarkState(for visiblePlace: VisiblePlace) -> ActivityBookmarkState {
-        guard let ownPlace = currentUserVisiblePlaces.first(where: {
-            VisiblePlaceGrouping.matches($0, visiblePlace)
-        }) else { return .notSaved }
-        return ownPlace.userPlace.status == .wannaGo ? .wanna : .checkedIn
+        let statesByAlias = activityBookmarkStatesByPlaceAlias()
+        let matchingStates = VisiblePlaceGrouping.groupingAliases(for: visiblePlace.place)
+            .compactMap { statesByAlias[$0] }
+        if matchingStates.contains(.checkedIn) { return .checkedIn }
+        if matchingStates.contains(.wanna) { return .wanna }
+        return .notSaved
     }
 
     @discardableResult
@@ -1922,15 +1955,46 @@ final class WanderStore: ObservableObject {
 
     private func seedFixtureActivityEngagement(for activity: [FeedActivity]) {
         let seedCounts = [(5, 2), (3, 1), (8, 3), (2, 0), (6, 1)]
+        var seededEngagement = activityEngagementByID
         for (index, event) in activity.filter({ $0.place != nil }).enumerated()
-            where activityEngagementByID[event.id] == nil {
+            where seededEngagement[event.id] == nil {
             let seed = seedCounts[index % seedCounts.count]
-            activityEngagementByID[event.id] = ActivityEngagementSummary(
+            seededEngagement[event.id] = ActivityEngagementSummary(
                 activityID: event.id,
                 likeCount: seed.0,
                 commentCount: seed.1
             )
         }
+        if seededEngagement != activityEngagementByID {
+            activityEngagementByID = seededEngagement
+        }
+    }
+
+    private func activityBookmarkStatesByPlaceAlias() -> [String: ActivityBookmarkState] {
+        if let cached = activityBookmarkStateByPlaceAliasCache,
+           cached.revision == presentationRevision,
+           cached.userID == currentUser.id {
+            return cached.states
+        }
+
+        activityBookmarkIndexBuildCount += 1
+        var states: [String: ActivityBookmarkState] = [:]
+        for visiblePlace in currentUserVisiblePlaces {
+            let state: ActivityBookmarkState = visiblePlace.userPlace.status == .wannaGo
+                ? .wanna
+                : .checkedIn
+            for alias in VisiblePlaceGrouping.groupingAliases(for: visiblePlace.place) {
+                if states[alias] != .checkedIn {
+                    states[alias] = state
+                }
+            }
+        }
+        activityBookmarkStateByPlaceAliasCache = (
+            revision: presentationRevision,
+            userID: currentUser.id,
+            states: states
+        )
+        return states
     }
 
     /// Clerk may report a signed-in user slightly before its first usable
@@ -1961,6 +2025,13 @@ final class WanderStore: ObservableObject {
             .filter { followedIDs.contains($0.owner.id) }
             .filter { !$0.owner.isPrivateProfile }
             .filter { !isMuted(userID: $0.owner.id) }
+
+        if currentUser.id.hasPrefix("perf_user_") {
+            return performanceFixtureFollowedFeedPage(
+                followedPlaces: followedPlaces,
+                relativeTo: now
+            )
+        }
 
         func place(ownerID: String, placeID: String) -> VisiblePlace? {
             followedPlaces.first {
@@ -2045,6 +2116,64 @@ final class WanderStore: ObservableObject {
 
         let orderedActivity = FeedPresentation.newestFirst(activity, relativeTo: now)
         let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
+        return FollowedFeedPage(
+            activity: orderedActivity,
+            featuredPlaces: FeedPresentation.featuredPlaces(
+                from: orderedActivity,
+                currentUserPlaceIDs: savedPlaceIDs,
+                relativeTo: now
+            ),
+            nextCursor: nil,
+            fetchedAt: now
+        )
+    }
+
+    private func performanceFixtureFollowedFeedPage(
+        followedPlaces: [VisiblePlace],
+        relativeTo now: Date
+    ) -> FollowedFeedPage {
+        let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
+        let placeEvents = followedPlaces
+            .filter { !savedPlaceIDs.contains($0.place.id) }
+            .prefix(20)
+            .enumerated()
+            .map { index, visiblePlace in
+                let kind: FeedActivityKind = index.isMultiple(of: 3)
+                    ? .placeWannaGo
+                    : .placeBeen
+                return FeedActivity(
+                    id: String(format: "perf-feed-%03d", index),
+                    kind: kind,
+                    actor: shell(for: visiblePlace.owner),
+                    place: visiblePlace,
+                    occurredAt: now.addingTimeInterval(-Double(index + 1) * 3_600),
+                    note: index.isMultiple(of: 2) ? visiblePlace.userPlace.note : nil,
+                    rating: visiblePlace.userPlace.ratingScore
+                )
+            }
+
+        let listEvents = visiblePlaceLists
+            .filter { $0.ownerUserID != currentUser.id }
+            .prefix(5)
+            .enumerated()
+            .compactMap { index, list -> FeedActivity? in
+                guard let owner = profile(for: list.ownerUserID) else { return nil }
+                return FeedActivity(
+                    id: String(format: "perf-feed-%03d", placeEvents.count + index),
+                    kind: .listCreated,
+                    actor: shell(for: owner),
+                    list: list,
+                    occurredAt: now.addingTimeInterval(
+                        -Double(placeEvents.count + index + 1) * 3_600
+                    ),
+                    note: list.description
+                )
+            }
+
+        let orderedActivity = FeedPresentation.newestFirst(
+            placeEvents + listEvents,
+            relativeTo: now
+        )
         return FollowedFeedPage(
             activity: orderedActivity,
             featuredPlaces: FeedPresentation.featuredPlaces(
@@ -4221,42 +4350,7 @@ final class WanderStore: ObservableObject {
     }
 
     func firstVisitPhoto(forPlaceID placeID: String) -> LocalVisitPhoto? {
-        let placeIDs = matchingPlaceIDs(placeID)
-        let userPlaceIDs = Set(
-            userPlaces
-                .filter {
-                    $0.userID == currentUser.id
-                        && $0.deletedAt == nil
-                        && placeIDs.contains($0.placeID)
-                }
-                .flatMap { userPlace in
-                    [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
-                }
-        )
-        let visitIDs = Set(
-            placeVisits
-                .filter { $0.deletedAt == nil && userPlaceIDs.contains($0.userPlaceID) }
-                .flatMap { visit in
-                    [visit.id, visit.localID, visit.serverID].compactMap { $0 }
-                }
-        )
-
-        return visitPhotos
-            .filter { photo in
-                guard photo.deletedAt == nil, visitIDs.contains(photo.visitID) else { return false }
-                if let localAssetRef = photo.localAssetRef, !localAssetRef.isEmpty { return true }
-                return photo.uploadState == .uploaded && photo.storagePath?.isEmpty == false
-            }
-            .sorted { lhs, rhs in
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt < rhs.createdAt
-                }
-                if lhs.sortOrder != rhs.sortOrder {
-                    return lhs.sortOrder < rhs.sortOrder
-                }
-                return lhs.id < rhs.id
-            }
-            .first
+        firstVisitPhotosByPlaceID()[placeID]
     }
 
     func firstVisitPhotosByPlaceID() -> [String: LocalVisitPhoto] {

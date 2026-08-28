@@ -213,12 +213,13 @@ struct ActivityEngagementActionRow: View {
     }
 
     private var bookmarkButton: some View {
-        Group {
+        let resolvedBookmarkState = bookmarkState
+        return Group {
             if let visiblePlace {
                 Button {
-                    guard bookmarkState != .checkedIn else { return }
+                    guard resolvedBookmarkState != .checkedIn else { return }
                     auth.requireSignIn(for: .socialSave) {
-                        switch bookmarkState {
+                        switch resolvedBookmarkState {
                         case .notSaved:
                             store.saveFlowDidPresent(.saveSheet)
                             wannaSaveContext = .addWannaVisiblePlace(
@@ -237,16 +238,16 @@ struct ActivityEngagementActionRow: View {
                         }
                     }
                 } label: {
-                    Image(systemName: bookmarkState == .notSaved ? "bookmark" : "bookmark.fill")
+                    Image(systemName: resolvedBookmarkState == .notSaved ? "bookmark" : "bookmark.fill")
                         .font(.system(size: 21, weight: .semibold))
-                        .foregroundStyle(bookmarkState == .wanna ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                        .foregroundStyle(resolvedBookmarkState == .wanna ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(bookmarkState == .wanna ? "Remove from Wanna" : "Add to Wanna")
-                .accessibilityValue(bookmarkState.accessibilityValue)
-                .accessibilityHint(bookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
+                .accessibilityLabel(resolvedBookmarkState == .wanna ? "Remove from Wanna" : "Add to Wanna")
+                .accessibilityValue(resolvedBookmarkState.accessibilityValue)
+                .accessibilityHint(resolvedBookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
             }
         }
     }

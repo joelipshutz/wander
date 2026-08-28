@@ -684,7 +684,8 @@ final class NavigationContractTests: XCTestCase {
             before: "struct ActivityCommentsScreen: View"
         )
         XCTAssertTrue(activityModule.contains("ActivityPostcardView("))
-        XCTAssertTrue(activityModule.contains("postcardContext"))
+        XCTAssertTrue(activityModule.contains("let engagementContext = activity.activityEngagementContext"))
+        XCTAssertTrue(activityModule.contains("context: engagementContext ?? fallbackPostcardContext"))
         XCTAssertTrue(activityModule.contains("activity.note"))
         XCTAssertTrue(activityModule.contains("activity.rating"))
         XCTAssertTrue(postcard.contains("WanderTypography.editorialTitle"))
@@ -3909,16 +3910,21 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
-    func testPlaceProfileFullViewKeepsScrollableBottomInset() {
+    func testPlaceProfileFullViewUsesCompactBottomSpacing() {
         XCTAssertEqual(
-            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 0),
-            64
+            PlaceProfileFullScreen.fullViewBottomContentInset,
+            16
+        )
+    }
+
+    func testFullPagePlaceViewOmitsRedundantPlaceDetailsCard() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
 
-        XCTAssertEqual(
-            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
-            66
-        )
+        XCTAssertFalse(placeProfile.contains("Place details"))
+        XCTAssertFalse(placeProfile.contains("PlaceProfileDetailRow"))
+        XCTAssertFalse(placeProfile.contains("Map/business search details"))
     }
 
     func testFullPagePlaceViewOmitsFitRationaleContent() throws {
@@ -4245,7 +4251,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("PlaceSaveDraft.restorableFlow("))
         XCTAssertTrue(mapScreen.contains("case .addVisit(let visiblePlace):"))
         XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: selectedPlace)"))
-        XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: group.primary)"))
+        XCTAssertTrue(mapScreen.contains(".currentUserSaveByGroupKey[group.key]"))
+        XCTAssertTrue(mapScreen.contains("?? indexedCurrentUserSave(matching: group.primary)"))
         XCTAssertTrue(mapScreen.contains("summaries.insert(saveSummary(for: currentUserSave), at: 0)"))
         XCTAssertTrue(mapScreen.contains("existingDraft.form.selectedStatus != context.initialStatus"))
         XCTAssertTrue(mapScreen.contains("switchedForm.selectedStatus = context.initialStatus"))

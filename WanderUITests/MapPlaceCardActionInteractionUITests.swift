@@ -66,6 +66,103 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
 
 @MainActor
 final class FeedPostcardInteractionUITests: XCTestCase {
+    func testPerformanceFixtureMeasuresFirstScrollHitches() {
+        let app = performanceFeedApp()
+        app.launch()
+        let firstPostcard = app.descendants(matching: .any)[
+            "feed.activity.perf-feed-000.postcard"
+        ]
+        XCTAssertTrue(firstPostcard.waitForExistence(timeout: 12))
+        let scroll = app.scrollViews["feed.places.scroll"].firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: 3))
+        let initialPostcardY = firstPostcard.frame.minY
+        var didMeasureColdSwipe = false
+
+        if #available(iOS 19.0, *) {
+            // XCTest always invokes a performance block once more than
+            // iterationCount and discards that first invocation. Make the
+            // discarded pass a no-op so the measured swipe remains cold.
+            var invocationCount = 0
+            let options = XCTMeasureOptions()
+            options.iterationCount = 1
+            options.invocationOptions = [.manuallyStart, .manuallyStop]
+
+            measure(metrics: [XCTHitchMetric(application: app)], options: options) {
+                invocationCount += 1
+                startMeasuring()
+                defer { stopMeasuring() }
+                guard invocationCount > 1 else { return }
+                scroll.swipeUp(velocity: .fast)
+                didMeasureColdSwipe = true
+            }
+        } else {
+            scroll.swipeUp(velocity: .fast)
+            didMeasureColdSwipe = true
+        }
+
+        XCTAssertTrue(didMeasureColdSwipe)
+        XCTAssertTrue(
+            !firstPostcard.isHittable || firstPostcard.frame.minY < initialPostcardY - 20,
+            "The measured first swipe should move Feed content."
+        )
+    }
+
+    func testPerformanceFixtureReusesWarmFeedSurfaces() {
+        let app = performanceFeedApp()
+        app.launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
+
+        var dismissedSystemBanner = false
+        addUIInterruptionMonitor(withDescription: "Dismiss notification banners") { element in
+            guard element.identifier == "NotificationShortLookView" else { return false }
+            dismissedSystemBanner = true
+            element.swipeUp()
+            return true
+        }
+
+        let people = app.buttons["People"].firstMatch
+        let places = app.buttons["Places"].firstMatch
+        XCTAssertTrue(people.waitForExistence(timeout: 3))
+        XCTAssertTrue(places.waitForExistence(timeout: 3))
+
+        // Materialize both retained roots before timing the warm path. The
+        // existence checks intentionally stay outside the measured window:
+        // XCTest polls for at least one second even when the element is ready.
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
+        )
+        places.tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 3))
+
+        let switchStartedAt = Date()
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 2)
+        )
+        places.tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 2))
+        if !dismissedSystemBanner {
+            XCTAssertLessThan(
+                Date().timeIntervalSince(switchStartedAt),
+                5,
+                "Two warm Feed surface switches should not rebuild their retained roots."
+            )
+        }
+    }
+
+    private func performanceFeedApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab", "discover"
+        ]
+        return app
+    }
+
     func testActionsDoNotOpenTheNextPlace() {
         let app = launch()
 

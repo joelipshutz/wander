@@ -90,7 +90,7 @@ struct PlaceProfileFullScreen: View {
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
     private static let edgeSwipeProjectedTranslation: CGFloat = 160
-    private static let minimumFullViewBottomContentInset: CGFloat = 64
+    static let fullViewBottomContentInset = WanderTheme.spacing4
 
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
@@ -256,10 +256,6 @@ struct PlaceProfileFullScreen: View {
 
     static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
         PlaceProfileMapHeader.resolvedTopInset(from: safeAreaTopInset)
-    }
-
-    static func resolvedFullViewBottomContentInset(from safeAreaBottomInset: CGFloat) -> CGFloat {
-        max(minimumFullViewBottomContentInset, safeAreaBottomInset + WanderTheme.spacing8)
     }
 
     private var edgeSwipeBackGesture: some Gesture {
@@ -1188,7 +1184,6 @@ private struct PlaceProfileFullView: View {
     var body: some View {
         GeometryReader { proxy in
             let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
-            let bottomContentInset = PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: proxy.safeAreaInsets.bottom)
 
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
@@ -1231,11 +1226,10 @@ private struct PlaceProfileFullView: View {
                             }
                             .id(WalkthroughTargetID.placeHistory)
                             .walkthroughTarget(.placeHistory)
-                            detailsSection
                         }
                         .padding(.horizontal, WanderTheme.spacing4)
                         .padding(.top, WanderTheme.spacing4)
-                        .padding(.bottom, bottomContentInset)
+                        .padding(.bottom, PlaceProfileFullScreen.fullViewBottomContentInset)
                     }
                     .task(id: place.id) {
                         guard initialSection == .activity else { return }
@@ -1694,29 +1688,6 @@ private struct PlaceProfileFullView: View {
         }
     }
 
-    private var detailsSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionLabel("Place details")
-            VStack(spacing: 0) {
-                ForEach(Array(detailRows.enumerated()), id: \.element.id) { index, detail in
-                    PlaceProfileDetailRow(title: detail.title, value: detail.value)
-                    if index < detailRows.count - 1 {
-                        Divider()
-                            .overlay(WanderTheme.borderHairline.color.opacity(0.72))
-                            .padding(.leading, 88)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
-        }
-    }
-
     private var heroMetadata: String? {
         PlaceProfileCopy.heroMetadata(for: place)
     }
@@ -1879,29 +1850,6 @@ private struct PlaceProfileFullView: View {
 
     private var displayRating: PlaceActualRating? {
         presentation.overallRating ?? presentation.ownRating
-    }
-
-    private var addressLine: String? {
-        PlaceProfileCopy.detailsAddress(for: place)
-    }
-
-    private var detailRows: [PlaceProfileDetailItem] {
-        var rows: [PlaceProfileDetailItem] = []
-        if let addressLine {
-            rows.append(PlaceProfileDetailItem(title: "Address", value: addressLine))
-        }
-        if let category = PlaceProfileCopy.categoryDisplay(for: place) {
-            rows.append(PlaceProfileDetailItem(title: "Category", value: category.capitalized))
-        }
-        rows.append(PlaceProfileDetailItem(title: "Source", value: sourceDisplay))
-        return rows
-    }
-
-    private var sourceDisplay: String {
-        if place.websiteURLString != nil || place.phoneNumber != nil {
-            return "Map/business search details"
-        }
-        return "Place on \(AppBrand.displayName)"
     }
 
     private func iconName(for kind: PlaceExternalAction.Kind) -> String {
@@ -3175,36 +3123,6 @@ private struct PlaceProfileSubtleCard: View {
     }
 }
 
-private struct PlaceProfileDetailRow: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            Text(title)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .frame(width: 76, alignment: .leading)
-            Text(value)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.vertical, WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-    }
-}
-
-private struct PlaceProfileDetailItem: Identifiable {
-    var id: String { title.lowercased() }
-    let title: String
-    let value: String
-}
-
 private struct PlaceFact: Identifiable {
     var id: String { "\(systemImage)-\(title)" }
     let title: String
@@ -3214,13 +3132,6 @@ private struct PlaceFact: Identifiable {
 private enum PlaceProfileCopy {
     static func heroMetadata(for place: PlaceSheetPlace) -> String? {
         joinedText([place.locality, categoryDisplay(for: place)])
-    }
-
-    static func detailsAddress(for place: PlaceSheetPlace) -> String? {
-        if let address = trimmed(place.address) {
-            return address
-        }
-        return joinedText([place.locality, place.region])
     }
 
     static func categoryDisplay(for place: PlaceSheetPlace) -> String? {
