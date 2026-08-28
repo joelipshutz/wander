@@ -280,6 +280,7 @@ struct ProfileOwnerHome: View {
     let inCommonAction: () -> Void
     let calendarDateAction: (ProfileCalendarDaySummary) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
+    let yourMapAction: (() -> Void)?
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
@@ -315,6 +316,23 @@ struct ProfileOwnerHome: View {
                     allActivityAction: allActivityAction
                 )
                 .id(ProfileHomeScrollAnchor.activity)
+                #if DEBUG
+                if mode.isOwner, let yourMapAction {
+                    ProfileYourMapPreview(
+                        insights: insights,
+                        action: yourMapAction
+                    )
+                    .id(ProfileHomeScrollAnchor.map)
+                } else {
+                    ProfileMapSection(
+                        profile: profile,
+                        insights: insights,
+                        ownerLabel: ownerLabel,
+                        summaryAction: mapSummaryAction
+                    )
+                    .id(ProfileHomeScrollAnchor.map)
+                }
+                #else
                 ProfileMapSection(
                     profile: profile,
                     insights: insights,
@@ -322,6 +340,7 @@ struct ProfileOwnerHome: View {
                     summaryAction: mapSummaryAction
                 )
                 .id(ProfileHomeScrollAnchor.map)
+                #endif
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -1499,6 +1518,72 @@ private struct ProfileCalendarLegend: View {
         }
     }
 }
+
+#if DEBUG
+private struct ProfileYourMapPreview: View {
+    let insights: ProfileInsights
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("your map")
+                            .font(WanderTypography.editorialSectionTitle)
+                        Text(countSummary)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: WanderTheme.spacing1) {
+                        Text("Explore")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                }
+
+                ProfileMapSnapshotView(
+                    points: insights.mapPoints,
+                    shareImageFileURL: .constant(nil)
+                )
+                .frame(height: 178)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                Text("Slice your place diary by time, status, category, city, country, tags, ratings, and repeat visits.")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WanderTheme.surfaceBone.color.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Your Map, \(countSummary)")
+        .accessibilityHint("Opens your full interactive place diary")
+        .accessibilityIdentifier("profile.yourMap.preview")
+        .walkthroughTarget(.profileMap)
+        .walkthroughEmphasis(.profileMap)
+    }
+
+    private var countSummary: String {
+        let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
+        let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
+        return "\(insights.mapPlaceCount) \(placeLabel) across \(insights.mapCityCount) \(cityLabel)"
+    }
+}
+#endif
 
 enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
     case places
