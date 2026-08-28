@@ -2,7 +2,6 @@ import MapKit
 import SwiftUI
 import UIKit
 
-#if DEBUG
 struct YourMapPrototypeScreen: View {
     let dataset: YourMapPrototypeDataset
 
@@ -1378,4 +1377,3 @@ private func categoryColor(_ category: String) -> Color {
         YourMapPrototypeScreen(volume: .empty)
     }
 }
-#endif
