@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "name": "REC-120 social place importer evaluation corpus",
+  "createdAt": "2026-08-27",
+  "cases": [
+    {
+      "id": "instagram-caption-cave-springs",
+      "platform": "instagram",
+      "contentType": "post",
+      "url": "https://www.instagram.com/p/DbPM9o1mzbL/",
+      "modalitiesExpected": ["caption"],
+      "provenance": "REC-246",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Cave Springs", "aliases": ["Cave Springs Resort"] },
+          { "name": "Castle Crags State Park", "aliases": ["Castle Crags"] }
+        ],
+        "acceptable": [
+          { "name": "Castle Dome", "aliases": [] }
+        ],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "instagram-carousel-wyoming",
+      "platform": "instagram",
+      "contentType": "carousel",
+      "url": "https://www.instagram.com/p/Dak2JCClKkF/",
+      "modalitiesExpected": ["caption", "carousel_image_text"],
+      "minimumMediaAssets": 12,
+      "provenance": "REC-106",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Fremont Lake", "aliases": [] },
+          { "name": "Green River Lakes", "aliases": [] },
+          { "name": "Half Moon Lake Lodge", "aliases": [] },
+          { "name": "White Mountain Petroglyphs", "aliases": [] },
+          { "name": "Flaming Gorge", "aliases": ["Flaming Gorge Reservoir"] },
+          { "name": "Skyline Drive Overlook", "aliases": ["Skyline Drive Interpretive Site"] },
+          { "name": "Pine Coffee Supply", "aliases": ["Pine Coffee & Supply"] },
+          { "name": "Farson Mercantile", "aliases": ["Farson Merc"] }
+        ],
+        "acceptable": [
+          { "name": "Wind River Range", "aliases": [] }
+        ],
+        "forbidden": [
+          { "name": "Visit Wyoming", "aliases": ["visitWyoming"] }
+        ]
+      }
+    },
+    {
+      "id": "instagram-reel-attribution",
+      "platform": "instagram",
+      "contentType": "reel",
+      "url": "https://www.instagram.com/reel/Da9EdCzBFuw/",
+      "modalitiesExpected": ["caption"],
+      "provenance": "REC-120",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Frank N Frank's", "aliases": ["Frank N Franks", "franknfranks"] }
+        ],
+        "acceptable": [],
+        "forbidden": [
+          { "name": "Amboy", "aliases": [] },
+          { "name": "Howlin's Ray's", "aliases": ["Howlins Rays"] }
+        ]
+      }
+    },
+    {
+      "id": "instagram-reel-tagged-location-video-text",
+      "platform": "instagram",
+      "contentType": "reel",
+      "url": "https://www.instagram.com/reel/Dav5_60ywYJ/",
+      "modalitiesExpected": ["tagged_location", "video_text"],
+      "minimumMediaAssets": 1,
+      "provenance": "REC-246",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Faregrounds", "aliases": ["faregroundsbh"] }
+        ],
+        "acceptable": [],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "instagram-dense-image-guide",
+      "platform": "instagram",
+      "contentType": "carousel",
+      "url": "https://www.instagram.com/p/DU6kxigDOD-/",
+      "modalitiesExpected": ["carousel_image_text"],
+      "minimumMediaAssets": 2,
+      "provenance": "PlaceImportTests hundred-coffee-guide regression",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "ONYX COFFEE LAB", "aliases": [] },
+          { "name": "TIM WENDELBOE", "aliases": [] },
+          { "name": "ALQUIMIA COFFEE", "aliases": [] },
+          { "name": "ONLY COFFEE PROJECT CROWS NEST", "aliases": [] },
+          { "name": "TOBY'S ESTATE COFFEE ROASTERS", "aliases": [] },
+          { "name": "APARTMENT COFFEE", "aliases": [] },
+          { "name": "GOTA COFFEE EXPERTS", "aliases": [] },
+          { "name": "STORY OF ONO", "aliases": [] },
+          { "name": "TROPICALIA COFFEE", "aliases": [] },
+          { "name": "TANAT", "aliases": [] },
+          { "name": "FANKØR", "aliases": [] },
+          { "name": "ARCANE ESTATE COFFEE", "aliases": [] },
+          { "name": "BETA COFFEE", "aliases": [] },
+          { "name": "NOMADIC SPECIALTY COFFEE", "aliases": [] },
+          { "name": "NEMESIS COFFEE", "aliases": [] },
+          { "name": "NOMAD FRUTAS SELECTAS", "aliases": [] },
+          { "name": "KAFI WASI CAFÉ TOSTADURÍA", "aliases": [] },
+          { "name": "BENCHMARK COFFEE", "aliases": [] },
+          { "name": "HOLA LAGASCA", "aliases": [] },
+          { "name": "BLENDIN COFFEE CLUB", "aliases": [] },
+          { "name": "HOLASTE! SPECIALTY COFFEE", "aliases": [] },
+          { "name": "MOMOS COFFEE FLAGSHIP STORE", "aliases": [] },
+          { "name": "MONOTONO SPECIALTY COFFEE", "aliases": [] },
+          { "name": "ULT COFFEE", "aliases": [] },
+          { "name": "EL INJERTO", "aliases": [] },
+          { "name": "THREE MONKEYS COFFEE", "aliases": [] },
+          { "name": "PROUD MARY COFFEE", "aliases": [] },
+          { "name": "KOFFEE MAMEYA KAKERU", "aliases": [] },
+          { "name": "COFFEE ANTHOLOGY", "aliases": [] },
+          { "name": "7G ROASTER", "aliases": [] },
+          { "name": "ESPRESSO ALCHEMY", "aliases": [] },
+          { "name": "COFFEEWERK + PRESS", "aliases": [] },
+          { "name": "TYPICA CAFÉ", "aliases": [] },
+          { "name": "YARDSTICK", "aliases": [] },
+          { "name": "HISTÓRICO", "aliases": [] },
+          { "name": "COFFEE SIND", "aliases": [] },
+          { "name": "DELAFINCA SPECIALTY COFFEE", "aliases": [] },
+          { "name": "OTTOMAN COFFEE HOUSE", "aliases": [] },
+          { "name": "CASA CANELA", "aliases": [] },
+          { "name": "ESPRESSO LAB", "aliases": [] },
+          { "name": "SEVEN MYSTERY", "aliases": [] },
+          { "name": "FARO", "aliases": [] },
+          { "name": "DOMESTIQUE", "aliases": [] },
+          { "name": "HARVEST COFFEE", "aliases": [] },
+          { "name": "ORIGEN TOSTADORES DE CAFÉ", "aliases": [] },
+          { "name": "KEEP COFFEE ROASTERY", "aliases": [] },
+          { "name": "MEET LAB COFFEE", "aliases": [] },
+          { "name": "MULANO COFFEE SHOP", "aliases": [] },
+          { "name": "LA CABRA", "aliases": [] },
+          { "name": "BIRCH COFFEE", "aliases": [] },
+          { "name": "RULI COFFEE", "aliases": [] },
+          { "name": "ATTE FOR COFFEE", "aliases": [] },
+          { "name": "SINGLE O", "aliases": [] },
+          { "name": "RUBIA COFFEE ROASTERS", "aliases": [] },
+          { "name": "BOB COFFEE LAB", "aliases": [] },
+          { "name": "UNFILTERED COFFEE", "aliases": [] },
+          { "name": "TOMORROW COFFEE ROASTERS", "aliases": [] },
+          { "name": "CA PASSE CREME", "aliases": [] },
+          { "name": "ECO MAPU", "aliases": [] },
+          { "name": "43.12 COFFEE", "aliases": [] },
+          { "name": "FIKA & CO. CAFE", "aliases": [] },
+          { "name": "DITTA ARTIGIANALE SPECIALTY COFFEE ROASTERS", "aliases": [] },
+          { "name": "CAFÉ NATIVO", "aliases": [] },
+          { "name": "CAFERATTO", "aliases": [] },
+          { "name": "KROSS COFFEE ROASTERS", "aliases": [] },
+          { "name": "PREVAIL COFFEE", "aliases": [] },
+          { "name": "MOK COFFEE", "aliases": [] },
+          { "name": "AZURA - THE COFFEE COMPANY", "aliases": [] },
+          { "name": "PUKU PUKU", "aliases": [] },
+          { "name": "THE GOLDEN PIG", "aliases": [] },
+          { "name": "LITTLE VICTORIES COFFEE", "aliases": [] },
+          { "name": "PUSH X PULL", "aliases": [] },
+          { "name": "GALANI COFFEE", "aliases": [] },
+          { "name": "WAKE UP", "aliases": [] },
+          { "name": "BOUCHE", "aliases": [] },
+          { "name": "CAFÉ DE REYES", "aliases": [] },
+          { "name": "SAVAYA COFFEE MARKET", "aliases": [] },
+          { "name": "COFFEE STOPOVER BLACK", "aliases": [] },
+          { "name": "FUKU", "aliases": [] },
+          { "name": "THE MINERS COFFEE", "aliases": [] },
+          { "name": "CUPPING CAFÉ", "aliases": [] },
+          { "name": "COFFEA GUATEMALA", "aliases": [] },
+          { "name": "D·ORIGEN COFFEE ROASTERS BARCELONA", "aliases": [] },
+          { "name": "COFFEE STAIN", "aliases": [] },
+          { "name": "THE DUDE SPECIALTY COFFEE", "aliases": [] },
+          { "name": "STORY AND SOIL COFFEE", "aliases": [] },
+          { "name": "EXPLORADORES", "aliases": [] },
+          { "name": "THE FOLKS", "aliases": [] },
+          { "name": "CASA BARISTA & CO., CASCO HISTORICO", "aliases": [] },
+          { "name": "CYPHER URBAN ROASTERY", "aliases": [] },
+          { "name": "CAFETANO", "aliases": [] },
+          { "name": "COFFEE FIVE", "aliases": [] },
+          { "name": "KIMA COFFEE", "aliases": [] },
+          { "name": "NEGRO", "aliases": [] },
+          { "name": "METRIC", "aliases": [] },
+          { "name": "EL TERRIBLE JUAN CAFÉ", "aliases": [] },
+          { "name": "FLAT WHITE SPECIALTY COFFEE", "aliases": [] },
+          { "name": "CAFEOTECA", "aliases": [] },
+          { "name": "SURRY HILLS PALERMO", "aliases": [] },
+          { "name": "VACATION COFFEE", "aliases": [] }
+        ],
+        "acceptable": [],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "tiktok-caption-single-place",
+      "platform": "tiktok",
+      "contentType": "video",
+      "url": "https://www.tiktok.com/@helenwinnnnn/video/7448513035146251566",
+      "modalitiesExpected": ["caption", "video_text"],
+      "minimumMediaAssets": 1,
+      "provenance": "Verified against the live public TikTok caption captured 2026-08-27",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Yintang Spicy Hotpot", "aliases": ["Yintang"] }
+        ],
+        "acceptable": [],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "tiktok-video-multi-place-osaka",
+      "platform": "tiktok",
+      "contentType": "video",
+      "url": "https://www.tiktok.com/@hangrybynature/video/7399320195497577735",
+      "modalitiesExpected": ["caption", "video_text", "speech"],
+      "minimumMediaAssets": 1,
+      "provenance": "Verified against the live public TikTok caption and platform sticker text captured 2026-08-27",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          { "name": "Rikuro", "aliases": ["Rikuro's", "Rikuro Ojisan"] },
+          { "name": "Teppanyaro", "aliases": [] },
+          { "name": "Amerikamura", "aliases": ["America-mura"] },
+          { "name": "Kuromon Market", "aliases": ["Kuromon Ichiba Market"] },
+          { "name": "Doguyasuji", "aliases": ["Kitchen Street", "Sennichimae Doguyasuji"] },
+          { "name": "Turikichi", "aliases": [] },
+          { "name": "Caption by Hyatt Namba Osaka", "aliases": ["Caption by Hyatt Namba"] }
+        ],
+        "acceptable": [
+          { "name": "Dotonbori", "aliases": [] },
+          { "name": "Glico Man", "aliases": ["Glico Running Man"] }
+        ],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "tiktok-video-text-only-diagnostic",
+      "platform": "tiktok",
+      "contentType": "video",
+      "url": "https://www.tiktok.com/@lifewkeeks7/video/7480370075703250219",
+      "modalitiesExpected": ["video_text"],
+      "minimumMediaAssets": 1,
+      "provenance": "Public TikTok discovery page; caption omits the place name",
+      "labels": {
+        "status": "labeled",
+        "required": [
+          {
+            "name": "Caroline's Seaside Cafe by Giuseppe",
+            "aliases": [
+              "Caroline's Seaside Cafe",
+              "Carolines Seaside Cafe by Giuseppe",
+              "Carolines Seaside Cafe"
+            ]
+          }
+        ],
+        "acceptable": [],
+        "forbidden": []
+      }
+    }
+  ]
+}
