@@ -189,6 +189,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let visitPhotos: [VisitPhotoRecord]?
     let sharedVisitInvitations: [SharedVisitInvitation]?
     let sharedVisitInboxUserID: String?
+    let wannaEvents: [WannaEvent]?
+    let wannaPlanInvitations: [WannaPlanInvitation]?
+    let wannaInboxUserID: String?
     let pendingSharedVisitInvites: [PendingSharedVisitInvite]?
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
@@ -228,6 +231,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         sharedVisitInvitations = store.sharedVisitInvitations
         sharedVisitInboxUserID = store.sharedVisitInboxUserID
+        wannaEvents = store.wannaEvents
+        wannaPlanInvitations = store.wannaPlanInvitations
+        wannaInboxUserID = store.wannaInboxUserID
         pendingSharedVisitInvites = store.pendingSharedVisitInvites
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
@@ -277,6 +283,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
             sharedVisitInvitations: sharedVisitInvitations ?? [],
             sharedVisitInboxUserID: sharedVisitInboxUserID,
+            wannaEvents: wannaEvents ?? [],
+            wannaPlanInvitations: wannaPlanInvitations ?? [],
+            wannaInboxUserID: wannaInboxUserID,
             pendingSharedVisitInvites: pendingSharedVisitInvites ?? [],
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
@@ -315,6 +324,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let visitPhotos: [LocalVisitPhoto]
         let sharedVisitInvitations: [SharedVisitInvitation]
         let sharedVisitInboxUserID: String?
+        let wannaEvents: [WannaEvent]
+        let wannaPlanInvitations: [WannaPlanInvitation]
+        let wannaInboxUserID: String?
         let pendingSharedVisitInvites: [PendingSharedVisitInvite]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]

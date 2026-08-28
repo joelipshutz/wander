@@ -3450,6 +3450,12 @@ final class RemoteRepositoryTests: XCTestCase {
             .sharedVisit(participantID: "48000000-0000-0000-0000-000000000001", generation: 3)
         )
         XCTAssertEqual(
+            PushNotificationManager.destination(
+                from: URL(string: "recme://wanna-plans/49000000-0000-0000-0000-000000000001?generation=2")!
+            ),
+            .wannaPlan
+        )
+        XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://extraction-jobs/43000000-0000-0000-0000-000000000001")!),
             .drafts(extractionJobID: "43000000-0000-0000-0000-000000000001")
         )
@@ -3499,6 +3505,17 @@ final class RemoteRepositoryTests: XCTestCase {
                 data: ["participant_id": "participant-1", "invitation_generation": 4]
             ),
             .sharedVisit(participantID: "participant-1", generation: 4)
+        )
+        XCTAssertEqual(
+            destination(
+                "shared_visit",
+                data: [
+                    "participant_id": "participant-2",
+                    "invitation_generation": 2,
+                    "plan_id": "plan-1",
+                ]
+            ),
+            .wannaPlan
         )
         XCTAssertEqual(destination("capture_ready", data: ["extraction_job_id": "job-1"]), .drafts(extractionJobID: "job-1"))
         XCTAssertEqual(

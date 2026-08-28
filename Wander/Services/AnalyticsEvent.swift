@@ -111,6 +111,8 @@ enum AnalyticsEngagementAction: String {
     case saveStreakAdvanced = "save_streak_advanced"
     case sharedVisitAccepted = "shared_visit_accepted"
     case sharedVisitInvitesQueued = "shared_visit_invites_queued"
+    case wannaPlanCreated = "wanna_plan_created"
+    case wannaPlanInvitationAccepted = "wanna_plan_invitation_accepted"
     case trustedProfileViewed = "trusted_profile_viewed"
 }
 
@@ -269,6 +271,12 @@ enum WanderAnalyticsEvents {
     static let notificationOpened = "notification_opened"
     static let sharedVisitInvitesQueued = "shared_visit_invites_queued"
     static let sharedVisitAccepted = "shared_visit_accepted"
+    static let wannaCreated = "wanna_created"
+    static let wannaPlanCreated = "wanna_plan_created"
+    static let wannaPlanInvitationAccepted = "wanna_plan_invitation_accepted"
+    static let wannaPlanInvitationDeclined = "wanna_plan_invitation_declined"
+    static let wannaCheckInResolutionPresented = "wanna_checkin_resolution_presented"
+    static let wannaCheckInResolved = "wanna_checkin_resolved"
     static let placeListCreated = "place_list_created"
     static let placeListItemAdded = "place_list_item_added"
     static let discoverFilterUsed = "discover_filter_used"

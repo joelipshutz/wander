@@ -76,7 +76,8 @@ enum ProfileActivityPresenter {
     static func items(
         visiblePlaces: [VisiblePlace],
         visits: [LocalPlaceVisit],
-        currentUserID: String
+        currentUserID: String,
+        wannaEvents: [WannaEvent] = []
     ) -> [ProfileActivityItem] {
         let groups = VisiblePlaceGrouping.groups(
             from: visiblePlaces,
@@ -93,6 +94,15 @@ enum ProfileActivityPresenter {
                     $0.owner.id == currentUserID && $0.userPlace.deletedAt == nil
                 }
                 let checkedInPlaces = ownerPlaces.filter { $0.userPlace.status == .been }
+                let groupPlaceIDs = Set(ownerPlaces.flatMap {
+                    [$0.place.id, $0.place.localID, $0.place.serverID].compactMap { $0 }
+                })
+                let groupUserPlaceIDs = Set(ownerPlaces.flatMap {
+                    [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
+                })
+                let matchingWannaEvents = wannaEvents.filter {
+                    groupPlaceIDs.contains($0.placeID) || groupUserPlaceIDs.contains($0.userPlaceID)
+                }
 
                 if let visiblePlace = checkedInPlaces.first {
                     let referenceIDs = checkedInPlaces.reduce(into: Set<String>()) {
@@ -145,19 +155,33 @@ enum ProfileActivityPresenter {
                         )
                     }
 
-                    let historicalWantedDates = Set(
-                        checkedInPlaces.compactMap(\.userPlace.historicalWantedAt)
-                    )
-                    for historicalWantedAt in historicalWantedDates {
-                        activity.append(
-                            ProfileActivityItem(
-                                id: "wanna-history-\(group.id)-\(historicalWantedAt.timeIntervalSince1970)",
-                                visiblePlace: visiblePlace,
-                                kind: .wanna,
-                                timestamp: historicalWantedAt,
-                                visitID: nil
-                            )
+                    if matchingWannaEvents.isEmpty {
+                        let historicalWantedDates = Set(
+                            checkedInPlaces.compactMap(\.userPlace.historicalWantedAt)
                         )
+                        for historicalWantedAt in historicalWantedDates {
+                            activity.append(
+                                ProfileActivityItem(
+                                    id: "wanna-history-\(group.id)-\(historicalWantedAt.timeIntervalSince1970)",
+                                    visiblePlace: visiblePlace,
+                                    kind: .wanna,
+                                    timestamp: historicalWantedAt,
+                                    visitID: nil
+                                )
+                            )
+                        }
+                    } else {
+                        for event in matchingWannaEvents {
+                            activity.append(
+                                ProfileActivityItem(
+                                    id: "wanna-event-\(event.id)",
+                                    visiblePlace: visiblePlace,
+                                    kind: .wanna,
+                                    timestamp: event.occurredAt,
+                                    visitID: nil
+                                )
+                            )
+                        }
                     }
                     return activity
                 }
@@ -167,15 +191,26 @@ enum ProfileActivityPresenter {
                 }) else {
                     return []
                 }
-                return [
+                guard !matchingWannaEvents.isEmpty else {
+                    return [
+                        ProfileActivityItem(
+                            id: "wanna-\(visiblePlace.userPlace.id)",
+                            visiblePlace: visiblePlace,
+                            kind: .wanna,
+                            timestamp: visiblePlace.userPlace.savedAt,
+                            visitID: nil
+                        )
+                    ]
+                }
+                return matchingWannaEvents.map { event in
                     ProfileActivityItem(
-                        id: "wanna-\(visiblePlace.userPlace.id)",
+                        id: "wanna-event-\(event.id)",
                         visiblePlace: visiblePlace,
                         kind: .wanna,
-                        timestamp: visiblePlace.userPlace.savedAt,
+                        timestamp: event.occurredAt,
                         visitID: nil
                     )
-                ]
+                }
             }
             .sorted { lhs, rhs in
                 if lhs.timestamp != rhs.timestamp {
@@ -728,9 +763,9 @@ private struct ProfileInvitationButton: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Check-in invitations")
+        .accessibilityLabel("Invitations")
         .accessibilityValue(badgeState.accessibilityValue)
-        .accessibilityHint("Opens check-in invitations")
+        .accessibilityHint("Opens Wanna and check-in invitations")
         .accessibilityIdentifier("profile.checkInInvitations")
     }
 }

@@ -1247,11 +1247,21 @@ struct SaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
     let placeID: String?
+    let wannaCheckInResolution: WannaCheckInResolution?
+    let wannaResolutionVisitID: String?
 
-    init(userPlaceID: String, syncState: SyncState, placeID: String? = nil) {
+    init(
+        userPlaceID: String,
+        syncState: SyncState,
+        placeID: String? = nil,
+        wannaCheckInResolution: WannaCheckInResolution? = nil,
+        wannaResolutionVisitID: String? = nil
+    ) {
         self.userPlaceID = userPlaceID
         self.syncState = syncState
         self.placeID = placeID
+        self.wannaCheckInResolution = wannaCheckInResolution
+        self.wannaResolutionVisitID = wannaResolutionVisitID
     }
 }
 
@@ -1906,6 +1916,21 @@ protocol UserPlaceRepository {
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws
     func delete(userPlaceID: String) async throws
+}
+
+@MainActor
+protocol WannaRepository {
+    func saveWanna(userPlace: UserPlaceDraft, wanna: WannaSaveDraft) async throws -> WannaSaveResult
+    func ownEvents() async throws -> [WannaEvent]
+    func inbox(before: Date?, limit: Int) async throws -> [WannaPlanInvitation]
+    func accept(
+        participantID: String,
+        invitationGeneration: Int,
+        operationID: String,
+        wannaEventID: String
+    ) async throws -> WannaPlanAcceptanceResult
+    func decline(participantID: String, invitationGeneration: Int) async throws
+    func resolve(placeID: String, choice: WannaCheckInChoice, visitID: String?) async throws -> Int
 }
 
 @MainActor

@@ -94,6 +94,7 @@
 		494E2C67824F5DC9AFBDC46C /* WanderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00EA2E6F128127B2CED014D /* WanderFixtures.swift */; };
 		4A07E4DBDDA8BC31D120B17A /* rec-271-instagram-post-direct-handoff-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2AA16BF5C2E2E6C371692333 /* rec-271-instagram-post-direct-handoff-pre.json */; };
 		4A22B42F0D3DFB823F938E9D /* PlaceImportParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */; };
+		4A6C28DDC39359E4B123B8D3 /* WannaPlanModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9794D033BEEFF7F1E343A98 /* WannaPlanModelsTests.swift */; };
 		4B1E69D54A34826BF104006B /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059173381275E3363050A4E1 /* OnboardingStateTests.swift */; };
 		4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */; };
 		52B8AC44581CEA630201DEB3 /* SyncStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0925F17F5640CFD88F70EBA /* SyncStateMachine.swift */; };
@@ -133,6 +134,7 @@
 		74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */; };
 		74AAAADD6470333A4F1A1508 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
 		75C7CA5AF3B736785AFB3827 /* ProfileImportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E267FE49035CB36F175971 /* ProfileImportViews.swift */; };
+		76519D98A3983F3E01E33FF3 /* WannaPlanModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19527D52BB5D2768E944FE80 /* WannaPlanModels.swift */; };
 		792923938AC328A4DFAA3EF7 /* rec-289-selected-pin-regional-refresh-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 21A6F2B32615224AE4D40F0A /* rec-289-selected-pin-regional-refresh-pre.json */; };
 		7AE6B55E9D5E343894865F0B /* ExtractionCandidateFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9E0413D74DC5421A150467 /* ExtractionCandidateFilterTests.swift */; };
 		7BD8BFE1EAEA64BE5544D68F /* PlacePhotoDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B3FAB15B2BBA5C24B48EF /* PlacePhotoDelivery.swift */; };
@@ -357,6 +359,7 @@
 		159538D8F8224999DF1BB697 /* WanderWidgetSnapshotPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetSnapshotPublisher.swift; sourceTree = "<group>"; };
 		16C5F62A98A3826F6DD6332C /* InviteFramework.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFramework.swift; sourceTree = "<group>"; };
 		17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionProviding.swift; sourceTree = "<group>"; };
+		19527D52BB5D2768E944FE80 /* WannaPlanModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaPlanModels.swift; sourceTree = "<group>"; };
 		19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-liquid-glass-pin-transition-pre.json"; sourceTree = "<group>"; };
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
 		1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPlaceImportMetadata.swift; sourceTree = "<group>"; };
@@ -525,6 +528,7 @@
 		C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildConfigurationTests.swift; sourceTree = "<group>"; };
 		C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceSaveDraftStore.swift; sourceTree = "<group>"; };
 		C904029812CF4369275B29FA /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
+		C9794D033BEEFF7F1E343A98 /* WannaPlanModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaPlanModelsTests.swift; sourceTree = "<group>"; };
 		CD01185367E4332DDC38DE98 /* rec-275-place-profile-checkin-routing-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-275-place-profile-checkin-routing-pre.json"; sourceTree = "<group>"; };
 		CE6EA4D0DC023461D682C8A3 /* WanderNearbyWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderNearbyWidget.swift; sourceTree = "<group>"; };
 		CED7D1302D938DD4775E8816 /* LocalModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalModels.swift; sourceTree = "<group>"; };
@@ -873,6 +877,7 @@
 				B3179057CF009DF47A424566 /* WanderWidgetIntegrationTests.swift */,
 				A89D9500AD233DA43B3ACEF7 /* WanderWidgetSnapshotTests.swift */,
 				73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */,
+				C9794D033BEEFF7F1E343A98 /* WannaPlanModelsTests.swift */,
 				BDE361490EBD29A724E1B3F6 /* YourMapPrototypeTests.swift */,
 				AEC993BF400CE82DF8C78D55 /* Fixtures */,
 			);
@@ -1061,6 +1066,7 @@
 				E4753F17DA5C73EB4353038E /* PlaceRating.swift */,
 				FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */,
 				038D4985674B1D969110954F /* WanderEnums.swift */,
+				19527D52BB5D2768E944FE80 /* WannaPlanModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1536,6 +1542,7 @@
 				7EB2D803677BEB26C58F3C02 /* WanderWidgetLaunchRequest.swift in Sources */,
 				DBDA10E305A15751087B1BB0 /* WanderWidgetSnapshotPublisher.swift in Sources */,
 				448B652BEB843822DC3B2FEA /* WannaGoReminder.swift in Sources */,
+				76519D98A3983F3E01E33FF3 /* WannaPlanModels.swift in Sources */,
 				0AFF489943D94A388A02F6A6 /* YourMapPrototypeModels.swift in Sources */,
 				2B104C64FDB4DC5F3C4E95F2 /* YourMapPrototypeScreen.swift in Sources */,
 				8E6FE20E754A7C65A933AD53 /* ZoomablePhoto.swift in Sources */,
@@ -1632,6 +1639,7 @@
 				01193A5EFB4DEB5B4F0BB8A4 /* WanderWidgetIntegrationTests.swift in Sources */,
 				0A585F6095EFCF4D8CA5DEF1 /* WanderWidgetSnapshotTests.swift in Sources */,
 				3AF80074E8D094F572E97DB2 /* WannaGoReminderTests.swift in Sources */,
+				4A6C28DDC39359E4B123B8D3 /* WannaPlanModelsTests.swift in Sources */,
 				E004960753EEE03FB0C5133A /* YourMapPrototypeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

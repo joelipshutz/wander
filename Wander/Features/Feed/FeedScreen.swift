@@ -1450,11 +1450,26 @@ private struct FeedActivityModule: View {
 
     private var secondaryMetadataTitle: String? {
         guard activity.place != nil else { return nil }
+        if let wannaContext = activity.wannaContext {
+            let people = wannaContext.acceptedInvitees.map(\.displayName)
+            let peopleCopy: String? = if people.isEmpty {
+                nil
+            } else if people.count == 1 {
+                "with \(people[0])"
+            } else if people.count == 2 {
+                "with \(people[0]) and \(people[1])"
+            } else {
+                "with \(people[0]), \(people[1]) +\(people.count - 2)"
+            }
+            let dateCopy = wannaContext.plannedDate?.formatted(date: .abbreviated, time: .omitted)
+            let summary = [peopleCopy, dateCopy].compactMap { $0 }.joined(separator: " · ")
+            return summary.isEmpty ? nil : summary
+        }
         return activity.list?.name
     }
 
     private var listDestinationAction: (() -> Void)? {
-        guard secondaryMetadataTitle != nil else { return nil }
+        guard activity.list != nil else { return nil }
         return openListDestination
     }
 
@@ -1537,11 +1552,17 @@ private extension FeedActivity {
     }
 
     var postcardTicketEyebrow: String {
-        kind == .listCreated ? "CREATED A LIST" : resolvedTicketKind.defaultTicketEyebrow
+        if kind == .placeWannaGo, let wannaContext {
+            return wannaContext.feedTicketEyebrow
+        }
+        return kind == .listCreated ? "CREATED A LIST" : resolvedTicketKind.defaultTicketEyebrow
     }
 
     var postcardAttributionAction: String {
-        kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
+        if kind == .placeWannaGo, let wannaContext {
+            return wannaContext.feedAttributionAction
+        }
+        return kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
     }
 }
 

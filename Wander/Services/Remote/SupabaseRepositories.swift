@@ -682,7 +682,119 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try await response.followedFeedPage()
+        let page = try await response.followedFeedPage()
+        let wannaActivityIDs = page.activity
+            .filter { $0.kind == .placeWannaGo }
+            .map(\.id)
+        guard !wannaActivityIDs.isEmpty else { return page }
+
+        let contexts: [RemoteFeedWannaContextDTO] = (try? await rpc.call(
+            "feed_wanna_context",
+            params: FeedWannaContextParams(activityIDs: wannaActivityIDs)
+        )) ?? []
+        let contextByActivityID = try Dictionary(
+            uniqueKeysWithValues: contexts.map { ($0.activityID, try $0.context()) }
+        )
+        return FollowedFeedPage(
+            activity: page.activity.map { activity in
+                FeedActivity(
+                    id: activity.id,
+                    kind: activity.kind,
+                    actor: activity.actor,
+                    place: activity.place,
+                    list: activity.list,
+                    occurredAt: activity.occurredAt,
+                    note: activity.note,
+                    rating: activity.rating,
+                    media: activity.media,
+                    wannaContext: contextByActivityID[activity.id]
+                )
+            },
+            featuredPlaces: page.featuredPlaces,
+            nextCursor: page.nextCursor,
+            fetchedAt: page.fetchedAt
+        )
+    }
+}
+
+struct SupabaseWannaRepository: WannaRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func saveWanna(userPlace: UserPlaceDraft, wanna: WannaSaveDraft) async throws -> WannaSaveResult {
+        try CommunityContentPolicy.validate(
+            userPlace.place.canonicalName,
+            userPlace.place.address,
+            userPlace.place.locality,
+            userPlace.place.region,
+            userPlace.place.country,
+            userPlace.note
+        )
+        for attribute in userPlace.attributes {
+            try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
+        }
+        let response: SaveOwnWannaResponse = try await rpc.call(
+            "save_own_wanna",
+            params: SaveOwnWannaParams(userPlace: userPlace, wanna: wanna)
+        )
+        return try response.result()
+    }
+
+    func ownEvents() async throws -> [WannaEvent] {
+        let rows: [RemoteOwnWannaEventDTO] = try await rpc.call(
+            "own_wanna_events",
+            params: EmptyParams()
+        )
+        return try rows.map { try $0.event() }
+    }
+
+    func inbox(before: Date?, limit: Int) async throws -> [WannaPlanInvitation] {
+        let rows: [RemoteWannaPlanInvitationDTO] = try await rpc.call(
+            "list_wanna_plan_inbox",
+            params: WannaPlanInboxParams(before: before, limit: min(max(limit, 1), 100))
+        )
+        return try rows.map { try $0.invitation() }
+    }
+
+    func accept(
+        participantID: String,
+        invitationGeneration: Int,
+        operationID: String,
+        wannaEventID: String
+    ) async throws -> WannaPlanAcceptanceResult {
+        let response: AcceptWannaPlanResponse = try await rpc.call(
+            "accept_wanna_plan",
+            params: AcceptWannaPlanParams(
+                participantID: participantID,
+                invitationGeneration: invitationGeneration,
+                wannaEventID: wannaEventID,
+                operationID: operationID
+            )
+        )
+        return try response.result()
+    }
+
+    func decline(participantID: String, invitationGeneration: Int) async throws {
+        let didDecline: Bool = try await rpc.call(
+            "decline_wanna_plan",
+            params: DeclineWannaPlanParams(
+                participantID: participantID,
+                invitationGeneration: invitationGeneration
+            )
+        )
+        guard didDecline else {
+            throw WanderRemoteError.invalidResponse("Wanna invitation is no longer available")
+        }
+    }
+
+    func resolve(placeID: String, choice: WannaCheckInChoice, visitID: String?) async throws -> Int {
+        try await rpc.call(
+            "resolve_own_active_wannas",
+            params: ResolveOwnWannasParams(placeID: placeID, choice: choice, visitID: visitID)
+        )
     }
 }
 
@@ -3575,4 +3687,428 @@ private struct SaveOwnPlaceResponse: Decodable {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
     }
+}
+
+private struct SaveOwnWannaParams: Encodable {
+    let inputPlace: SaveOwnPlacePlaceParams
+    let inputUserPlace: SaveOwnPlaceUserPlaceParams
+    let inputAttributes: [SaveOwnPlaceAttributeParams]
+    let inputWannaEvent: WannaEventParams
+    let inputPlan: WannaPlanParams?
+
+    init(userPlace: UserPlaceDraft, wanna: WannaSaveDraft) throws {
+        guard userPlace.status == .wannaGo else {
+            throw WanderRemoteError.invalidResponse("A Wanna event requires Wanna status")
+        }
+        inputPlace = SaveOwnPlacePlaceParams(place: userPlace.place)
+        inputUserPlace = SaveOwnPlaceUserPlaceParams(draft: userPlace)
+        inputAttributes = try userPlace.attributes.map(SaveOwnPlaceAttributeParams.init)
+        inputWannaEvent = WannaEventParams(
+            id: wanna.eventID,
+            plannedDate: userPlace.plannedDate
+        )
+        inputPlan = wanna.plan.map(WannaPlanParams.init)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlace = "input_place"
+        case inputUserPlace = "input_user_place"
+        case inputAttributes = "input_attributes"
+        case inputWannaEvent = "input_wanna_event"
+        case inputPlan = "input_plan"
+    }
+}
+
+private struct WannaEventParams: Encodable {
+    let id: String
+    let plannedDate: String?
+
+    init(id: String, plannedDate: Date?) {
+        self.id = id
+        self.plannedDate = plannedDate.map { WannaGoDate.storageString(from: $0) }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case plannedDate = "planned_date"
+    }
+}
+
+private struct WannaPlanParams: Encodable {
+    let id: String
+    let inviteeUserIDs: [String]
+    let sharing: String
+
+    init(_ draft: WannaPlanDraft) {
+        id = draft.id
+        inviteeUserIDs = Array(Set(draft.inviteeUserIDs)).sorted()
+        sharing = draft.sharing.rawValue
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviteeUserIDs = "invitee_user_ids"
+        case sharing
+    }
+}
+
+private struct SaveOwnWannaResponse: Decodable {
+    let userPlaceID: String
+    let placeID: String
+    let wannaEventID: String
+    let planID: String?
+    let sharing: String?
+    let invitationCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case userPlaceID = "user_place_id"
+        case placeID = "place_id"
+        case wannaEventID = "wanna_event_id"
+        case planID = "plan_id"
+        case sharing
+        case invitationCount = "invitation_count"
+    }
+
+    func result() throws -> WannaSaveResult {
+        let parsedSharing: WannaPlanSharing? = try sharing.map {
+            guard let value = WannaPlanSharing(rawValue: $0) else {
+                throw WanderRemoteError.invalidResponse("Invalid Wanna plan sharing: \($0)")
+            }
+            return value
+        }
+        return WannaSaveResult(
+            userPlaceID: userPlaceID,
+            placeID: placeID,
+            wannaEventID: wannaEventID,
+            planID: planID,
+            sharing: parsedSharing,
+            invitationCount: invitationCount
+        )
+    }
+}
+
+private struct RemoteOwnWannaEventDTO: Decodable {
+    let wannaEventID: String
+    let userPlaceID: String
+    let placeID: String
+    let eventState: String
+    let eventSource: String
+    let wasVisitedBefore: Bool
+    let plannedDate: String?
+    let occurredAt: Date
+    let planID: String?
+    let planSharing: String?
+    let planStatus: String?
+
+    enum CodingKeys: String, CodingKey {
+        case wannaEventID = "wanna_event_id"
+        case userPlaceID = "user_place_id"
+        case placeID = "place_id"
+        case eventState = "event_state"
+        case eventSource = "event_source"
+        case wasVisitedBefore = "was_visited_before"
+        case plannedDate = "planned_date"
+        case occurredAt = "occurred_at"
+        case planID = "plan_id"
+        case planSharing = "plan_sharing"
+        case planStatus = "plan_status"
+    }
+
+    func event() throws -> WannaEvent {
+        guard let state = WannaEventState(rawValue: eventState),
+              let source = WannaEventSource(rawValue: eventSource)
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid Wanna event state")
+        }
+        return WannaEvent(
+            id: wannaEventID,
+            userPlaceID: userPlaceID,
+            placeID: placeID,
+            state: state,
+            source: source,
+            wasVisitedBefore: wasVisitedBefore,
+            plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) },
+            occurredAt: occurredAt,
+            planID: planID,
+            planSharing: try parseWannaPlanSharing(planSharing),
+            planStatus: try parseWannaPlanStatus(planStatus)
+        )
+    }
+}
+
+private struct FeedWannaContextParams: Encodable {
+    let activityIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case activityIDs = "input_activity_ids"
+    }
+}
+
+private struct RemoteFeedWannaContextDTO: Decodable {
+    let activityID: String
+    let wannaEventID: String
+    let note: String?
+    let wasVisitedBefore: Bool
+    let plannedDate: String?
+    let planID: String?
+    let planSharing: String?
+    let planStatus: String?
+    let participants: [RemoteWannaPlanParticipantDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case wannaEventID = "wanna_event_id"
+        case note
+        case wasVisitedBefore = "was_visited_before"
+        case plannedDate = "planned_date"
+        case planID = "plan_id"
+        case planSharing = "plan_sharing"
+        case planStatus = "plan_status"
+        case participants
+    }
+
+    func context() throws -> WannaPlanContext {
+        WannaPlanContext(
+            wannaEventID: wannaEventID,
+            note: note,
+            wasVisitedBefore: wasVisitedBefore,
+            plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) },
+            planID: planID,
+            sharing: try parseWannaPlanSharing(planSharing),
+            status: try parseWannaPlanStatus(planStatus),
+            participants: try participants.map { try $0.participant() }
+        )
+    }
+}
+
+private struct WannaPlanInboxParams: Encodable {
+    let before: Date?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case before = "input_before"
+        case limit = "input_limit"
+    }
+}
+
+private struct RemoteWannaPlanParticipantDTO: Decodable {
+    let participantID: String
+    let userID: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+    let role: String
+    let state: String
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case userID = "user_id"
+        case handle
+        case displayName = "display_name"
+        case avatarURL = "avatar_url"
+        case role
+        case state
+    }
+
+    func participant() throws -> WannaPlanParticipant {
+        guard let parsedRole = WannaPlanParticipantRole(rawValue: role),
+              let parsedState = WannaPlanParticipantState(rawValue: state)
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid Wanna plan participant")
+        }
+        return WannaPlanParticipant(
+            participantID: participantID,
+            userID: userID,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL,
+            role: parsedRole,
+            state: parsedState
+        )
+    }
+}
+
+private struct RemoteWannaPlanInvitationDTO: Decodable {
+    let participantID: String
+    let planID: String
+    let invitationGeneration: Int
+    let participantState: String
+    let invitedAt: Date
+    let creatorUserID: String
+    let creatorHandle: String
+    let creatorDisplayName: String
+    let creatorAvatarURL: String?
+    let placeID: String
+    let placeName: String
+    let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double
+    let longitude: Double
+    let sourceProvider: String
+    let sourceProviderPlaceID: String?
+    let plannedDate: String?
+    let planSharing: String
+    let planStatus: String
+    let participants: [RemoteWannaPlanParticipantDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case planID = "plan_id"
+        case invitationGeneration = "invitation_generation"
+        case participantState = "participant_state"
+        case invitedAt = "invited_at"
+        case creatorUserID = "creator_user_id"
+        case creatorHandle = "creator_handle"
+        case creatorDisplayName = "creator_display_name"
+        case creatorAvatarURL = "creator_avatar_url"
+        case placeID = "place_id"
+        case placeName = "place_name"
+        case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case address
+        case locality
+        case region
+        case country
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case plannedDate = "planned_date"
+        case planSharing = "plan_sharing"
+        case planStatus = "plan_status"
+        case participants
+    }
+
+    func invitation() throws -> WannaPlanInvitation {
+        guard let state = WannaPlanParticipantState(rawValue: participantState),
+              let sharing = WannaPlanSharing(rawValue: planSharing),
+              let status = WannaPlanStatus(rawValue: planStatus)
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid Wanna plan invitation")
+        }
+        return WannaPlanInvitation(
+            participantID: participantID,
+            planID: planID,
+            invitationGeneration: invitationGeneration,
+            state: state,
+            invitedAt: invitedAt,
+            creatorUserID: creatorUserID,
+            creatorHandle: creatorHandle,
+            creatorDisplayName: creatorDisplayName,
+            creatorAvatarURL: creatorAvatarURL,
+            placeID: placeID,
+            placeName: placeName,
+            category: category,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) },
+            sharing: sharing,
+            planStatus: status,
+            participants: try participants.map { try $0.participant() }
+        )
+    }
+}
+
+private struct AcceptWannaPlanParams: Encodable {
+    let participantID: String
+    let invitationGeneration: Int
+    let wannaEventID: String
+    let operationID: String
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "input_participant_id"
+        case invitationGeneration = "input_generation"
+        case wannaEventID = "input_wanna_event_id"
+        case operationID = "input_operation_id"
+    }
+}
+
+private struct AcceptWannaPlanResponse: Decodable {
+    let participantID: String
+    let planID: String
+    let participantState: String
+    let wannaEventID: String
+    let userPlaceID: String
+    let placeID: String
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case planID = "plan_id"
+        case participantState = "participant_state"
+        case wannaEventID = "wanna_event_id"
+        case userPlaceID = "user_place_id"
+        case placeID = "place_id"
+    }
+
+    func result() throws -> WannaPlanAcceptanceResult {
+        guard let state = WannaPlanParticipantState(rawValue: participantState) else {
+            throw WanderRemoteError.invalidResponse("Invalid Wanna plan acceptance")
+        }
+        return WannaPlanAcceptanceResult(
+            participantID: participantID,
+            planID: planID,
+            participantState: state,
+            wannaEventID: wannaEventID,
+            userPlaceID: userPlaceID,
+            placeID: placeID
+        )
+    }
+}
+
+private struct DeclineWannaPlanParams: Encodable {
+    let participantID: String
+    let invitationGeneration: Int
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "input_participant_id"
+        case invitationGeneration = "input_generation"
+    }
+}
+
+private struct ResolveOwnWannasParams: Encodable {
+    let placeID: String
+    let resolution: String
+    let visitID: String?
+
+    init(placeID: String, choice: WannaCheckInChoice, visitID: String?) {
+        self.placeID = placeID
+        resolution = choice.rawValue
+        self.visitID = visitID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case placeID = "input_place_id"
+        case resolution = "input_resolution"
+        case visitID = "input_visit_id"
+    }
+}
+
+private func parseWannaPlanSharing(_ value: String?) throws -> WannaPlanSharing? {
+    guard let value else { return nil }
+    guard let parsed = WannaPlanSharing(rawValue: value) else {
+        throw WanderRemoteError.invalidResponse("Invalid Wanna plan sharing: \(value)")
+    }
+    return parsed
+}
+
+private func parseWannaPlanStatus(_ value: String?) throws -> WannaPlanStatus? {
+    guard let value else { return nil }
+    guard let parsed = WannaPlanStatus(rawValue: value) else {
+        throw WanderRemoteError.invalidResponse("Invalid Wanna plan status: \(value)")
+    }
+    return parsed
 }

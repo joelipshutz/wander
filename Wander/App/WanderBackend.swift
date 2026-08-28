@@ -85,6 +85,7 @@ final class WanderBackend: ObservableObject {
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
+    let wannaRepository: (any WannaRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
     private let featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot
@@ -130,6 +131,7 @@ final class WanderBackend: ObservableObject {
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
+            self.wannaRepository = SupabaseWannaRepository(rpc: client)
         } else {
             self.featureFlagRepository = nil
             self.profileRepository = nil
@@ -151,6 +153,7 @@ final class WanderBackend: ObservableObject {
             self.placePhotoRepository = nil
             self.notificationRepository = nil
             self.sharedVisitRepository = nil
+            self.wannaRepository = nil
         }
     }
 
@@ -180,6 +183,7 @@ final class WanderBackend: ObservableObject {
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
+        wannaRepository: (any WannaRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
@@ -209,6 +213,7 @@ final class WanderBackend: ObservableObject {
         self.placePhotoRepository = placePhotoRepository
         self.notificationRepository = notificationRepository
         self.sharedVisitRepository = sharedVisitRepository
+        self.wannaRepository = wannaRepository
     }
 
     var canUseRemoteData: Bool {
@@ -232,6 +237,7 @@ final class WanderBackend: ObservableObject {
             || placePhotoRepository != nil
             || notificationRepository != nil
             || sharedVisitRepository != nil
+            || wannaRepository != nil
     }
 
     func refreshFeatureFlags(for userID: String) async {
@@ -1187,5 +1193,55 @@ final class WanderBackend: ObservableObject {
     func markSharedVisitPhotoUploaded(photoID: String) async throws {
         guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
         try await sharedVisitRepository.markPhotoUploaded(photoID: photoID)
+    }
+
+    var canUseWannaEvents: Bool {
+        wannaRepository != nil
+    }
+
+    func saveWanna(userPlace: UserPlaceDraft, wanna: WannaSaveDraft) async throws -> WannaSaveResult {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        return try await wannaRepository.saveWanna(userPlace: userPlace, wanna: wanna)
+    }
+
+    func ownWannaEvents() async throws -> [WannaEvent] {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        return try await wannaRepository.ownEvents()
+    }
+
+    func wannaPlanInbox(before: Date? = nil, limit: Int = 50) async throws -> [WannaPlanInvitation] {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        return try await wannaRepository.inbox(before: before, limit: limit)
+    }
+
+    func acceptWannaPlan(
+        participantID: String,
+        invitationGeneration: Int,
+        identifiers: WannaPlanAcceptanceIdentifiers
+    ) async throws -> WannaPlanAcceptanceResult {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        return try await wannaRepository.accept(
+            participantID: participantID,
+            invitationGeneration: invitationGeneration,
+            operationID: identifiers.operationID,
+            wannaEventID: identifiers.wannaEventID
+        )
+    }
+
+    func declineWannaPlan(participantID: String, invitationGeneration: Int) async throws {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        try await wannaRepository.decline(
+            participantID: participantID,
+            invitationGeneration: invitationGeneration
+        )
+    }
+
+    func resolveOwnWannas(
+        placeID: String,
+        choice: WannaCheckInChoice,
+        visitID: String?
+    ) async throws -> Int {
+        guard let wannaRepository else { throw WanderRemoteError.notConfigured }
+        return try await wannaRepository.resolve(placeID: placeID, choice: choice, visitID: visitID)
     }
 }
