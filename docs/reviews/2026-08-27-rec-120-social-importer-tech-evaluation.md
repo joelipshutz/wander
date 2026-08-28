@@ -45,8 +45,8 @@ launch bar. Across all eight cases, transport and strict acquisition
 completeness were both 100%, while Gemini understanding succeeded on 7/8 after
 one multi-place TikTok case exhausted three HTTP 503 attempts. Hint extraction
 reached 92.6% micro recall but only 39.7% macro precision, no post had an exact
-hint set, only 18.2% of hints selected a MapKit candidate, and mean end-to-end
-latency was 131.358 seconds. This is a measured candidate, not a winner or a
+hint set, only 19.9% of hints selected a MapKit candidate, and mean end-to-end
+latency was 151.715 seconds. This is a measured candidate, not a winner or a
 launch-ready importer.
 
 Bright Data, Google Video Intelligence, AWS, and Azure remain unmeasured with
@@ -112,18 +112,25 @@ limits hidden by that smoke.
 
 | Run | Cases | Transport | Complete acquisition | Understanding | MapKit lookup health | MapKit selection | Mean latency |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Verified smoke | 2 | 100% | 100% | 100% | 87.5% | 50.0% | 60.196 s |
-| Full corpus | 8 | 100% | 100% | 87.5% | 39.2% | 18.2% | 131.358 s |
+| Verified smoke | 2 | 100% | 100% | 100% | 87.5% | 50.0% | 60.531 s |
+| Full corpus | 8 | 100% | 100% | 87.5% | 61.4% | 19.9% | 151.715 s |
 
 | Run | Hint macro P / R | Hint micro P / R | Required hits | Posts with a hint hit | Exact hint set | Selected-name macro P / R | Selected-name micro P / R |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Verified smoke | 37.5% / 100% | 33.3% / 100% | 2/2 | 2/2 | 0/2 | 75.0% / 100% | 66.7% / 100% |
-| Full corpus | 39.7% / 87.3% | 75.5% / 92.6% | 112/121 | 7/8 | 0/8 | 50.3% / 53.4% | 61.9% / 9.9% |
+| Full corpus | 39.7% / 87.3% | 75.5% / 92.6% | 112/121 | 7/8 | 0/8 | 50.0% / 53.8% | 65.2% / 12.4% |
 
 The full run's selected-name post-success rate was 75% and selected-name exact
-set rate was 12.5%, with only 12/121 required names surviving MapKit selection.
+set rate was 12.5%, with only 15/121 required names surviving MapKit selection.
 Selected-name scoring checks names and aliases only; it does not verify physical
 branch identity, address, provider ID, or coordinates.
+
+The final MapKit figures above are a v4 re-resolution of the saved Gemini hints,
+so they made no new Apify or Gemini calls. The batch helper applies production's
+ranking and per-query-limit order, paces searches, and retries only transient
+MapKit server/throttling errors. Without pacing, the 176-lookup replay produced
+136 `loadingThrottled` failures and an artificial 13.1% lookup-health result.
+The app's selection code remains authoritative; this helper is still a mirror.
 
 Measured full-run Apify actor usage summed to $0.1387. The seven successful
 Gemini responses reported 44,348 prompt tokens and 66,896 total tokens, implying
@@ -201,9 +208,9 @@ The most important observations are:
 - Gemini recovered 112/121 required names overall, including 106/108 labels in
   the two carousel-image-text scenarios, but emitted enough extra hints that no
   case had an exact hint set.
-- MapKit was the largest downstream attrition point: only 39.2% of hint lookups
-  were healthy, 18.2% selected a candidate, and selected-name micro recall fell
-  to 9.9%. This combines search health, ambiguity thresholds, and candidate
+- MapKit was the largest downstream attrition point: 61.4% of hint lookups were
+  healthy, 19.9% selected a candidate, and selected-name micro recall fell to
+  12.4%. This combines search health, ambiguity thresholds, and candidate
   quality; the corpus cannot yet validate physical branch identity.
 - The current deterministic path found only 16 of 121 labeled mentions. A good
   post-level score can hide catastrophic multi-place recall.
@@ -230,10 +237,13 @@ The most important observations are:
   Cave Springs case selected Castle Crags but missed Cave Springs while four
   hint lookups returned `MKErrorDomain` failures. This is a useful resolution
   diagnostic, not physical-POI or launch proof. That measured run used the v2
-  mirror. The committed v3 helper additionally ports production's LA/Georgia
-  ambiguity rules and District of Columbia region handling with executable
-  parity fixtures. It still copies evaluation logic rather than invoking the
-  production type directly, so production Swift remains authoritative.
+  mirror. The committed v4 helper additionally ports production's pre-limit
+  result ranking, per-query-limit-before-global-dedup order, LA/Georgia
+  ambiguity rules, and District of Columbia region handling with executable
+  parity fixtures. It paces batch requests and retries transient MapKit errors
+  to avoid replay-induced throttling. It still copies evaluation logic rather
+  than invoking the production type directly, so production Swift remains
+  authoritative.
 
 ## Root cause in the current app
 
@@ -466,8 +476,8 @@ To repeat the measured cell without putting secrets in Git:
 Do not launch the current importer unchanged, and do not treat the credentialed
 cell as a ship decision. Apify is now the strongest measured acquisition option
 in this corpus, and Apify plus Gemini has strong micro hint recall, but the full
-path still had one failed understanding case, zero exact hint sets, 18.2% MapKit
-selection, 9.9% selected-name micro recall, and 131.358-second mean latency.
+path still had one failed understanding case, zero exact hint sets, 19.9% MapKit
+selection, 12.4% selected-name micro recall, and 151.715-second mean latency.
 Implement the bounded parser/media/auth/retry fixes as evaluation findings,
 then compare Bright Data and Google Video Intelligence on the same frozen
 corpus, repeat providers enough to measure tail reliability, and expand to the

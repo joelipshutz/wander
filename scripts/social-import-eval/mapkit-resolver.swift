@@ -6,6 +6,8 @@ import MapKit
 private struct BatchRequest: Decodable {
     let requests: [HintRequest]
     let geographyProbes: [GeographyProbe]?
+    let rankingProbes: [RankingProbe]?
+    let queryLimitProbes: [QueryLimitProbe]?
 }
 
 private struct HintRequest: Decodable {
@@ -19,6 +21,8 @@ private struct BatchResponse: Encodable {
     let resolver: String
     let results: [HintResult]
     let geographyProbes: [GeographyProbeResult]?
+    let rankingProbes: [RankingProbeResult]?
+    let queryLimitProbes: [QueryLimitProbeResult]?
 }
 
 fileprivate struct GeographyProbe: Decodable {
@@ -31,6 +35,34 @@ fileprivate struct GeographyProbeResult: Encodable {
     let stateCode: String?
     let hasSearchRegion: Bool
     let localityText: String?
+}
+
+fileprivate struct RankingProbe: Decodable {
+    let id: String
+    let items: [RankingProbeItem]
+}
+
+fileprivate struct RankingProbeItem: Decodable {
+    let id: String
+    let hasPointOfInterestCategory: Bool
+    let isPark: Bool
+    let hasPrimaryCategory: Bool
+}
+
+fileprivate struct RankingProbeResult: Encodable {
+    let id: String
+    let orderedItemIDs: [String]
+}
+
+fileprivate struct QueryLimitProbe: Decodable {
+    let id: String
+    let perQueryLimit: Int
+    let queryItemIDs: [[String]]
+}
+
+fileprivate struct QueryLimitProbeResult: Encodable {
+    let id: String
+    let accumulatedItemIDs: [String]
 }
 
 private struct HintResult: Encodable {
@@ -107,6 +139,9 @@ private struct SearchPlan {
 }
 
 private enum Resolver {
+    private static let minimumSearchInterval: TimeInterval = 0.6
+    @MainActor private static var lastSearchStartedAt = Date.distantPast
+
     @MainActor
     static func resolve(_ input: HintRequest) async -> HintResult {
         let plan = SearchPlan(name: input.name, areaHint: input.area)
@@ -138,23 +173,20 @@ private enum Resolver {
                 )
             }
             do {
-                let response = try await MKLocalSearch(request: request).start()
-                var queryCount = 0
-                for item in response.mapItems {
+                let response = try await pacedSearch(request)
+                var queryItems: [MKMapItem] = []
+                var querySeen = Set<String>()
+                for item in rankedMapItems(response.mapItems) {
                     guard CLLocationCoordinate2DIsValid(item.placemark.coordinate),
                           item.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                     else { continue }
-                    let coordinate = item.placemark.coordinate
-                    let key = [
-                        item.name?.lowercased() ?? "",
-                        String(format: "%.6f", coordinate.latitude),
-                        String(format: "%.6f", coordinate.longitude)
-                    ].joined(separator: "|")
-                    if seen.insert(key).inserted {
-                        mapItems.append(item)
-                        queryCount += 1
-                        if queryCount >= perQueryLimit { break }
-                    }
+                    let key = mapItemKey(item)
+                    guard querySeen.insert(key).inserted else { continue }
+                    queryItems.append(item)
+                    if queryItems.count >= perQueryLimit { break }
+                }
+                for item in queryItems where seen.insert(mapItemKey(item)).inserted {
+                    mapItems.append(item)
                 }
             } catch {
                 lastError = error
@@ -261,6 +293,42 @@ private enum Resolver {
         )
     }
 
+    /// The evaluator can replay far more hints back-to-back than the app's
+    /// interactive flow. Pace those requests and retry only MapKit's transient
+    /// server/throttling failures so batch pressure is not misreported as
+    /// candidate-quality loss. Ranking and selection remain production mirrors.
+    @MainActor
+    private static func pacedSearch(_ request: MKLocalSearch.Request) async throws -> MKLocalSearch.Response {
+        let backoffSeconds: [TimeInterval] = [1.5, 4.0]
+        var attempt = 0
+        while true {
+            let elapsed = Date().timeIntervalSince(lastSearchStartedAt)
+            let remaining = minimumSearchInterval - elapsed
+            if remaining > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            }
+            lastSearchStartedAt = Date()
+            do {
+                return try await MKLocalSearch(request: request).start()
+            } catch {
+                guard isRetryableMapKitError(error), attempt < backoffSeconds.count else {
+                    throw error
+                }
+                let delay = backoffSeconds[attempt]
+                attempt += 1
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+    }
+
+    private static func isRetryableMapKitError(_ error: Error) -> Bool {
+        let providerError = error as NSError
+        guard providerError.domain == MKErrorDomain,
+              let code = MKError.Code(rawValue: UInt(providerError.code))
+        else { return false }
+        return code == .serverFailure || code == .loadingThrottled
+    }
+
     fileprivate static func providerNameVariants(for name: String) -> [String] {
         let folded = normalizedWords(name).joined(separator: " ")
         var variants = [name]
@@ -271,6 +339,73 @@ private enum Resolver {
             variants.append("\(name) Interpretive Site")
         }
         return variants
+    }
+
+    /// Mirrors the ranking pass used by production `MapKitPlaceResolver`
+    /// before its per-query limit is applied. MapKit POIs outrank address-only
+    /// results, known place categories receive the same secondary boost, and
+    /// parks retain production's additional preference.
+    private static func rankedMapItems(_ items: [MKMapItem]) -> [MKMapItem] {
+        items.enumerated()
+            .sorted { lhs, rhs in
+                let left = productionRankingScore(for: lhs.element)
+                let right = productionRankingScore(for: rhs.element)
+                return left == right ? lhs.offset < rhs.offset : left > right
+            }
+            .map(\.element)
+    }
+
+    private static func mapItemKey(_ item: MKMapItem) -> String {
+        let coordinate = item.placemark.coordinate
+        return [
+            item.name?.lowercased() ?? "",
+            String(format: "%.6f", coordinate.latitude),
+            String(format: "%.6f", coordinate.longitude)
+        ].joined(separator: "|")
+    }
+
+    private static func productionRankingScore(for item: MKMapItem) -> Double {
+        let pointCategory = item.pointOfInterestCategory
+        return productionRankingScore(
+            hasPointOfInterestCategory: pointCategory != nil,
+            isPark: pointCategory == .park || pointCategory == .nationalPark,
+            hasPrimaryCategory: pointCategory != nil || hasNameBasedPrimaryCategory(item.name)
+        )
+    }
+
+    private static func productionRankingScore(
+        hasPointOfInterestCategory: Bool,
+        isPark: Bool,
+        hasPrimaryCategory: Bool
+    ) -> Double {
+        var score = 0.0
+        if hasPointOfInterestCategory {
+            score += 500
+            if isPark { score += 70 }
+        }
+        if hasPrimaryCategory { score += 120 }
+        return score
+    }
+
+    private static func hasNameBasedPrimaryCategory(_ name: String?) -> Bool {
+        guard let name else { return false }
+        let value = " " + normalizedWords(name).joined(separator: " ") + " "
+        let phrases = [
+            "veterinary", "veterinarian", " vet ", "animal hospital", "pet hospital",
+            "pet clinic", "dog dental", "cat clinic", "optometrist", "ophthalmologist",
+            "eye doctor", "eye care", "vision center", "optical", "temple", "shrine",
+            "spiritual", "church", "chapel", "cathedral", "mosque", "synagogue",
+            "hospital", "medical center", "health center", "urgent care", "pharmacy",
+            "drugstore", "dermatology", "pediatrics", "physical therapy", "chiropractor",
+            "wellness studio", "spa", "pilates", "plankhaus", "lagree", "reformer",
+            " gym ", "fitness", "training", "strength", "workout", "nail salon",
+            "nails", "manicure", "pedicure", "hair salon", "barbershop", "barber shop",
+            "barber", "tattoo"
+        ]
+        return phrases.contains { phrase in
+            let normalized = " " + normalizedWords(phrase).joined(separator: " ") + " "
+            return value.contains(normalized)
+        }
     }
 
     fileprivate static func coordinate(from value: String?) -> CLLocationCoordinate2D? {
@@ -590,6 +725,41 @@ private enum Resolver {
         )
     }
 
+    fileprivate static func inspectRanking(_ probe: RankingProbe) -> RankingProbeResult {
+        let ordered = probe.items.enumerated().sorted { lhs, rhs in
+            let left = productionRankingScore(
+                hasPointOfInterestCategory: lhs.element.hasPointOfInterestCategory,
+                isPark: lhs.element.isPark,
+                hasPrimaryCategory: lhs.element.hasPrimaryCategory
+            )
+            let right = productionRankingScore(
+                hasPointOfInterestCategory: rhs.element.hasPointOfInterestCategory,
+                isPark: rhs.element.isPark,
+                hasPrimaryCategory: rhs.element.hasPrimaryCategory
+            )
+            return left == right ? lhs.offset < rhs.offset : left > right
+        }
+        return RankingProbeResult(id: probe.id, orderedItemIDs: ordered.map(\.element.id))
+    }
+
+    fileprivate static func inspectQueryLimit(_ probe: QueryLimitProbe) -> QueryLimitProbeResult {
+        let perQueryLimit = max(1, probe.perQueryLimit)
+        var accumulated: [String] = []
+        var accumulatedIDs = Set<String>()
+        for queryItemIDs in probe.queryItemIDs {
+            var limited: [String] = []
+            var queryIDs = Set<String>()
+            for itemID in queryItemIDs where queryIDs.insert(itemID).inserted {
+                limited.append(itemID)
+                if limited.count >= perQueryLimit { break }
+            }
+            for itemID in limited where accumulatedIDs.insert(itemID).inserted {
+                accumulated.append(itemID)
+            }
+        }
+        return QueryLimitProbeResult(id: probe.id, accumulatedItemIDs: accumulated)
+    }
+
     private static func hasUnrequestedStreetDesignator(
         _ candidate: String,
         comparedWith hint: String
@@ -720,16 +890,18 @@ private struct Main {
                 results.append(await Resolver.resolve(hint))
             }
             let response = BatchResponse(
-                resolver: "mapkit-production-query-and-threshold-mirror-v3",
+                resolver: "mapkit-production-query-ranking-and-threshold-mirror-v4",
                 results: results,
-                geographyProbes: request.geographyProbes?.map(Resolver.inspectGeography)
+                geographyProbes: request.geographyProbes?.map(Resolver.inspectGeography),
+                rankingProbes: request.rankingProbes?.map(Resolver.inspectRanking),
+                queryLimitProbes: request.queryLimitProbes?.map(Resolver.inspectQueryLimit)
             )
             let encoded = try JSONEncoder().encode(response)
             FileHandle.standardOutput.write(encoded)
             FileHandle.standardOutput.write(Data([0x0A]))
         } catch {
             let response = [
-                "resolver": "mapkit-production-query-and-threshold-mirror-v3",
+                "resolver": "mapkit-production-query-ranking-and-threshold-mirror-v4",
                 "fatalError": error.localizedDescription
             ]
             let encoded = try? JSONSerialization.data(withJSONObject: response)

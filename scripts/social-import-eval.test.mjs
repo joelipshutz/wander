@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { promisify } from "node:util";
 
 import {
   buildSummary,
@@ -18,11 +20,18 @@ import {
   runUnderstandingProvider,
 } from "./social-import-eval/providers.mjs";
 import { fetchAcquiredMediaBytes } from "./social-import-eval/media.mjs";
-import { inspectMapKitGeography } from "./social-import-eval/mapkit.mjs";
+import {
+  inspectMapKitGeography,
+  inspectMapKitQueryLimits,
+  inspectMapKitRanking,
+} from "./social-import-eval/mapkit.mjs";
+import { runCredentialFreeProcess } from "./social-import-eval/subprocess.mjs";
 import {
   assessAcquisitionCompleteness,
   validateAcquisitionCompleteness,
 } from "./social-import-eval/completeness.mjs";
+
+const execFileAsync = promisify(execFile);
 
 function tinyMP4Bytes() {
   return Buffer.from([
@@ -266,6 +275,116 @@ test("MapKit geography mirror preserves production LA, Georgia, and DC semantics
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });
   }
+});
+
+test("MapKit ranking mirror applies production category ordering before truncation", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitRanking([{
+    id: "production-order",
+    items: [
+      { id: "address", hasPointOfInterestCategory: false, isPark: false, hasPrimaryCategory: false },
+      { id: "poi", hasPointOfInterestCategory: true, isPark: false, hasPrimaryCategory: true },
+      { id: "named-address", hasPointOfInterestCategory: false, isPark: false, hasPrimaryCategory: true },
+      { id: "park", hasPointOfInterestCategory: true, isPark: true, hasPrimaryCategory: true },
+    ],
+  }], null);
+  assert.deepEqual(actual, [{
+    id: "production-order",
+    orderedItemIDs: ["park", "poi", "named-address", "address"],
+  }]);
+});
+
+test("MapKit mirror applies each query limit before global deduplication", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitQueryLimits([{
+    id: "cross-query-duplicate",
+    perQueryLimit: 2,
+    queryItemIDs: [
+      ["shared", "first-only", "first-outside-limit"],
+      ["shared", "second-only", "second-outside-limit"],
+    ],
+  }], null);
+  assert.deepEqual(actual, [{
+    id: "cross-query-duplicate",
+    accumulatedItemIDs: ["shared", "first-only", "second-only"],
+  }]);
+});
+
+test("MapKit re-resolution fails rather than relabeling a resolver-none run", async () => {
+  const runDirectory = await mkdtemp(join(tmpdir(), "rec120-rescore-none-"));
+  const manifest = { schemaVersion: 1, resolver: "none" };
+  try {
+    await Promise.all([
+      writeFile(join(runDirectory, "manifest.json"), JSON.stringify(manifest)),
+      writeFile(join(runDirectory, "results.json"), JSON.stringify([{
+        poiResolution: { mode: "none", status: "not_run", response: null },
+      }])),
+    ]);
+    const rescorer = new URL("./social-import-eval/rescore.mjs", import.meta.url);
+    await assert.rejects(
+      execFileAsync(process.execPath, [rescorer.pathname, runDirectory, "--reresolve-mapkit"]),
+      (error) => {
+        assert.match(error.stderr, /requires a run originally created with --resolve mapkit/);
+        return true;
+      },
+    );
+    assert.deepEqual(JSON.parse(await readFile(join(runDirectory, "manifest.json"), "utf8")), manifest);
+  } finally {
+    await rm(runDirectory, { recursive: true, force: true });
+  }
+});
+
+test("local helper subprocesses never inherit provider credentials", {
+  concurrency: false,
+}, async () => {
+  const original = {
+    apify: process.env.APIFY_TOKEN,
+    gemini: process.env.GEMINI_API_KEY,
+    brightData: process.env.BRIGHTDATA_API_TOKEN,
+    google: process.env.GOOGLE_CLOUD_ACCESS_TOKEN,
+  };
+  process.env.APIFY_TOKEN = "unit-test-apify-secret";
+  process.env.GEMINI_API_KEY = "unit-test-gemini-secret";
+  process.env.BRIGHTDATA_API_TOKEN = "unit-test-brightdata-secret";
+  process.env.GOOGLE_CLOUD_ACCESS_TOKEN = "unit-test-google-secret";
+  try {
+    const { output } = await runCredentialFreeProcess(process.execPath, [
+      "-e",
+      "process.stdout.write(JSON.stringify({apify:process.env.APIFY_TOKEN??null,gemini:process.env.GEMINI_API_KEY??null,brightData:process.env.BRIGHTDATA_API_TOKEN??null,google:process.env.GOOGLE_CLOUD_ACCESS_TOKEN??null}))",
+    ]);
+    assert.deepEqual(JSON.parse(output), {
+      apify: null,
+      gemini: null,
+      brightData: null,
+      google: null,
+    });
+  } finally {
+    if (original.apify == null) delete process.env.APIFY_TOKEN;
+    else process.env.APIFY_TOKEN = original.apify;
+    if (original.gemini == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = original.gemini;
+    if (original.brightData == null) delete process.env.BRIGHTDATA_API_TOKEN;
+    else process.env.BRIGHTDATA_API_TOKEN = original.brightData;
+    if (original.google == null) delete process.env.GOOGLE_CLOUD_ACCESS_TOKEN;
+    else process.env.GOOGLE_CLOUD_ACCESS_TOKEN = original.google;
+  }
+});
+
+test("fixture replay blocks network-capable understanding unless explicitly allowed", async () => {
+  const runner = new URL("./social-import-eval/run.mjs", import.meta.url);
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      runner.pathname,
+      "--fixture-dir", "/private/tmp/nonexistent-rec120-fixtures",
+      "--understanders", "gemini",
+    ]),
+    (error) => {
+      assert.match(error.stderr, /Fixture replay is offline by default/);
+      return true;
+    },
+  );
 });
 
 test("credentialed providers fail closed without leaking configuration", async () => {

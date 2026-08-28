@@ -43,7 +43,9 @@ Options:
                            aws-rekognition-transcribe,azure-video-indexer
   --resolve <mode>         none or mapkit (default: none)
   --out <directory>        output directory (default: ignored timestamped run)
-  --fixture-dir <path>     replay saved acquisition envelopes without network
+  --fixture-dir <path>     replay saved acquisition envelopes; offline by default
+  --allow-network-after-fixture
+                           allow media/model/MapKit network after fixture load
   --help                   show this message
 `;
 }
@@ -56,10 +58,15 @@ function parseArguments(argv) {
     resolver: "none",
     out: null,
     fixtureDirectory: null,
+    allowNetworkAfterFixture: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") return { ...options, help: true };
+    if (argument === "--allow-network-after-fixture") {
+      options.allowNetworkAfterFixture = true;
+      continue;
+    }
     const next = argv[index + 1];
     if (!next || next.startsWith("--")) throw new Error("Missing value for " + argument);
     switch (argument) {
@@ -98,6 +105,13 @@ function parseArguments(argv) {
   }
   if (!["none", "mapkit"].includes(options.resolver)) {
     throw new Error("Unknown resolver: " + options.resolver);
+  }
+  const needsNetworkAfterFixture = options.understanders.some((name) => name !== "deterministic")
+    || options.resolver === "mapkit";
+  if (options.fixtureDirectory && needsNetworkAfterFixture && !options.allowNetworkAfterFixture) {
+    throw new Error(
+      "Fixture replay is offline by default. Add --allow-network-after-fixture to download media, call a model, or use MapKit.",
+    );
   }
   return options;
 }
@@ -228,6 +242,7 @@ async function main() {
     understanders: options.understanders,
     resolver: options.resolver,
     fixtureReplay: Boolean(fixtureDirectory),
+    networkAfterFixtureAllowed: options.allowNetworkAfterFixture,
     providerConfiguration: publicConfiguration(),
     runtime: { node: process.version, platform: process.platform, architecture: process.arch },
   };

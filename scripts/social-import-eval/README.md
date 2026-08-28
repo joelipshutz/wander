@@ -22,6 +22,8 @@ fetch the Instagram or TikTok URL. End-to-end variants must compose both jobs.
   of scope.
 - API credentials are read from the process environment and are never written
   to output.
+- Swift helpers compile in process-private temporary directories and receive a
+  minimal environment that excludes provider credentials.
 - Live run directories are ignored by Git. They can contain public captions,
   creator metadata, expiring media URLs, transcripts, and provider JSON; review
   them before sharing.
@@ -46,9 +48,23 @@ summaries without reacquiring social media or rerunning understanding:
 npm run eval:social-import:rescore -- social-import-eval/runs/<run>
 ```
 
+To rerun only MapKit against saved understanding hints, without reacquiring a
+post or making a paid model call:
+
+```bash
+npm run eval:social-import:rescore -- \
+  social-import-eval/runs/<run> --reresolve-mapkit
+```
+
+The source run must have been created with `--resolve mapkit`; the command fails
+closed for resolver-none runs. Batch replays pace MapKit requests and retry only
+transient server/throttling errors so replay pressure is not counted as POI
+candidate-quality loss.
+
 Add `--resolve mapkit` to use the same POI provider and a scoring mirror of
 `ManualPlaceSearchPlan` / `PlaceImportCandidateMatcher` from the iOS app. The
-first run compiles a small local Swift helper into the run directory.
+first run compiles a credential-isolated Swift helper in a private temporary
+directory.
 
 Useful options:
 
@@ -59,7 +75,9 @@ Useful options:
                  aws-rekognition-transcribe,azure-video-indexer>
 --resolve <none|mapkit>
 --out <directory>
---fixture-dir <directory of saved acquisition JSON>
+--fixture-dir <directory of saved acquisition JSON; offline by default>
+--allow-network-after-fixture
+                 explicitly allow media/model/MapKit network after fixture load
 ```
 
 The committed corpus currently contains eight manually labeled public posts and
@@ -109,9 +127,14 @@ The subsequent eight-case `apify-gemini-full-2026-08-28` run measured:
 - 87.5% understanding success after one case exhausted three HTTP 503 attempts;
 - 39.7%/87.3% macro and 75.5%/92.6% micro hint precision/recall;
 - 7/8 posts with at least one required hint and 0/8 exact hint sets;
-- 50.3%/53.4% selected-name macro precision/recall;
-- 39.2% MapKit lookup health and 18.2% candidate selection; and
-- 131.358 seconds mean end-to-end latency.
+- 50.0%/53.8% selected-name macro precision/recall;
+- 61.4% MapKit lookup health and 19.9% candidate selection; and
+- 151.715 seconds mean end-to-end latency.
+
+Those POI figures are a v4 re-resolution of the frozen Gemini hints, not a new
+paid acquisition/model run. The helper paces batch searches and retries only
+transient MapKit server/throttling errors; an unpaced replay was discarded
+because its bulk pressure produced 136 `loadingThrottled` failures.
 
 The selected-name score verifies only names/aliases, not physical branch
 identity. One initial transport timeout and one initial HTTP 503 recovered via
@@ -190,9 +213,10 @@ cross-host redirects.
   a local, zero-API-cost comparator; it is evaluation code, not app code.
 - Deterministic hint extraction approximates the production evidence ordering
   and trust model in `SocialPlaceHintExtractor`.
-- The v3 MapKit benchmark mirror adds production-style provider-name query
+- The v4 MapKit benchmark mirror adds production-style provider-name query
   variants, coordinate/region hints, exact-country and area-conflict filters,
-  OCR-specific near-spelling handling, and the candidate clear-lead threshold.
+  production pre-limit result ranking, OCR-specific near-spelling handling,
+  and the candidate clear-lead threshold.
   It also ports the production LA/Georgia ambiguity rules and District of
   Columbia region handling, covered by executable parity fixtures. It remains
   copied evaluation logic; production Swift regression fixtures are the
