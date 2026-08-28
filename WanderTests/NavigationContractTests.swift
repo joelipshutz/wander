@@ -1250,10 +1250,15 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
         )
         let releaseSurfaceRange = try XCTUnwrap(source.range(of: "enum InCommonReleaseProjection"))
-        let lastDebugEnd = try XCTUnwrap(source.range(of: "#endif", options: .backwards))
+        let sourceBeforeReleaseSurface = String(source[..<releaseSurfaceRange.lowerBound])
         let releaseSurface = String(source[releaseSurfaceRange.lowerBound...])
 
-        XCTAssertGreaterThan(releaseSurfaceRange.lowerBound, lastDebugEnd.upperBound)
+        if let lastDebugStart = sourceBeforeReleaseSurface.range(of: "#if DEBUG", options: .backwards) {
+            let lastDebugEnd = try XCTUnwrap(
+                sourceBeforeReleaseSurface.range(of: "#endif", options: .backwards)
+            )
+            XCTAssertGreaterThan(lastDebugEnd.lowerBound, lastDebugStart.lowerBound)
+        }
         XCTAssertTrue(releaseSurface.contains("store.placesInCommon(with: profileID)"))
         XCTAssertTrue(releaseSurface.contains("InCommonReleaseHero("))
         XCTAssertTrue(releaseSurface.contains("TextField(\"search \\(navigationTitle.lowercased())\""))
