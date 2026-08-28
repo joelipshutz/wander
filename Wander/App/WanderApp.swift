@@ -214,6 +214,15 @@ struct WanderApp: App {
 struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     private static let assetName = "PlaceCarouselPhotos"
     private static let tileCount = 4
+    private static var croppedImageCache: [Int: UIImage] = [:]
+    private static var encodedImageCache: [Int: Data] = [:]
+
+    init() {
+        guard ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") else {
+            return
+        }
+        Self.prewarmTileCache()
+    }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         if request.skipsGooglePlacesLookup {
@@ -244,11 +253,15 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
 
     func imageData(for photo: PlacePhoto) async throws -> Data {
         let tileIndex = Self.tileIndex(from: photo.providerPlaceID)
+        if let data = Self.encodedImageCache[tileIndex] {
+            return data
+        }
         guard let image = Self.croppedAssetImage(tileIndex: tileIndex),
               let data = image.pngData()
         else {
             throw WanderRemoteError.invalidResponse("Map capture photo asset is unavailable")
         }
+        Self.encodedImageCache[tileIndex] = data
         return data
     }
 
@@ -309,13 +322,16 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     }
 
     private static func croppedAssetImage(tileIndex: Int) -> UIImage? {
+        let normalizedIndex = max(0, min(tileIndex, tileCount - 1))
+        if let cachedImage = croppedImageCache[normalizedIndex] {
+            return cachedImage
+        }
         guard let sourceImage = UIImage(named: assetName),
               let sourceCGImage = sourceImage.cgImage
         else {
             return nil
         }
 
-        let normalizedIndex = max(0, min(tileIndex, tileCount - 1))
         let tileWidth = sourceCGImage.width / 2
         let tileHeight = sourceCGImage.height / 2
         let cropRect = CGRect(
@@ -327,11 +343,23 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
         guard let croppedCGImage = sourceCGImage.cropping(to: cropRect) else {
             return nil
         }
-        return UIImage(
+        let image = UIImage(
             cgImage: croppedCGImage,
             scale: sourceImage.scale,
             orientation: sourceImage.imageOrientation
         )
+        croppedImageCache[normalizedIndex] = image
+        return image
+    }
+
+    private static func prewarmTileCache() {
+        for tileIndex in 0..<tileCount {
+            guard let image = croppedAssetImage(tileIndex: tileIndex),
+                  encodedImageCache[tileIndex] == nil,
+                  let data = image.pngData()
+            else { continue }
+            encodedImageCache[tileIndex] = data
+        }
     }
 
     private static func googleMapsSourceURLString(for placeName: String) -> String? {

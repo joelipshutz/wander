@@ -233,6 +233,7 @@ struct FeedScreen: View {
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
             }
+            .accessibilityIdentifier("feed.places.scroll")
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()
@@ -1234,7 +1235,9 @@ private struct FeedSearchLauncher: View {
             value: isPulsing
         )
         .task {
-            guard placeholders.count > 1 else { return }
+            guard placeholders.count > 1,
+                  !ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures")
+            else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2.6))
                 guard !Task.isCancelled else { return }

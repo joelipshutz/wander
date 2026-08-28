@@ -450,9 +450,22 @@ final class MapHitTestingTests: XCTestCase {
 
         XCTAssertTrue(map.contains("viewerLocation: mapCardViewerLocation"))
         XCTAssertFalse(map.contains("searchOriginLocation"))
-        XCTAssertTrue(map.contains("from: renderProjection.visiblePlaceGroups"))
+        XCTAssertTrue(map.contains("from: searchVisiblePlaceGroups"))
         XCTAssertTrue(map.contains("Task { @MainActor [immediateSavedSuggestions] in"))
         XCTAssertFalse(map.contains("savedTypeaheadSuggestions(for:"))
+
+        let searchStart = try XCTUnwrap(map.range(of: "private func runMapSearch("))
+        let searchEnd = try XCTUnwrap(
+            map.range(
+                of: "private func beginMapSearchRequest()",
+                range: searchStart.upperBound..<map.endIndex
+            )
+        )
+        let submittedSearch = map[searchStart.lowerBound..<searchEnd.lowerBound]
+        XCTAssertTrue(submittedSearch.contains("queryMatchingPlaces: searchVisiblePlaces"))
+        XCTAssertTrue(submittedSearch.contains("searchVisiblePlaces.isEmpty"))
+        XCTAssertFalse(submittedSearch.contains("visiblePlaces.first"))
+        XCTAssertFalse(submittedSearch.contains("visiblePlaces.isEmpty"))
 
         let sourceStart = try XCTUnwrap(map.range(of: "private func selectMapSource("))
         let sourceEnd = try XCTUnwrap(
@@ -460,6 +473,55 @@ final class MapHitTestingTests: XCTestCase {
         )
         let sourceSelection = map[sourceStart.lowerBound..<sourceEnd.lowerBound]
         XCTAssertTrue(sourceSelection.contains("handleFeaturedCameraChange(currentSearchRegion)"))
+    }
+
+    @MainActor
+    func testSubmittedSearchDoesNotSelectAPlaceRetainedOnlyForPresentation() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let retainedPlace = try XCTUnwrap(store.visiblePlaces().first)
+        let renderedPlaces = MapActivePinRetention.places(
+            from: [],
+            retaining: retainedPlace
+        )
+        let candidate = PlaceCandidate(
+            id: "unrelated-mapkit-result",
+            name: "Unrelated Result",
+            category: "Cafe",
+            latitude: 34.05,
+            longitude: -118.25,
+            confidence: 1
+        )
+
+        XCTAssertEqual(renderedPlaces.map(\.id), [retainedPlace.id])
+
+        switch MapSubmittedSearchSelectionPolicy.selection(
+            queryMatchingPlaces: [],
+            mapKitCandidates: [candidate]
+        ) {
+        case .candidate(let selectedCandidate):
+            XCTAssertEqual(selectedCandidate, candidate)
+        case .saved, .none:
+            XCTFail("A presentation-only retained pin must not beat the MapKit result.")
+        }
+
+        switch MapSubmittedSearchSelectionPolicy.selection(
+            queryMatchingPlaces: [retainedPlace],
+            mapKitCandidates: [candidate]
+        ) {
+        case .saved(let selectedPlace):
+            XCTAssertEqual(selectedPlace.id, retainedPlace.id)
+        case .candidate, .none:
+            XCTFail("A genuine saved-place query match should remain preferred.")
+        }
+
+        if case .none = MapSubmittedSearchSelectionPolicy.selection(
+            queryMatchingPlaces: [],
+            mapKitCandidates: []
+        ) {
+            // Expected.
+        } else {
+            XCTFail("An empty search result set should remain empty.")
+        }
     }
 }
 

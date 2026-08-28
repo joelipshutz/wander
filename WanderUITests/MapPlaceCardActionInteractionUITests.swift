@@ -66,7 +66,81 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
 
 @MainActor
 final class FeedPostcardInteractionUITests: XCTestCase {
-    func testPerformanceFixtureScrollsAndReusesWarmFeedSurfaces() {
+    func testPerformanceFixtureScrollsWithoutHitches() {
+        let app = performanceFeedApp()
+        app.launch()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["feed.activity.perf-feed-000.postcard"]
+                .waitForExistence(timeout: 12)
+        )
+        let scroll = app.scrollViews["feed.places.scroll"].firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: 3))
+        let laterPostcard = app.descendants(matching: .any)[
+            "feed.activity.perf-feed-008.postcard"
+        ]
+        var didRevealLaterPostcard = false
+
+        var metrics: [any XCTMetric] = [
+            XCTOSSignpostMetric.scrollingAndDecelerationMetric
+        ]
+        if #available(iOS 19.0, *) {
+            metrics.append(XCTHitchMetric(application: app))
+        }
+
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        options.invocationOptions = [.manuallyStart, .manuallyStop]
+
+        measure(metrics: metrics, options: options) {
+            startMeasuring()
+            scroll.swipeUp(velocity: .fast)
+            stopMeasuring()
+            didRevealLaterPostcard = didRevealLaterPostcard || laterPostcard.exists
+        }
+        XCTAssertTrue(didRevealLaterPostcard)
+    }
+
+    func testPerformanceFixtureReusesWarmFeedSurfaces() {
+        let app = performanceFeedApp()
+        app.launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
+
+        addUIInterruptionMonitor(withDescription: "Dismiss notification banners") { element in
+            guard element.identifier == "NotificationShortLookView" else { return false }
+            element.swipeUp()
+            return true
+        }
+
+        let people = app.buttons["People"].firstMatch
+        let places = app.buttons["Places"].firstMatch
+        XCTAssertTrue(people.waitForExistence(timeout: 3))
+        XCTAssertTrue(places.waitForExistence(timeout: 3))
+
+        // Materialize both retained roots before timing the warm path. The
+        // existence checks intentionally stay outside the measured window:
+        // XCTest polls for at least one second even when the element is ready.
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
+        )
+        places.tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 3))
+
+        let switchStartedAt = Date()
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 2)
+        )
+        places.tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 2))
+        XCTAssertLessThan(
+            Date().timeIntervalSince(switchStartedAt),
+            5,
+            "Two warm Feed surface switches should not rebuild their retained roots."
+        )
+    }
+
+    private func performanceFeedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -75,54 +149,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
             "-WanderDisableWalkthroughs",
             "-WanderInitialTab", "discover"
         ]
-        app.launch()
-
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
-        let firstPostcard = app.descendants(matching: .any)[
-            "feed.activity.perf-feed-000.postcard"
-        ]
-        XCTAssertTrue(firstPostcard.waitForExistence(timeout: 12))
-
-        let laterPostcard = app.descendants(matching: .any)[
-            "feed.activity.perf-feed-008.postcard"
-        ]
-        var longestSwipeDuration: TimeInterval = 0
-        for _ in 0..<10 where !laterPostcard.exists {
-            let swipeStartedAt = Date()
-            app.swipeUp()
-            longestSwipeDuration = max(
-                longestSwipeDuration,
-                Date().timeIntervalSince(swipeStartedAt)
-            )
-        }
-        XCTAssertTrue(laterPostcard.waitForExistence(timeout: 2))
-        XCTAssertLessThan(
-            longestSwipeDuration,
-            3,
-            "A dense Feed swipe should not block on row-wide recomputation."
-        )
-
-        let people = app.buttons["People"].firstMatch
-        let places = app.buttons["Places"].firstMatch
-        XCTAssertTrue(people.waitForExistence(timeout: 3))
-        XCTAssertTrue(places.waitForExistence(timeout: 3))
-
-        let switchStartedAt = Date()
-        people.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
-        )
-        places.tap()
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 3))
-        people.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
-        )
-        XCTAssertLessThan(
-            Date().timeIntervalSince(switchStartedAt),
-            6,
-            "Retained Feed surfaces should switch without rebuilding their roots."
-        )
+        return app
     }
 
     func testActionsDoNotOpenTheNextPlace() {

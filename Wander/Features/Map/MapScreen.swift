@@ -82,6 +82,27 @@ enum MapSearchPerformancePolicy {
     }
 }
 
+enum MapSubmittedSearchSelection {
+    case saved(VisiblePlace)
+    case candidate(PlaceCandidate)
+    case none
+}
+
+enum MapSubmittedSearchSelectionPolicy {
+    static func selection(
+        queryMatchingPlaces: [VisiblePlace],
+        mapKitCandidates: [PlaceCandidate]
+    ) -> MapSubmittedSearchSelection {
+        if let place = queryMatchingPlaces.first {
+            return .saved(place)
+        }
+        if let candidate = mapKitCandidates.first {
+            return .candidate(candidate)
+        }
+        return .none
+    }
+}
+
 enum MapSearchQueryPolicy {
     struct ResultEvidence {
         let name: String
@@ -879,6 +900,13 @@ struct MapScreen: View {
         )
     }
 
+    /// Search must use only the query-filtered projection. A routed place is
+    /// retained below strictly for map/card continuity and is not a match for
+    /// an unrelated query merely because it was selected before searching.
+    private var searchVisiblePlaces: [VisiblePlace] {
+        renderProjection.visiblePlaces
+    }
+
     private var mapSearchDockClearance: CGFloat {
         max(MapControlLayout.searchDockClearance, measuredMapSearchDockHeight)
     }
@@ -898,6 +926,10 @@ struct MapScreen: View {
             retaining: routedVisiblePlace,
             currentUserID: store.currentUser.id
         )
+    }
+
+    private var searchVisiblePlaceGroups: [VisiblePlaceGroup] {
+        renderProjection.visiblePlaceGroups
     }
 
     private func projectedGroupKey(for visiblePlace: VisiblePlace) -> String? {
@@ -3252,18 +3284,22 @@ struct MapScreen: View {
             }
             mapSearchCandidates = candidates.filter { !isAlreadyVisible(candidate: $0) }
 
-            if let firstVisiblePlace = visiblePlaces.first {
+            switch MapSubmittedSearchSelectionPolicy.selection(
+                queryMatchingPlaces: searchVisiblePlaces,
+                mapKitCandidates: mapSearchCandidates
+            ) {
+            case .saved(let firstVisiblePlace):
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
                 center(on: firstVisiblePlace)
                 mapSearchMessage = nil
-            } else if let firstCandidate = mapSearchCandidates.first {
+            case .candidate(let firstCandidate):
                 routedVisiblePlace = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
                 mapSearchMessage = nil
-            } else {
+            case .none:
                 routedVisiblePlace = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
@@ -3280,7 +3316,7 @@ struct MapScreen: View {
                 return
             }
             mapSearchCandidates = []
-            mapSearchMessage = visiblePlaces.isEmpty
+            mapSearchMessage = searchVisiblePlaces.isEmpty
                 ? "No places on your map match yet. Try a more specific search."
                 : nil
         }
@@ -4278,7 +4314,7 @@ struct MapScreen: View {
         }
 
         let immediateSavedSuggestions = savedTypeaheadSuggestions(
-            from: visiblePlaceGroups
+            from: searchVisiblePlaceGroups
         )
         typeaheadSuggestions = immediateSavedSuggestions
         isLoadingTypeahead = true
