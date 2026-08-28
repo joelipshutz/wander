@@ -67,6 +67,225 @@ enum MapSearchPerformancePolicy {
     }
 }
 
+enum MapSearchQueryPolicy {
+    struct ResultEvidence {
+        let name: String
+        let distanceFromSearchCenter: CLLocationDistance
+        let pointOfInterestCategory: MKPointOfInterestCategory?
+    }
+
+    private static let minimumNearbyMatchRadius: CLLocationDistance = 100_000
+    private static let regionRadiusMultiplier = 4.0
+
+    static func fallbackQuery(
+        for query: String,
+        primaryResultNames: [String]
+    ) -> String? {
+        guard lexicalScore(forName: primaryResultNames, query: query) == 0 else {
+            return nil
+        }
+
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard tokens.count > 1 else { return nil }
+
+        var fallback: String?
+        var fallbackLength = 0
+        for token in tokens {
+            let trimmed = token.trimmingCharacters(in: .punctuationCharacters)
+            let length = canonicalText(trimmed).count
+            guard length >= 4, length > fallbackLength else { continue }
+            fallback = trimmed
+            fallbackLength = length
+        }
+
+        return fallback
+    }
+
+    static func lexicalScore(forName name: String, query: String) -> Double {
+        lexicalScore(forName: [name], query: query)
+    }
+
+    static func shouldRecoverBeyondRegion(
+        for query: String,
+        evidence: [ResultEvidence],
+        searchRegion: MKCoordinateRegion
+    ) -> Bool {
+        guard canonicalText(query).split(separator: " ").count > 1 else {
+            return false
+        }
+
+        let nearbyMatchRadius = nearbyMatchRadius(for: searchRegion)
+        return !evidence.contains { result in
+            lexicalScore(forName: result.name, query: query) > 0
+                && result.distanceFromSearchCenter <= nearbyMatchRadius
+        }
+    }
+
+    static func preferredCategoryFallbacks(
+        from evidence: [ResultEvidence],
+        limit: Int = 3
+    ) -> [MKPointOfInterestCategory] {
+        guard limit > 0 else { return [] }
+
+        var counts: [MKPointOfInterestCategory: (count: Int, firstIndex: Int)] = [:]
+        for (index, result) in evidence.enumerated() {
+            guard let category = result.pointOfInterestCategory else { continue }
+            let current = counts[category] ?? (count: 0, firstIndex: index)
+            counts[category] = (current.count + 1, current.firstIndex)
+        }
+
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value.count != rhs.value.count {
+                    return lhs.value.count > rhs.value.count
+                }
+                return lhs.value.firstIndex < rhs.value.firstIndex
+            }
+            .prefix(limit)
+            .map(\.key)
+    }
+
+    static func hasLexicalMatch(in names: [String], query: String) -> Bool {
+        lexicalScore(forName: names, query: query) > 0
+    }
+
+    private static func nearbyMatchRadius(for region: MKCoordinateRegion) -> CLLocationDistance {
+        let center = CLLocation(
+            latitude: region.center.latitude,
+            longitude: region.center.longitude
+        )
+        let corner = CLLocation(
+            latitude: region.center.latitude + region.span.latitudeDelta / 2,
+            longitude: region.center.longitude + region.span.longitudeDelta / 2
+        )
+        return max(
+            minimumNearbyMatchRadius,
+            center.distance(from: corner) * regionRadiusMultiplier
+        )
+    }
+
+    private static func lexicalScore(forName names: [String], query: String) -> Double {
+        let normalizedQuery = canonicalText(query)
+        guard !normalizedQuery.isEmpty else { return 0 }
+
+        return names.reduce(0) { bestScore, name in
+            let normalizedName = canonicalText(name)
+            let score: Double
+            if normalizedName == normalizedQuery {
+                score = 1_000
+            } else if normalizedName.hasPrefix(normalizedQuery) {
+                score = 750
+            } else if normalizedName.contains(normalizedQuery) {
+                score = 500
+            } else {
+                score = 0
+            }
+            return max(bestScore, score)
+        }
+    }
+
+    private static func canonicalText(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "’", with: "")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .lowercased()
+    }
+}
+
+@MainActor
+private final class MapSearchCompletionCollector: NSObject, @preconcurrency MKLocalSearchCompleterDelegate {
+    private struct Result: @unchecked Sendable {
+        let completions: [MKLocalSearchCompletion]
+    }
+
+    private let completer = MKLocalSearchCompleter()
+    private var continuation: CheckedContinuation<Result, Never>?
+    private var settleTask: Task<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
+
+    func completions(
+        for query: String,
+        region: MKCoordinateRegion
+    ) async -> [MKLocalSearchCompletion] {
+        let result = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                completer.delegate = self
+                completer.resultTypes = [.pointOfInterest, .address]
+                completer.region = region
+
+                guard !Task.isCancelled else {
+                    finish(with: [])
+                    return
+                }
+
+                timeoutTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard !Task.isCancelled, let self else { return }
+                    finish(with: completer.results)
+                }
+                completer.queryFragment = query
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.finish(with: [])
+            }
+        }
+        return result.completions
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        let results = completer.results
+        settleTask?.cancel()
+        settleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            self?.finish(with: results)
+        }
+    }
+
+    func completer(
+        _ completer: MKLocalSearchCompleter,
+        didFailWithError error: Error
+    ) {
+        finish(with: [])
+    }
+
+    private func finish(with results: [MKLocalSearchCompletion]) {
+        guard let continuation else { return }
+        self.continuation = nil
+        settleTask?.cancel()
+        settleTask = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        completer.cancel()
+        completer.delegate = nil
+        continuation.resume(returning: Result(completions: results))
+    }
+}
+
+enum MapSearchResultIdentity {
+    static func locationKey(
+        name: String,
+        latitude: Double,
+        longitude: Double
+    ) -> String {
+        let latitudeKey = Int((latitude * 100_000).rounded())
+        let longitudeKey = Int((longitude * 100_000).rounded())
+        let slug = name
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return "\(slug)_\(latitudeKey)_\(longitudeKey)"
+    }
+}
+
 struct MapSearchSelectionSession: Equatable {
     private(set) var isActive = false
     private var selectedPlaceGroupKeyAtEntry: String?
@@ -3068,27 +3287,185 @@ struct MapScreen: View {
     }
 
     private func mapKitCandidates(for query: String, limit: Int = 8) async throws -> [PlaceCandidate] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.region = currentSearchRegion
-        request.resultTypes = [.pointOfInterest, .address]
+        let searchRegion = currentSearchRegion
+        let primaryItems = try await mapKitItems(for: query, region: searchRegion)
+        var items = primaryItems
+
+        if let fallbackQuery = MapSearchQueryPolicy.fallbackQuery(
+            for: query,
+            primaryResultNames: primaryItems.compactMap(\.name)
+        ) {
+            do {
+                items.append(contentsOf: try await mapKitItems(for: fallbackQuery, region: searchRegion))
+            } catch {
+                guard !Task.isCancelled else { throw CancellationError() }
+            }
+        }
+
+        let evidence = mapSearchEvidence(for: items, searchRegion: searchRegion)
+        if MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+            for: query,
+            evidence: evidence,
+            searchRegion: searchRegion
+        ) {
+            do {
+                let neutralItems = try await mapKitItems(for: query, region: nil)
+                    .filter { item in
+                        MapSearchQueryPolicy.lexicalScore(
+                            forName: item.name ?? "",
+                            query: query
+                        ) > 0
+                    }
+                items.append(contentsOf: neutralItems)
+            } catch {
+                guard !Task.isCancelled else { throw CancellationError() }
+            }
+
+            if MapSearchQueryPolicy.hasLexicalMatch(
+                in: items.compactMap(\.name),
+                query: query
+            ) {
+                let completionItems = await mapKitCompletionItems(
+                    for: query,
+                    region: searchRegion,
+                    limit: min(limit, 4)
+                )
+                if !completionItems.isEmpty {
+                    items.insert(contentsOf: completionItems, at: 0)
+                }
+            } else {
+                let categoryFallbacks = MapSearchQueryPolicy.preferredCategoryFallbacks(
+                    from: evidence
+                )
+                for category in categoryFallbacks {
+                    do {
+                        let categoryItems = try await mapKitItems(
+                            for: query,
+                            region: nil,
+                            pointOfInterestCategory: category
+                        )
+                        .filter { item in
+                            MapSearchQueryPolicy.lexicalScore(
+                                forName: item.name ?? "",
+                                query: query
+                            ) > 0
+                        }
+                        items.append(contentsOf: categoryItems)
+                        if !categoryItems.isEmpty {
+                            break
+                        }
+                    } catch {
+                        guard !Task.isCancelled else { throw CancellationError() }
+                    }
+                }
+            }
+        }
+
         let origin = MapSearchPerformancePolicy.rankingOrigin(
             viewerLocation: mapCardViewerLocation,
-            mapRegion: currentSearchRegion
+            mapRegion: searchRegion
         )
+        return mapKitCandidates(from: items, query: query, origin: origin, limit: limit)
+    }
 
-        let response = try await MKLocalSearch(request: request).start()
-        return mapKitCandidates(from: response.mapItems, query: query, origin: origin, limit: limit)
+    private func mapKitItems(
+        for query: String,
+        region: MKCoordinateRegion?,
+        pointOfInterestCategory: MKPointOfInterestCategory? = nil
+    ) async throws -> [MKMapItem] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        if let region {
+            request.region = region
+        }
+        if let pointOfInterestCategory {
+            request.pointOfInterestFilter = MKPointOfInterestFilter(
+                including: [pointOfInterestCategory]
+            )
+            request.resultTypes = .pointOfInterest
+        } else {
+            request.resultTypes = [.pointOfInterest, .address]
+        }
+        return try await MKLocalSearch(request: request).start().mapItems
+    }
+
+    private func mapSearchEvidence(
+        for items: [MKMapItem],
+        searchRegion: MKCoordinateRegion
+    ) -> [MapSearchQueryPolicy.ResultEvidence] {
+        let searchCenter = CLLocation(
+            latitude: searchRegion.center.latitude,
+            longitude: searchRegion.center.longitude
+        )
+        return items.compactMap { item in
+            guard let name = item.name else { return nil }
+            let coordinate = item.placemark.coordinate
+            guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+            let distance = searchCenter.distance(
+                from: CLLocation(
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                )
+            )
+            return MapSearchQueryPolicy.ResultEvidence(
+                name: name,
+                distanceFromSearchCenter: distance,
+                pointOfInterestCategory: item.pointOfInterestCategory
+            )
+        }
+    }
+
+    private func mapKitCompletionItems(
+        for query: String,
+        region: MKCoordinateRegion,
+        limit: Int
+    ) async -> [MKMapItem] {
+        guard limit > 0 else { return [] }
+
+        let collector = MapSearchCompletionCollector()
+        let completions = await collector.completions(for: query, region: region)
+            .filter { completion in
+                MapSearchQueryPolicy.lexicalScore(
+                    forName: completion.title,
+                    query: query
+                ) == 1_000
+            }
+
+        guard completions.count > 1 else { return [] }
+
+        var items: [MKMapItem] = []
+        for completion in completions.prefix(limit) {
+            guard !Task.isCancelled else { return [] }
+            do {
+                let response = try await MKLocalSearch(
+                    request: MKLocalSearch.Request(completion: completion)
+                ).start()
+                items.append(contentsOf: response.mapItems.filter { item in
+                    MapSearchQueryPolicy.lexicalScore(
+                        forName: item.name ?? "",
+                        query: query
+                    ) > 0
+                })
+            } catch {
+                guard !Task.isCancelled else { return [] }
+            }
+        }
+        return items
     }
 
     private func mapKitCandidates(from items: [MKMapItem], query: String?, origin: CLLocation, limit: Int) -> [PlaceCandidate] {
         var seen = Set<String>()
         return items
-            .sorted {
-                mapSearchRankingScore(for: $0, query: query, origin: origin)
-                    > mapSearchRankingScore(for: $1, query: query, origin: origin)
+            .enumerated()
+            .sorted { lhs, rhs in
+                let lhsScore = mapSearchRankingScore(for: lhs.element, query: query, origin: origin)
+                let rhsScore = mapSearchRankingScore(for: rhs.element, query: query, origin: origin)
+                if lhsScore != rhsScore {
+                    return lhsScore > rhsScore
+                }
+                return lhs.offset < rhs.offset
             }
-            .compactMap { item in
+            .compactMap { _, item in
             guard let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !name.isEmpty,
                   CLLocationCoordinate2DIsValid(item.placemark.coordinate)
@@ -3796,10 +4173,8 @@ struct MapScreen: View {
             let candidates = (try? await mapKitCandidates(for: query, limit: 6)) ?? []
             guard !Task.isCancelled, Self.normalized(mapQuery) == normalized else { return }
 
-            let seenTitles = Set(immediateSavedSuggestions.map { Self.normalized($0.title) })
             let mapSuggestions = candidates
                 .filter { !isAlreadyVisible(candidate: $0) }
-                .filter { !seenTitles.contains(Self.normalized($0.name)) }
                 .prefix(max(0, 6 - immediateSavedSuggestions.count))
                 .map(MapSearchSuggestion.mapKit)
 
@@ -4112,19 +4487,10 @@ struct MapScreen: View {
     }
 
     private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {
-        let normalizedQuery = Self.normalized(query ?? "")
-        let normalizedName = Self.normalized(item.name ?? "")
-        var score = 0.0
-
-        if !normalizedQuery.isEmpty {
-            if normalizedName == normalizedQuery {
-                score += 1_000
-            } else if normalizedName.hasPrefix(normalizedQuery) {
-                score += 750
-            } else if normalizedName.contains(normalizedQuery) {
-                score += 500
-            }
-        }
+        var score = MapSearchQueryPolicy.lexicalScore(
+            forName: item.name ?? "",
+            query: query ?? ""
+        )
 
         if item.pointOfInterestCategory != nil {
             score += 120
@@ -4146,21 +4512,15 @@ struct MapScreen: View {
     }
 
     private func mapKitSourceID(for item: MKMapItem, name: String) -> String {
-        let latitude = Int((item.placemark.coordinate.latitude * 100_000).rounded())
-        let longitude = Int((item.placemark.coordinate.longitude * 100_000).rounded())
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "mapkit_\(slug)_\(latitude)_\(longitude)"
+        "mapkit_\(mapKitDuplicateKey(for: item, name: name))"
     }
 
     private func mapKitDuplicateKey(for item: MKMapItem, name: String) -> String {
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "\(slug)_\(item.placemark.locality?.lowercased() ?? "")"
+        MapSearchResultIdentity.locationKey(
+            name: name,
+            latitude: item.placemark.coordinate.latitude,
+            longitude: item.placemark.coordinate.longitude
+        )
     }
 
     private func category(for item: MKMapItem) -> String {
@@ -4196,13 +4556,12 @@ struct MapScreen: View {
     }
 
     private func mapFeatureSourceID(for feature: MapFeature, name: String) -> String {
-        let latitude = Int((feature.coordinate.latitude * 100_000).rounded())
-        let longitude = Int((feature.coordinate.longitude * 100_000).rounded())
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "mapkit_\(slug)_\(latitude)_\(longitude)"
+        let locationKey = MapSearchResultIdentity.locationKey(
+            name: name,
+            latitude: feature.coordinate.latitude,
+            longitude: feature.coordinate.longitude
+        )
+        return "mapkit_\(locationKey)"
     }
 
     private func category(for feature: MapFeature) -> String {
