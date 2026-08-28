@@ -95,6 +95,29 @@ summary.json                  aggregate and per-modality metrics
 summary.md                    compact human-readable comparison
 ```
 
+## Verified credentialed run
+
+The gitignored `apify-gemini-smoke-2026-08-28-verified` run exercised two cases
+through Apify acquisition, Gemini understanding, and MapKit resolution. It
+reached 100% transport, strict completeness, understanding success, and
+required-place recall. Hint exact-set success was 0/2, and MapKit selected a
+candidate for 50% of hints.
+
+The subsequent eight-case `apify-gemini-full-2026-08-28` run measured:
+
+- 100% acquisition transport and strict completeness;
+- 87.5% understanding success after one case exhausted three HTTP 503 attempts;
+- 39.7%/87.3% macro and 75.5%/92.6% micro hint precision/recall;
+- 7/8 posts with at least one required hint and 0/8 exact hint sets;
+- 50.3%/53.4% selected-name macro precision/recall;
+- 39.2% MapKit lookup health and 18.2% candidate selection; and
+- 131.358 seconds mean end-to-end latency.
+
+The selected-name score verifies only names/aliases, not physical branch
+identity. One initial transport timeout and one initial HTTP 503 recovered via
+retry, while the three-503 case remained failed in the frozen benchmark.
+Neither run establishes launch readiness.
+
 ## Provider environment variables
 
 Provider adapters fail closed with a structured `not_configured` result when
@@ -113,6 +136,9 @@ APIFY_TIKTOK_ACTOR_ID
 
 GEMINI_API_KEY
 GEMINI_MODEL                  optional; adapter default is documented in code
+GEMINI_MAX_ATTEMPTS           optional; default 3, hard maximum 5
+GEMINI_RETRY_BASE_MS          optional bounded retry-backoff base
+GEMINI_RETRY_MAX_MS           optional bounded retry-backoff ceiling
 
 GOOGLE_CLOUD_ACCESS_TOKEN
 ```
@@ -120,9 +146,15 @@ GOOGLE_CLOUD_ACCESS_TOKEN
 No `.env` file is required or read by the runner. This keeps credentials out of
 the repository and makes CI/provider injection explicit.
 
-The Apify adapter does not request, fetch, ingest, or score vendor transcript
-artifacts. Apify STT remains a documented capability to evaluate separately,
-not a measured feature of this harness.
+The Apify adapter invokes actor runs through `/v2/actors`, disables the actor's
+AI video description, and does not request, fetch, ingest, or score vendor
+transcript artifacts. Apify STT remains a documented capability to evaluate
+separately, not a measured feature of this harness.
+
+Private Apify key-value-store media can require the same process token used for
+acquisition. The runner attaches that Bearer header only to the exact Apify API
+host, keeps it non-enumerable so it cannot enter JSON output, and removes it on
+cross-host redirects.
 
 ## Media understanding behavior
 
@@ -130,6 +162,13 @@ not a measured feature of this harness.
   where the selected understanding adapter accepts that media kind.
 - Gemini attempts every acquired image and video, but sends only successful
   fetches within bounded per-item sizes and one bounded inline-request total.
+  Media parts precede the untrusted creator-text prompt.
+- Gemini uses the current nested JSON `responseFormat`. The schema intentionally
+  omits `maxItems`: a synthetic A/B request changed from HTTP 400 with
+  `maxItems: 150` to HTTP 200 after removing it.
+- Gemini retries transport failures and HTTP 408, 429, and 5xx responses with a
+  bounded attempt count and jittered/`Retry-After`-aware backoff. Attempt
+  metadata is preserved without credentials.
 - Google Video Intelligence attempts every acquired video child, issuing one
   annotation operation per successfully fetched video. It does not stop after
   the first video. Stills remain the responsibility of a still-image path.

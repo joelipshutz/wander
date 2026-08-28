@@ -661,6 +661,136 @@ test("Bright Data and Apify acquisitions propagate dataset validation failures",
   }
 });
 
+test("Apify media authorization is scoped to private KVS downloads and never serialized", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApify = process.env.APIFY_TOKEN;
+  const token = "unit-test-apify-token";
+  const testCase = {
+    platform: "tiktok",
+    contentType: "video",
+    url: "https://www.tiktok.com/@creator/video/7448513035146251566",
+  };
+  let mediaHeaders;
+  process.env.APIFY_TOKEN = token;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = String(input);
+    if (url.includes("/runs?")) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.aiVideoDescription, false);
+      return JSONResponse({
+        data: { id: "run-123", status: "SUCCEEDED", defaultDatasetId: "dataset-123" },
+      });
+    }
+    if (url.includes("/datasets/dataset-123/items")) {
+      return JSONResponse([{
+        webVideoUrl: testCase.url,
+        videoMeta: { downloadAddr: "https://v16.tiktokcdn.com/direct-video.mp4" },
+        mediaUrls: ["https://api.apify.com/v2/key-value-stores/store/records/video.mp4"],
+      }]);
+    }
+    if (url.includes("/key-value-stores/store/records/video.mp4")) {
+      mediaHeaders = options.headers;
+      return new Response(tinyMP4Bytes(), { headers: { "content-type": "video/mp4" } });
+    }
+    throw new Error("Unexpected Apify request");
+  };
+
+  try {
+    const acquisition = await runAcquisitionProvider("apify", testCase);
+    assert.equal(acquisition.status, "ok");
+    assert.match(acquisition.evidence.media[0].privateRequestHeaders.authorization, /^Bearer /);
+    assert.equal(JSON.stringify(acquisition).includes(token), false);
+
+    const ingestion = await fetchAcquiredMediaBytes(acquisition.evidence.media[0], {
+      expectedKind: "video",
+      maximumBytes: 1_000,
+      socialPageURL: testCase.url,
+    });
+    assert.equal(ingestion.error, undefined);
+    assert.equal(mediaHeaders.authorization, "Bearer " + token);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApify == null) delete process.env.APIFY_TOKEN;
+    else process.env.APIFY_TOKEN = originalApify;
+  }
+});
+
+test("Apify authorization is stripped from cross-host media redirects", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const media = {
+    type: "video",
+    url: "https://api.apify.com/v2/key-value-stores/store/records/video.mp4",
+  };
+  Object.defineProperty(media, "privateRequestHeaders", {
+    enumerable: false,
+    value: { authorization: "Bearer unit-test-apify-token" },
+  });
+  const requestHeaders = [];
+  globalThis.fetch = async (input, options = {}) => {
+    requestHeaders.push({ url: String(input), headers: options.headers });
+    if (String(input).includes("api.apify.com")) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://v16.tiktokcdn.com/redirected-video.mp4" },
+      });
+    }
+    return new Response(tinyMP4Bytes(), { headers: { "content-type": "video/mp4" } });
+  };
+  try {
+    const result = await fetchAcquiredMediaBytes(media, {
+      expectedKind: "video",
+      maximumBytes: 1_000,
+      socialPageURL: "https://www.tiktok.com/@creator/video/7448513035146251566",
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(requestHeaders[0].headers.authorization, "Bearer unit-test-apify-token");
+    assert.equal(requestHeaders[1].headers.authorization, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Apify authorization is stripped from same-host redirects outside KVS records", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const media = {
+    type: "video",
+    url: "https://api.apify.com/v2/key-value-stores/store/records/video.mp4",
+  };
+  Object.defineProperty(media, "privateRequestHeaders", {
+    enumerable: false,
+    value: { authorization: "Bearer unit-test-apify-token" },
+  });
+  const requestHeaders = [];
+  globalThis.fetch = async (input, options = {}) => {
+    requestHeaders.push({ url: String(input), headers: options.headers });
+    if (String(input).includes("/key-value-stores/")) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://api.apify.com/v2/users/me" },
+      });
+    }
+    return new Response(tinyMP4Bytes(), { headers: { "content-type": "video/mp4" } });
+  };
+  try {
+    const result = await fetchAcquiredMediaBytes(media, {
+      expectedKind: "video",
+      maximumBytes: 1_000,
+      socialPageURL: "https://www.tiktok.com/@creator/video/7448513035146251566",
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(requestHeaders[0].headers.authorization, "Bearer unit-test-apify-token");
+    assert.equal(requestHeaders[1].headers.authorization, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Gemini downloads acquired TikTok bytes with scoped private headers and sends inline data", {
   concurrency: false,
 }, async () => {
@@ -710,17 +840,147 @@ test("Gemini downloads acquired TikTok bytes with scoped private headers and sen
       evidence: { caption: "A place", media: [media] },
     });
     const parts = modelRequest.contents[0].parts;
+    const inlinePart = parts.find((part) => part.inlineData);
     assert.equal(result.status, "ok");
     assert.equal(downloadHeaders.cookie, privateCookie);
     assert.equal(parts.some((part) => part.fileData), false);
-    assert.equal(parts[1].inlineData.mimeType, "video/mp4");
-    assert.equal(parts[1].inlineData.data, bytes.toString("base64"));
+    assert.equal(inlinePart.inlineData.mimeType, "video/mp4");
+    assert.equal(inlinePart.inlineData.data, bytes.toString("base64"));
+    assert.equal(typeof parts.at(-1).text, "string");
+    assert.equal(
+      modelRequest.generationConfig.responseFormat.text.mimeType,
+      "APPLICATION_JSON",
+    );
+    assert.equal(modelRequest.generationConfig.temperature, 0);
+    assert.equal(
+      "maxItems" in modelRequest.generationConfig.responseFormat.text.schema.properties.candidates,
+      false,
+    );
     assert.equal(result.mediaIngestion[0].byteCount, bytes.length);
     assert.equal(JSON.stringify(result).includes(privateCookie), false);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = originalKey;
+  }
+});
+
+test("Gemini retries transient provider failures without redownloading media", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalBase = process.env.GEMINI_RETRY_BASE_MS;
+  let mediaFetches = 0;
+  let modelFetches = 0;
+  process.env.GEMINI_API_KEY = "unit-test-gemini-key";
+  process.env.GEMINI_RETRY_BASE_MS = "1";
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("cdninstagram.com")) {
+      mediaFetches += 1;
+      return new Response(tinyMP4Bytes(), { headers: { "content-type": "video/mp4" } });
+    }
+    modelFetches += 1;
+    if (modelFetches === 1) {
+      return JSONResponse({ error: { code: 503, status: "UNAVAILABLE" } }, 503);
+    }
+    return JSONResponse({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [] }) }] } }],
+    });
+  };
+  try {
+    const result = await runUnderstandingProvider("gemini", {
+      platform: "instagram",
+      contentType: "reel",
+      url: "https://www.instagram.com/reel/ABC123xyz/",
+    }, {
+      status: "ok",
+      evidence: {
+        media: [{ type: "video", url: "https://scontent.cdninstagram.com/video.mp4" }],
+      },
+    });
+    assert.equal(result.status, "ok");
+    assert.equal(mediaFetches, 1);
+    assert.equal(modelFetches, 2);
+    assert.deepEqual(result.requestAttempts.map((item) => item.statusCode), [503, 200]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalBase == null) delete process.env.GEMINI_RETRY_BASE_MS;
+    else process.env.GEMINI_RETRY_BASE_MS = originalBase;
+  }
+});
+
+test("Gemini does not retry invalid requests", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  let modelFetches = 0;
+  process.env.GEMINI_API_KEY = "unit-test-gemini-key";
+  globalThis.fetch = async () => {
+    modelFetches += 1;
+    return JSONResponse({ error: { code: 400, status: "INVALID_ARGUMENT" } }, 400);
+  };
+  try {
+    const result = await runUnderstandingProvider("gemini", {
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/ABC123xyz/",
+    }, { status: "ok", evidence: { media: [] } });
+    assert.equal(result.status, "failed");
+    assert.equal(result.error.message, "HTTP 400");
+    assert.equal(modelFetches, 1);
+    assert.deepEqual(result.requestAttempts.map((item) => item.statusCode), [400]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  }
+});
+
+test("Gemini reports exhausted transport retries without leaking the request", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalAttempts = process.env.GEMINI_MAX_ATTEMPTS;
+  const originalBase = process.env.GEMINI_RETRY_BASE_MS;
+  const originalMaximum = process.env.GEMINI_RETRY_MAX_MS;
+  let modelFetches = 0;
+  process.env.GEMINI_API_KEY = "unit-test-gemini-key";
+  process.env.GEMINI_MAX_ATTEMPTS = "2";
+  process.env.GEMINI_RETRY_BASE_MS = "10000";
+  process.env.GEMINI_RETRY_MAX_MS = "1";
+  globalThis.fetch = async () => {
+    modelFetches += 1;
+    throw new TypeError("fetch failed", { cause: { code: "UND_ERR_SOCKET" } });
+  };
+  try {
+    const result = await runUnderstandingProvider("gemini", {
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/ABC123xyz/",
+    }, { status: "ok", evidence: { media: [] } });
+    assert.equal(result.status, "failed");
+    assert.equal(result.error.code, "gemini_transport_error");
+    assert.equal(result.error.message, "UND_ERR_SOCKET");
+    assert.equal(modelFetches, 2);
+    assert.equal(result.requestAttempts.length, 2);
+    assert.ok(result.requestAttempts[0].retryDelayMs <= 1);
+    assert.equal(JSON.stringify(result).includes("unit-test-gemini-key"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalAttempts == null) delete process.env.GEMINI_MAX_ATTEMPTS;
+    else process.env.GEMINI_MAX_ATTEMPTS = originalAttempts;
+    if (originalBase == null) delete process.env.GEMINI_RETRY_BASE_MS;
+    else process.env.GEMINI_RETRY_BASE_MS = originalBase;
+    if (originalMaximum == null) delete process.env.GEMINI_RETRY_MAX_MS;
+    else process.env.GEMINI_RETRY_MAX_MS = originalMaximum;
   }
 });
 

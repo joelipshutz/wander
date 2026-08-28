@@ -132,6 +132,11 @@ function mayReceiveTikTokPrivateHeaders(destination, socialPageURL) {
   return tiktokPrivateHeaderDomains.some((domain) => hostIs(host, domain));
 }
 
+function mayReceiveApifyAuthorization(destination) {
+  return destination.hostname.toLowerCase() === "api.apify.com"
+    && /^\/v2\/key-value-stores\/[^/]+\/records\/[^/]+$/.test(destination.pathname);
+}
+
 function safeHeaderValue(value, maximumLength) {
   if (typeof value !== "string" || value.length > maximumLength || /[\r\n]/.test(value)) {
     return null;
@@ -149,13 +154,26 @@ function mediaRequestHeaders(media, destination, socialPageURL, expectedKind) {
   const page = publicHTTPSURL(socialPageURL);
   if (page) headers.referer = page.origin + "/";
 
-  // Acquisition-scoped cookies/referers are never sent to arbitrary vendor
-  // URLs. They are allowed only for a TikTok page -> TikTok media-domain flow.
-  if (!mayReceiveTikTokPrivateHeaders(destination, socialPageURL)) return headers;
   const privateHeaders = media?.privateRequestHeaders;
-  const entries = privateHeaders instanceof Headers
+  const entries = [...(privateHeaders instanceof Headers
     ? privateHeaders.entries()
-    : Object.entries(privateHeaders ?? {});
+    : Object.entries(privateHeaders ?? {}))];
+
+  // Apify KVS media records can be private even though the actor run and
+  // dataset succeeded. Forward the acquisition token only to the exact API
+  // host; cross-host redirects strip it below.
+  if (mayReceiveApifyAuthorization(destination)) {
+    const authorizationEntry = entries.find(([rawName]) => (
+      String(rawName).toLowerCase() === "authorization"
+    ));
+    const authorization = safeHeaderValue(authorizationEntry?.[1], 4_096);
+    if (authorization?.startsWith("Bearer ")) headers.authorization = authorization;
+    return headers;
+  }
+
+  // Acquisition-scoped TikTok cookies/referers are never sent to arbitrary
+  // vendor URLs. They are allowed only for a TikTok page -> TikTok media flow.
+  if (!mayReceiveTikTokPrivateHeaders(destination, socialPageURL)) return headers;
   for (const [rawName, rawValue] of entries) {
     const name = String(rawName).toLowerCase();
     if (!allowedPrivateHeaderNames.has(name)) continue;
@@ -265,12 +283,14 @@ async function readBoundedBody(response, maximumBytes) {
 }
 
 function redirectHeaders(headers, nextURL, socialPageURL) {
-  if (mayReceiveTikTokPrivateHeaders(nextURL, socialPageURL)) return headers;
   const next = { ...headers };
-  delete next.cookie;
-  const page = publicHTTPSURL(socialPageURL);
-  if (page) next.referer = page.origin + "/";
-  else delete next.referer;
+  if (!mayReceiveApifyAuthorization(nextURL)) delete next.authorization;
+  if (!mayReceiveTikTokPrivateHeaders(nextURL, socialPageURL)) {
+    delete next.cookie;
+    const page = publicHTTPSURL(socialPageURL);
+    if (page) next.referer = page.origin + "/";
+    else delete next.referer;
+  }
   return next;
 }
 

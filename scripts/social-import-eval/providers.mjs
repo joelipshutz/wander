@@ -62,6 +62,75 @@ async function responseRecord(response) {
   };
 }
 
+function boundedPositiveInteger(name, fallback, hardMaximum) {
+  const configured = Number(process.env[name]);
+  const value = Number.isInteger(configured) && configured > 0 ? configured : fallback;
+  return Math.min(value, hardMaximum);
+}
+
+function retryableGeminiStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function retryAfterMilliseconds(response) {
+  const value = response.headers.get("retry-after");
+  if (!value) return null;
+  if (/^\d+(?:\.\d+)?$/.test(value.trim())) return Math.ceil(Number(value) * 1_000);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null;
+}
+
+function geminiRetryDelay(response, attempt) {
+  const maximumDelay = boundedPositiveInteger("GEMINI_RETRY_MAX_MS", 30_000, 60_000);
+  const requested = response ? retryAfterMilliseconds(response) : null;
+  if (requested != null) return Math.min(requested, maximumDelay);
+  const base = boundedPositiveInteger("GEMINI_RETRY_BASE_MS", 1_000, 10_000);
+  const ceiling = Math.min(maximumDelay, base * (2 ** Math.max(0, attempt - 1)));
+  return Math.floor(Math.random() * (ceiling + 1));
+}
+
+async function fetchGeminiWithRetry(url, options) {
+  const maximumAttempts = boundedPositiveInteger("GEMINI_MAX_ATTEMPTS", 3, 5);
+  const attempts = [];
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    let response;
+    try {
+      response = await fetchResponse(url, options, 180_000);
+    } catch (error) {
+      attempts.push({
+        attempt,
+        outcome: "transport_error",
+        errorName: error instanceof Error ? error.name : "Error",
+        causeCode: typeof error?.cause?.code === "string" ? error.cause.code : null,
+      });
+      if (attempt === maximumAttempts) {
+        return {
+          response: null,
+          attempts,
+          transportError: {
+            name: error instanceof Error ? error.name : "Error",
+            causeCode: typeof error?.cause?.code === "string" ? error.cause.code : null,
+          },
+        };
+      }
+      const waitMilliseconds = geminiRetryDelay(null, attempt);
+      attempts[attempts.length - 1].retryDelayMs = waitMilliseconds;
+      await delay(waitMilliseconds);
+      continue;
+    }
+    const retryable = retryableGeminiStatus(response.status);
+    attempts.push({ attempt, statusCode: response.status, retryable });
+    if (response.ok || !retryable || attempt === maximumAttempts) {
+      return { response, attempts };
+    }
+    const waitMilliseconds = geminiRetryDelay(response, attempt);
+    attempts[attempts.length - 1].retryDelayMs = waitMilliseconds;
+    await response.body?.cancel().catch(() => {});
+    await delay(waitMilliseconds);
+  }
+  throw new Error("Gemini retry loop ended without a response");
+}
+
 function firstMetaContent(html, keys) {
   for (const key of keys) {
     const escaped = key.replace(/[.*+?^$(){}|[\]\\]/g, "\\$&");
@@ -525,6 +594,30 @@ function addMedia(output, media) {
   });
 }
 
+function attachApifyMediaAuthorization(evidence, token) {
+  for (const media of evidence.media) {
+    const usesPrivateApifyMedia = [media.url, media.persistentURL, media.thumbnailURL]
+      .filter(Boolean)
+      .some((value) => {
+        try {
+          const url = new URL(value);
+          return url.hostname.toLowerCase() === "api.apify.com"
+            && /^\/v2\/key-value-stores\/[^/]+\/records\/[^/]+$/.test(url.pathname);
+        } catch {
+          return false;
+        }
+      });
+    if (!usesPrivateApifyMedia) continue;
+    Object.defineProperty(media, "privateRequestHeaders", {
+      configurable: false,
+      enumerable: false,
+      value: { authorization: "Bearer " + token },
+      writable: false,
+    });
+  }
+  return evidence;
+}
+
 function vendorSlideshow(record) {
   const type = String(record.type ?? record.contentType ?? record.postType ?? "").toLowerCase();
   return record.isSlideshow === true
@@ -879,7 +972,7 @@ function apifyInput(testCase) {
       resultsPerPage: 1,
       shouldDownloadVideos: true,
       shouldDownloadSlideshowImages: true,
-      aiVideoDescription: true,
+      aiVideoDescription: false,
     };
   }
   if (testCase.contentType === "reel") {
@@ -908,7 +1001,7 @@ async function apifyAcquisition(testCase) {
   }
   const actor = apifyActor(testCase);
   const actorSlug = actor.replace("/", "~");
-  const runURL = "https://api.apify.com/v2/acts/" + encodeURIComponent(actorSlug)
+  const runURL = "https://api.apify.com/v2/actors/" + encodeURIComponent(actorSlug)
     + "/runs?waitForFinish=60&maxTotalChargeUsd=1";
   const response = await fetchResponse(runURL, {
     method: "POST",
@@ -965,6 +1058,9 @@ async function apifyAcquisition(testCase) {
   }
   const raw = { run, items: datasetRecord.body };
   const normalized = normalizeVendorDataset(datasetRecord.body, testCase);
+  if (normalized.status === "ok") {
+    normalized.evidence = attachApifyMediaAuthorization(normalized.evidence, token);
+  }
   return {
     ...normalized,
     raw,
@@ -1092,7 +1188,7 @@ async function geminiUnderstanding(testCase, acquisition) {
       mediaIngestion: [],
     };
   }
-  const parts = [{ text: geminiPrompt(testCase, evidence) }];
+  const parts = [];
   const mediaIngestion = [];
   const maximumTotalBytes = boundedMediaByteLimit(
     "GEMINI_MAX_INLINE_MEDIA_BYTES",
@@ -1142,12 +1238,12 @@ async function geminiUnderstanding(testCase, acquisition) {
       },
     });
   }
+  parts.push({ text: geminiPrompt(testCase, evidence) });
   const schema = {
     type: "object",
     properties: {
       candidates: {
         type: "array",
-        maxItems: 150,
         items: {
           type: "object",
           properties: {
@@ -1175,7 +1271,7 @@ async function geminiUnderstanding(testCase, acquisition) {
     additionalProperties: false,
   };
   const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
-  const response = await fetchResponse(
+  const request = await fetchGeminiWithRetry(
     "https://generativelanguage.googleapis.com/v1beta/models/"
       + encodeURIComponent(model) + ":generateContent",
     {
@@ -1189,13 +1285,31 @@ async function geminiUnderstanding(testCase, acquisition) {
         contents: [{ role: "user", parts }],
         generationConfig: {
           temperature: 0,
-          responseMimeType: "application/json",
-          responseJsonSchema: schema,
+          responseFormat: {
+            text: {
+              mimeType: "APPLICATION_JSON",
+              schema,
+            },
+          },
         },
       }),
     },
-    180_000,
   );
+  const response = request.response;
+  if (!response) {
+    return {
+      status: "failed",
+      error: {
+        code: "gemini_transport_error",
+        message: request.transportError?.causeCode ?? request.transportError?.name ?? "transport_error",
+      },
+      raw: null,
+      evidence,
+      hints: [],
+      mediaIngestion,
+      requestAttempts: request.attempts,
+    };
+  }
   const raw = await responseRecord(response);
   if (!response.ok) {
     return {
@@ -1205,6 +1319,7 @@ async function geminiUnderstanding(testCase, acquisition) {
       evidence,
       hints: [],
       mediaIngestion,
+      requestAttempts: request.attempts,
     };
   }
   const text = raw.body?.candidates?.[0]?.content?.parts
@@ -1222,6 +1337,7 @@ async function geminiUnderstanding(testCase, acquisition) {
       evidence,
       hints: [],
       mediaIngestion,
+      requestAttempts: request.attempts,
     };
   }
   const modelCandidates = Array.isArray(parsed.candidates)
@@ -1241,6 +1357,7 @@ async function geminiUnderstanding(testCase, acquisition) {
     evidence: understoodEvidence,
     hints: extractDeterministicHints(understoodEvidence),
     mediaIngestion,
+    requestAttempts: request.attempts,
     cost: {
       note: "Use response usageMetadata with the current model price; video defaults to provider sampling unless custom media metadata is supplied.",
     },
