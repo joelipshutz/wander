@@ -24,9 +24,7 @@ struct ProfileScreen: View {
     @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
-    #if DEBUG
     @State private var showsYourMapPrototype = false
-    #endif
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -104,9 +102,7 @@ struct ProfileScreen: View {
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
                 },
                 yourMapAction: {
-                    #if DEBUG
                     showsYourMapPrototype = true
-                    #endif
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
@@ -126,12 +122,10 @@ struct ProfileScreen: View {
                     }
                 }
                 .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
-                #if DEBUG
                 .toolbar(
                     showsSettings || showsYourMapPrototype ? .hidden : .visible,
                     for: .tabBar
                 )
-                #endif
                 .sheet(item: $socialGraphTab, onDismiss: {
                     walkthroughs.activate(.profile)
                 }) { tab in
@@ -189,12 +183,10 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
-                #if DEBUG
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
                     YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
                     .toolbar(.hidden, for: .tabBar)
                 }
-                #endif
                 .navigationDestination(isPresented: $showsVisitInvitations) {
                     SharedVisitInvitationInboxScreen { invitation in
                         showsVisitInvitations = false
@@ -340,7 +332,6 @@ struct ProfileScreen: View {
         )
     }
 
-    #if DEBUG
     private var yourMapPrototypeDataset: YourMapPrototypeDataset {
         let projection = store.currentUserCalendarProjection
         return YourMapPrototypeDataset.make(
@@ -351,7 +342,6 @@ struct ProfileScreen: View {
             visiblePlaces: projection.visiblePlaces
         )
     }
-    #endif
 
     private var profileStats: ProfileStats {
         store.currentUserCalendarProjection.profileStats(
