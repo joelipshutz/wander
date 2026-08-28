@@ -100,6 +100,7 @@
 		52D02001E5ABD10E7917EFFF /* VisitPhotoLocalFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */; };
 		53AA029A980413C3B4E3A372 /* OnboardingPermissionManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1202D211E41D76B3D0CB2D31 /* OnboardingPermissionManagers.swift */; };
 		540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */; };
+		54234A3E3176B76CF9CDFC4B /* rec-380-apple-signin-adoption-race-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */; };
 		544468DBCE5DC0461C1F52D4 /* rec-259-native-login-linking-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = AB2DCB79E225061F89953A56 /* rec-259-native-login-linking-pre.json */; };
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		58986486438F908962A1B26E /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
@@ -561,6 +562,7 @@
 		ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverModels.swift; sourceTree = "<group>"; };
 		EFBB1E0FFAE279FBB7C42FEF /* VisibilityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisibilityPolicy.swift; sourceTree = "<group>"; };
 		EFD316F9E6EBA0B705EA7867 /* OnboardingFriendSuggestionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFriendSuggestionsModel.swift; sourceTree = "<group>"; };
+		F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-380-apple-signin-adoption-race-pre.json"; sourceTree = "<group>"; };
 		F15A0A0901CFD503ABBFF5DA /* rec-195-streak-notification-routing-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-streak-notification-routing-pre.json"; sourceTree = "<group>"; };
 		F1EB6D9E784DEB05C9AC510B /* WanderWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderLocalStore.swift; sourceTree = "<group>"; };
@@ -715,6 +717,7 @@
 				1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */,
 				139BCA88A502517AA4BD9F9F /* rec-360-active-pin-layering-and-tap-pre.json */,
 				8249999898241DFF75C992C3 /* rec-360-active-pin-layering-and-tap-pre.png */,
+				F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */,
 				61FB898ADE26A77B273B1639 /* simulator-test-session-relaunch-post.png */,
 				4017467979764DBA4C407626 /* simulator-test-session-relaunch-pre.json */,
 			);
@@ -1404,6 +1407,7 @@
 				CCEC1EF2FAE2A0572AF39550 /* rec-360-active-pin-layering-and-tap-post.png in Resources */,
 				84316327A030DB7D1B0CD590 /* rec-360-active-pin-layering-and-tap-pre.json in Resources */,
 				DE5F78BF05179155567775F1 /* rec-360-active-pin-layering-and-tap-pre.png in Resources */,
+				54234A3E3176B76CF9CDFC4B /* rec-380-apple-signin-adoption-race-pre.json in Resources */,
 				9C82EFA4EF3FC64621785DDB /* simulator-test-session-relaunch-post.png in Resources */,
 				2EAB478075A4392BD131BCAF /* simulator-test-session-relaunch-pre.json in Resources */,
 			);
@@ -2035,7 +2039,7 @@
 			repositoryURL = "https://github.com/clerk/clerk-ios";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.3;
+				minimumVersion = 1.5.0;
 			};
 		};
 		82400502D061751C471C0A3D /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
