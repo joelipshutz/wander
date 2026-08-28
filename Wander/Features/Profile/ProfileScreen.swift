@@ -2070,6 +2070,213 @@ private struct ProfilePlaceCollectionClusterMarker: View {
     }
 }
 
+enum InCommonReleaseProjection {
+    static func overlapScore(sharedCount: Int, viewerCount: Int, profileCount: Int) -> Int {
+        let safeViewerCount = max(0, viewerCount)
+        let safeProfileCount = max(0, profileCount)
+        let safeSharedCount = min(
+            max(0, sharedCount),
+            min(safeViewerCount, safeProfileCount)
+        )
+        let unionCount = safeViewerCount + safeProfileCount - safeSharedCount
+        guard unionCount > 0 else { return 0 }
+        return Int((Double(safeSharedCount) / Double(unionCount) * 100).rounded())
+    }
+
+    static func prefersRightGroup<Element>(
+        _ lhs: (key: String, value: [Element]),
+        _ rhs: (key: String, value: [Element])
+    ) -> Bool {
+        if lhs.value.count != rhs.value.count {
+            return lhs.value.count < rhs.value.count
+        }
+        return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedDescending
+    }
+}
+
+private struct InCommonReleaseSignal: Identifiable {
+    let emoji: String
+    let title: String
+    let detail: String
+
+    var id: String { "\(title)-\(detail)" }
+}
+
+private struct InCommonReleaseHero: View {
+    let score: Int
+    let sharedPlaceCount: Int
+    let viewerName: String
+    let profileName: String
+    let signals: [InCommonReleaseSignal]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing4) {
+                scoreRing
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    avatarPair
+                    Text(score >= 80 ? "Your maps really click ✨" : "You’ve got common ground")
+                        .font(WanderTypography.editorialCardTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text(
+                        "\(sharedPlaceCount) shared \(sharedPlaceCount == 1 ? "place" : "places") with \(profileName)."
+                    )
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+
+            if !signals.isEmpty {
+                Text("you both keep coming back for")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(signals) { signal in
+                            InCommonReleaseSignalChip(signal: signal)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var scoreRing: some View {
+        ZStack {
+            Circle()
+                .stroke(WanderTheme.surfaceSand.color, lineWidth: 9)
+            Circle()
+                .trim(from: 0, to: CGFloat(score) / 100)
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            WanderTheme.terracotta.color,
+                            WanderTheme.categorySun.color,
+                            WanderTheme.pinSocial.color
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            VStack(spacing: 0) {
+                Text("\(score)%")
+                    .font(.system(size: 25, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                Text("overlap")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .frame(width: 102, height: 102)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(score) percent map overlap")
+    }
+
+    private var avatarPair: some View {
+        HStack(spacing: -8) {
+            WanderAvatar(
+                initials: initials(for: viewerName),
+                size: 34,
+                color: WanderTheme.terracotta.color
+            )
+            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+            WanderAvatar(
+                initials: initials(for: profileName),
+                size: 34,
+                color: WanderTheme.pinSocial.color
+            )
+            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
+        let value = parts.compactMap(\.first).map(String.init).joined()
+        return value.isEmpty ? "?" : value.uppercased()
+    }
+}
+
+private struct InCommonReleaseSignalChip: View {
+    let signal: InCommonReleaseSignal
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Text(signal.emoji)
+                .font(.system(size: 20))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(signal.title)
+                    .font(.system(size: 13, weight: .black))
+                Text(signal.detail)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 54)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct InCommonReleaseMapScreen: View {
+    let places: [VisiblePlace]
+    let currentUserID: String
+    let onSelect: (VisiblePlace) -> Void
+
+    var body: some View {
+        let presentation = ProfilePlaceCollectionMapProjection.presentation(
+            for: places,
+            currentUserID: currentUserID
+        )
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                ProfilePlaceCollectionMap(
+                    presentation: presentation,
+                    overviewRegion: presentation.fittedRegion,
+                    overviewTotalCount: presentation.totalCount,
+                    onSelect: onSelect
+                )
+
+                Text("where you agree")
+                    .font(WanderTypography.editorialCardTitle)
+                    .padding(.horizontal, WanderTheme.spacing4)
+
+                LazyVStack(spacing: WanderTheme.spacing2) {
+                    ForEach(places) { visiblePlace in
+                        Button {
+                            onSelect(visiblePlace)
+                        } label: {
+                            ProfilePlaceRow(visiblePlace: visiblePlace)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows saved place details")
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+        }
+        .wanderScreen()
+        .navigationTitle("Shared map")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct SavedPlacesListScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -2085,6 +2292,7 @@ private struct SavedPlacesListScreen: View {
     @State private var tagFilterQuery = ""
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
+    @State private var showsInCommonMap = false
 
     init(mode: SavedPlacesListMode, profileID: String) {
         self.mode = mode
@@ -2168,6 +2376,16 @@ private struct SavedPlacesListScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    if isInCommonRoot {
+                        inCommonPrivacyNotice
+                        InCommonReleaseHero(
+                            score: inCommonOverlapScore,
+                            sharedPlaceCount: allModePlaces.count,
+                            viewerName: store.currentUser.displayName,
+                            profileName: inCommonProfile?.displayName ?? "their",
+                            signals: inCommonSignals
+                        )
+                    }
                     if let calendarDay = collection?.calendarDay {
                         ProfileCalendarDayDetailHeader(summary: calendarDay)
                     }
@@ -2180,7 +2398,12 @@ private struct SavedPlacesListScreen: View {
                     }
 
                     if filteredPlaces.isEmpty {
-                        if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
+                        if isInCommonRoot, allModePlaces.isEmpty {
+                            SmallEmptyRow(
+                                title: "Your maps haven’t crossed yet",
+                                subtitle: "When you both save the same place, it’ll show up here"
+                            )
+                        } else if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
                                 subtitle: "check-ins will show up here"
@@ -2211,6 +2434,32 @@ private struct SavedPlacesListScreen: View {
                 inlineNavigationHeader
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isInCommonRoot, !allModePlaces.isEmpty {
+                Button {
+                    showsInCommonMap = true
+                } label: {
+                    Label("Open your shared map", systemImage: "map.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(WanderTheme.textInk.color)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing2)
+                .background(WanderTheme.canvasWarm.color.opacity(0.96))
+                .accessibilityHint("Shows every place you have in common on a map")
+            }
+        }
+        .navigationDestination(isPresented: $showsInCommonMap) {
+            InCommonReleaseMapScreen(
+                places: allModePlaces,
+                currentUserID: store.currentUser.id,
+                onSelect: { selectedPlace = $0 }
+            )
+        }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
         }
@@ -2231,6 +2480,87 @@ private struct SavedPlacesListScreen: View {
 
     private var navigationTitle: String {
         collection?.title ?? mode.title
+    }
+
+    private var isInCommonRoot: Bool {
+        mode == .inCommon && collection == nil
+    }
+
+    private var inCommonProfile: LocalProfile? {
+        store.profile(for: profileID)
+    }
+
+    private var inCommonOverlapScore: Int {
+        let viewerPlaces = VisiblePlaceGrouping.representativePlaces(
+            from: store.currentUserVisiblePlaces,
+            currentUserID: store.currentUser.id
+        )
+        let profilePlaces = VisiblePlaceGrouping.representativePlaces(
+            from: store.visiblePlaces(for: profileID),
+            currentUserID: store.currentUser.id
+        )
+        return InCommonReleaseProjection.overlapScore(
+            sharedCount: allModePlaces.count,
+            viewerCount: viewerPlaces.count,
+            profileCount: profilePlaces.count
+        )
+    }
+
+    private var inCommonSignals: [InCommonReleaseSignal] {
+        var signals: [InCommonReleaseSignal] = []
+        let categoryGroups = Dictionary(grouping: allModePlaces) {
+            WanderPlaceCategory.broadCategory(for: $0.effectiveCategory)
+        }
+        if let category = categoryGroups.max(by: InCommonReleaseProjection.prefersRightGroup) {
+            signals.append(
+                InCommonReleaseSignal(
+                    emoji: category.value.first?.categoryEmoji ?? "📍",
+                    title: category.key,
+                    detail: "\(category.value.count) shared \(category.value.count == 1 ? "place" : "places")"
+                )
+            )
+        }
+
+        let localityGroups = Dictionary(
+            grouping: allModePlaces.compactMap { visiblePlace -> (String, VisiblePlace)? in
+                guard let locality = visiblePlace.place.locality?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !locality.isEmpty else { return nil }
+                return (locality, visiblePlace)
+            },
+            by: \.0
+        )
+        if let locality = localityGroups.max(by: InCommonReleaseProjection.prefersRightGroup) {
+            signals.append(
+                InCommonReleaseSignal(
+                    emoji: "📌",
+                    title: locality.key,
+                    detail: "\(locality.value.count) shared \(locality.value.count == 1 ? "place" : "places")"
+                )
+            )
+        }
+        return signals
+    }
+
+    @ViewBuilder
+    private var inCommonPrivacyNotice: some View {
+        if store.relationship(to: profileID) != .mutual {
+            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateInfo.color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Based on places visible to you")
+                        .font(.system(size: 13, weight: .black))
+                    Text("Friends-only and private saves stay out of this comparison.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WanderTheme.skyTint.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        }
     }
 
     private var usesInlineNavigationHeader: Bool {
