@@ -218,12 +218,15 @@ function releaseStatusCopy(status) {
   }
 }
 
-export function buildReleaseArtifacts({ report, buildNumber, status }) {
+export function buildReleaseArtifacts({ report, buildNumber, marketingVersion, status }) {
   if (!report.ok) {
     fail("Cannot generate release artifacts from a failed reconciliation.");
   }
   if (!Number.isInteger(buildNumber) || buildNumber <= 0) {
     fail("A positive integer build number is required to generate release artifacts.");
+  }
+  if (!nonEmptyString(marketingVersion)) {
+    fail("A project marketing version is required to generate release artifacts.");
   }
   if (report.shipped.length === 0) {
     fail("At least one shipped payload is required to generate tester copy.");
@@ -260,7 +263,7 @@ export function buildReleaseArtifacts({ report, buildNumber, status }) {
   }
 
   const slack = [
-    `rec.me 0.1 (${buildNumber}) ${releaseStatusCopy(status)}.`,
+    `rec.me ${marketingVersion.trim()} (${buildNumber}) ${releaseStatusCopy(status)}.`,
     "",
     "What changed",
     bulletList(changes, "No tester-facing changes."),
@@ -322,6 +325,17 @@ export function sortTestFlightTags(tags) {
 
 export function runGit(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+export function resolveMarketingVersion(ref, cwd) {
+  const projectYAML = runGit(["show", `${ref}:project.yml`], cwd);
+  const match = projectYAML.match(
+    /^\s*MARKETING_VERSION:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/m,
+  );
+  if (!match) {
+    fail(`project.yml at ${ref} does not declare MARKETING_VERSION.`);
+  }
+  return match[1];
 }
 
 export function resolveCommit(ref, cwd) {
@@ -473,6 +487,7 @@ function main() {
     const artifacts = buildReleaseArtifacts({
       report,
       buildNumber,
+      marketingVersion: resolveMarketingVersion(options.head, cwd),
       status: options.status,
     });
     if (options.writeDir) {

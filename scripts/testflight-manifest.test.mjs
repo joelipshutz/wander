@@ -45,7 +45,8 @@ function makeRepository() {
   git(cwd, ["config", "user.name", "Manifest Test"]);
   git(cwd, ["config", "user.email", "manifest@example.com"]);
   writeFileSync(join(cwd, "README.md"), "base\n");
-  git(cwd, ["add", "README.md"]);
+  writeFileSync(join(cwd, "project.yml"), "settings:\n  base:\n    MARKETING_VERSION: \"1.0\"\n");
+  git(cwd, ["add", "README.md", "project.yml"]);
   git(cwd, ["commit", "-m", "base"]);
   git(cwd, ["tag", "testflight/build-1"]);
   mkdirSync(join(cwd, "feature"));
@@ -209,6 +210,10 @@ test("snapshot syncs the same issue and emits a version-2 release gate", async (
     assert.equal(gate.manifestSource.issueNumber, 77);
     assert.equal(gate.manifestSource.entriesSha256, entriesSha256(gate.entries));
     assert.equal(gate.entries[0].commit, repository.candidateSha);
+    assert.match(
+      readFileSync(result.files.slack, "utf8"),
+      /^rec\.me 1\.0 \(2\) is the locked release candidate\./,
+    );
     assert.equal(parseEntryComment(state.comments[0].body).disposition, "ship");
   } finally {
     rmSync(repository.cwd, { recursive: true, force: true });
