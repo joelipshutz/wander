@@ -98,6 +98,223 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertEqual(fallbackOrigin.coordinate.longitude, region.center.longitude)
     }
 
+    func testMapSearchRetriesWithDistinctiveQueryWhenPrimaryResultsMissTheBusinessName() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(map.contains("MapSearchQueryPolicy.fallbackQuery("))
+    }
+
+    func testMapSearchQueryPolicyUsesDistinctiveTokenAfterUnrelatedFuzzyResult() {
+        XCTAssertEqual(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "So Sentimental",
+                primaryResultNames: ["Sorento"]
+            ),
+            "Sentimental"
+        )
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "So Sentimental",
+                query: "So Sentimental"
+            ),
+            1_000
+        )
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "Sorento",
+                query: "So Sentimental"
+            ),
+            0
+        )
+    }
+
+    func testMapSearchQueryPolicyKeepsStrongPrimaryAndSingleWordSearchesUnchanged() {
+        XCTAssertNil(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "So Sentimental",
+                primaryResultNames: ["So Sentimental Coffee"]
+            )
+        )
+        XCTAssertNil(
+            MapSearchQueryPolicy.fallbackQuery(
+                for: "Sentimental",
+                primaryResultNames: ["Sorento"]
+            )
+        )
+    }
+
+    func testMapSearchQueryPolicyNormalizesPunctuationAndDiacritics() {
+        XCTAssertEqual(
+            MapSearchQueryPolicy.lexicalScore(
+                forName: "J’s Kitchen Café",
+                query: "j's kitchen cafe"
+            ),
+            1_000
+        )
+    }
+
+    func testMapSearchQueryPolicyOnlyRecoversMultiwordQueriesWithoutANearbyNameMatch() {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+        )
+
+        XCTAssertFalse(
+            MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+                for: "So Sentimental",
+                evidence: [
+                    MapSearchQueryPolicy.ResultEvidence(
+                        name: "So Sentimental",
+                        distanceFromSearchCenter: 40_000,
+                        pointOfInterestCategory: .cafe
+                    )
+                ],
+                searchRegion: region
+            )
+        )
+        XCTAssertTrue(
+            MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+                for: "The Salty Donut",
+                evidence: [
+                    MapSearchQueryPolicy.ResultEvidence(
+                        name: "The Salty Donut",
+                        distanceFromSearchCenter: 3_400_000,
+                        pointOfInterestCategory: .cafe
+                    )
+                ],
+                searchRegion: region
+            )
+        )
+        XCTAssertTrue(
+            MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+                for: "The Grey",
+                evidence: [
+                    MapSearchQueryPolicy.ResultEvidence(
+                        name: "The Greek Theatre",
+                        distanceFromSearchCenter: 5_000,
+                        pointOfInterestCategory: .theater
+                    )
+                ],
+                searchRegion: region
+            )
+        )
+        XCTAssertFalse(
+            MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+                for: "Sentimental",
+                evidence: [],
+                searchRegion: region
+            )
+        )
+    }
+
+    func testMapSearchQueryPolicyCapsProviderDerivedCategoryFallbacksAtThree() {
+        let evidence = [
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Birdy Grey",
+                distanceFromSearchCenter: 1_000,
+                pointOfInterestCategory: .store
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Earley Grey Tearoom",
+                distanceFromSearchCenter: 2_000,
+                pointOfInterestCategory: .restaurant
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Gray Fashion",
+                distanceFromSearchCenter: 3_000,
+                pointOfInterestCategory: .store
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Grey Studio",
+                distanceFromSearchCenter: 4_000,
+                pointOfInterestCategory: .museum
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "The Gray Zebra",
+                distanceFromSearchCenter: 5_000,
+                pointOfInterestCategory: .restaurant
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Violet Grey",
+                distanceFromSearchCenter: 6_000,
+                pointOfInterestCategory: .store
+            ),
+            MapSearchQueryPolicy.ResultEvidence(
+                name: "Grey Matter",
+                distanceFromSearchCenter: 7_000,
+                pointOfInterestCategory: .museum
+            )
+        ]
+
+        XCTAssertEqual(
+            MapSearchQueryPolicy.preferredCategoryFallbacks(from: evidence),
+            [.store, .restaurant, .museum]
+        )
+    }
+
+    func testMapSearchBroaderRecoveryStaysLexicalAndPreservesCompletionBranches() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(map.contains("MapSearchQueryPolicy.shouldRecoverBeyondRegion("))
+        XCTAssertTrue(map.contains("region: nil"))
+        XCTAssertTrue(map.contains("MapSearchQueryPolicy.preferredCategoryFallbacks("))
+        XCTAssertTrue(map.contains("MapSearchCompletionCollector"))
+        XCTAssertTrue(map.contains("MapSearchQueryPolicy.lexicalScore("))
+    }
+
+    func testMapSearchResultIdentityKeepsSameNamedLocationsSeparate() {
+        let downtown = MapSearchResultIdentity.locationKey(
+            name: "Sonoratown",
+            latitude: 34.04446,
+            longitude: -118.25231
+        )
+        let midCity = MapSearchResultIdentity.locationKey(
+            name: "Sonoratown",
+            latitude: 34.03792,
+            longitude: -118.34510
+        )
+
+        XCTAssertNotEqual(downtown, midCity)
+        XCTAssertEqual(
+            downtown,
+            MapSearchResultIdentity.locationKey(
+                name: "Sonoratown",
+                latitude: 34.04446,
+                longitude: -118.25231
+            )
+        )
+    }
+
+    func testMapSearchTypeaheadOnlySuppressesTheAlreadyVisiblePhysicalLocation() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let scheduleStart = try XCTUnwrap(map.range(of: "private func scheduleTypeahead(for query: String)"))
+        let scheduleEnd = try XCTUnwrap(
+            map.range(
+                of: "private func savedTypeaheadSuggestions(",
+                range: scheduleStart.upperBound..<map.endIndex
+            )
+        )
+        let schedule = map[scheduleStart.lowerBound..<scheduleEnd.lowerBound]
+
+        XCTAssertTrue(schedule.contains(".filter { !isAlreadyVisible(candidate: $0) }"))
+        XCTAssertFalse(schedule.contains("seenTitles"))
+    }
+
     func testFeaturedRefreshPolicyOnlyFetchesForFeaturedSource() {
         XCTAssertTrue(MapSearchPerformancePolicy.shouldFetchFeatured(for: .featured))
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .friends))
