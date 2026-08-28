@@ -362,6 +362,7 @@ struct MapScreen: View {
     @State private var activePinBounceRevision: UInt64 = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
+    @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery: String
@@ -1340,6 +1341,15 @@ struct MapScreen: View {
         .accessibilityHidden(isPlaceProfileOverlayVisible)
         .overlay {
             selectedPlaceProfileOverlay
+        }
+        .sheet(item: $mapPlaceListTarget) { target in
+            MapPlaceListPickerSheet(target: target) { result in
+                showTransientMapSearchMessage(
+                    result.message,
+                    dismissDelayNanoseconds: 3_000_000_000
+                )
+            }
+            .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .fullScreenCover(isPresented: $isLocationEducationPresented) {
             MapLocationEducationPrompt(
@@ -2447,6 +2457,9 @@ struct MapScreen: View {
                         defaultVisibility: store.effectiveDefaultVisibility
                     )
                 },
+                onAddToList: {
+                    mapPlaceListTarget = .candidate(selectedSearchCandidate)
+                },
                 onReady: {
                     handleCompactCardReady(for: compactSelectionIdentity)
                 }
@@ -2464,6 +2477,9 @@ struct MapScreen: View {
                 onOpen: openSelectedPlaceProfile,
                 onAction: {
                     performAction(for: selectedPlace)
+                },
+                onAddToList: {
+                    mapPlaceListTarget = .visiblePlace(selectedPlace)
                 },
                 onReady: {
                     handleCompactCardReady(for: compactSelectionIdentity)
@@ -2612,6 +2628,9 @@ struct MapScreen: View {
                         )
                     }
                 },
+                onAddToList: {
+                    mapPlaceListTarget = .candidate(selectedSearchCandidate)
+                },
                 onFloatingAction: { saveAction in
                     handleFloatingAction(
                         saveAction,
@@ -2645,6 +2664,9 @@ struct MapScreen: View {
                     collapseSelectedPlaceProfile {
                         performAction(for: selectedPlace)
                     }
+                },
+                onAddToList: {
+                    mapPlaceListTarget = .visiblePlace(selectedPlace)
                 },
                 onFloatingAction: { saveAction in
                     handleFloatingAction(saveAction, for: selectedPlace)

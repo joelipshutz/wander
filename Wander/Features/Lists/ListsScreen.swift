@@ -3930,6 +3930,30 @@ private struct ListPlaceProfileDestination: View {
     }
 }
 
+struct NewPlaceListDraft {
+    let title: String
+    let description: String
+    let isStealth: Bool
+    let collaboratorUserIDs: [String]
+}
+
+struct NewPlaceListEditorSheet: View {
+    let onSave: (NewPlaceListDraft) -> Void
+
+    var body: some View {
+        ListEditorSheet(presentation: .create) { draft in
+            onSave(
+                NewPlaceListDraft(
+                    title: draft.title,
+                    description: draft.description,
+                    isStealth: draft.isStealth,
+                    collaboratorUserIDs: draft.collaborators.map(\.id)
+                )
+            )
+        }
+    }
+}
+
 private enum ListEditorPresentation: Identifiable, Hashable {
     case create
     case edit(PlaceListMock)
@@ -4488,6 +4512,12 @@ private struct FacePileView: View {
     }
 }
 
+enum PlaceListDisplayCount {
+    static func resolve(cachedCount: Int?, visibleCount: Int) -> Int {
+        max(cachedCount ?? 0, visibleCount)
+    }
+}
+
 private struct PlaceListMock: Identifiable, Hashable {
     let id: String
     let name: String
@@ -4590,7 +4620,10 @@ private extension PlaceListMock {
                     : nil
             )
         }
-        self.itemCountOverride = list.cachedItemCount
+        self.itemCountOverride = PlaceListDisplayCount.resolve(
+            cachedCount: list.cachedItemCount,
+            visibleCount: visiblePlaces.count
+        )
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
