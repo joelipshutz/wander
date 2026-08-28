@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(29);
+select plan(30);
 
 select is(
   (
