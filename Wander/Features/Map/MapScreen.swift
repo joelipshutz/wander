@@ -4591,7 +4591,8 @@ struct MapScreen: View {
 
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures") {
+        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures")
+            || ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") {
             return (Self.defaultRegion.center.latitude, Self.defaultRegion.center.longitude)
         }
         #endif

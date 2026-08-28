@@ -49,6 +49,101 @@ final class MapFilterInteractionUITests: XCTestCase {
         }
     }
 
+    func testPerformanceFixtureMeasuresPlaceSelectionAndTapAwayDismissalHitches() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 12))
+
+        let pin = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
+        ).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 12))
+        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
+        XCTAssertTrue(map.frame.contains(pinCenter))
+        let normalizedPinCenter = CGVector(
+            dx: (pinCenter.x - map.frame.minX) / map.frame.width,
+            dy: (pinCenter.y - map.frame.minY) / map.frame.height
+        )
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        let activePin = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "map.pin.active.saved.")
+        ).firstMatch
+        let nearby = app.buttons["map.nearby"]
+        XCTAssertTrue(nearby.waitForExistence(timeout: 3))
+
+        var didMeasureInteraction = false
+        if #available(iOS 19.0, *) {
+            // XCTest discards the first performance-block invocation. Keep it
+            // as a no-op so the measured pass starts with no selected place.
+            var invocationCount = 0
+            let options = XCTMeasureOptions()
+            options.iterationCount = 1
+            options.invocationOptions = [.manuallyStart, .manuallyStop]
+
+            measure(metrics: [XCTHitchMetric(application: app)], options: options) {
+                invocationCount += 1
+                startMeasuring()
+                defer { stopMeasuring() }
+                guard invocationCount > 1 else { return }
+
+                map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+                XCTAssertTrue(card.waitForExistence(timeout: 3))
+                XCTAssertTrue(activePin.waitForExistence(timeout: 2))
+
+                // Exercise the same physical empty-map tap users use to close
+                // the card. The fixed point is empty in this deterministic fixture.
+                map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
+                XCTAssertEqual(
+                    XCTWaiter.wait(
+                        for: [
+                            XCTNSPredicateExpectation(
+                                predicate: NSPredicate(format: "exists == false"),
+                                object: card
+                            )
+                        ],
+                        timeout: 3
+                    ),
+                    .completed
+                )
+                XCTAssertFalse(activePin.waitForExistence(timeout: 1))
+                XCTAssertEqual(
+                    XCTWaiter.wait(
+                        for: [
+                            XCTNSPredicateExpectation(
+                                predicate: NSPredicate(format: "hittable == true"),
+                                object: nearby
+                            )
+                        ],
+                        timeout: 2
+                    ),
+                    .completed
+                )
+                didMeasureInteraction = true
+            }
+        } else {
+            map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 3))
+            map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
+            XCTAssertFalse(card.waitForExistence(timeout: 3))
+            didMeasureInteraction = true
+        }
+
+        XCTAssertTrue(didMeasureInteraction)
+        XCTAssertFalse(card.exists)
+        XCTAssertTrue(nearby.isHittable)
+    }
+
     func testSingleScreenTapOnMapPinSelectsThatPlace() {
         let app = XCUIApplication()
         app.launchArguments = [
