@@ -3910,16 +3910,21 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
-    func testPlaceProfileFullViewKeepsScrollableBottomInset() {
+    func testPlaceProfileFullViewUsesCompactBottomSpacing() {
         XCTAssertEqual(
-            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 0),
-            64
+            PlaceProfileFullScreen.fullViewBottomContentInset,
+            16
+        )
+    }
+
+    func testFullPagePlaceViewOmitsRedundantPlaceDetailsCard() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
 
-        XCTAssertEqual(
-            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
-            66
-        )
+        XCTAssertFalse(placeProfile.contains("Place details"))
+        XCTAssertFalse(placeProfile.contains("PlaceProfileDetailRow"))
+        XCTAssertFalse(placeProfile.contains("Map/business search details"))
     }
 
     func testFullPagePlaceViewOmitsFitRationaleContent() throws {
