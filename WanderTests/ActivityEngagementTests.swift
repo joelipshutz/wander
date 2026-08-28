@@ -1,3 +1,4 @@
+import Combine
 import Photos
 import UIKit
 import XCTest
@@ -329,6 +330,63 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertFalse(succeeded)
         XCTAssertEqual(store.activityEngagement(for: activityID), .empty(activityID: activityID))
         XCTAssertNotNil(store.activityEngagementError(for: activityID))
+    }
+
+    func testEngagementRefreshPublishesAConstantNumberOfStoreChanges() async {
+        let activityIDs = (0..<25).map {
+            String(format: "40000000-0000-0000-0000-%012d", $0)
+        }
+        let summaries = activityIDs.enumerated().map { index, activityID in
+            ActivityEngagementSummary(
+                activityID: activityID,
+                likeCount: index,
+                commentCount: index / 2
+            )
+        }
+        let repository = ActivityEngagementRepositoryStub(summariesResult: summaries)
+        let store = WanderStore(fixtures: .empty())
+        var publicationCount = 0
+        let observation = store.objectWillChange.sink {
+            publicationCount += 1
+        }
+
+        await store.refreshActivityEngagement(
+            activityIDs: activityIDs,
+            backend: WanderBackend(activityEngagementRepository: repository)
+        )
+
+        withExtendedLifetime(observation) {}
+        XCTAssertLessThanOrEqual(publicationCount, 2)
+        XCTAssertEqual(store.activityEngagement(for: activityIDs[0]).likeCount, 0)
+        XCTAssertEqual(store.activityEngagement(for: activityIDs[24]).likeCount, 24)
+    }
+
+    func testPerformanceFixtureBuildsPopulatedFeedAndReusesBookmarkIndex() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.performanceScale())
+
+        let didRefresh = await store.refreshFollowedFeed(backend: nil)
+        XCTAssertTrue(didRefresh)
+        let page = try XCTUnwrap(store.followedFeedPage)
+
+        XCTAssertEqual(page.activity.count, 25)
+        XCTAssertEqual(page.featuredPlaces.count, 8)
+        XCTAssertEqual(page.activity.first?.id, "perf-feed-000")
+        XCTAssertEqual(page.activity.last?.id, "perf-feed-024")
+        XCTAssertEqual(page.activity.compactMap(\.place).count, 20)
+
+        for _ in 0..<5 {
+            for visiblePlace in page.activity.compactMap(\.place) {
+                XCTAssertEqual(store.activityBookmarkState(for: visiblePlace), .notSaved)
+            }
+        }
+        XCTAssertEqual(store.activityBookmarkIndexBuildCount, 1)
+
+        let ownPlace = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let expectedState: ActivityBookmarkState = ownPlace.userPlace.status == .wannaGo
+            ? .wanna
+            : .checkedIn
+        XCTAssertEqual(store.activityBookmarkState(for: ownPlace), expectedState)
+        XCTAssertEqual(store.activityBookmarkIndexBuildCount, 1)
     }
 
     func testLocalCommentAddsOneCommentAndOneVisibleCount() async {
@@ -802,6 +860,7 @@ private enum ActivityEngagementTestError: Error {
 @MainActor
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
+    let summariesResult: [ActivityEngagementSummary]?
     let setLikeError: Error?
     let commentsPage: ActivityCommentsPage?
     let deleteResult: ActivityEngagementSummary?
@@ -812,6 +871,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
 
     init(
         placeMatches: [PlaceActivityEngagementMatch] = [],
+        summariesResult: [ActivityEngagementSummary]? = nil,
         setLikeError: Error? = nil,
         commentsPage: ActivityCommentsPage? = nil,
         deleteResult: ActivityEngagementSummary? = nil,
@@ -820,6 +880,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
         activityResponses: [Result<FeedActivity, Error>]? = nil
     ) {
         self.placeMatches = placeMatches
+        self.summariesResult = summariesResult
         self.setLikeError = setLikeError
         self.commentsPage = commentsPage
         self.deleteResult = deleteResult
@@ -840,7 +901,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
-        activityIDs.map(ActivityEngagementSummary.empty(activityID:))
+        summariesResult ?? activityIDs.map(ActivityEngagementSummary.empty(activityID:))
     }
 
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
