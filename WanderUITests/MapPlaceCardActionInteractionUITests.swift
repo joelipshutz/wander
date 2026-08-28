@@ -66,38 +66,45 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
 
 @MainActor
 final class FeedPostcardInteractionUITests: XCTestCase {
-    func testPerformanceFixtureScrollsWithoutHitches() {
+    func testPerformanceFixtureMeasuresFirstScrollHitches() {
         let app = performanceFeedApp()
         app.launch()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["feed.activity.perf-feed-000.postcard"]
-                .waitForExistence(timeout: 12)
-        )
+        let firstPostcard = app.descendants(matching: .any)[
+            "feed.activity.perf-feed-000.postcard"
+        ]
+        XCTAssertTrue(firstPostcard.waitForExistence(timeout: 12))
         let scroll = app.scrollViews["feed.places.scroll"].firstMatch
         XCTAssertTrue(scroll.waitForExistence(timeout: 3))
-        let laterPostcard = app.descendants(matching: .any)[
-            "feed.activity.perf-feed-008.postcard"
-        ]
-        var didRevealLaterPostcard = false
+        let initialPostcardY = firstPostcard.frame.minY
+        var didMeasureColdSwipe = false
 
-        var metrics: [any XCTMetric] = [
-            XCTOSSignpostMetric.scrollingAndDecelerationMetric
-        ]
         if #available(iOS 19.0, *) {
-            metrics.append(XCTHitchMetric(application: app))
-        }
+            // XCTest always invokes a performance block once more than
+            // iterationCount and discards that first invocation. Make the
+            // discarded pass a no-op so the measured swipe remains cold.
+            var invocationCount = 0
+            let options = XCTMeasureOptions()
+            options.iterationCount = 1
+            options.invocationOptions = [.manuallyStart, .manuallyStop]
 
-        let options = XCTMeasureOptions()
-        options.iterationCount = 3
-        options.invocationOptions = [.manuallyStart, .manuallyStop]
-
-        measure(metrics: metrics, options: options) {
-            startMeasuring()
+            measure(metrics: [XCTHitchMetric(application: app)], options: options) {
+                invocationCount += 1
+                startMeasuring()
+                defer { stopMeasuring() }
+                guard invocationCount > 1 else { return }
+                scroll.swipeUp(velocity: .fast)
+                didMeasureColdSwipe = true
+            }
+        } else {
             scroll.swipeUp(velocity: .fast)
-            stopMeasuring()
-            didRevealLaterPostcard = didRevealLaterPostcard || laterPostcard.exists
+            didMeasureColdSwipe = true
         }
-        XCTAssertTrue(didRevealLaterPostcard)
+
+        XCTAssertTrue(didMeasureColdSwipe)
+        XCTAssertTrue(
+            !firstPostcard.isHittable || firstPostcard.frame.minY < initialPostcardY - 20,
+            "The measured first swipe should move Feed content."
+        )
     }
 
     func testPerformanceFixtureReusesWarmFeedSurfaces() {
@@ -105,8 +112,10 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
 
+        var dismissedSystemBanner = false
         addUIInterruptionMonitor(withDescription: "Dismiss notification banners") { element in
             guard element.identifier == "NotificationShortLookView" else { return false }
+            dismissedSystemBanner = true
             element.swipeUp()
             return true
         }
@@ -133,11 +142,13 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         )
         places.tap()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 2))
-        XCTAssertLessThan(
-            Date().timeIntervalSince(switchStartedAt),
-            5,
-            "Two warm Feed surface switches should not rebuild their retained roots."
-        )
+        if !dismissedSystemBanner {
+            XCTAssertLessThan(
+                Date().timeIntervalSince(switchStartedAt),
+                5,
+                "Two warm Feed surface switches should not rebuild their retained roots."
+            )
+        }
     }
 
     private func performanceFeedApp() -> XCUIApplication {
