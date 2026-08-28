@@ -46,12 +46,41 @@ final class MapHitTestingTests: XCTestCase {
             builds += 1
             return 42
         }
+        let warmRevisit = cache.value(for: "stable") {
+            builds += 1
+            return 100
+        }
 
         XCTAssertEqual(first, 41)
         XCTAssertEqual(second, 41)
         XCTAssertEqual(changed, 42)
+        XCTAssertEqual(warmRevisit, 41)
         XCTAssertEqual(builds, 2)
         XCTAssertEqual(cache.buildCount, 2)
+    }
+
+    @MainActor
+    func testRenderProjectionCacheKeepsEachMapSourceWarmAcrossFeaturedPans() {
+        let cache = MapRenderProjectionCache<String, Int>(capacity: 2)
+        var builds = 0
+
+        func value(_ key: String, source: String) -> Int {
+            cache.value(for: key, partition: source) {
+                builds += 1
+                return builds
+            }
+        }
+
+        _ = value("featured-region-1", source: "featured")
+        let friends = value("friends", source: "friends")
+        let you = value("you", source: "you")
+        _ = value("featured-region-2", source: "featured")
+        _ = value("featured-region-3", source: "featured")
+
+        XCTAssertEqual(value("friends", source: "friends"), friends)
+        XCTAssertEqual(value("you", source: "you"), you)
+        XCTAssertEqual(builds, 5)
+        XCTAssertEqual(cache.buildCount, 5)
     }
 
     func testScreenPointWithinMarkerRadius() {
@@ -510,7 +539,6 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusMotionStyle.duration, 0.22, accuracy: 0.001)
-        XCTAssertEqual(MapPinFocusTransitionPolicy.maximumStagger, 0.12, accuracy: 0.001)
         XCTAssertEqual(MapPinFocusPolicy.minimumOpacity, 0.26, accuracy: 0.001)
     }
 
@@ -561,66 +589,6 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertGreaterThan(midFalloffOpacity, MapPinFocusPolicy.minimumOpacity)
         XCTAssertLessThan(midFalloffOpacity, 1)
         XCTAssertEqual(distantPinOpacity, 1, accuracy: 0.001)
-    }
-
-    func testSelectedPinFocusFadesNearToFarAndRestoresFarToNear() {
-        let nearFade = MapPinFocusConfiguration(
-            selectionID: "new",
-            opacity: MapPinFocusPolicy.minimumOpacity,
-            normalizedDistance: MapPinFocusPolicy.innerRadius
-        )
-        let farFade = MapPinFocusConfiguration(
-            selectionID: "new",
-            opacity: 0.92,
-            normalizedDistance: MapPinFocusPolicy.outerRadius - 0.01
-        )
-
-        XCTAssertLessThan(
-            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: nearFade),
-            MapPinFocusTransitionPolicy.delay(from: .unfocused, to: farFade)
-        )
-        XCTAssertGreaterThan(
-            MapPinFocusTransitionPolicy.delay(from: nearFade, to: .unfocused),
-            MapPinFocusTransitionPolicy.delay(from: farFade, to: .unfocused)
-        )
-    }
-
-    func testSelectionReplacementFadesNewClusterWhileRestoringOldCluster() {
-        let nearOldCluster = MapPinFocusConfiguration(
-            selectionID: "old",
-            opacity: MapPinFocusPolicy.minimumOpacity,
-            normalizedDistance: MapPinFocusPolicy.innerRadius
-        )
-        let oldClusterAfterReplacement = MapPinFocusConfiguration(
-            selectionID: "new",
-            opacity: 1,
-            normalizedDistance: MapPinFocusPolicy.outerRadius
-        )
-        let newClusterBeforeReplacement = MapPinFocusConfiguration(
-            selectionID: "old",
-            opacity: 1,
-            normalizedDistance: MapPinFocusPolicy.outerRadius
-        )
-        let nearNewCluster = MapPinFocusConfiguration(
-            selectionID: "new",
-            opacity: MapPinFocusPolicy.minimumOpacity,
-            normalizedDistance: MapPinFocusPolicy.innerRadius
-        )
-
-        XCTAssertEqual(
-            MapPinFocusTransitionPolicy.direction(
-                from: nearOldCluster,
-                to: oldClusterAfterReplacement
-            ),
-            .restore
-        )
-        XCTAssertEqual(
-            MapPinFocusTransitionPolicy.direction(
-                from: newClusterBeforeReplacement,
-                to: nearNewCluster
-            ),
-            .fade
-        )
     }
 
     func testSelectedPinFocusClearsWithoutASelection() {
@@ -745,6 +713,50 @@ final class MapSelectionMotionTests: XCTestCase {
             currentUserID: store.currentUser.id
         )
         XCTAssertNotNil(retainedGroup)
+    }
+
+    @MainActor
+    func testActivePinRetentionMergesOmittedCurrentUserSaveIntoMatchingGroup() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let sharedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: store.visiblePlaces(),
+                currentUserID: currentUserID
+            ).first { group in
+                group.places.contains { $0.owner.id == currentUserID }
+                    && group.places.contains { $0.owner.id != currentUserID }
+            }
+        )
+        let activePlace = try XCTUnwrap(
+            sharedGroup.places.first { $0.owner.id == currentUserID }
+        )
+        let replacementPlace = try XCTUnwrap(
+            sharedGroup.places.first { $0.owner.id != currentUserID }
+        )
+        let refreshedGroups = VisiblePlaceGrouping.groups(
+            from: [replacementPlace],
+            currentUserID: currentUserID
+        )
+
+        let retainedGroups = MapActivePinRetention.groups(
+            from: refreshedGroups,
+            retaining: activePlace,
+            currentUserID: currentUserID
+        )
+        let retainedGroup = try XCTUnwrap(retainedGroups.first)
+
+        XCTAssertEqual(retainedGroups.count, 1)
+        XCTAssertEqual(retainedGroup.key, refreshedGroups[0].key)
+        XCTAssertEqual(retainedGroup.primary.userPlace.id, activePlace.userPlace.id)
+        XCTAssertEqual(
+            Set(retainedGroup.places.map(\.userPlace.id)),
+            Set([activePlace.userPlace.id, replacementPlace.userPlace.id])
+        )
+        XCTAssertEqual(
+            MapActivePinRetention.groupKey(for: activePlace, in: retainedGroups),
+            retainedGroup.key
+        )
     }
 
     func testActivePinRefreshRegressionFixtureRequiresPersistentSelection() throws {
@@ -983,7 +995,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(
             map.contains("updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))")
         )
-        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+        XCTAssertTrue(map.contains("updateRenderedAnnotationViewport(for: region)"))
+        XCTAssertFalse(map.contains("visibleTransitionGroupKeys"))
+        XCTAssertFalse(map.contains("transitionMapPins("))
     }
 
     func testEntranceIdentityStateStagesOnlyPinsNewToTheViewport() throws {
@@ -1157,6 +1171,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(continuousHandler.contains("withAnimation"))
         XCTAssertFalse(continuousHandler.contains("store."))
         XCTAssertFalse(continuousHandler.contains("registerMapZoom"))
+        XCTAssertFalse(continuousHandler.contains("updateMapPinEntranceKeys"))
+        XCTAssertFalse(continuousHandler.contains("renderedAnnotationViewport"))
         XCTAssertFalse(map.contains("@State private var mapInteractionStartRegion"))
         XCTAssertFalse(map.contains("@State private var mapInteractionDidZoom"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
@@ -1169,7 +1185,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
         XCTAssertTrue(
             map.contains(
-                "pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll"
+                "pointsOfInterest: .all"
             )
         )
         XCTAssertGreaterThanOrEqual(
@@ -1181,7 +1197,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains("replacementFadeOutDuration"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
-        XCTAssertTrue(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))
+        XCTAssertTrue(map.contains("MapActivePinRetention.groupKey("))
+        XCTAssertFalse(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))
         XCTAssertTrue(map.contains("compactCardContentOpacity"))
         XCTAssertTrue(map.contains("nearbyFadeAnimation"))
         XCTAssertTrue(map.contains("nearbyReturnFadeAnimation"))
@@ -1569,7 +1586,9 @@ final class MapFilterSelectionTests: XCTestCase {
         )
 
         XCTAssertFalse(filterChipSource.contains(".scaleEffect("))
-        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+        XCTAssertFalse(map.contains("visibleTransitionGroupKeys"))
+        XCTAssertFalse(map.contains("transitionMapPins("))
+        XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
         XCTAssertTrue(map.contains("MapPinEntranceModifier("))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
@@ -2136,6 +2155,25 @@ final class MapFeaturedSelectionTests: XCTestCase {
             MapViewportRefreshPolicy.shouldRefresh(
                 visibleRegion: outsideRegion,
                 loadedViewport: loadedViewport
+            )
+        )
+    }
+
+    func testAnnotationViewportContractsAfterZoomingBackIn() {
+        let zoomedOutRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            span: MKCoordinateSpan(latitudeDelta: 1.0, longitudeDelta: 1.0)
+        )
+        let renderedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: zoomedOutRegion)
+        let zoomedInRegion = MKCoordinateRegion(
+            center: zoomedOutRegion.center,
+            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        )
+
+        XCTAssertTrue(
+            MapAnnotationViewportPolicy.shouldRefresh(
+                visibleRegion: zoomedInRegion,
+                renderedViewport: renderedViewport
             )
         )
     }

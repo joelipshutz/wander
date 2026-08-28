@@ -16,6 +16,7 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
     @State private var selectedSurface: FeedSurface
+    @State private var hasMountedPeopleSurface: Bool
     @State private var peopleQuery = ""
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @FocusState private var peopleSearchFieldFocused: Bool
@@ -24,7 +25,9 @@ struct FeedScreen: View {
 
     init(onAdd: @escaping () -> Void = {}) {
         self.onAdd = onAdd
-        _selectedSurface = State(initialValue: FeedSurface.resolvedInitialSurface())
+        let initialSurface = FeedSurface.resolvedInitialSurface()
+        _selectedSurface = State(initialValue: initialSurface)
+        _hasMountedPeopleSurface = State(initialValue: initialSurface == .people)
     }
 
     private let tickerSuggestions = [
@@ -40,16 +43,23 @@ struct FeedScreen: View {
         NavigationStack {
             ZStack {
                 ZStack(alignment: .top) {
-                    switch selectedSurface {
-                    case .places:
-                        placesSurface
-                    case .people:
+                    placesSurface
+                        .opacity(selectedSurface == .places ? 1 : 0)
+                        .allowsHitTesting(selectedSurface == .places)
+                        .accessibilityHidden(selectedSurface != .places)
+                        .zIndex(selectedSurface == .places ? 1 : 0)
+
+                    if hasMountedPeopleSurface || selectedSurface == .people {
                         FeedPeopleSurface(
                             memberQuery: $peopleQuery,
                             contentTopInset: feedContentTopInset,
                             dismissSearchFocus: { peopleSearchFieldFocused = false },
                             openProfile: openProfile
                         )
+                        .opacity(selectedSurface == .people ? 1 : 0)
+                        .allowsHitTesting(selectedSurface == .people)
+                        .accessibilityHidden(selectedSurface != .people)
+                        .zIndex(selectedSurface == .people ? 1 : 0)
                     }
 
                     floatingHeader
@@ -131,6 +141,9 @@ struct FeedScreen: View {
                 Text(savedMessage ?? "")
             }
             .onChange(of: selectedSurface) { _, surface in
+                if surface == .people {
+                    hasMountedPeopleSurface = true
+                }
                 peopleSearchFieldFocused = false
                 if surface != .people {
                     peopleQuery = ""
@@ -646,7 +659,9 @@ private struct FeedSurfaceTabs: View {
                 set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
             )
         )
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Feed section")
+        .accessibilityIdentifier("feed.surfaceSwitch")
     }
 }
 
@@ -807,22 +822,23 @@ private struct FeedPeopleSurface: View {
 
     private var peopleSection: some View {
         let recommendationCounts = store.visiblePlaceCountsByOwnerID()
+        let profiles = followingProfiles
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
                 FeedSectionHeading(title: "People")
                 Spacer()
-                Text("\(followingProfiles.count)")
+                Text("\(profiles.count)")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            if followingProfiles.isEmpty {
+            if profiles.isEmpty {
                 FeedPeopleEmptyPanel(
                     title: "No one followed yet",
                     message: "Follow someone above or search by name."
                 )
             } else {
-                ForEach(followingProfiles) { profile in
+                ForEach(profiles) { profile in
                     FeedFollowedPersonRow(
                         profile: profile,
                         recCount: recommendationCounts[profile.id, default: 0]
@@ -1391,8 +1407,9 @@ private struct FeedActivityModule: View {
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
+        let engagementContext = activity.activityEngagementContext
         ActivityPostcardView(
-            context: postcardContext,
+            context: engagementContext ?? fallbackPostcardContext,
             visiblePlace: activity.place,
             metadataIcon: metadataIcon,
             secondaryMetadataTitle: secondaryMetadataTitle,
@@ -1461,8 +1478,8 @@ private struct FeedActivityModule: View {
         return "list.bullet"
     }
 
-    private var postcardContext: ActivityEngagementContext {
-        engagementContext ?? ActivityEngagementContext(
+    private var fallbackPostcardContext: ActivityEngagementContext {
+        ActivityEngagementContext(
             activityID: activity.id,
             actor: activity.actor,
             placeName: "Map activity",
@@ -1477,10 +1494,6 @@ private struct FeedActivityModule: View {
             listContext: activity.list?.activityEngagementListContext,
             media: activity.media.map(\.activityEngagementMedia)
         )
-    }
-
-    private var engagementContext: ActivityEngagementContext? {
-        activity.activityEngagementContext
     }
 }
 
@@ -1605,12 +1618,17 @@ struct FeedResolvedPlacePhoto: View {
 
     private func resolvePhoto() async {
         let resolutionKey = photoResolutionKey
+        let request = sheetPlace.photoRequest.rendering(.feed)
+        if let cachedPhoto = backend.cachedPlacePhoto(for: request),
+           !(cachedPhoto.isGooglePlacesPhoto
+                && cachedPhoto.providerPlaceID == failedGooglePhotoID) {
+            photo = cachedPhoto
+            return
+        }
         photo = nil
 
         do {
-            let remotePhoto = try await backend.placePhoto(
-                for: sheetPlace.photoRequest.rendering(.feed)
-            )
+            let remotePhoto = try await backend.placePhoto(for: request)
             try Task.checkCancellation()
             let resolvedPhoto: PlacePhoto
             if remotePhoto.isGooglePlacesPhoto,

@@ -2,6 +2,43 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testPerformanceFixtureKeepsWarmSourceSwitchesResponsive() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs"
+        ]
+        app.launch()
+
+        let sourceIDs = [
+            "map.filter.friends",
+            "map.filter.you",
+            "map.filter.featured",
+            "map.filter.friends"
+        ]
+        for sourceID in sourceIDs {
+            XCTAssertTrue(app.buttons[sourceID].waitForExistence(timeout: 12))
+        }
+
+        let startedAt = Date()
+        for sourceID in sourceIDs {
+            let source = app.buttons[sourceID]
+            source.tap()
+            XCTAssertTrue(
+                source.isSelected,
+                "Dense-account source switch did not select \(sourceID)."
+            )
+        }
+
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            8,
+            "Four warm dense-account source switches should not block the UI."
+        )
+    }
+
     func testSingleScreenTapOnMapPinSelectsThatPlace() {
         let app = XCUIApplication()
         app.launchArguments = [

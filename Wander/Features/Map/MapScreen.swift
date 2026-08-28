@@ -29,21 +29,36 @@ struct MapSaveFlowSelectionCoordinator {
 
 @MainActor
 final class MapRenderProjectionCache<Key: Equatable, Value> {
-    private var cachedKey: Key?
-    private var cachedValue: Value?
+    private let capacityPerPartition: Int
+    private var entriesByPartition: [String: [(key: Key, value: Value)]] = [:]
 
     #if DEBUG
     private(set) var buildCount = 0
     #endif
 
-    func value(for key: Key, build: () -> Value) -> Value {
-        if cachedKey == key, let cachedValue {
-            return cachedValue
+    init(capacity: Int = 3) {
+        capacityPerPartition = max(1, capacity)
+    }
+
+    func value(
+        for key: Key,
+        partition: String = "default",
+        build: () -> Value
+    ) -> Value {
+        var entries = entriesByPartition[partition] ?? []
+        if let index = entries.firstIndex(where: { $0.key == key }) {
+            let entry = entries.remove(at: index)
+            entries.append(entry)
+            entriesByPartition[partition] = entries
+            return entry.value
         }
 
         let value = build()
-        cachedKey = key
-        cachedValue = value
+        entries.append((key, value))
+        if entries.count > capacityPerPartition {
+            entries.removeFirst(entries.count - capacityPerPartition)
+        }
+        entriesByPartition[partition] = entries
         #if DEBUG
         buildCount += 1
         #endif
@@ -368,7 +383,6 @@ private struct MapRenderProjectionKey: Equatable {
     let featuredPlacesRevision: UInt64
     let filterState: MapFilterState
     let query: String
-    let routedVisiblePlaceID: String?
     let currentUserID: String
     let rankingCenterLatitude: CLLocationDegrees
     let rankingCenterLongitude: CLLocationDegrees
@@ -380,6 +394,71 @@ private struct MapRenderProjection {
     let baseVisiblePlaces: [VisiblePlace]
     let visiblePlaces: [VisiblePlace]
     let visiblePlaceGroups: [VisiblePlaceGroup]
+    let groupKeyByVisiblePlaceID: [String: String]
+    let pinRenderCatalog: MapPinRenderCatalog
+    let tasteSummaries: [PlaceSaveSummary]
+}
+
+struct MapPinRenderCatalog {
+    let outlinesByGroupKey: [String: [MapPinOutline]]
+    let currentUserSaveByGroupKey: [String: VisiblePlace]
+    let currentUserSaveByAlias: [String: VisiblePlace]
+    let saveIDsByGroupKey: [String: Set<String>]
+
+    init(
+        groups: [VisiblePlaceGroup],
+        currentUserPlaces: [VisiblePlace],
+        currentUserID: String
+    ) {
+        let currentUserGroups = VisiblePlaceGrouping.groups(
+            from: currentUserPlaces,
+            currentUserID: currentUserID
+        )
+        var currentUserSaveByAlias: [String: VisiblePlace] = [:]
+        currentUserSaveByAlias.reserveCapacity(currentUserGroups.count * 3)
+        for group in currentUserGroups {
+            for alias in group.aliases {
+                currentUserSaveByAlias[alias] = group.primary
+            }
+        }
+        self.currentUserSaveByAlias = currentUserSaveByAlias
+
+        var outlinesByGroupKey: [String: [MapPinOutline]] = [:]
+        var currentUserSaveByGroupKey: [String: VisiblePlace] = [:]
+        var saveIDsByGroupKey: [String: Set<String>] = [:]
+        outlinesByGroupKey.reserveCapacity(groups.count)
+        currentUserSaveByGroupKey.reserveCapacity(groups.count)
+        saveIDsByGroupKey.reserveCapacity(groups.count)
+
+        for group in groups {
+            saveIDsByGroupKey[group.key] = Set(group.places.map(\.userPlace.id))
+            let currentUserSave = group.aliases.lazy
+                .compactMap { currentUserSaveByAlias[$0] }
+                .first
+            if let currentUserSave {
+                currentUserSaveByGroupKey[group.key] = currentUserSave
+            }
+
+            var places = group.places
+            if let currentUserSave,
+               !places.contains(where: {
+                   $0.userPlace.id == currentUserSave.userPlace.id
+               }) {
+                places.append(currentUserSave)
+            }
+            let states = places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
+            outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
+        }
+
+        self.outlinesByGroupKey = outlinesByGroupKey
+        self.currentUserSaveByGroupKey = currentUserSaveByGroupKey
+        self.saveIDsByGroupKey = saveIDsByGroupKey
+    }
 }
 
 enum MapWalkthroughMemoryPolicy {
@@ -606,9 +685,7 @@ struct MapScreen: View {
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportRefreshTask: Task<Void, Never>?
     @State private var isLoadingMapSources = true
-    @State private var transitioningAnnotationGroups: [VisiblePlaceGroup]?
-    @State private var visibleTransitionGroupKeys: Set<String>?
-    @State private var mapPinTransitionTask: Task<Void, Never>?
+    @State private var renderedAnnotationViewport: MapViewport
     @State private var mapPinEntranceKeyState = MapPinEntranceKeyState()
     @State private var mapPinEntranceTask: Task<Void, Never>?
     @State private var compactCardPhase = MapCompactCardPhase.hidden
@@ -662,7 +739,10 @@ struct MapScreen: View {
     private let onSearchLaunchRequestHandled: (UUID) -> Void
     private let onAdd: () -> Void
 
-    private func baseVisiblePlaces(followedOwnerIDs: Set<String>) -> [VisiblePlace] {
+    private func baseVisiblePlaces(
+        followedOwnerIDs: Set<String>,
+        tasteSummaries: [PlaceSaveSummary]
+    ) -> [VisiblePlace] {
         switch mapFilterState.source {
         case .featured:
             return MapFeaturedSelection.places(
@@ -691,37 +771,67 @@ struct MapScreen: View {
 
     private var renderProjection: MapRenderProjection {
         let currentUserID = store.currentUser.id
+        let rankingRegion = mapFilterState.source == .featured
+            ? featuredRankingRegion
+            : Self.defaultRegion
         let key = MapRenderProjectionKey(
             storeRevision: store.presentationRevision,
-            featuredPlacesRevision: featuredPlacesRevision,
+            featuredPlacesRevision: mapFilterState.source == .featured
+                ? featuredPlacesRevision
+                : 0,
             filterState: mapFilterState,
             query: mapQuery,
-            routedVisiblePlaceID: routedVisiblePlace?.id,
             currentUserID: currentUserID,
-            rankingCenterLatitude: featuredRankingRegion.center.latitude,
-            rankingCenterLongitude: featuredRankingRegion.center.longitude,
-            rankingLatitudeDelta: featuredRankingRegion.span.latitudeDelta,
-            rankingLongitudeDelta: featuredRankingRegion.span.longitudeDelta
+            rankingCenterLatitude: rankingRegion.center.latitude,
+            rankingCenterLongitude: rankingRegion.center.longitude,
+            rankingLatitudeDelta: rankingRegion.span.latitudeDelta,
+            rankingLongitudeDelta: rankingRegion.span.longitudeDelta
         )
 
-        return renderProjectionCache.value(for: key) {
+        return renderProjectionCache.value(
+            for: key,
+            partition: mapFilterState.source.rawValue
+        ) {
             let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
-            let basePlaces = baseVisiblePlaces(followedOwnerIDs: followedOwnerIDs)
-            var places = MapActivePinRetention.places(
-                from: basePlaces,
-                retaining: routedVisiblePlace
+            let currentUserPlaces = store.currentUserVisiblePlaces
+            let tasteSummaries = currentUserPlaces.map { visiblePlace in
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: visiblePlace.attributes,
+                    viewerFollowsOwner: false
+                )
+            }
+            let basePlaces = baseVisiblePlaces(
+                followedOwnerIDs: followedOwnerIDs,
+                tasteSummaries: tasteSummaries
             )
+            var places = basePlaces
             let query = TrustedPlaceSearchQuery(mapQuery)
             if query.hasMeaningfulTokens {
                 places = TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
             }
+            let groups = VisiblePlaceGrouping.groups(
+                from: places,
+                currentUserID: currentUserID
+            )
+            var groupKeyByVisiblePlaceID: [String: String] = [:]
+            groupKeyByVisiblePlaceID.reserveCapacity(places.count)
+            for group in groups {
+                for visiblePlace in group.places {
+                    groupKeyByVisiblePlaceID[visiblePlace.id] = group.key
+                }
+            }
             return MapRenderProjection(
                 baseVisiblePlaces: basePlaces,
                 visiblePlaces: places,
-                visiblePlaceGroups: VisiblePlaceGrouping.groups(
-                    from: places,
+                visiblePlaceGroups: groups,
+                groupKeyByVisiblePlaceID: groupKeyByVisiblePlaceID,
+                pinRenderCatalog: MapPinRenderCatalog(
+                    groups: groups,
+                    currentUserPlaces: currentUserPlaces,
                     currentUserID: currentUserID
-                )
+                ),
+                tasteSummaries: tasteSummaries
             )
         }
     }
@@ -759,10 +869,14 @@ struct MapScreen: View {
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
         _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
+        _renderedAnnotationViewport = State(initialValue: Self.initialRemoteViewport)
     }
 
     private var visiblePlaces: [VisiblePlace] {
-        renderProjection.visiblePlaces
+        MapActivePinRetention.places(
+            from: renderProjection.visiblePlaces,
+            retaining: routedVisiblePlace
+        )
     }
 
     private var mapSearchDockClearance: CGFloat {
@@ -779,11 +893,43 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        renderProjection.visiblePlaceGroups
+        MapActivePinRetention.groups(
+            from: renderProjection.visiblePlaceGroups,
+            retaining: routedVisiblePlace,
+            currentUserID: store.currentUser.id
+        )
+    }
+
+    private func projectedGroupKey(for visiblePlace: VisiblePlace) -> String? {
+        if let groupKey = renderProjection.groupKeyByVisiblePlaceID[visiblePlace.id] {
+            return groupKey
+        }
+
+        let aliases = VisiblePlaceGrouping.groupingAliases(for: visiblePlace.place)
+        return renderProjection.visiblePlaceGroups.first {
+            !$0.aliases.isDisjoint(with: aliases)
+        }?.key
+    }
+
+    private var renderedVisiblePlaceGroups: [VisiblePlaceGroup] {
+        var groups = visiblePlaceGroups.filter { group in
+            MapViewportRefreshPolicy.contains(
+                group.primary,
+                in: renderedAnnotationViewport
+            )
+        }
+        if let selectedPlaceGroupKey,
+           !groups.contains(where: { $0.key == selectedPlaceGroupKey }),
+           let selectedGroup = visiblePlaceGroups.first(where: {
+               $0.key == selectedPlaceGroupKey
+           }) {
+            groups.append(selectedGroup)
+        }
+        return groups
     }
 
     private var mapAnnotationPlaces: [VisiblePlace] {
-        visiblePlaceGroups.map(\.primary)
+        renderedVisiblePlaceGroups.map(\.primary)
     }
 
     private var visiblePlaceGroupKeys: [String] {
@@ -847,7 +993,7 @@ struct MapScreen: View {
 
     private func mapPinEntranceKeys(in region: MKCoordinateRegion) -> Set<String> {
         let viewport = MapViewportRefreshPolicy.viewport(for: region)
-        let savedKeys = visiblePlaceGroups.compactMap { group in
+        let savedKeys = renderedVisiblePlaceGroups.compactMap { group in
             MapViewportRefreshPolicy.contains(group.primary, in: viewport)
                 ? MapPinEntranceIdentity.saved(group.key)
                 : nil
@@ -908,7 +1054,7 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        let annotationGroups = transitioningAnnotationGroups ?? orderedVisiblePlaceGroups()
+        let annotationGroups = orderedVisiblePlaceGroups()
         let indexedAnnotationGroups = Array(annotationGroups.enumerated())
         let indexedSearchCandidates = Array(mappableSearchCandidates.enumerated())
         let inactiveAnnotationGroups = indexedAnnotationGroups.filter { _, group in
@@ -946,10 +1092,7 @@ struct MapScreen: View {
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
-                setMoreFilterSelection(
-                    selection,
-                    from: annotationGroups
-                )
+                setMoreFilterSelection(selection)
             }
         )
         NavigationStack {
@@ -965,10 +1108,9 @@ struct MapScreen: View {
                         }
 
                         ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
-                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key)
-                                ?? mapPinEntranceKeyState.isPresented(
-                                    MapPinEntranceIdentity.saved(group.key)
-                                )
+                            let isTransitionVisible = mapPinEntranceKeyState.isPresented(
+                                MapPinEntranceIdentity.saved(group.key)
+                            )
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                             let coordinate = CLLocationCoordinate2D(
                                 latitude: group.primary.place.latitude,
@@ -986,8 +1128,7 @@ struct MapScreen: View {
                             ) {
                                 MapPlaceMarker(
                                     visiblePlace: group.primary,
-                                    saves: saveSummaries(for: group),
-                                    currentUserID: store.currentUser.id,
+                                    outlines: pinOutlines(for: group),
                                     isSelected: false
                                 )
                                 .frame(minWidth: 44, minHeight: 44)
@@ -1058,11 +1199,10 @@ struct MapScreen: View {
                         // MapProxy-positioned SwiftUI overlay cannot follow continuous
                         // camera frames without forcing costly per-frame state updates.
                         ForEach(activeAnnotationGroups, id: \.key) { group in
-                            let activeSaves = saveSummaries(for: group)
-                            let isEntranceVisible = visibleTransitionGroupKeys?.contains(group.key)
-                                ?? mapPinEntranceKeyState.isPresented(
-                                    MapPinEntranceIdentity.saved(group.key)
-                                )
+                            let activeOutlines = pinOutlines(for: group)
+                            let isEntranceVisible = mapPinEntranceKeyState.isPresented(
+                                MapPinEntranceIdentity.saved(group.key)
+                            )
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -1072,16 +1212,11 @@ struct MapScreen: View {
                             ) {
                                 ActiveMapAnnotationContent(
                                     title: group.primary.place.canonicalName,
-                                    outlineCount: MapPlaceMarker.outlineCount(
-                                        visiblePlace: group.primary,
-                                        saves: activeSaves,
-                                        currentUserID: store.currentUser.id
-                                    )
+                                    outlineCount: activeOutlines.count
                                 ) {
                                     MapPlaceMarker(
                                         visiblePlace: group.primary,
-                                        saves: activeSaves,
-                                        currentUserID: store.currentUser.id,
+                                        outlines: activeOutlines,
                                         isSelected: true
                                     )
                                     .modifier(
@@ -1154,7 +1289,7 @@ struct MapScreen: View {
                         .standard(
                             elevation: .flat,
                             emphasis: .muted,
-                            pointsOfInterest: activePinFocusSelection == nil ? .all : .excludingAll
+                            pointsOfInterest: .all
                         )
                     )
                     .environment(
@@ -1215,10 +1350,7 @@ struct MapScreen: View {
                             HStack(spacing: WanderTheme.spacing1) {
                                 ForEach(MapSource.allCases) { source in
                                     Button {
-                                        selectMapSource(
-                                            source,
-                                            from: annotationGroups
-                                        )
+                                        selectMapSource(source)
                                     } label: {
                                         MapSourceFilterChip(
                                             source: source,
@@ -1275,10 +1407,7 @@ struct MapScreen: View {
                                 message: mapFilterEmptyMessage,
                                 canReset: mapFilterState.more.activeSectionCount > 0,
                                 reset: {
-                                    setMoreFilterSelection(
-                                        MapMoreFilterSelection(),
-                                        from: annotationGroups
-                                    )
+                                    setMoreFilterSelection(MapMoreFilterSelection())
                                 }
                             )
                             .padding(.horizontal, WanderTheme.spacing3)
@@ -1425,7 +1554,7 @@ struct MapScreen: View {
                 handleCompactSelectionIdentityChange(from: previous, to: current)
             }
             .onChange(of: isMapTabActive) { _, isActive in
-                handleMapTabActivityChange(isActive, from: annotationGroups)
+                handleMapTabActivityChange(isActive)
             }
             .onChange(of: isAddPresented) { _, isPresented in
                 if isPresented {
@@ -1487,12 +1616,11 @@ struct MapScreen: View {
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
                     if let routedVisiblePlace,
-                       let retainedGroup = VisiblePlaceGrouping.matchingGroup(
+                       let retainedGroupKey = MapActivePinRetention.groupKey(
                            for: routedVisiblePlace,
-                           in: visiblePlaces,
-                           currentUserID: store.currentUser.id
+                           in: visiblePlaceGroups
                        ) {
-                        selectedPlaceGroupKey = retainedGroup.key
+                        selectedPlaceGroupKey = retainedGroupKey
                     } else {
                         selectedPlaceGroupKey = nil
                         isPlaceProfilePresented = false
@@ -1532,7 +1660,6 @@ struct MapScreen: View {
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
-                mapPinTransitionTask?.cancel()
                 mapPinEntranceTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
@@ -1770,16 +1897,12 @@ struct MapScreen: View {
         cameraRegionTracker.synchronize(with: region)
     }
 
-    private func selectMapSource(
-        _ source: MapSource,
-        from outgoingGroups: [VisiblePlaceGroup]
-    ) {
+    private func selectMapSource(_ source: MapSource) {
         dismissMoreFilters()
         let previousState = mapFilterState
         mapFilterState.selectSource(source)
         guard mapFilterState != previousState else { return }
         routedVisiblePlace = nil
-        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
         handleFeaturedCameraChange(currentSearchRegion)
     }
 
@@ -1809,7 +1932,6 @@ struct MapScreen: View {
 
     private func handleMapTabActivityChange(
         _ isActive: Bool,
-        from outgoingGroups: [VisiblePlaceGroup],
         now: Date = .now
     ) {
         dismissMoreFilters()
@@ -1825,64 +1947,20 @@ struct MapScreen: View {
             interval: moreFiltersAwayResetInterval
         ) else { return }
 
-        setMoreFilterSelection(MapMoreFilterSelection(), from: outgoingGroups)
+        setMoreFilterSelection(MapMoreFilterSelection())
     }
 
-    private func setMoreFilterSelection(
-        _ selection: MapMoreFilterSelection,
-        from outgoingGroups: [VisiblePlaceGroup]
-    ) {
+    private func setMoreFilterSelection(_ selection: MapMoreFilterSelection) {
         guard mapFilterState.more != selection else { return }
         routedVisiblePlace = nil
         mapFilterState.more = selection
-        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
     }
 
     private func orderedVisiblePlaceGroups() -> [VisiblePlaceGroup] {
         Self.orderedAnnotationGroups(
-            visiblePlaceGroups,
+            renderedVisiblePlaceGroups,
             selectedGroupKey: selectedPlaceGroupKey
         )
-    }
-
-    private func transitionMapPins(
-        from outgoingGroups: [VisiblePlaceGroup],
-        to incomingGroups: [VisiblePlaceGroup]
-    ) {
-        mapPinTransitionTask?.cancel()
-
-        let outgoingKeys = Set(outgoingGroups.map(\.key))
-        let incomingKeys = Set(incomingGroups.map(\.key))
-        guard outgoingKeys != incomingKeys, !reduceMotion else {
-            transitioningAnnotationGroups = nil
-            visibleTransitionGroupKeys = nil
-            return
-        }
-
-        transitioningAnnotationGroups = outgoingGroups
-        visibleTransitionGroupKeys = outgoingKeys
-
-        mapPinTransitionTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-
-            visibleTransitionGroupKeys = []
-
-            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.fadeOutDuration))
-            guard !Task.isCancelled else { return }
-
-            transitioningAnnotationGroups = incomingGroups
-            visibleTransitionGroupKeys = []
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            visibleTransitionGroupKeys = incomingKeys
-
-            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.entranceWindowDuration))
-            guard !Task.isCancelled else { return }
-            transitioningAnnotationGroups = nil
-            visibleTransitionGroupKeys = nil
-            mapPinTransitionTask = nil
-        }
     }
 
     private func updateMapPinEntranceKeys(_ keys: Set<String>) {
@@ -2005,11 +2083,8 @@ struct MapScreen: View {
             )
             switch marker {
             case let .visiblePlace(visiblePlace):
-                let groupKey = VisiblePlaceGrouping.matchingGroup(
-                    for: visiblePlace,
-                    in: visiblePlaces,
-                    currentUserID: store.currentUser.id
-                )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
+                let groupKey = projectedGroupKey(for: visiblePlace)
+                    ?? VisiblePlaceGrouping.key(for: visiblePlace)
                 if highlightsCompactSelection, selectedPlaceGroupKey == groupKey {
                     replayActivePinBounce()
                 } else {
@@ -2072,10 +2147,11 @@ struct MapScreen: View {
 
     private func handleMapCameraChange(_ region: MKCoordinateRegion) {
         cameraRegionTracker.recordCameraChange(region)
-        updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))
     }
 
     private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
+        updateRenderedAnnotationViewport(for: region)
+        updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))
         switch cameraRegionTracker.finishCameraChange(region) {
         case .stationary:
             break
@@ -2085,6 +2161,15 @@ struct MapScreen: View {
             cancelPendingMapTapDismissal()
             requestCompactSelectionDismissal(trigger: .oneFingerPan)
         }
+    }
+
+    private func updateRenderedAnnotationViewport(for region: MKCoordinateRegion) {
+        guard MapAnnotationViewportPolicy.shouldRefresh(
+            visibleRegion: region,
+            renderedViewport: renderedAnnotationViewport
+        ) else { return }
+
+        renderedAnnotationViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
     }
 
     private func registerMapZoom() {
@@ -2237,10 +2322,14 @@ struct MapScreen: View {
 
     private func handleFeaturedCameraChange(_ region: MKCoordinateRegion) {
         featuredViewportRefreshTask?.cancel()
-        featuredRankingRegion = region
+        featuredViewportRefreshTask = nil
 
-        guard MapSearchPerformancePolicy.shouldFetchFeatured(for: mapFilterState.source),
-              !isLoadingMapSources,
+        guard MapSearchPerformancePolicy.shouldFetchFeatured(for: mapFilterState.source) else {
+            return
+        }
+
+        featuredRankingRegion = region
+        guard !isLoadingMapSources,
               auth.isSignedIn,
               backend.placeRepository != nil
         else { return }
@@ -2328,22 +2417,52 @@ struct MapScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        let groupedPlaces = VisiblePlaceGrouping.matchingGroup(
-            for: selectedPlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        )?.places ?? [selectedPlace]
+        guard let groupKey = projectedGroupKey(for: selectedPlace),
+              let group = visiblePlaceGroups.first(where: { $0.key == groupKey })
+        else {
+            return saveSummaries(
+                from: [selectedPlace],
+                currentUserSave: currentUserSave(matching: selectedPlace)
+            )
+        }
 
-        return saveSummaries(
-            from: groupedPlaces,
-            currentUserSave: currentUserSave(matching: selectedPlace)
-        )
+        return saveSummaries(for: group)
     }
 
     private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
         saveSummaries(
             from: group.places,
-            currentUserSave: currentUserSave(matching: group.primary)
+            currentUserSave: renderProjection.pinRenderCatalog
+                .currentUserSaveByGroupKey[group.key]
+                ?? indexedCurrentUserSave(matching: group.primary)
+        )
+    }
+
+    private func pinOutlines(for group: VisiblePlaceGroup) -> [MapPinOutline] {
+        let projectedSaveIDs = renderProjection.pinRenderCatalog
+            .saveIDsByGroupKey[group.key]
+        let renderedSaveIDs = Set(group.places.map(\.userPlace.id))
+        if projectedSaveIDs == renderedSaveIDs,
+           let outlines = renderProjection.pinRenderCatalog.outlinesByGroupKey[group.key] {
+            return outlines
+        }
+
+        var places = group.places
+        if let currentUserSave = indexedCurrentUserSave(matching: group.primary),
+           !places.contains(where: {
+               $0.userPlace.id == currentUserSave.userPlace.id
+           }) {
+            places.append(currentUserSave)
+        }
+        return MapPinOutlineBuilder.outlines(
+            for: places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == store.currentUser.id
+                        ? .currentUser
+                        : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
         )
     }
 
@@ -2401,22 +2520,13 @@ struct MapScreen: View {
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
-        store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(
-                visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id),
-                viewerFollowsOwner: false
-            )
-        }
+        renderProjection.tasteSummaries
     }
 
     private func selectVisiblePlace(_ visiblePlace: VisiblePlace) {
         routedVisiblePlace = visiblePlace
-        selectedPlaceGroupKey = VisiblePlaceGrouping.matchingGroup(
-            for: visiblePlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
+        selectedPlaceGroupKey = projectedGroupKey(for: visiblePlace)
+            ?? VisiblePlaceGrouping.key(for: visiblePlace)
     }
 
     private func handleCompactSelectionIdentityChange(
@@ -3036,9 +3146,6 @@ struct MapScreen: View {
     @MainActor
     private func resetMapPresentations() {
         invalidateMapSearchRequest()
-        mapPinTransitionTask?.cancel()
-        transitioningAnnotationGroups = nil
-        visibleTransitionGroupKeys = nil
         mapSearchFocusRequestID = nil
         mapSearchSelectionSession.finish()
         isMapSearchFocused = false
@@ -3746,9 +3853,19 @@ struct MapScreen: View {
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
-        return store.currentUserVisiblePlaces.first { mine in
-            VisiblePlaceGrouping.matches(mine, visiblePlace)
+        if let groupKey = projectedGroupKey(for: visiblePlace),
+           let cachedSave = renderProjection.pinRenderCatalog
+            .currentUserSaveByGroupKey[groupKey] {
+            return cachedSave
         }
+        return indexedCurrentUserSave(matching: visiblePlace)
+    }
+
+    private func indexedCurrentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
+        VisiblePlaceGrouping.groupingAliases(for: visiblePlace.place)
+            .lazy
+            .compactMap { renderProjection.pinRenderCatalog.currentUserSaveByAlias[$0] }
+            .first
     }
 
     private func currentUserSave(matching candidate: PlaceCandidate) -> VisiblePlace? {
@@ -4161,7 +4278,7 @@ struct MapScreen: View {
         }
 
         let immediateSavedSuggestions = savedTypeaheadSuggestions(
-            from: renderProjection.visiblePlaceGroups
+            from: visiblePlaceGroups
         )
         typeaheadSuggestions = immediateSavedSuggestions
         isLoadingTypeahead = true
@@ -5322,48 +5439,6 @@ enum MapPinFocusPolicy {
     }
 }
 
-enum MapPinFocusTransitionDirection: Equatable {
-    case fade
-    case restore
-    case steady
-}
-
-enum MapPinFocusTransitionPolicy {
-    static let maximumStagger: TimeInterval = 0.12
-
-    static func direction(
-        from previous: MapPinFocusConfiguration,
-        to current: MapPinFocusConfiguration
-    ) -> MapPinFocusTransitionDirection {
-        if current.opacity < previous.opacity { return .fade }
-        if current.opacity > previous.opacity { return .restore }
-        return .steady
-    }
-
-    static func delay(
-        from previous: MapPinFocusConfiguration,
-        to current: MapPinFocusConfiguration
-    ) -> TimeInterval {
-        guard previous.selectionID != current.selectionID else { return 0 }
-
-        switch direction(from: previous, to: current) {
-        case .fade:
-            return staggerProgress(for: current.normalizedDistance) * maximumStagger
-        case .restore:
-            return (1 - staggerProgress(for: previous.normalizedDistance)) * maximumStagger
-        case .steady:
-            return 0
-        }
-    }
-
-    private static func staggerProgress(for normalizedDistance: Double?) -> Double {
-        guard let normalizedDistance else { return 1 }
-        let progress = (normalizedDistance - MapPinFocusPolicy.innerRadius)
-            / (MapPinFocusPolicy.outerRadius - MapPinFocusPolicy.innerRadius)
-        return min(max(progress, 0), 1)
-    }
-}
-
 @MainActor
 enum MapPinFocusMotionStyle {
     static let duration: TimeInterval = 0.22
@@ -5373,43 +5448,14 @@ enum MapPinFocusMotionStyle {
 private struct MapPinFocusModifier: ViewModifier {
     let configuration: MapPinFocusConfiguration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var renderedOpacity: Double?
 
     func body(content: Content) -> some View {
         content
-            .opacity(renderedOpacity ?? configuration.opacity)
-            .onAppear {
-                setWithoutAnimation(configuration.opacity)
-            }
-            .onChange(of: configuration) { previous, current in
-                transition(from: previous, to: current)
-            }
-            .onChange(of: reduceMotion) { _, _ in
-                setWithoutAnimation(configuration.opacity)
-            }
-    }
-
-    private func transition(
-        from previous: MapPinFocusConfiguration,
-        to current: MapPinFocusConfiguration
-    ) {
-        guard !reduceMotion else {
-            setWithoutAnimation(current.opacity)
-            return
-        }
-
-        let delay = MapPinFocusTransitionPolicy.delay(from: previous, to: current)
-        withAnimation(MapPinFocusMotionStyle.animation.delay(delay)) {
-            renderedOpacity = current.opacity
-        }
-    }
-
-    private func setWithoutAnimation(_ opacity: Double) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            renderedOpacity = opacity
-        }
+            .opacity(configuration.opacity)
+            .animation(
+                reduceMotion ? nil : MapPinFocusMotionStyle.animation,
+                value: configuration
+            )
     }
 }
 
@@ -5656,6 +5702,30 @@ enum MapViewportRefreshPolicy {
             maxLatitude: min(90, center.latitude + latitudeRadius),
             maxLongitude: min(180, center.longitude + longitudeRadius)
         )
+    }
+}
+
+enum MapAnnotationViewportPolicy {
+    private static let contractionRatio = 0.65
+
+    static func shouldRefresh(
+        visibleRegion: MKCoordinateRegion,
+        renderedViewport: MapViewport
+    ) -> Bool {
+        if MapViewportRefreshPolicy.shouldRefresh(
+            visibleRegion: visibleRegion,
+            loadedViewport: renderedViewport
+        ) {
+            return true
+        }
+
+        let desiredViewport = MapViewportRefreshPolicy.prefetchedViewport(for: visibleRegion)
+        let renderedLatitudeSpan = renderedViewport.maxLatitude - renderedViewport.minLatitude
+        let renderedLongitudeSpan = renderedViewport.maxLongitude - renderedViewport.minLongitude
+        let desiredLatitudeSpan = desiredViewport.maxLatitude - desiredViewport.minLatitude
+        let desiredLongitudeSpan = desiredViewport.maxLongitude - desiredViewport.minLongitude
+        return desiredLatitudeSpan < renderedLatitudeSpan * contractionRatio
+            || desiredLongitudeSpan < renderedLongitudeSpan * contractionRatio
     }
 }
 
@@ -7042,18 +7112,13 @@ private struct SearchResultMarker: View {
 
 private struct MapPlaceMarker: View {
     let visiblePlace: VisiblePlace
-    let saves: [PlaceSaveSummary]
-    let currentUserID: String
+    let outlines: [MapPinOutline]
     let isSelected: Bool
 
     var body: some View {
         WanderMapPin(
             visiblePlace: visiblePlace,
-            outlines: Self.outlines(
-                visiblePlace: visiblePlace,
-                saves: saves,
-                currentUserID: currentUserID
-            )
+            outlines: outlines
         )
         .scaleEffect(
             isSelected
@@ -7063,55 +7128,6 @@ private struct MapPlaceMarker: View {
         .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
     }
 
-    static func outlineCount(
-        visiblePlace: VisiblePlace,
-        saves: [PlaceSaveSummary],
-        currentUserID: String
-    ) -> Int {
-        outlines(
-            visiblePlace: visiblePlace,
-            saves: saves,
-            currentUserID: currentUserID
-        ).count
-    }
-
-    private static func outlines(
-        visiblePlace: VisiblePlace,
-        saves: [PlaceSaveSummary],
-        currentUserID: String
-    ) -> [MapPinOutline] {
-        MapPinOutlineBuilder.outlines(
-            for: saveStates(
-                visiblePlace: visiblePlace,
-                saves: saves,
-                currentUserID: currentUserID
-            )
-        )
-    }
-
-    private static func saveStates(
-        visiblePlace: VisiblePlace,
-        saves: [PlaceSaveSummary],
-        currentUserID: String
-    ) -> [MapPinSaveState] {
-        let states = saves.map { summary in
-            MapPinSaveState(
-                ownership: summary.visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                status: summary.visiblePlace.userPlace.status
-            )
-        }
-
-        if states.isEmpty {
-            return [
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            ]
-        }
-
-        return states
-    }
 }
 
 private struct WanderMapPin: View {
@@ -7359,6 +7375,62 @@ enum MapActivePinRetention {
         else { return places }
 
         return places + [activePlace]
+    }
+
+    static func groups(
+        from groups: [VisiblePlaceGroup],
+        retaining activePlace: VisiblePlace?,
+        currentUserID: String
+    ) -> [VisiblePlaceGroup] {
+        guard let activePlace,
+              !groups.contains(where: { group in
+                  group.places.contains {
+                      $0.userPlace.id == activePlace.userPlace.id
+                  }
+              })
+        else { return groups }
+
+        let activeAliases = VisiblePlaceGrouping.groupingAliases(for: activePlace.place)
+        guard let matchingIndex = groups.firstIndex(where: {
+            !$0.aliases.isDisjoint(with: activeAliases)
+        }) else {
+            guard let singleton = VisiblePlaceGrouping.groups(
+                from: [activePlace],
+                currentUserID: currentUserID
+            ).first else { return groups }
+            return groups + [singleton]
+        }
+
+        let matchingGroup = groups[matchingIndex]
+        let mergedGroup = VisiblePlaceGrouping.groups(
+            from: matchingGroup.places + [activePlace],
+            currentUserID: currentUserID
+        ).first { group in
+            group.places.contains {
+                $0.userPlace.id == activePlace.userPlace.id
+            }
+        }
+        guard let mergedGroup else { return groups }
+
+        var retainedGroups = groups
+        retainedGroups[matchingIndex] = VisiblePlaceGroup(
+            key: matchingGroup.key,
+            aliases: matchingGroup.aliases.union(mergedGroup.aliases),
+            places: mergedGroup.places,
+            currentUserID: currentUserID
+        )
+        return retainedGroups
+    }
+
+    static func groupKey(
+        for activePlace: VisiblePlace,
+        in groups: [VisiblePlaceGroup]
+    ) -> String? {
+        groups.first { group in
+            group.places.contains {
+                $0.userPlace.id == activePlace.userPlace.id
+            }
+        }?.key
     }
 }
 

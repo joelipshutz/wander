@@ -66,6 +66,65 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
 
 @MainActor
 final class FeedPostcardInteractionUITests: XCTestCase {
+    func testPerformanceFixtureScrollsAndReusesWarmFeedSurfaces() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab", "discover"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
+        let firstPostcard = app.descendants(matching: .any)[
+            "feed.activity.perf-feed-000.postcard"
+        ]
+        XCTAssertTrue(firstPostcard.waitForExistence(timeout: 12))
+
+        let laterPostcard = app.descendants(matching: .any)[
+            "feed.activity.perf-feed-008.postcard"
+        ]
+        var longestSwipeDuration: TimeInterval = 0
+        for _ in 0..<10 where !laterPostcard.exists {
+            let swipeStartedAt = Date()
+            app.swipeUp()
+            longestSwipeDuration = max(
+                longestSwipeDuration,
+                Date().timeIntervalSince(swipeStartedAt)
+            )
+        }
+        XCTAssertTrue(laterPostcard.waitForExistence(timeout: 2))
+        XCTAssertLessThan(
+            longestSwipeDuration,
+            3,
+            "A dense Feed swipe should not block on row-wide recomputation."
+        )
+
+        let people = app.buttons["People"].firstMatch
+        let places = app.buttons["Places"].firstMatch
+        XCTAssertTrue(people.waitForExistence(timeout: 3))
+        XCTAssertTrue(places.waitForExistence(timeout: 3))
+
+        let switchStartedAt = Date()
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
+        )
+        places.tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 3))
+        people.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
+        )
+        XCTAssertLessThan(
+            Date().timeIntervalSince(switchStartedAt),
+            6,
+            "Retained Feed surfaces should switch without rebuilding their roots."
+        )
+    }
+
     func testActionsDoNotOpenTheNextPlace() {
         let app = launch()
 
