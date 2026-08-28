@@ -4556,13 +4556,12 @@ struct MapScreen: View {
     }
 
     private func mapFeatureSourceID(for feature: MapFeature, name: String) -> String {
-        let latitude = Int((feature.coordinate.latitude * 100_000).rounded())
-        let longitude = Int((feature.coordinate.longitude * 100_000).rounded())
-        let slug = name
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return "mapkit_\(slug)_\(latitude)_\(longitude)"
+        let locationKey = MapSearchResultIdentity.locationKey(
+            name: name,
+            latitude: feature.coordinate.latitude,
+            longitude: feature.coordinate.longitude
+        )
+        return "mapkit_\(locationKey)"
     }
 
     private func category(for feature: MapFeature) -> String {
