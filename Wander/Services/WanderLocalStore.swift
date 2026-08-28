@@ -2281,7 +2281,12 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func addVisiblePlace(_ visiblePlace: VisiblePlace, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
+    func addVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        to list: LocalPlaceList,
+        backend: WanderBackend?,
+        analyticsSurface: String? = nil
+    ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
         }
@@ -2329,7 +2334,15 @@ final class WanderStore: ObservableObject {
             await syncPlaceListItem(localOrServerID: item.id, listID: list.id, backend: backend)
         }
 
-        return ListPlaceAddResult(outcome: .added, companionSave: companionSave)
+        let result = ListPlaceAddResult(outcome: .added, companionSave: companionSave)
+        if let analyticsSurface {
+            trackListPlaceAdded(
+                to: list,
+                companionSave: companionSave,
+                surface: analyticsSurface
+            )
+        }
+        return result
     }
 
     /// Adds an already-owned place to a list without rebuilding the visible
@@ -2392,13 +2405,23 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
+    func addCandidate(
+        _ candidate: PlaceCandidate,
+        to list: LocalPlaceList,
+        backend: WanderBackend?,
+        analyticsSurface: String? = nil
+    ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
         }
 
         if let existingVisiblePlace = matchingCurrentUserVisiblePlace(for: candidate) {
-            return await addVisiblePlace(existingVisiblePlace, to: list, backend: backend)
+            return await addVisiblePlace(
+                existingVisiblePlace,
+                to: list,
+                backend: backend,
+                analyticsSurface: analyticsSurface
+            )
         }
 
         if hasCandidate(candidate, in: list) {
@@ -2430,7 +2453,12 @@ final class WanderStore: ObservableObject {
             )
         }
 
-        let result = await addVisiblePlace(savedVisiblePlace, to: list, backend: backend)
+        let result = await addVisiblePlace(
+            savedVisiblePlace,
+            to: list,
+            backend: backend,
+            analyticsSurface: nil
+        )
         let saveAlreadyExisted = !existingCurrentUserSaveIDs.isDisjoint(with: Set([
             saveResult.userPlaceID,
             savedVisiblePlace.id,
@@ -2446,9 +2474,55 @@ final class WanderStore: ObservableObject {
         } else {
             companionSave = .createdWanna(userPlaceID: savedVisiblePlace.userPlace.id)
         }
-        return ListPlaceAddResult(
+        let resolvedResult = ListPlaceAddResult(
             outcome: result.outcome,
             companionSave: companionSave
+        )
+        if result.outcome == .added, let analyticsSurface {
+            trackListPlaceAdded(
+                to: list,
+                companionSave: companionSave,
+                surface: analyticsSurface
+            )
+        }
+        return resolvedResult
+    }
+
+    private func trackListPlaceAdded(
+        to list: LocalPlaceList,
+        companionSave: ListPlaceAddResult.CompanionSave,
+        surface: String
+    ) {
+        let companionSaveValue: String
+        switch companionSave {
+        case .none:
+            companionSaveValue = "none"
+        case .createdWanna:
+            companionSaveValue = "created_wanna"
+        case .existingWanna:
+            companionSaveValue = "existing_wanna"
+        }
+        let properties = [
+            "surface": surface,
+            "list_role": list.ownerUserID == currentUser.id ? "owner" : "collaborator",
+            "companion_save": companionSaveValue
+        ]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.placeListItemAdded,
+                properties: properties
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .listPlaceAdded,
+                surface: surface,
+                properties: [
+                    "list_role": properties["list_role"] ?? "owner",
+                    "companion_save": companionSaveValue
+                ]
+            )
         )
     }
 
