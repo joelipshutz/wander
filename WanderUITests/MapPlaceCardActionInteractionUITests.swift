@@ -228,6 +228,35 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertFalse(profileApp.buttons["place-profile.back"].exists)
     }
 
+    func testInCommonReleaseFlowOpensTheRealSharedMap() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
+
+        let actorButton = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"]
+        reveal(actorButton, in: app)
+        XCTAssertTrue(actorButton.waitForExistence(timeout: 4))
+        actorButton.tap()
+
+        let inCommonButton = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "places in common with Mina")
+        ).firstMatch
+        reveal(inCommonButton, in: app)
+        XCTAssertTrue(inCommonButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(inCommonButton.isHittable)
+        inCommonButton.tap()
+
+        XCTAssertTrue(app.staticTexts["In Common"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["you both keep coming back for"].exists)
+        let sharedMapButton = app.buttons["Open your shared map"]
+        XCTAssertTrue(sharedMapButton.waitForExistence(timeout: 4))
+        capture("rec-335-in-common-release")
+
+        sharedMapButton.tap()
+        XCTAssertTrue(app.navigationBars["Shared map"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["where you agree"].exists)
+        capture("rec-335-in-common-shared-map-release")
+    }
+
     func testWannaBadgeVisualScale() {
         let app = launch()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
