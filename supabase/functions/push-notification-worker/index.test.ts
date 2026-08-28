@@ -189,6 +189,37 @@ Deno.test("delivery analytics replaces unexpected notification types", () => {
   assertEquals(analyticsEvent.properties.notification_type, "unknown");
 });
 
+Deno.test("delivery analytics allowlists every reservation and client reminder type", () => {
+  for (
+    const notificationType of [
+      "calendar_reservation_live",
+      "calendar_reservation_follow_up",
+      "import_finished",
+      "save_streak_reminder",
+      "wanna_go_reminder",
+    ]
+  ) {
+    const analyticsEvent = notificationDeliveryAnalyticsEvent(
+      {
+        event_id: "10000000-0000-0000-0000-000000000001",
+        claim_token: "20000000-0000-0000-0000-000000000001",
+        recipient_user_id: "private_recipient",
+        notification_type: notificationType,
+        title: "Private title",
+        body: "Private body",
+        data: {},
+        tokens: [],
+      },
+      { status: "sent", accepted_count: 1 },
+    );
+
+    assertEquals(
+      analyticsEvent.properties.notification_type,
+      notificationType,
+    );
+  }
+});
+
 Deno.test("frequency analytics exposes summary and complete aggregate histogram only", () => {
   const events = notificationFrequencyAnalyticsEvents({
     window_days: 30,

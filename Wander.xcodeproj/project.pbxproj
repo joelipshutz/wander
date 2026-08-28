@@ -212,6 +212,7 @@
 		C04D00FF2C508036A0003D84 /* ProfileAvatarStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35E9F94446528E07DA24AD9 /* ProfileAvatarStorageTests.swift */; };
 		C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */; };
 		C500C85EDAC2AC11197F7CC8 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */; };
+		C59670B14A081B1E8CD6A303 /* CalendarReservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */; };
 		C5C321B30AB5C45FF046F95D /* ProfileIdentityDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EBB83E471DD06673AA7C4A9 /* ProfileIdentityDraftTests.swift */; };
 		C609A317876A8AB33A96DF6B /* rec-303-map-pin-entrance-bounce-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 0B82E95F99088884DF1C0C97 /* rec-303-map-pin-entrance-bounce-post.png */; };
 		C685CB14B12B2AFDFC9F4EAB /* WanderBackendConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */; };
@@ -263,6 +264,7 @@
 		F773AA7B35A1E5A2C15A5707 /* ActivityEngagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */; };
 		FAEC993AFC7C37554FC13C3C /* PlaceRatingExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */; };
 		FBE5921715AB0F4368586D7B /* GoogleMapsSharedListImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F5A219AE38028EC07F622C /* GoogleMapsSharedListImporter.swift */; };
+		FC1886271BDE08FBF1EF00AF /* CalendarReservationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F234B226B6C3FEF8C09F4FCF /* CalendarReservationManager.swift */; };
 		FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FCB749FFB8699E525A65B0D /* SaveStreakCelebrationView.swift */; };
 		FDC3BBDAB70F2C27C113113B /* SupabaseRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F65E6837895B0A19DDFAB2 /* SupabaseRepositories.swift */; };
 		FE5D9FABF4A4A763E7F3A6F8 /* StorefrontPlaceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D1ACEE7ABC54A75EF698C4 /* StorefrontPlaceResolver.swift */; };
@@ -397,6 +399,7 @@
 		3A8893E8CF16E21653DE03BA /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
 		3B8C1F5EB6AF68AB6C4BAE54 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeTokenTests.swift; sourceTree = "<group>"; };
 		3C27E1F825871B306B970668 /* PlaceProfilePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfilePresentationTests.swift; sourceTree = "<group>"; };
+		3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarReservationTests.swift; sourceTree = "<group>"; };
 		3D96BEEE61A9DCDDE5E75B5A /* LoggedOutCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggedOutCarouselView.swift; sourceTree = "<group>"; };
 		3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		3EA6591C2750C3AB8B3E33C6 /* ActivityEngagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEngagementTests.swift; sourceTree = "<group>"; };
@@ -563,6 +566,7 @@
 		EFD316F9E6EBA0B705EA7867 /* OnboardingFriendSuggestionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFriendSuggestionsModel.swift; sourceTree = "<group>"; };
 		F15A0A0901CFD503ABBFF5DA /* rec-195-streak-notification-routing-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-streak-notification-routing-pre.json"; sourceTree = "<group>"; };
 		F1EB6D9E784DEB05C9AC510B /* WanderWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F234B226B6C3FEF8C09F4FCF /* CalendarReservationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarReservationManager.swift; sourceTree = "<group>"; };
 		F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderLocalStore.swift; sourceTree = "<group>"; };
 		F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitter.swift; sourceTree = "<group>"; };
 		F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVisitComponents.swift; sourceTree = "<group>"; };
@@ -826,6 +830,7 @@
 				34977B260344994771BCC93E /* AuthSessionTests.swift */,
 				D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */,
 				C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */,
+				3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */,
 				7D348E71875A1E8A32FD57BE /* CheckInCopyTests.swift */,
 				65300A1846111DFE644E7D4F /* CommunityModerationTests.swift */,
 				260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */,
@@ -1109,6 +1114,7 @@
 			children = (
 				E194BD10847F361AB8D779BC /* ActivityEngagementModels.swift */,
 				DE62D76C9EC89546850909A7 /* AnalyticsEvent.swift */,
+				F234B226B6C3FEF8C09F4FCF /* CalendarReservationManager.swift */,
 				112A43105E71C57F00B6F93C /* CommunityModeration.swift */,
 				D5665DF2A481AC9A45CE315E /* ContactProvider.swift */,
 				ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */,
@@ -1426,6 +1432,7 @@
 				E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */,
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
+				FC1886271BDE08FBF1EF00AF /* CalendarReservationManager.swift in Sources */,
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,
 				1777381F242E1547FB1F5E0B /* CheckInTicketSurface.swift in Sources */,
 				1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */,
@@ -1585,6 +1592,7 @@
 				C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */,
 				0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */,
 				940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */,
+				C59670B14A081B1E8CD6A303 /* CalendarReservationTests.swift in Sources */,
 				0C9CF19D0B6BE75F34B79402 /* CheckInCopyTests.swift in Sources */,
 				6174C281A2E3108DC73FEA0F /* CommunityModerationTests.swift in Sources */,
 				74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */,

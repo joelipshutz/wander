@@ -92,6 +92,11 @@ async function main() {
           strangerUserID,
         );
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await runCalendarReservationNotificationSmokeChecks(
+          client,
+          smokeUserID,
+          strangerUserID,
+        );
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
@@ -114,6 +119,212 @@ async function main() {
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+async function runCalendarReservationNotificationSmokeChecks(
+  client,
+  smokeUserID,
+  strangerUserID,
+) {
+  const occurrenceKey = "c".repeat(64);
+  const startAt = new Date(Date.now() + (36 * 60 * 60 * 1000));
+  const endAt = new Date(startAt.getTime() + (2 * 60 * 60 * 1000));
+  const windowStart = new Date(Date.now() - (24 * 60 * 60 * 1000));
+  const windowEnd = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000));
+
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.places (
+        canonical_name, category, primary_category, latitude, longitude,
+        source_provider, source_provider_place_id, confidence
+      ) values (
+        'Codex Calendar Reservation', 'restaurants_food', 'restaurants_food',
+        34.0141, -118.4976, 'mapkit', 'codex-calendar-reservation', 1
+      )
+      on conflict (source_provider, source_provider_place_id) do update
+      set canonical_name = excluded.canonical_name,
+          updated_at = now()
+    `,
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "calendar notification RPCs preserve hardened metadata and client grants",
+    `
+      select
+        sync.prosecdef as sync_definer,
+        'search_path=public, app' = any(coalesce(sync.proconfig, array[]::text[])) as sync_path,
+        prompt.prosecdef as prompt_definer,
+        'search_path=public, app' = any(coalesce(prompt.proconfig, array[]::text[])) as prompt_path,
+        complete.prosecdef as complete_definer,
+        'search_path=public, app' = any(coalesce(complete.proconfig, array[]::text[])) as complete_path,
+        reconcile.prosecdef as reconcile_definer,
+        'search_path=public, app' = any(coalesce(reconcile.proconfig, array[]::text[])) as reconcile_path,
+        has_function_privilege('authenticated', sync.oid, 'execute') as sync_authenticated,
+        not has_function_privilege('anon', sync.oid, 'execute') as sync_anon_denied,
+        not has_function_privilege(
+          'authenticated',
+          'app.queue_notification_intent(text,text,text,text,text,jsonb,text,timestamp with time zone,timestamp with time zone,text,smallint,text,text)',
+          'execute'
+        ) as generic_writer_denied
+      from pg_proc sync
+      cross join pg_proc prompt
+      cross join pg_proc complete
+      cross join pg_proc reconcile
+      where sync.oid = 'public.sync_calendar_reservations(jsonb,timestamp with time zone,timestamp with time zone)'::regprocedure
+        and prompt.oid = 'public.get_calendar_reservation(uuid)'::regprocedure
+        and complete.oid = 'public.complete_calendar_reservation(uuid)'::regprocedure
+        and reconcile.oid = 'public.reconcile_client_notification_intents(text,jsonb)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
+    "reservation notification preference can be explicitly enabled",
+    `
+      select (
+        public.update_notification_preferences(
+          '{"push_enabled":true,"reservation_reminders_enabled":true,"wanna_go_reminders_enabled":true}'::jsonb
+        )
+      ).reservation_reminders_enabled as enabled
+    `,
+    [],
+    (result) => result.rows[0]?.enabled === true,
+  );
+
+  const productionReservationPayload = [{
+    occurrence_key: occurrenceKey,
+    canonical_name: "Codex Calendar Reservation",
+    locality: "Santa Monica",
+    source_provider: "mapkit",
+    source_provider_place_id: "codex-calendar-reservation",
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    event_timezone: "America/Los_Angeles",
+  }];
+  await expectQuery(
+    client,
+    "authenticated calendar sync accepts the exact privacy-minimal iOS payload",
+    `
+      select public.sync_calendar_reservations(
+        $1::jsonb,
+        $2::timestamptz,
+        $3::timestamptz
+      ) as result
+    `,
+    [
+      JSON.stringify(productionReservationPayload),
+      windowStart.toISOString(),
+      windowEnd.toISOString(),
+    ],
+    (result) => result.rows[0]?.result?.synced_count === 1
+      && result.rows[0]?.result?.queued_count === 2,
+  );
+
+  await expectQuery(
+    client,
+    "calendar sync stores no raw EventKit content and queues both governed stages",
+    `
+      select
+        reservation.canonical_name,
+        reservation.resolved_place_id is not null as resolved_place,
+        count(event.id)::integer as event_count,
+        bool_and(event.source = 'calendar_reservation') as governed_source,
+        bool_and(event.data - array['reservation_id', 'prompt_stage'] = '{}'::jsonb) as safe_payload
+      from public.calendar_reservations reservation
+      join public.notification_events event
+        on event.conflict_group = 'calendar_reservation:' || reservation.id
+      where reservation.user_id = $1
+        and reservation.occurrence_key = $2
+      group by reservation.id
+    `,
+    [smokeUserID, occurrenceKey],
+    (result) => result.rows.length === 1
+      && result.rows[0].canonical_name === "Codex Calendar Reservation"
+      && result.rows[0].resolved_place === true
+      && result.rows[0].event_count === 2
+      && result.rows[0].governed_source === true
+      && result.rows[0].safe_payload === true,
+  );
+
+  const reservationIDResult = await client.query(
+    `
+      select id
+      from public.calendar_reservations
+      where user_id = $1 and occurrence_key = $2
+    `,
+    [smokeUserID, occurrenceKey],
+  );
+  const reservationID = reservationIDResult.rows[0]?.id;
+  if (!reservationID) {
+    throw new Error("calendar reservation smoke fixture did not return an id");
+  }
+
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQuery(
+    client,
+    "another authenticated account cannot resolve the reservation prompt",
+    "select public.get_calendar_reservation($1::uuid) as reservation",
+    [reservationID],
+    (result) => result.rows[0]?.reservation === null,
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "the owner resolves and completes the reservation prompt",
+    `
+      select
+        public.get_calendar_reservation($1::uuid)->>'canonical_name' as canonical_name,
+        public.complete_calendar_reservation($1::uuid) as completed
+    `,
+    [reservationID],
+    (result) => result.rows[0]?.canonical_name === "Codex Calendar Reservation"
+      && result.rows[0]?.completed === true,
+  );
+  await expectQuery(
+    client,
+    "reservation completion suppresses both outstanding waterfall stages",
+    `
+      select count(*)::integer as skipped_count
+      from public.notification_events
+      where recipient_user_id = $1
+        and conflict_group = 'calendar_reservation:' || $2::uuid
+        and status = 'skipped'
+    `,
+    [smokeUserID, reservationID],
+    (result) => result.rows[0]?.skipped_count === 2,
+  );
+
+  await expectQuery(
+    client,
+    "authenticated Wanna intent reconciliation accepts the exact iOS envelope",
+    `
+      select public.reconcile_client_notification_intents(
+        'wanna_go_reminder',
+        $1::jsonb
+      ) as result
+    `,
+    [JSON.stringify([{
+      intent_key: "smoke-wanna-reminder",
+      title: "Still wanna go?",
+      body: "A place on your map is waiting.",
+      deeplink_url: "recme://places/40000000-0000-0000-0000-000000000001",
+      data: {
+        place_id: "40000000-0000-0000-0000-000000000001",
+        user_place_id: "50000000-0000-0000-0000-000000000001",
+        planned_date: "2026-09-01",
+      },
+      earliest_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      latest_at: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
+      priority: 40,
+    }])],
+    (result) => result.rows[0]?.result?.queued_count === 1,
+  );
 }
 
 async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID) {

@@ -1444,6 +1444,7 @@ struct NotificationPreferences: Equatable {
     var followedActivityEnabled: Bool = false
     var engagementEnabled: Bool = false
     var wannaGoRemindersEnabled: Bool = false
+    var reservationRemindersEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
         pushEnabled: true,
@@ -1455,7 +1456,8 @@ struct NotificationPreferences: Equatable {
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
         engagementEnabled: true,
-        wannaGoRemindersEnabled: true
+        wannaGoRemindersEnabled: true,
+        reservationRemindersEnabled: true
     )
 
     static let allDisabled = NotificationPreferences(
@@ -1468,7 +1470,8 @@ struct NotificationPreferences: Equatable {
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
         engagementEnabled: false,
-        wannaGoRemindersEnabled: false
+        wannaGoRemindersEnabled: false,
+        reservationRemindersEnabled: false
     )
 }
 
@@ -1483,6 +1486,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var followedActivityEnabled: Bool?
     var engagementEnabled: Bool?
     var wannaGoRemindersEnabled: Bool?
+    var reservationRemindersEnabled: Bool?
 
     init(
         pushEnabled: Bool? = nil,
@@ -1494,7 +1498,8 @@ struct NotificationPreferencesUpdate: Equatable {
         discoveryDigestEnabled: Bool? = nil,
         followedActivityEnabled: Bool? = nil,
         engagementEnabled: Bool? = nil,
-        wannaGoRemindersEnabled: Bool? = nil
+        wannaGoRemindersEnabled: Bool? = nil,
+        reservationRemindersEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
         self.socialGraphEnabled = socialGraphEnabled
@@ -1506,6 +1511,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.followedActivityEnabled = followedActivityEnabled
         self.engagementEnabled = engagementEnabled
         self.wannaGoRemindersEnabled = wannaGoRemindersEnabled
+        self.reservationRemindersEnabled = reservationRemindersEnabled
     }
 
     static let allEnabled = NotificationPreferencesUpdate(
@@ -1518,7 +1524,8 @@ struct NotificationPreferencesUpdate: Equatable {
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
         engagementEnabled: true,
-        wannaGoRemindersEnabled: true
+        wannaGoRemindersEnabled: true,
+        reservationRemindersEnabled: true
     )
 
     static let allDisabled = NotificationPreferencesUpdate(
@@ -1531,8 +1538,69 @@ struct NotificationPreferencesUpdate: Equatable {
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
         engagementEnabled: false,
-        wannaGoRemindersEnabled: false
+        wannaGoRemindersEnabled: false,
+        reservationRemindersEnabled: false
     )
+}
+
+struct ClientNotificationIntent: Equatable {
+    let intentKey: String
+    let title: String
+    let body: String
+    let deeplinkURL: String?
+    let data: [String: JSONValue]
+    let earliestAt: Date
+    let latestAt: Date
+    let priority: Int
+    let conflictGroup: String?
+    let recipientTimezone: String?
+}
+
+struct NotificationIntentReconciliationResult: Equatable {
+    let queuedCount: Int
+    let createdCount: Int
+}
+
+struct CalendarReservationSyncItem: Codable, Equatable, Sendable {
+    let occurrenceKey: String
+    let canonicalName: String
+    let locality: String?
+    let sourceProvider: String
+    let sourceProviderPlaceID: String
+    let startAt: Date
+    let endAt: Date
+    let eventTimezone: String
+
+    enum CodingKeys: String, CodingKey {
+        case occurrenceKey = "occurrence_key"
+        case canonicalName = "canonical_name"
+        case locality
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case startAt = "start_at"
+        case endAt = "end_at"
+        case eventTimezone = "event_timezone"
+    }
+}
+
+struct CalendarReservationSyncResult: Equatable {
+    let syncedCount: Int
+    let queuedCount: Int
+    let cancelledCount: Int
+}
+
+struct CalendarReservationPrompt: Equatable, Sendable {
+    let id: String
+    let canonicalName: String
+    let locality: String?
+    let sourceProvider: String
+    let sourceProviderPlaceID: String
+    let startAt: Date
+    let endAt: Date
+    let eventTimezone: String
+    let resolvedPlaceID: String?
+    let isCompleted: Bool
+    let isCancelled: Bool
 }
 
 enum SharedVisitParticipantStatus: String, Codable, Equatable {
@@ -2102,6 +2170,17 @@ protocol NotificationRepository {
     func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences
     func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String
     func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws
+    func reconcileClientNotificationIntents(
+        source: String,
+        intents: [ClientNotificationIntent]
+    ) async throws -> NotificationIntentReconciliationResult
+    func syncCalendarReservations(
+        _ reservations: [CalendarReservationSyncItem],
+        windowStart: Date,
+        windowEnd: Date
+    ) async throws -> CalendarReservationSyncResult
+    func calendarReservation(id: String) async throws -> CalendarReservationPrompt?
+    func completeCalendarReservation(id: String) async throws -> Bool
 }
 
 @MainActor

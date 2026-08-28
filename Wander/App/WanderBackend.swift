@@ -1114,6 +1114,52 @@ final class WanderBackend: ObservableObject {
         try await notificationRepository.unregisterPushToken(token, environment: environment)
     }
 
+    func reconcileClientNotificationIntents(
+        source: String,
+        intents: [ClientNotificationIntent]
+    ) async throws -> NotificationIntentReconciliationResult {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.reconcileClientNotificationIntents(
+            source: source,
+            intents: intents
+        )
+    }
+
+    func syncCalendarReservations(
+        _ reservations: [CalendarReservationSyncItem],
+        windowStart: Date,
+        windowEnd: Date
+    ) async throws -> CalendarReservationSyncResult {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.syncCalendarReservations(
+            reservations,
+            windowStart: windowStart,
+            windowEnd: windowEnd
+        )
+    }
+
+    func calendarReservation(id: String) async throws -> CalendarReservationPrompt? {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.calendarReservation(id: id)
+    }
+
+    func completeCalendarReservation(id: String) async throws -> Bool {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.completeCalendarReservation(id: id)
+    }
+
     var canUseSharedVisits: Bool {
         sharedVisitRepository != nil
     }

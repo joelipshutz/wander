@@ -381,11 +381,13 @@ struct NotificationSettingsSheet: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var preferences = NotificationPreferences.allDisabled
     @State private var isLoading = false
     @State private var isSaving = false
     @State private var isChangingEnabledState = false
     @State private var isWaitingForSettingsAuthorization = false
+    @State private var isConnectingCalendar = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -403,6 +405,8 @@ struct NotificationSettingsSheet: View {
                     }
 
                     statusBlock
+
+                    calendarBlock
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                         SettingsSectionTitle("push types")
@@ -452,6 +456,13 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Reservation check-in reminders",
+                            systemImage: "fork.knife.circle",
+                            binding: preferenceBinding(\.reservationRemindersEnabled) {
+                                NotificationPreferencesUpdate(reservationRemindersEnabled: $0)
+                            }
+                        )
+                        notificationToggle(
                             title: "Save streak reminders",
                             systemImage: "flame",
                             binding: saveStreakReminderBinding
@@ -484,7 +495,9 @@ struct NotificationSettingsSheet: View {
             await load()
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, isWaitingForSettingsAuthorization else { return }
+            guard phase == .active else { return }
+            calendarReservations.refreshAuthorizationStatus()
+            guard isWaitingForSettingsAuthorization else { return }
             Task {
                 await pushNotifications.refreshAuthorizationStatus()
                 guard pushNotifications.canRegisterForRemoteNotifications else { return }
@@ -543,6 +556,79 @@ struct NotificationSettingsSheet: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var calendarBlock: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 38, height: 38)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text("Apple Calendar")
+                        .font(.system(size: 15, weight: .black))
+                    Text(calendarReservations.hasFullAccess
+                         ? "Connected. Restaurant reservations can become prefilled check-ins."
+                         : "Connect to recognize restaurant reservations on this iPhone.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                Spacer()
+            }
+
+            Button {
+                Task { await connectOrSyncCalendar() }
+            } label: {
+                actionLabel(
+                    title: isConnectingCalendar
+                        ? "working"
+                        : (calendarReservations.hasFullAccess ? "sync now" : "connect calendar"),
+                    systemImage: calendarReservations.hasFullAccess ? "arrow.triangle.2.circlepath" : "calendar.badge.plus"
+                )
+            }
+            .disabled(isConnectingCalendar || !auth.isSignedIn)
+
+            Text("rec.me never uploads or stores raw calendar titles, notes, guests, URLs, or addresses—only the matched restaurant and reservation time.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    @MainActor
+    private func connectOrSyncCalendar() async {
+        isConnectingCalendar = true
+        errorMessage = nil
+        defer { isConnectingCalendar = false }
+
+        if !calendarReservations.hasFullAccess {
+            let granted = await calendarReservations.requestAccess()
+            guard granted else {
+                if calendarReservations.authorizationStatus == .denied,
+                   let url = URL(string: UIApplication.openSettingsURLString) {
+                    await UIApplication.shared.open(url)
+                }
+                return
+            }
+            if notificationsEnabled {
+                await save(NotificationPreferencesUpdate(reservationRemindersEnabled: true))
+            }
+        }
+        await calendarReservations.syncIfNeeded(
+            backend: backend,
+            store: store,
+            userID: store.currentUser.id,
+            force: true,
+            reason: "settings_manual"
+        )
+        if let calendarError = calendarReservations.lastErrorMessage {
+            errorMessage = calendarError
+        }
     }
 
     private var statusSubtitle: String {
@@ -621,7 +707,7 @@ struct NotificationSettingsSheet: View {
                 for: store.currentUser.id
             )
             Task {
-                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
             }
         }
     }
@@ -643,8 +729,8 @@ struct NotificationSettingsSheet: View {
                 : .allDisabled
             pushNotifications.applyNotificationPreferences(preferences)
             pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
         } catch {
             errorMessage = "Could not load notification settings."
         }
@@ -682,8 +768,15 @@ struct NotificationSettingsSheet: View {
         }
         preferences = enabledPreferences
         pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+        await calendarReservations.syncIfNeeded(
+            backend: backend,
+            store: store,
+            userID: store.currentUser.id,
+            force: true,
+            reason: "notifications_enabled"
+        )
     }
 
     private func disableNotifications() async {
@@ -713,8 +806,17 @@ struct NotificationSettingsSheet: View {
         do {
             preferences = try await backend.updateNotificationPreferences(update)
             pushNotifications.applyNotificationPreferences(preferences)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+            if update.reservationRemindersEnabled == true {
+                await calendarReservations.syncIfNeeded(
+                    backend: backend,
+                    store: store,
+                    userID: store.currentUser.id,
+                    force: true,
+                    reason: "reservation_reminders_enabled"
+                )
+            }
         } catch {
             errorMessage = "Could not save notification settings."
         }

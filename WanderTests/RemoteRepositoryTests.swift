@@ -3046,7 +3046,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "discovery_digest_enabled": false,
           "followed_activity_enabled": true,
           "engagement_enabled": true,
-          "wanna_go_reminders_enabled": false
+          "wanna_go_reminders_enabled": false,
+          "reservation_reminders_enabled": false
         }
         """.data(using: .utf8)
         rpc.responses["update_notification_preferences"] = """
@@ -3060,7 +3061,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "discovery_digest_enabled": true,
           "followed_activity_enabled": false,
           "engagement_enabled": false,
-          "wanna_go_reminders_enabled": true
+          "wanna_go_reminders_enabled": true,
+          "reservation_reminders_enabled": true
         }
         """.data(using: .utf8)
         rpc.responses["register_push_token"] = #""token-row-id""#.data(using: .utf8)
@@ -3072,7 +3074,8 @@ final class RemoteRepositoryTests: XCTestCase {
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: false,
                 engagementEnabled: false,
-                wannaGoRemindersEnabled: true
+                wannaGoRemindersEnabled: true,
+                reservationRemindersEnabled: true
             )
         )
         let tokenID = try await repository.registerPushToken(
@@ -3088,10 +3091,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(preferences.engagementEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertFalse(preferences.wannaGoRemindersEnabled)
+        XCTAssertFalse(preferences.reservationRemindersEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
         XCTAssertFalse(updated.followedActivityEnabled)
         XCTAssertFalse(updated.engagementEnabled)
         XCTAssertTrue(updated.wannaGoRemindersEnabled)
+        XCTAssertTrue(updated.reservationRemindersEnabled)
         XCTAssertEqual(tokenID, "token-row-id")
         XCTAssertEqual(
             rpc.calls.map(\.name),
@@ -3108,6 +3113,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["engagement_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["wanna_go_reminders_enabled"] as? Bool, true)
+        XCTAssertEqual(updatePayload?["reservation_reminders_enabled"] as? Bool, true)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
         XCTAssertEqual(rpc.rawBodies[2]["input_environment"] as? String, "sandbox")
@@ -3115,6 +3121,99 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertEqual(rpc.rawBodies[3]["input_device_token"] as? String, "abcdef1234567890")
         XCTAssertEqual(rpc.rawBodies[3]["input_environment"] as? String, "sandbox")
+    }
+
+    func testNotificationRepositoryEncodesReservationAndClientIntentRPCs() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["reconcile_client_notification_intents"] = """
+        {"queued_count":1,"created_count":1}
+        """.data(using: .utf8)
+        rpc.responses["sync_calendar_reservations"] = """
+        {"synced_count":1,"queued_count":2,"cancelled_count":0}
+        """.data(using: .utf8)
+        rpc.responses["get_calendar_reservation"] = """
+        {
+          "id":"90000000-0000-0000-0000-000000000001",
+          "canonical_name":"Elephante",
+          "locality":"Santa Monica",
+          "source_provider":"mapkit",
+          "source_provider_place_id":"calendar-elephante",
+          "start_at":"2026-09-01T19:00:00Z",
+          "end_at":"2026-09-01T21:00:00Z",
+          "event_timezone":"America/Los_Angeles",
+          "resolved_place_id":"40000000-0000-0000-0000-000000000001",
+          "is_completed":false,
+          "is_cancelled":false
+        }
+        """.data(using: .utf8)
+        rpc.responses["complete_calendar_reservation"] = "true".data(using: .utf8)
+        let repository = SupabaseNotificationRepository(rpc: rpc)
+        let startAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-01T19:00:00Z"))
+        let endAt = startAt.addingTimeInterval(2 * 60 * 60)
+
+        let reconciliation = try await repository.reconcileClientNotificationIntents(
+            source: "wanna_go_reminder",
+            intents: [
+                ClientNotificationIntent(
+                    intentKey: "wanna-1",
+                    title: "Still wanna go?",
+                    body: "A place on your map is waiting.",
+                    deeplinkURL: "recme://places/place-1",
+                    data: ["place_id": .string("place-1")],
+                    earliestAt: startAt,
+                    latestAt: endAt,
+                    priority: 40,
+                    conflictGroup: "wanna:user-place-1",
+                    recipientTimezone: "America/Los_Angeles"
+                )
+            ]
+        )
+        let sync = try await repository.syncCalendarReservations(
+            [
+                CalendarReservationSyncItem(
+                    occurrenceKey: String(repeating: "a", count: 64),
+                    canonicalName: "Elephante",
+                    locality: "Santa Monica",
+                    sourceProvider: "mapkit",
+                    sourceProviderPlaceID: "calendar-elephante",
+                    startAt: startAt,
+                    endAt: endAt,
+                    eventTimezone: "America/Los_Angeles"
+                )
+            ],
+            windowStart: startAt.addingTimeInterval(-86_400),
+            windowEnd: endAt.addingTimeInterval(86_400)
+        )
+        let prompt = try await repository.calendarReservation(
+            id: "90000000-0000-0000-0000-000000000001"
+        )
+        let completed = try await repository.completeCalendarReservation(
+            id: "90000000-0000-0000-0000-000000000001"
+        )
+
+        XCTAssertEqual(reconciliation, NotificationIntentReconciliationResult(queuedCount: 1, createdCount: 1))
+        XCTAssertEqual(sync, CalendarReservationSyncResult(syncedCount: 1, queuedCount: 2, cancelledCount: 0))
+        XCTAssertEqual(prompt?.canonicalName, "Elephante")
+        XCTAssertEqual(prompt?.startAt, startAt)
+        XCTAssertTrue(completed)
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            [
+                "reconcile_client_notification_intents",
+                "sync_calendar_reservations",
+                "get_calendar_reservation",
+                "complete_calendar_reservation"
+            ]
+        )
+        XCTAssertEqual(rpc.rawBodies[0]["input_source"] as? String, "wanna_go_reminder")
+        let intents = rpc.rawBodies[0]["input_intents"] as? [[String: Any]]
+        XCTAssertEqual(intents?.first?["recipient_timezone"] as? String, "America/Los_Angeles")
+        let reservations = rpc.rawBodies[1]["input_reservations"] as? [[String: Any]]
+        XCTAssertEqual(reservations?.first?["canonical_name"] as? String, "Elephante")
+        XCTAssertEqual(
+            rpc.rawBodies[2]["input_reservation_id"] as? String,
+            "90000000-0000-0000-0000-000000000001"
+        )
     }
 
     func testSharedVisitRepositoryLoadsAndReconcilesExactInviteeSet() async throws {
@@ -3400,7 +3499,8 @@ final class RemoteRepositoryTests: XCTestCase {
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: true,
                 engagementEnabled: true,
-                wannaGoRemindersEnabled: true
+                wannaGoRemindersEnabled: true,
+                reservationRemindersEnabled: true
             )
         )
         XCTAssertEqual(NotificationPreferences.allDisabled, NotificationPreferences(
@@ -3413,7 +3513,8 @@ final class RemoteRepositoryTests: XCTestCase {
             discoveryDigestEnabled: false,
             followedActivityEnabled: false,
             engagementEnabled: false,
-            wannaGoRemindersEnabled: false
+            wannaGoRemindersEnabled: false,
+            reservationRemindersEnabled: false
         ))
     }
 
@@ -3452,6 +3553,10 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://extraction-jobs/43000000-0000-0000-0000-000000000001")!),
             .drafts(extractionJobID: "43000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "recme://add/reservations/90000000-0000-0000-0000-000000000001")!),
+            .calendarReservation(id: "90000000-0000-0000-0000-000000000001")
         )
     }
 
@@ -3506,6 +3611,20 @@ final class RemoteRepositoryTests: XCTestCase {
             .importReview(batchIDs: ["batch-1", "batch-2"])
         )
         XCTAssertEqual(destination("followed_activity_digest"), .discover)
+        XCTAssertEqual(
+            destination(
+                "calendar_reservation_live",
+                data: ["reservation_id": "90000000-0000-0000-0000-000000000001"]
+            ),
+            .calendarReservation(id: "90000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            destination(
+                "calendar_reservation_follow_up",
+                data: ["reservation_id": "90000000-0000-0000-0000-000000000001"]
+            ),
+            .calendarReservation(id: "90000000-0000-0000-0000-000000000001")
+        )
     }
 
     func testSharedVisitAcceptanceIdentifiersAreStableAndGenerationScoped() {

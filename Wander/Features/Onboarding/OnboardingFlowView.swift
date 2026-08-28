@@ -12,6 +12,7 @@ struct OnboardingFlowView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var step: OnboardingStep
     @State private var didTrackStart = false
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
@@ -69,6 +70,10 @@ struct OnboardingFlowView: View {
                 OnboardingFriendSuggestionsView(backend: backend, analytics: analytics) {
                     advance(from: .friends)
                 }
+            case .calendar:
+                OnboardingCalendarView(analytics: analytics) {
+                    advance(from: .calendar)
+                }
             case .notifications:
                 OnboardingNotificationView(analytics: analytics) {
                     await finish()
@@ -78,6 +83,7 @@ struct OnboardingFlowView: View {
         .environmentObject(backend)
         .environmentObject(auth)
         .environmentObject(pushNotifications)
+        .environmentObject(calendarReservations)
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.snappy(duration: 0.35), value: step)
         .preferredColorScheme(.light)
@@ -781,6 +787,73 @@ private struct OnboardingEmptySuggestions: View {
         }
         .padding(WanderTheme.spacing6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct OnboardingCalendarView: View {
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    let analytics: AnalyticsClient
+    let continueAction: () -> Void
+    @State private var isWorking = false
+
+    var body: some View {
+        OnboardingStepScaffold(step: .calendar) {
+            VStack(spacing: WanderTheme.spacing6) {
+                Spacer(minLength: WanderTheme.spacing4)
+                ZStack {
+                    Circle()
+                        .fill(WanderTheme.terracotta.color.opacity(0.14))
+                        .frame(width: 220, height: 220)
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 84, weight: .medium))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .symbolEffect(.bounce, value: isWorking)
+                }
+                OnboardingHeadline(
+                    eyebrow: "REMEMBER THE PLACES YOU GO",
+                    title: "Turn reservations into memories",
+                    message: "Connect Apple Calendar and rec.me can remind you to share your take after a restaurant reservation."
+                )
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Label("Restaurant and date arrive prefilled", systemImage: "checkmark.circle.fill")
+                    Label("rec.me only syncs the matched restaurant and reservation time", systemImage: "lock.fill")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+        } footer: {
+            VStack(spacing: WanderTheme.spacing1) {
+                WanderPrimaryButton(
+                    title: isWorking ? "Connecting Apple Calendar…" : "Connect Apple Calendar",
+                    isDisabled: isWorking
+                ) {
+                    Task {
+                        isWorking = true
+                        let granted = await calendarReservations.requestAccess()
+                        analytics.track(AnalyticsEvent(
+                            name: WanderAnalyticsEvents.onboardingPermissionResult,
+                            properties: [
+                                "permission": "calendar",
+                                "granted": granted ? "true" : "false"
+                            ]
+                        ))
+                        continueAction()
+                    }
+                }
+                Button("Not now") {
+                    analytics.track(AnalyticsEvent(
+                        name: WanderAnalyticsEvents.onboardingPermissionResult,
+                        properties: ["permission": "calendar", "granted": "skipped"]
+                    ))
+                    continueAction()
+                }
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            }
+        }
     }
 }
 

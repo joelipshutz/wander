@@ -3969,7 +3969,7 @@ struct MapScreen: View {
                 inviteeUserIDs: submission.inviteeUserIDs,
                 sourceVisit: targetVisit
             )
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
             return result
         case .sharedVisit(let invitation):
             return await acceptSharedVisit(invitation, submission: submission)
@@ -4005,7 +4005,7 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
             return result
         }
     }
@@ -4192,7 +4192,7 @@ struct MapScreen: View {
             guard removal != nil else {
                 return false
             }
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
             placeSaveDraftStore.clear()
 
             clearNativeMapFeatureSelection()
@@ -7845,6 +7845,8 @@ struct MapPlaceSaveContext: Identifiable {
     let initialPhotoAttachments: [MapPlaceSavePhotoAttachment]
     let existingCurrentUserSave: VisiblePlace?
     let existingLatestVisit: LocalPlaceVisit?
+    let initialVisitedAt: Date?
+    let calendarReservationID: String?
 
     init(
         candidate: PlaceCandidate,
@@ -7862,7 +7864,9 @@ struct MapPlaceSaveContext: Identifiable {
         initialCuisine: String?,
         initialPhotoAttachments: [MapPlaceSavePhotoAttachment],
         existingCurrentUserSave: VisiblePlace? = nil,
-        existingLatestVisit: LocalPlaceVisit? = nil
+        existingLatestVisit: LocalPlaceVisit? = nil,
+        initialVisitedAt: Date? = nil,
+        calendarReservationID: String? = nil
     ) {
         self.candidate = candidate
         self.mode = mode
@@ -7880,6 +7884,8 @@ struct MapPlaceSaveContext: Identifiable {
         self.initialPhotoAttachments = initialPhotoAttachments
         self.existingCurrentUserSave = existingCurrentUserSave
         self.existingLatestVisit = existingLatestVisit
+        self.initialVisitedAt = initialVisitedAt
+        self.calendarReservationID = calendarReservationID
     }
 
     var isEditing: Bool {
@@ -8007,7 +8013,9 @@ struct MapPlaceSaveContext: Identifiable {
         initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = [],
         currentUserSave: VisiblePlace? = nil,
         latestVisit: LocalPlaceVisit? = nil,
-        preselectsInitialStatus: Bool = false
+        preselectsInitialStatus: Bool = false,
+        initialVisitedAt: Date? = nil,
+        calendarReservationID: String? = nil
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
@@ -8025,7 +8033,39 @@ struct MapPlaceSaveContext: Identifiable {
             initialCuisine: nil,
             initialPhotoAttachments: initialPhotoAttachments,
             existingCurrentUserSave: currentUserSave,
-            existingLatestVisit: latestVisit
+            existingLatestVisit: latestVisit,
+            initialVisitedAt: initialVisitedAt,
+            calendarReservationID: calendarReservationID
+        )
+    }
+
+    static func calendarReservation(
+        _ candidate: PlaceCandidate,
+        reservationID: String,
+        visitedAt: Date,
+        defaultVisibility: PlaceVisibility,
+        currentUserSave: VisiblePlace? = nil,
+        latestVisit: LocalPlaceVisit? = nil
+    ) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate,
+            mode: .add(.manual),
+            requiresStatusConfirmation: false,
+            preselectsInitialStatus: true,
+            hasPriorCheckIn: currentUserSave?.userPlace.status == .been,
+            initialStatus: .been,
+            initialVisibility: currentUserSave?.userPlace.visibility ?? defaultVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialPlannedDate: nil,
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil,
+            initialPhotoAttachments: [],
+            existingCurrentUserSave: currentUserSave,
+            existingLatestVisit: latestVisit,
+            initialVisitedAt: min(visitedAt, .now),
+            calendarReservationID: reservationID
         )
     }
 
@@ -8151,12 +8191,17 @@ struct MapPlaceSaveContext: Identifiable {
               let existingCurrentUserSave
         else { return self }
 
-        return .existingCurrentUserSave(
+        let resolved = MapPlaceSaveContext.existingCurrentUserSave(
             existingCurrentUserSave,
             selectedStatus: selection,
             attributes: existingCurrentUserSave.attributes,
             latestVisit: existingLatestVisit,
             initialPhotoAttachments: initialPhotoAttachments
+        )
+        guard let calendarReservationID, let initialVisitedAt else { return resolved }
+        return resolved.attachingCalendarReservation(
+            id: calendarReservationID,
+            visitedAt: initialVisitedAt
         )
     }
 
@@ -8189,7 +8234,32 @@ struct MapPlaceSaveContext: Identifiable {
             initialCuisine: initialCuisine,
             initialPhotoAttachments: initialPhotoAttachments,
             existingCurrentUserSave: nil,
-            existingLatestVisit: existingLatestVisit
+            existingLatestVisit: existingLatestVisit,
+            initialVisitedAt: initialVisitedAt,
+            calendarReservationID: calendarReservationID
+        )
+    }
+
+    private func attachingCalendarReservation(id: String, visitedAt: Date) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate,
+            mode: mode,
+            requiresStatusConfirmation: requiresStatusConfirmation,
+            preselectsInitialStatus: true,
+            hasPriorCheckIn: hasPriorCheckIn,
+            initialStatus: .been,
+            initialVisibility: initialVisibility,
+            initialRatingScore: initialRatingScore,
+            initialNote: initialNote,
+            initialPlannedDate: nil,
+            initialAnswers: initialAnswers,
+            initialPersonalLabels: initialPersonalLabels,
+            initialCuisine: initialCuisine,
+            initialPhotoAttachments: initialPhotoAttachments,
+            existingCurrentUserSave: existingCurrentUserSave,
+            existingLatestVisit: existingLatestVisit,
+            initialVisitedAt: min(visitedAt, .now),
+            calendarReservationID: id
         )
     }
 
@@ -9400,7 +9470,12 @@ struct MapPlaceSaveEditor: View {
         _selectedCuisine = State(initialValue: initialCuisine)
         _droppedPinName = State(initialValue: initialDroppedPinName)
         _note = State(initialValue: restoredForm?.note ?? initialContext.initialNote)
-        _visitedAt = State(initialValue: restoredForm?.visitedAt ?? initialContext.editedVisit?.visitedAt ?? .now)
+        _visitedAt = State(
+            initialValue: restoredForm?.visitedAt
+                ?? initialContext.initialVisitedAt
+                ?? initialContext.editedVisit?.visitedAt
+                ?? .now
+        )
         let today = WannaGoDate.normalized(.now)
         let initialPlannedDate = (restoredForm?.plannedDate ?? initialContext.initialPlannedDate)
             .map { WannaGoDate.normalized($0) }
@@ -10401,7 +10476,7 @@ struct MapPlaceSaveEditor: View {
         questionBlocksCache = MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
 
         note = nextContext.initialNote
-        visitedAt = nextContext.editedVisit?.visitedAt ?? .now
+        visitedAt = nextContext.initialVisitedAt ?? nextContext.editedVisit?.visitedAt ?? .now
         let today = WannaGoDate.normalized(.now)
         plannedDate = nextContext.initialPlannedDate
             .map { WannaGoDate.normalized($0) }

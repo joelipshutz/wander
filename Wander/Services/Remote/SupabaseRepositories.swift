@@ -2579,6 +2579,58 @@ struct SupabaseNotificationRepository: NotificationRepository {
             )
         )
     }
+
+    func reconcileClientNotificationIntents(
+        source: String,
+        intents: [ClientNotificationIntent]
+    ) async throws -> NotificationIntentReconciliationResult {
+        let response: NotificationIntentReconciliationResponse = try await rpc.call(
+            "reconcile_client_notification_intents",
+            params: ReconcileClientNotificationIntentsParams(
+                inputSource: source,
+                inputIntents: intents.map(ClientNotificationIntentDTO.init)
+            )
+        )
+        return NotificationIntentReconciliationResult(
+            queuedCount: response.queuedCount,
+            createdCount: response.createdCount ?? response.queuedCount
+        )
+    }
+
+    func syncCalendarReservations(
+        _ reservations: [CalendarReservationSyncItem],
+        windowStart: Date,
+        windowEnd: Date
+    ) async throws -> CalendarReservationSyncResult {
+        let response: CalendarReservationSyncResponse = try await rpc.call(
+            "sync_calendar_reservations",
+            params: SyncCalendarReservationsParams(
+                inputReservations: reservations,
+                inputWindowStart: windowStart,
+                inputWindowEnd: windowEnd
+            )
+        )
+        return CalendarReservationSyncResult(
+            syncedCount: response.syncedCount,
+            queuedCount: response.queuedCount,
+            cancelledCount: response.cancelledCount
+        )
+    }
+
+    func calendarReservation(id: String) async throws -> CalendarReservationPrompt? {
+        let response: CalendarReservationPromptResponse? = try await rpc.call(
+            "get_calendar_reservation",
+            params: CalendarReservationIDParams(inputReservationID: id)
+        )
+        return response?.prompt
+    }
+
+    func completeCalendarReservation(id: String) async throws -> Bool {
+        try await rpc.call(
+            "complete_calendar_reservation",
+            params: CalendarReservationIDParams(inputReservationID: id)
+        )
+    }
 }
 
 private struct SearchProfilesParams: Encodable {
@@ -2626,6 +2678,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let followedActivityEnabled: Bool
     let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
+    let reservationRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case pushEnabled = "push_enabled"
@@ -2638,6 +2691,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case followedActivityEnabled = "followed_activity_enabled"
         case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
+        case reservationRemindersEnabled = "reservation_reminders_enabled"
     }
 
     var preferences: NotificationPreferences {
@@ -2651,7 +2705,8 @@ private struct NotificationPreferencesResponse: Decodable {
             discoveryDigestEnabled: discoveryDigestEnabled,
             followedActivityEnabled: followedActivityEnabled,
             engagementEnabled: engagementEnabled ?? false,
-            wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false
+            wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false,
+            reservationRemindersEnabled: reservationRemindersEnabled ?? false
         )
     }
 }
@@ -2679,6 +2734,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let followedActivityEnabled: Bool?
     let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
+    let reservationRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
         self.pushEnabled = update.pushEnabled
@@ -2691,6 +2747,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.followedActivityEnabled = update.followedActivityEnabled
         self.engagementEnabled = update.engagementEnabled
         self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
+        self.reservationRemindersEnabled = update.reservationRemindersEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -2704,6 +2761,142 @@ private struct NotificationPreferencesPatch: Encodable {
         case followedActivityEnabled = "followed_activity_enabled"
         case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
+        case reservationRemindersEnabled = "reservation_reminders_enabled"
+    }
+}
+
+private struct ReconcileClientNotificationIntentsParams: Encodable {
+    let inputSource: String
+    let inputIntents: [ClientNotificationIntentDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case inputSource = "input_source"
+        case inputIntents = "input_intents"
+    }
+}
+
+private struct ClientNotificationIntentDTO: Encodable {
+    let intentKey: String
+    let title: String
+    let body: String
+    let deeplinkURL: String?
+    let data: [String: JSONValue]
+    let earliestAt: Date
+    let latestAt: Date
+    let priority: Int
+    let conflictGroup: String?
+    let recipientTimezone: String?
+
+    init(_ intent: ClientNotificationIntent) {
+        intentKey = intent.intentKey
+        title = intent.title
+        body = intent.body
+        deeplinkURL = intent.deeplinkURL
+        data = intent.data
+        earliestAt = intent.earliestAt
+        latestAt = intent.latestAt
+        priority = intent.priority
+        conflictGroup = intent.conflictGroup
+        recipientTimezone = intent.recipientTimezone
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case intentKey = "intent_key"
+        case title
+        case body
+        case deeplinkURL = "deeplink_url"
+        case data
+        case earliestAt = "earliest_at"
+        case latestAt = "latest_at"
+        case priority
+        case conflictGroup = "conflict_group"
+        case recipientTimezone = "recipient_timezone"
+    }
+}
+
+private struct NotificationIntentReconciliationResponse: Decodable {
+    let queuedCount: Int
+    let createdCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case queuedCount = "queued_count"
+        case createdCount = "created_count"
+    }
+}
+
+private struct SyncCalendarReservationsParams: Encodable {
+    let inputReservations: [CalendarReservationSyncItem]
+    let inputWindowStart: Date
+    let inputWindowEnd: Date
+
+    enum CodingKeys: String, CodingKey {
+        case inputReservations = "input_reservations"
+        case inputWindowStart = "input_window_start"
+        case inputWindowEnd = "input_window_end"
+    }
+}
+
+private struct CalendarReservationSyncResponse: Decodable {
+    let syncedCount: Int
+    let queuedCount: Int
+    let cancelledCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case syncedCount = "synced_count"
+        case queuedCount = "queued_count"
+        case cancelledCount = "cancelled_count"
+    }
+}
+
+private struct CalendarReservationIDParams: Encodable {
+    let inputReservationID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputReservationID = "input_reservation_id"
+    }
+}
+
+private struct CalendarReservationPromptResponse: Decodable {
+    let id: String
+    let canonicalName: String
+    let locality: String?
+    let sourceProvider: String
+    let sourceProviderPlaceID: String
+    let startAt: Date
+    let endAt: Date
+    let eventTimezone: String
+    let resolvedPlaceID: String?
+    let isCompleted: Bool
+    let isCancelled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case canonicalName = "canonical_name"
+        case locality
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case startAt = "start_at"
+        case endAt = "end_at"
+        case eventTimezone = "event_timezone"
+        case resolvedPlaceID = "resolved_place_id"
+        case isCompleted = "is_completed"
+        case isCancelled = "is_cancelled"
+    }
+
+    var prompt: CalendarReservationPrompt {
+        CalendarReservationPrompt(
+            id: id,
+            canonicalName: canonicalName,
+            locality: locality,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            startAt: startAt,
+            endAt: endAt,
+            eventTimezone: eventTimezone,
+            resolvedPlaceID: resolvedPlaceID,
+            isCompleted: isCompleted,
+            isCancelled: isCancelled
+        )
     }
 }
 

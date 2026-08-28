@@ -5,6 +5,7 @@ enum OnboardingStep: String, CaseIterable, Codable, Equatable {
     case location
     case contacts
     case friends
+    case calendar
     case notifications
 
     var next: OnboardingStep? {

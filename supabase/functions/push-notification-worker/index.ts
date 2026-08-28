@@ -326,15 +326,20 @@ function normalizedNotificationType(value: string): string {
   return [
       "activity_commented",
       "activity_liked",
+      "calendar_reservation_follow_up",
+      "calendar_reservation_live",
       "capture_ready",
       "followed_activity_digest",
       "followed_place_visit",
       "followed_you",
+      "import_finished",
       "list_collaborator_added",
       "list_place_added",
       "mutual_follow",
       "place_saved_from_your_map",
+      "save_streak_reminder",
       "shared_visit",
+      "wanna_go_reminder",
     ].includes(value)
     ? value
     : "unknown";

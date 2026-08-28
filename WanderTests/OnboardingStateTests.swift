@@ -665,7 +665,8 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(OnboardingStep.identity.next, .location)
         XCTAssertEqual(OnboardingStep.location.next, .contacts)
         XCTAssertEqual(OnboardingStep.contacts.next, .friends)
-        XCTAssertEqual(OnboardingStep.friends.next, .notifications)
+        XCTAssertEqual(OnboardingStep.friends.next, .calendar)
+        XCTAssertEqual(OnboardingStep.calendar.next, .notifications)
         XCTAssertNil(OnboardingStep.notifications.next)
     }
 

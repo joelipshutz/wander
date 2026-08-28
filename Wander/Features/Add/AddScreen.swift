@@ -396,6 +396,9 @@ struct AddScreen: View {
                         sourceType: .currentLocation,
                         defaultVisibility: store.effectiveDefaultVisibility
                     ))
+                case .calendarReservation(let id):
+                    expandSheet()
+                    await openCalendarReservation(id: id)
                 }
                 guard !Task.isCancelled else { return }
                 onLaunchRequestHandled(launchRequest.id)
@@ -1145,6 +1148,56 @@ struct AddScreen: View {
         }
     }
 
+    @MainActor
+    private func openCalendarReservation(id: String) async {
+        resolutionMessage = nil
+        isResolvingCandidates = true
+        defer { isResolvingCandidates = false }
+
+        do {
+            guard let reservation = try await backend.calendarReservation(id: id),
+                  !reservation.isCompleted,
+                  !reservation.isCancelled
+            else {
+                resolutionMessage = "That reservation is no longer waiting for a check-in."
+                return
+            }
+            let resolvedCandidates = try await store.manualCandidates(
+                name: reservation.canonicalName,
+                areaHint: reservation.locality,
+                category: "restaurant"
+            )
+            guard let candidate = resolvedCandidates.first(where: {
+                $0.sourceProvider == reservation.sourceProvider
+                    && ($0.sourceProviderPlaceID ?? $0.id) == reservation.sourceProviderPlaceID
+            }) ?? resolvedCandidates.first else {
+                resolutionMessage = "We couldn’t find that restaurant. Search for it to check in."
+                return
+            }
+
+            selectedSource = .manual
+            candidates = [candidate]
+            selectedCandidateID = candidate.id
+            pendingVisitPhotoAttachments = []
+            let currentUserSave = MapPlaceSaveContext.currentUserSave(
+                matching: candidate,
+                in: store.currentUserVisiblePlaces
+            )
+            presentSaveFlow(.calendarReservation(
+                candidate,
+                reservationID: reservation.id,
+                visitedAt: reservation.startAt,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                currentUserSave: currentUserSave,
+                latestVisit: currentUserSave.flatMap {
+                    store.visits(for: $0.userPlace.id).first
+                }
+            ))
+        } catch {
+            resolutionMessage = "That reservation couldn’t be opened. Try again."
+        }
+    }
+
     private func restoreActiveSaveFlowIfNeeded() {
         guard addSaveFlow == nil else { return }
 
@@ -1396,6 +1449,9 @@ struct AddScreen: View {
         // until that transition succeeds so a process kill remains recoverable.
         if walkthroughs.activeSurface != .saveFlow {
             placeSaveDraftStore.clear()
+        }
+        if let reservationID = submission.context.calendarReservationID {
+            _ = try? await backend.completeCalendarReservation(id: reservationID)
         }
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)

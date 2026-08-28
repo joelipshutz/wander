@@ -60,6 +60,7 @@ struct WanderAddLaunchRequest: Equatable, Identifiable {
         case importInbox
         case importReview(batchIDs: [String])
         case nearbyPlace(PlaceCandidate)
+        case calendarReservation(id: String)
     }
 
     let id: UUID
