@@ -1,0 +1,226 @@
+# REC-120 social importer evaluator
+
+This is an isolated, non-production benchmark for public Instagram and TikTok
+place extraction. It preserves provider responses as raw JSON, converts them to
+one evidence contract, extracts grounded place hints, optionally resolves those
+hints with Apple MapKit, and scores only manually labeled cases.
+
+The evaluator intentionally separates two different jobs:
+
+1. **Acquisition** collects captions, ordered carousel assets, reel/video
+   assets, accessibility text, and provider location metadata, then measures
+   transport separately from strict completeness.
+2. **Understanding** reads that evidence and returns grounded place mentions.
+
+A scraper can succeed at acquisition while still missing text shown only in a
+video. A video model can understand a downloaded video while being unable to
+fetch the Instagram or TikTok URL. End-to-end variants must compose both jobs.
+
+## Safety and data handling
+
+- Inputs are explicit public URLs only. Private/account-library scraping is out
+  of scope.
+- API credentials are read from the process environment and are never written
+  to output.
+- Swift helpers compile in process-private temporary directories and receive a
+  minimal environment that excludes provider credentials.
+- Live run directories are ignored by Git. They can contain public captions,
+  creator metadata, expiring media URLs, transcripts, and provider JSON; review
+  them before sharing.
+- The committed corpus stores URLs and place labels, not downloaded media or
+  raw provider payloads.
+- The runner never creates cloud projects, enables billing, or accepts provider
+  terms.
+
+## Quick start
+
+From `scripts/`:
+
+```bash
+npm run test:social-import-eval
+npm run eval:social-import -- --providers current,current-improved --resolve none
+```
+
+After a scoring-only change, regenerate an existing run's `results.json` and
+summaries without reacquiring social media or rerunning understanding:
+
+```bash
+npm run eval:social-import:rescore -- social-import-eval/runs/<run>
+```
+
+To rerun only MapKit against saved understanding hints, without reacquiring a
+post or making a paid model call:
+
+```bash
+npm run eval:social-import:rescore -- \
+  social-import-eval/runs/<run> --reresolve-mapkit
+```
+
+The source run must have been created with `--resolve mapkit`; the command fails
+closed for resolver-none runs. Batch replays pace MapKit requests and retry only
+transient server/throttling errors so replay pressure is not counted as POI
+candidate-quality loss.
+
+Add `--resolve mapkit` to use the same POI provider and a scoring mirror of
+`ManualPlaceSearchPlan` / `PlaceImportCandidateMatcher` from the iOS app. The
+first run compiles a credential-isolated Swift helper in a private temporary
+directory.
+
+Useful options:
+
+```text
+--cases <comma-separated case ids>
+--providers <current,current-improved,brightdata,apify>
+--understanders <deterministic,apple-vision,apple-vision-keyframes,gemini,google-video,
+                 aws-rekognition-transcribe,azure-video-indexer>
+--resolve <none|mapkit>
+--out <directory>
+--fixture-dir <directory of saved acquisition JSON; offline by default>
+--allow-network-after-fixture
+                 explicitly allow media/model/MapKit network after fixture load
+```
+
+The committed corpus currently contains eight manually labeled public posts and
+121 required place mentions. Summary JSON includes both macro metrics (every
+post has equal weight) and micro metrics (every place mention has equal weight),
+plus post-level at-least-one and exact-set rates. Ground-truth matching accepts a
+full labeled name embedded in a longer hint, but never accepts a truncated
+prediction merely because it is a substring of the label.
+
+Acquisition transport means the provider returned usable evidence. Strict
+completeness additionally requires every expected modality and the corpus's
+minimum media count by kind to survive a bounded HTTPS/redirect/byte/MIME probe.
+The runner attempts every acquired media asset relevant to the case and records
+every probe, even though the strict gate uses the declared minimum rather than
+requiring every extra asset to succeed. Understanding and extraction are scored
+separately from both acquisition measures.
+
+Runs with `--resolve none` report extraction/hint metrics only. Their MapKit
+selected-name precision, recall, post-success, and exact-set fields are
+deliberately `null`; an unresolved hint is not silently treated as a selected
+candidate. Even in MapKit mode the corpus currently verifies only the selected
+name/alias, not physical branch identity, address, provider ID, or coordinates.
+Expected-modality summaries group whole cases, can overlap, and do not claim
+that a particular modality produced each correct label.
+
+The default output is `scripts/social-import-eval/runs/<timestamp>/`:
+
+```text
+manifest.json                 exact corpus/provider configuration
+raw/<case>/<provider>.json    untouched JSON response or local adapter record
+results.json                  normalized evidence, hints, POI candidates, timing, errors
+summary.json                  aggregate and per-modality metrics
+summary.md                    compact human-readable comparison
+```
+
+## Verified credentialed run
+
+The gitignored `apify-gemini-smoke-2026-08-28-verified` run exercised two cases
+through Apify acquisition, Gemini understanding, and MapKit resolution. It
+reached 100% transport, strict completeness, understanding success, and
+required-place recall. Hint exact-set success was 0/2, and MapKit selected a
+candidate for 50% of hints.
+
+The subsequent eight-case `apify-gemini-full-2026-08-28` run measured:
+
+- 100% acquisition transport and strict completeness;
+- 87.5% understanding success after one case exhausted three HTTP 503 attempts;
+- 39.7%/87.3% macro and 75.5%/92.6% micro hint precision/recall;
+- 7/8 posts with at least one required hint and 0/8 exact hint sets;
+- 50.0%/53.8% selected-name macro precision/recall;
+- 61.4% MapKit lookup health and 19.9% candidate selection; and
+- 151.715 seconds mean end-to-end latency.
+
+Those POI figures are a v4 re-resolution of the frozen Gemini hints, not a new
+paid acquisition/model run. The helper paces batch searches and retries only
+transient MapKit server/throttling errors; an unpaced replay was discarded
+because its bulk pressure produced 136 `loadingThrottled` failures.
+
+The selected-name score verifies only names/aliases, not physical branch
+identity. One initial transport timeout and one initial HTTP 503 recovered via
+retry, while the three-503 case remained failed in the frozen benchmark.
+Neither run establishes launch readiness.
+
+## Provider environment variables
+
+Provider adapters fail closed with a structured `not_configured` result when
+their requirements are absent.
+
+```text
+BRIGHTDATA_API_TOKEN
+BRIGHTDATA_INSTAGRAM_DATASET_ID
+BRIGHTDATA_INSTAGRAM_REELS_DATASET_ID
+BRIGHTDATA_TIKTOK_DATASET_ID
+
+APIFY_TOKEN
+APIFY_INSTAGRAM_ACTOR_ID
+APIFY_INSTAGRAM_REEL_ACTOR_ID
+APIFY_TIKTOK_ACTOR_ID
+
+GEMINI_API_KEY
+GEMINI_MODEL                  optional; adapter default is documented in code
+GEMINI_MAX_ATTEMPTS           optional; default 3, hard maximum 5
+GEMINI_RETRY_BASE_MS          optional bounded retry-backoff base
+GEMINI_RETRY_MAX_MS           optional bounded retry-backoff ceiling
+
+GOOGLE_CLOUD_ACCESS_TOKEN
+```
+
+No `.env` file is required or read by the runner. This keeps credentials out of
+the repository and makes CI/provider injection explicit.
+
+The Apify adapter invokes actor runs through `/v2/actors`, disables the actor's
+AI video description, and does not request, fetch, ingest, or score vendor
+transcript artifacts. Apify STT remains a documented capability to evaluate
+separately, not a measured feature of this harness.
+
+Private Apify key-value-store media can require the same process token used for
+acquisition. The runner attaches that Bearer header only to the exact Apify API
+host, keeps it non-enumerable so it cannot enter JSON output, and removes it on
+cross-host redirects.
+
+## Media understanding behavior
+
+- Every acquired image/video gets an ingestion attempt and per-asset diagnostic
+  where the selected understanding adapter accepts that media kind.
+- Gemini attempts every acquired image and video, but sends only successful
+  fetches within bounded per-item sizes and one bounded inline-request total.
+  Media parts precede the untrusted creator-text prompt.
+- Gemini uses the current nested JSON `responseFormat`. The schema intentionally
+  omits `maxItems`: a synthetic A/B request changed from HTTP 400 with
+  `maxItems: 150` to HTTP 200 after removing it.
+- Gemini retries transport failures and HTTP 408, 429, and 5xx responses with a
+  bounded attempt count and jittered/`Retry-After`-aware backoff. Attempt
+  metadata is preserved without credentials.
+- Google Video Intelligence attempts every acquired video child, issuing one
+  annotation operation per successfully fetched video. It does not stop after
+  the first video. Stills remain the responsibility of a still-image path.
+- A partial ingestion remains visible as `partial` or `failed`; media transport,
+  strict completeness, understanding, hint extraction, and POI selection are
+  distinct result stages.
+
+## Relationship to production code
+
+- `current` approximates the observable behavior of
+  `PublicSocialImportMetadataProvider`: Instagram public HTML plus selected
+  embedded JSON, and TikTok oEmbed. It is JavaScript evaluation code, not an
+  execution of the production Swift importer.
+- `current-improved` tests a bounded parser hypothesis: accept matching single
+  posts and reels, preserve video URLs, and traverse all matching media rather
+  than requiring `carousel_media`. It is also an evaluation approximation.
+- `apple-vision` mirrors the app's accurate still-image OCR settings.
+  `apple-vision-keyframes` adds 250 ms video sampling (bounded to 240 frames) as
+  a local, zero-API-cost comparator; it is evaluation code, not app code.
+- Deterministic hint extraction approximates the production evidence ordering
+  and trust model in `SocialPlaceHintExtractor`.
+- The v4 MapKit benchmark mirror adds production-style provider-name query
+  variants, coordinate/region hints, exact-country and area-conflict filters,
+  production pre-limit result ranking, OCR-specific near-spelling handling,
+  and the candidate clear-lead threshold.
+  It also ports the production LA/Georgia ambiguity rules and District of
+  Columbia region handling, covered by executable parity fixtures. It remains
+  copied evaluation logic; production Swift regression fixtures are the
+  authoritative parity check.
+
+The benchmark does not mutate the iOS app, Supabase, provider accounts, or user
+place data.

@@ -13,7 +13,10 @@
     "record:testflight-manifest": "node testflight-manifest.mjs record",
     "sync:testflight-manifest": "node testflight-manifest.mjs sync",
     "snapshot:testflight-manifest": "node testflight-manifest.mjs snapshot",
-    "test:testflight-manifest": "node --test reconcile-testflight-manifest.test.mjs testflight-manifest.test.mjs testflight-release-gate.test.mjs"
+    "test:testflight-manifest": "node --test reconcile-testflight-manifest.test.mjs testflight-manifest.test.mjs testflight-release-gate.test.mjs",
+    "eval:social-import": "node social-import-eval/run.mjs",
+    "eval:social-import:rescore": "node social-import-eval/rescore.mjs",
+    "test:social-import-eval": "node --test social-import-eval.test.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"

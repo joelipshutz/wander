@@ -10,3 +10,4 @@ node_modules/
 xcuserdata/
 Wander/Config/LocalAuth.xcconfig
 .gstack/
+scripts/social-import-eval/runs/
