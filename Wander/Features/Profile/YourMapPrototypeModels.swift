@@ -1,6 +1,5 @@
 import Foundation
 
-#if DEBUG
 enum YourMapPrototypeMode: String, CaseIterable, Identifiable {
     case map
     case patterns
@@ -578,4 +577,3 @@ struct YourMapPrototypeInsights: Equatable {
             }
     }
 }
-#endif

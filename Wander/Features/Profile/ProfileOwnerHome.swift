@@ -316,7 +316,6 @@ struct ProfileOwnerHome: View {
                     allActivityAction: allActivityAction
                 )
                 .id(ProfileHomeScrollAnchor.activity)
-                #if DEBUG
                 if mode.isOwner, let yourMapAction {
                     ProfileYourMapPreview(
                         insights: insights,
@@ -332,15 +331,6 @@ struct ProfileOwnerHome: View {
                     )
                     .id(ProfileHomeScrollAnchor.map)
                 }
-                #else
-                ProfileMapSection(
-                    profile: profile,
-                    insights: insights,
-                    ownerLabel: ownerLabel,
-                    summaryAction: mapSummaryAction
-                )
-                .id(ProfileHomeScrollAnchor.map)
-                #endif
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -1519,7 +1509,6 @@ private struct ProfileCalendarLegend: View {
     }
 }
 
-#if DEBUG
 private struct ProfileYourMapPreview: View {
     let insights: ProfileInsights
     let action: () -> Void
@@ -1583,7 +1572,6 @@ private struct ProfileYourMapPreview: View {
         return "\(insights.mapPlaceCount) \(placeLabel) across \(insights.mapCityCount) \(cityLabel)"
     }
 }
-#endif
 
 enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
     case places
