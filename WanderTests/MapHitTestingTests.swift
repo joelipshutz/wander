@@ -5,6 +5,41 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),
+            0.35,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.minimumVisibleInterval(
+                arguments: [
+                    "Wander",
+                    MapInitialLoadingPolicy.testDelayArgument,
+                    "1750"
+                ]
+            ),
+            1.75,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.remainingVisibleInterval(
+                elapsed: 0.2,
+                minimumVisibleInterval: 0.35
+            ),
+            0.15,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.remainingVisibleInterval(
+                elapsed: 1,
+                minimumVisibleInterval: 0.35
+            ),
+            0,
+            accuracy: 0.001
+        )
+    }
+
     func testMapChromeContentWidthPreservesInsetsAcrossPhoneSizesAndSafeAreas() {
         XCTAssertEqual(
             MapChromeLayout.contentWidth(

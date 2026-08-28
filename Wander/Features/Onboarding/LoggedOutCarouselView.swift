@@ -224,18 +224,35 @@ private struct OnboardingCarouselSlideView: View {
 }
 
 struct OnboardingLaunchView: View {
+    let message: String?
+
+    init(message: String? = nil) {
+        self.message = message
+    }
+
     var body: some View {
         ZStack {
             WanderTheme.canvasWarm.color.ignoresSafeArea()
-            VStack(spacing: WanderTheme.spacing2) {
+            VStack(spacing: message == nil ? WanderTheme.spacing2 : WanderTheme.spacing3) {
                 Image(systemName: "mappin.and.ellipse")
                     .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
                 Text(AppBrand.displayName)
                     .font(WanderTheme.editorialDisplay(size: 42, weight: .black))
+
+                if let message {
+                    VStack(spacing: WanderTheme.spacing2) {
+                        ProgressView()
+                            .tint(WanderTheme.terracotta.color)
+                        Text(message)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    .padding(.top, WanderTheme.spacing1)
+                }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Opening rec.me")
+        .accessibilityLabel(message ?? "Opening rec.me")
     }
 }

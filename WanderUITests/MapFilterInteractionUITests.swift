@@ -2,6 +2,31 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testPerformanceFixtureCoversMapKitDuringInitialAccountLoading() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapInitialLoadingDelayMilliseconds",
+            "30000"
+        ]
+        app.launch()
+
+        let loading = app.descendants(matching: .any)
+            .matching(identifier: "map.initialLoading")
+            .firstMatch
+        XCTAssertTrue(loading.waitForExistence(timeout: 3))
+        XCTAssertEqual(loading.label, "Loading your map…")
+        XCTAssertFalse(app.maps.firstMatch.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-381 graceful large-account Map loading"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testPerformanceFixtureKeepsWarmSourceSwitchesResponsive() {
         let app = XCUIApplication()
         app.launchArguments = [
