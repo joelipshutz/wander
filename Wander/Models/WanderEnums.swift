@@ -83,6 +83,108 @@ enum SyncState: String, Codable, CaseIterable, Equatable {
     case tombstoned
 }
 
+/// User-facing lifecycle for actions that commit locally before remote
+/// persistence finishes. `SyncState` remains the durable entity contract;
+/// this lifecycle gives every save surface the same honest presentation.
+enum DeferredSaveLifecycleState: String, Codable, CaseIterable, Equatable {
+    case pending
+    case optimisticallyCompleted = "optimistically_completed"
+    case confirmed
+    case failed
+    case retrying
+    case permanentlyFailed = "permanently_failed"
+
+    static func resolved(
+        from syncState: SyncState,
+        isRetrying: Bool = false
+    ) -> DeferredSaveLifecycleState {
+        if isRetrying {
+            return .retrying
+        }
+
+        switch syncState {
+        case .localOnly, .pendingCreate, .pendingUpdate, .pendingDelete:
+            return .optimisticallyCompleted
+        case .synced, .tombstoned:
+            return .confirmed
+        case .failed:
+            return .failed
+        case .serverDenied:
+            return .permanentlyFailed
+        }
+    }
+}
+
+struct DeferredSaveRecoveryPresentation: Equatable {
+    let state: DeferredSaveLifecycleState
+    let operationCount: Int
+    let title: String
+    let message: String
+    let systemImage: String
+    let retryTitle: String?
+
+    init?(
+        syncStates: [SyncState],
+        isRetrying: Bool
+    ) {
+        let outstandingStates = syncStates.filter {
+            switch $0 {
+            case .pendingCreate, .pendingUpdate, .failed, .serverDenied:
+                return true
+            case .localOnly, .pendingDelete, .synced, .tombstoned:
+                return false
+            }
+        }
+        guard !outstandingStates.isEmpty else { return nil }
+
+        operationCount = outstandingStates.count
+        if isRetrying {
+            state = .retrying
+        } else if outstandingStates.contains(.serverDenied) {
+            state = .permanentlyFailed
+        } else if outstandingStates.contains(.failed) {
+            state = .failed
+        } else {
+            state = .optimisticallyCompleted
+        }
+
+        let localSubject = operationCount == 1 ? "change is" : "changes are"
+        let localObject = operationCount == 1 ? "change" : "changes"
+        switch state {
+        case .pending:
+            title = "Saving…"
+            message = "Keeping your change safe on this phone."
+            systemImage = "clock"
+            retryTitle = nil
+        case .optimisticallyCompleted:
+            title = operationCount == 1 ? "Saved — syncing…" : "Saved \(operationCount) changes — syncing…"
+            message = "You can keep using rec.me while this finishes."
+            systemImage = "arrow.triangle.2.circlepath"
+            retryTitle = nil
+        case .confirmed:
+            title = "Saved"
+            message = "Your change is synced."
+            systemImage = "checkmark.circle.fill"
+            retryTitle = nil
+        case .failed:
+            title = "Saved here, not synced"
+            message = "Your \(localSubject) safe on this phone. Try syncing again."
+            systemImage = "exclamationmark.triangle.fill"
+            retryTitle = "Retry"
+        case .retrying:
+            title = "Trying again…"
+            message = "Your local \(localObject) will stay safe while rec.me retries."
+            systemImage = "arrow.clockwise"
+            retryTitle = nil
+        case .permanentlyFailed:
+            title = "Saved here — sync needs attention"
+            message = "Automatic retries stopped. Your local \(localObject) will remain until you try again."
+            systemImage = "exclamationmark.octagon.fill"
+            retryTitle = "Try again"
+        }
+    }
+}
+
 struct SaveSyncFeedback: Identifiable, Equatable {
     let id = UUID()
     let syncState: SyncState
@@ -111,8 +213,8 @@ struct SaveSyncFeedback: Identifiable, Equatable {
             usesWarningHaptic = true
             dismissDelayNanoseconds = 5_000_000_000
         case .pendingCreate, .pendingUpdate, .pendingDelete:
-            title = "saved on this phone"
-            message = "Sync is queued."
+            title = "saved"
+            message = "Syncing in the background."
             systemImage = "arrow.triangle.2.circlepath"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 3_500_000_000
@@ -144,7 +246,7 @@ struct SaveSyncFeedback: Identifiable, Equatable {
         case .failed:
             "Saved on this phone, but sync failed. We'll retry."
         case .pendingCreate, .pendingUpdate, .pendingDelete:
-            "Saved on this phone. Sync is queued."
+            "\(successMessage) Syncing in the background."
         case .localOnly:
             "Saved on this phone."
         case .serverDenied:

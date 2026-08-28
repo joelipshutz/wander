@@ -59,14 +59,14 @@ enum MapPlaceListTarget: Identifiable {
     ) async -> ListPlaceAddResult {
         switch self {
         case .candidate(let candidate):
-            await store.addCandidate(
+            await store.addCandidateOptimistically(
                 candidate,
                 to: list,
                 backend: backend,
                 analyticsSurface: "map"
             )
         case .visiblePlace(let visiblePlace):
-            await store.addVisiblePlace(
+            await store.addVisiblePlaceOptimistically(
                 visiblePlace,
                 to: list,
                 backend: backend,

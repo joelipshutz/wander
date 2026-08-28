@@ -89,6 +89,72 @@ private struct SharedPlaceImportAlertModifier: ViewModifier {
     }
 }
 
+private struct DeferredSaveRecoveryBanner: View {
+    let presentation: DeferredSaveRecoveryPresentation
+    let isSignedIn: Bool
+    let action: () -> Void
+
+    private var title: String {
+        isSignedIn ? presentation.title : "Saved on this phone"
+    }
+
+    private var message: String {
+        isSignedIn ? presentation.message : "Sign in to sync this change."
+    }
+
+    private var actionTitle: String? {
+        if !isSignedIn {
+            return "Sign in"
+        }
+        return presentation.retryTitle
+    }
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            if presentation.state == .optimisticallyCompleted
+                || presentation.state == .retrying {
+                ProgressView()
+                    .tint(WanderTheme.terracotta.color)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: presentation.systemImage)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(message)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let actionTitle {
+                Button(actionTitle, action: action)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing3)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 12, y: 5)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 struct WanderDeepLinkHandoffCoordinator {
     private struct PendingHandoff {
         let requestID: UUID
@@ -552,6 +618,34 @@ struct WanderRootView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if let presentation = store.deferredSaveRecoveryPresentation {
+                DeferredSaveRecoveryBanner(
+                    presentation: presentation,
+                    isSignedIn: auth.isSignedIn
+                ) {
+                    if auth.isSignedIn {
+                        Task {
+                            await store.retryDeferredSaveOperations(
+                                backend: backend
+                            )
+                        }
+                    } else {
+                        auth.presentGate(for: .syncPlace)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(20)
+            }
+        }
+        .animation(
+            accessibilityReduceMotion
+                ? .easeInOut(duration: 0.15)
+                : .spring(response: 0.32, dampingFraction: 0.88),
+            value: store.deferredSaveRecoveryPresentation
+        )
         .overlay {
             if let celebration = presentedSaveStreakCelebration {
                 Group {
@@ -1262,6 +1356,7 @@ struct WanderRootView: View {
                 else { return }
                 let nextBatchIDs = queuedAutomaticImportBatchIDs.sorted()
                 queuedAutomaticImportBatchIDs.subtract(nextBatchIDs)
+                let deferredSaveBaseline = store.deferredSaveOperationBaseline()
                 let result = await PlaceImportAutoSaveCoordinator.process(
                     batchIDs: nextBatchIDs,
                     importStore: importStore,
@@ -1276,6 +1371,8 @@ struct WanderRootView: View {
                       store.currentUser.id == expectedUserID
                 else { return }
                 if result.hasResult {
+                    store.registerDeferredSaveOperations(createdSince: deferredSaveBaseline)
+                    store.scheduleOptimisticSaveRecovery(backend: backend)
                     completedAutomaticImportBatchIDs.formUnion(result.batchIDs)
                     if scenePhase == .active {
                         presentPendingImportVerificationIfPossible()

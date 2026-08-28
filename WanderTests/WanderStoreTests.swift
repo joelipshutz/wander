@@ -8707,6 +8707,213 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(saved?.userPlace.lastSyncError)
     }
 
+    func testOptimisticSaveCompletesLocallyThenRecoversAfterRelaunch() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+        var localUserPlaceID: String?
+
+        do {
+            let firstStore = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            firstStore.apply(authState: .signedIn(session))
+            firstStore.setPrivateProfile(false)
+            let result = firstStore.saveCandidateOptimistically(
+                PlaceCandidate(
+                    id: "mapkit_optimistic_maru",
+                    name: "Optimistic Maru",
+                    category: "coffee",
+                    locality: "Los Angeles",
+                    region: "CA",
+                    latitude: 34.0407,
+                    longitude: -118.2354,
+                    sourceProvider: "mapkit",
+                    sourceProviderPlaceID: "mapkit_optimistic_maru",
+                    confidence: 0.92
+                ),
+                status: .wannaGo,
+                visibility: .mutuals,
+                note: "retry this exact save",
+                sourceType: .manual,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                        valueType: "personal_label",
+                        stringValues: ["date night"]
+                    )
+                ],
+                backend: WanderBackend(
+                    userPlaceRepository: FakeUserPlaceRepository(
+                        error: WanderRemoteError.invalidResponse("network down")
+                    )
+                )
+            )
+            localUserPlaceID = result.userPlaceID
+
+            XCTAssertEqual(result.syncState, .pendingCreate)
+            XCTAssertEqual(
+                firstStore.currentUserVisiblePlaces.first {
+                    $0.userPlace.id == result.userPlaceID
+                }?.userPlace.syncState,
+                .pendingCreate,
+                "The submitting surface should complete before remote persistence finishes"
+            )
+            XCTAssertEqual(
+                firstStore.deferredSaveRecoveryPresentation?.state,
+                .optimisticallyCompleted
+            )
+
+            for _ in 0..<200 where firstStore.deferredSaveRecoveryPresentation?.state != .failed {
+                await Task.yield()
+            }
+            XCTAssertEqual(firstStore.deferredSaveRecoveryPresentation?.state, .failed)
+            XCTAssertEqual(firstStore.deferredSaveRecoveryPresentation?.retryTitle, "Retry")
+            firstStore.flushPersistence()
+        }
+
+        let restoredLocalUserPlaceID = try XCTUnwrap(localUserPlaceID)
+        let relaunchedStore = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: fixture.persistence
+        )
+        relaunchedStore.apply(authState: .signedIn(session))
+        let restored = try XCTUnwrap(
+            relaunchedStore.currentUserVisiblePlaces.first {
+                $0.userPlace.localID == restoredLocalUserPlaceID
+            }
+        )
+        XCTAssertEqual(restored.userPlace.syncState, .failed)
+        XCTAssertEqual(restored.userPlace.visibility, .mutuals)
+        XCTAssertEqual(restored.userPlace.note, "retry this exact save")
+        XCTAssertEqual(restored.place.sourceProviderPlaceID, "mapkit_optimistic_maru")
+        XCTAssertEqual(relaunchedStore.deferredSaveRecoveryPresentation?.state, .failed)
+
+        let successRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_optimistic_maru",
+                syncState: .synced,
+                placeID: "place_optimistic_maru"
+            )
+        )
+        await relaunchedStore.retryDeferredSaveOperations(
+            backend: WanderBackend(userPlaceRepository: successRepository)
+        )
+
+        XCTAssertEqual(successRepository.savedDrafts.count, 1)
+        XCTAssertEqual(successRepository.savedDrafts[0].visibility, .mutuals)
+        XCTAssertEqual(successRepository.savedDrafts[0].note, "retry this exact save")
+        XCTAssertEqual(successRepository.savedDrafts[0].place.sourceProviderPlaceID, "mapkit_optimistic_maru")
+        XCTAssertEqual(successRepository.savedDrafts[0].attributes.map(\.questionKey), [PlaceMemoryAttributeKeys.personalLabels])
+        XCTAssertNil(relaunchedStore.deferredSaveRecoveryPresentation)
+        XCTAssertEqual(
+            relaunchedStore.currentUserVisiblePlaces.first {
+                $0.userPlace.localID == restoredLocalUserPlaceID
+            }?.userPlace.syncState,
+            .synced
+        )
+    }
+
+    func testLegacyUnsyncedRowsDoNotEnterDeferredSaveRecoveryPresentationOrExplicitRetry() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+            )
+        )
+        store.setPrivateProfile(false)
+
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_legacy_pending",
+                name: "Legacy Pending",
+                category: "coffee",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 0.9
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+
+        XCTAssertEqual(result.syncState, .pendingCreate)
+        XCTAssertNil(store.deferredSaveRecoveryPresentation)
+
+        store.userPlaces.first { $0.id == result.userPlaceID }?.syncStateRaw = SyncState.serverDenied.rawValue
+        let repository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_legacy_pending",
+                syncState: .synced,
+                placeID: "place_legacy_pending"
+            )
+        )
+        await store.retryDeferredSaveOperations(
+            backend: WanderBackend(userPlaceRepository: repository)
+        )
+
+        XCTAssertEqual(repository.savedDrafts.count, 0)
+        XCTAssertEqual(
+            store.userPlaces.first { $0.id == result.userPlaceID }?.syncState,
+            .serverDenied,
+            "The REC-341 Retry action must not revive unrelated legacy failures"
+        )
+        XCTAssertNil(store.deferredSaveRecoveryPresentation)
+    }
+
+    func testConcurrentRetryReusesInFlightOptimisticRemoteWrite() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+            )
+        )
+        let repository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_deduplicated",
+                syncState: .synced,
+                placeID: "place_deduplicated"
+            ),
+            suspendSave: true
+        )
+        let backend = WanderBackend(userPlaceRepository: repository)
+
+        _ = store.saveCandidateOptimistically(
+            PlaceCandidate(
+                id: "mapkit_deduplicated",
+                name: "One Remote Write Cafe",
+                category: "coffee",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 0.9
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            backend: backend
+        )
+
+        while !repository.hasSuspendedSaveRequest {
+            await Task.yield()
+        }
+        let retryTask = Task { @MainActor in
+            await store.retryDeferredSaveOperations(backend: backend)
+        }
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+        XCTAssertEqual(repository.savedDrafts.count, 1)
+
+        repository.resumeSave()
+        await retryTask.value
+
+        XCTAssertEqual(repository.savedDrafts.count, 1)
+        XCTAssertNil(store.deferredSaveRecoveryPresentation)
+    }
+
     func testSyncUnsyncedOwnPlacesTracksZeroCandidateBackfillBatch() async throws {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
@@ -8885,7 +9092,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Failed Deli" }?.userPlace.syncState, .synced)
     }
 
-    func testSyncUnsyncedOwnPlacesSkipsSocialSavesAndTerminalRows() async {
+    func testSyncUnsyncedOwnPlacesMarksLegacySocialSaveWithoutProvenancePermanentAndSkipsOtherTerminalRows() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
 
@@ -8978,7 +9185,9 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(syncedCount, 1)
         XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.place.canonicalName), ["Backfill Cafe"])
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Backfill Cafe" }?.userPlace.syncState, .synced)
-        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Social Copy" }?.userPlace.syncState, .pendingCreate)
+        let socialCopy = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Social Copy" }?.userPlace
+        XCTAssertEqual(socialCopy?.syncState, .serverDenied)
+        XCTAssertEqual(socialCopy?.lastSyncError, "Missing durable social-save provenance")
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Pending Delete" }?.userPlace.syncState, .pendingDelete)
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Denied Place" }?.userPlace.syncState, .serverDenied)
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Tombstoned Place" }?.userPlace.syncState, .tombstoned)
@@ -11069,16 +11278,24 @@ private final class FakeUserPlaceRepository: UserPlaceRepository, CheckInReposit
     private let result: SaveResult?
     private let error: Error?
     private let userPlacesByUserID: [String: [VisiblePlace]]
+    private var isSaveSuspended: Bool
     private(set) var savedDrafts: [UserPlaceDraft] = []
     private(set) var savedCheckInDrafts: [CheckInSaveDraft] = []
     private(set) var userPlaceRequests: [UserPlaceRequest] = []
     private(set) var deletedUserPlaceIDs: [String] = []
     private(set) var deletedCheckInIDs: [String] = []
+    private(set) var hasSuspendedSaveRequest = false
 
-    init(result: SaveResult? = nil, error: Error? = nil, userPlacesByUserID: [String: [VisiblePlace]] = [:]) {
+    init(
+        result: SaveResult? = nil,
+        error: Error? = nil,
+        userPlacesByUserID: [String: [VisiblePlace]] = [:],
+        suspendSave: Bool = false
+    ) {
         self.result = result
         self.error = error
         self.userPlacesByUserID = userPlacesByUserID
+        self.isSaveSuspended = suspendSave
     }
 
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
@@ -11091,10 +11308,20 @@ private final class FakeUserPlaceRepository: UserPlaceRepository, CheckInReposit
 
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
         savedDrafts.append(draft)
+        if isSaveSuspended {
+            hasSuspendedSaveRequest = true
+            while isSaveSuspended {
+                await Task.yield()
+            }
+        }
         if let error {
             throw error
         }
         return result ?? SaveResult(userPlaceID: "up_fake", syncState: .synced, placeID: "place_fake")
+    }
+
+    func resumeSave() {
+        isSaveSuspended = false
     }
 
     func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {

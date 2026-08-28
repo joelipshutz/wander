@@ -237,6 +237,13 @@ final class WanderStore: ObservableObject {
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
+    private var ownPlaceSyncTasks: [
+        String: (id: UUID, task: Task<OwnPlaceSyncOutcome, Never>)
+    ] = [:]
+    private var automaticDeferredSaveRecoveryTask: (id: UUID, task: Task<Void, Never>)?
+    private var deferredSaveRecoveryTask: (id: UUID, task: Task<Void, Never>)?
+    @Published private(set) var isRetryingDeferredSaveOperations = false
+    private(set) var deferredSaveOperationKeys: Set<String> = []
     private var visitPhotoUploadTask: (
         id: UUID,
         userID: String,
@@ -258,6 +265,123 @@ final class WanderStore: ObservableObject {
         let visits: [WanderStoreSnapshot.PlaceVisitRecord]
     }
     @Published private(set) var isRefreshingCurrentUserCalendarData = false
+
+    var deferredSaveRecoveryPresentation: DeferredSaveRecoveryPresentation? {
+        let ownedListReferenceIDs = placeLists
+            .filter { $0.ownerUserID == currentUser.id && $0.deletedAt == nil }
+            .reduce(into: Set<String>()) { result, list in
+                result.formUnion([list.id, list.localID, list.serverID].compactMap { $0 })
+            }
+        let userPlaceStates = userPlaces
+            .filter { $0.userID == currentUser.id && $0.deletedAt == nil }
+            .filter {
+                deferredSaveOperationKeys.contains(
+                    Self.deferredSaveOperationKey(entity: "user_place", localID: $0.localID)
+                )
+            }
+            .map(\.syncState)
+        let listStates = placeLists
+            .filter { $0.ownerUserID == currentUser.id && $0.deletedAt == nil }
+            .filter {
+                deferredSaveOperationKeys.contains(
+                    Self.deferredSaveOperationKey(entity: "place_list", localID: $0.localID)
+                )
+            }
+            .map(\.syncState)
+        let listItemStates = placeListItems
+            .filter {
+                $0.deletedAt == nil
+                    && ($0.addedByUserID == currentUser.id
+                        || ownedListReferenceIDs.contains($0.listID))
+            }
+            .filter {
+                deferredSaveOperationKeys.contains(
+                    Self.deferredSaveOperationKey(entity: "place_list_item", localID: $0.localID)
+                )
+            }
+            .map(\.syncState)
+
+        return DeferredSaveRecoveryPresentation(
+            syncStates: userPlaceStates + listStates + listItemStates,
+            isRetrying: isRetryingDeferredSaveOperations
+        )
+    }
+
+    private static func deferredSaveOperationKey(entity: String, localID: String) -> String {
+        "\(entity):\(localID)"
+    }
+
+    private static func isOutstandingDeferredSaveState(_ state: SyncState) -> Bool {
+        switch state {
+        case .pendingCreate, .pendingUpdate, .failed, .serverDenied:
+            return true
+        case .localOnly, .pendingDelete, .synced, .tombstoned:
+            return false
+        }
+    }
+
+    private func outstandingDeferredSaveOperationKeys() -> Set<String> {
+        let ownedListReferenceIDs = placeLists
+            .filter { $0.ownerUserID == currentUser.id && $0.deletedAt == nil }
+            .reduce(into: Set<String>()) { result, list in
+                result.formUnion([list.id, list.localID, list.serverID].compactMap { $0 })
+            }
+        let userPlaceKeys = userPlaces
+            .filter {
+                $0.userID == currentUser.id
+                    && $0.deletedAt == nil
+                    && Self.isOutstandingDeferredSaveState($0.syncState)
+            }
+            .map { Self.deferredSaveOperationKey(entity: "user_place", localID: $0.localID) }
+        let listKeys = placeLists
+            .filter {
+                $0.ownerUserID == currentUser.id
+                    && $0.deletedAt == nil
+                    && Self.isOutstandingDeferredSaveState($0.syncState)
+            }
+            .map { Self.deferredSaveOperationKey(entity: "place_list", localID: $0.localID) }
+        let listItemKeys = placeListItems
+            .filter {
+                $0.deletedAt == nil
+                    && ($0.addedByUserID == currentUser.id
+                        || ownedListReferenceIDs.contains($0.listID))
+                    && Self.isOutstandingDeferredSaveState($0.syncState)
+            }
+            .map { Self.deferredSaveOperationKey(entity: "place_list_item", localID: $0.localID) }
+        return Set(userPlaceKeys + listKeys + listItemKeys)
+    }
+
+    func deferredSaveOperationBaseline() -> Set<String> {
+        outstandingDeferredSaveOperationKeys()
+    }
+
+    func registerDeferredSaveOperations(createdSince baseline: Set<String>) {
+        registerDeferredSaveOperationKeys(
+            outstandingDeferredSaveOperationKeys().subtracting(baseline)
+        )
+    }
+
+    private func registerDeferredSaveUserPlace(userPlaceID: String) {
+        guard let userPlace = currentUserPlace(matching: userPlaceID),
+              Self.isOutstandingDeferredSaveState(userPlace.syncState)
+        else { return }
+        registerDeferredSaveOperationKeys([
+            Self.deferredSaveOperationKey(entity: "user_place", localID: userPlace.localID)
+        ])
+    }
+
+    private func registerDeferredSaveOperationKeys(_ keys: Set<String>) {
+        guard !keys.isEmpty else { return }
+        let previousKeys = deferredSaveOperationKeys
+        deferredSaveOperationKeys.formUnion(keys)
+        guard deferredSaveOperationKeys != previousKeys else { return }
+        objectWillChange.send()
+        persist()
+    }
+
+    private func pruneConfirmedDeferredSaveOperationKeys() {
+        deferredSaveOperationKeys.formIntersection(outstandingDeferredSaveOperationKeys())
+    }
     @Published private(set) var currentUserCalendarHydrationRevision: UInt64 = 0
     private var authoritativeCalendarUserID: String?
     private var currentUserCalendarLocalFingerprint: CurrentUserCalendarLocalFingerprint?
@@ -534,6 +658,7 @@ final class WanderStore: ObservableObject {
             self.unresolvedDrafts = restored.unresolvedDrafts
             self.sourceArtifacts = restored.sourceArtifacts
             self.extractionJobs = restored.extractionJobs
+            self.deferredSaveOperationKeys = restored.deferredSaveOperationKeys
             self.contactProvider = restored.contactProvider
             self.defaultVisibility = restored.defaultVisibility
             self.isPrivateProfile = restored.isPrivateProfile
@@ -561,6 +686,7 @@ final class WanderStore: ObservableObject {
             self.placeLists = fixtures.placeLists
             self.placeListMembers = fixtures.placeListMembers
             self.placeListItems = fixtures.placeListItems
+            self.deferredSaveOperationKeys = []
             self.contactProvider = fixtures.contactProvider
             self.defaultVisibility = fixtures.currentUser.defaultVisibility
             self.isPrivateProfile = fixtures.currentUser.isPrivateProfile
@@ -604,6 +730,7 @@ final class WanderStore: ObservableObject {
         }
         reconcileCurrentUserCalendarLocalFingerprint()
         invalidatePresentationCaches()
+        pruneConfirmedDeferredSaveOperationKeys()
         guard let persistence else { return }
 
         if persistenceDeferralDepth > 0 {
@@ -619,6 +746,123 @@ final class WanderStore: ObservableObject {
 
     func flushPersistence() {
         persistence?.flush()
+    }
+
+    /// Starts the remote half of a locally committed save without holding the
+    /// submitting UI open. The per-user-place task fence prevents a retry,
+    /// foreground maintenance pass, and the original submission from issuing
+    /// concurrent writes for the same logical save.
+    func scheduleOptimisticOwnPlaceSync(
+        userPlaceID: String,
+        backend: WanderBackend?
+    ) {
+        guard let backend else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await self.retryOwnPlaceSync(
+                userPlaceID: userPlaceID,
+                backend: backend,
+                trigger: .directSave
+            )
+        }
+    }
+
+    /// Used after a local import transaction, which can create multiple place
+    /// saves plus a destination list in one optimistic completion.
+    func scheduleOptimisticSaveRecovery(backend: WanderBackend?) {
+        guard let backend,
+              automaticDeferredSaveRecoveryTask == nil,
+              deferredSaveRecoveryTask == nil
+        else { return }
+
+        let taskID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await self.syncUnsyncedOwnPlaces(backend: backend)
+            _ = await self.syncPendingPlaceLists(backend: backend)
+        }
+        automaticDeferredSaveRecoveryTask = (taskID, task)
+        Task { @MainActor [weak self] in
+            await task.value
+            guard self?.automaticDeferredSaveRecoveryTask?.id == taskID else { return }
+            self?.automaticDeferredSaveRecoveryTask = nil
+        }
+    }
+
+    /// Explicit recovery for the app-wide deferred-save banner. All retry
+    /// paths remain idempotent at their existing repository/RPC boundaries.
+    func retryDeferredSaveOperations(backend: WanderBackend?) async {
+        guard let backend else { return }
+        if let deferredSaveRecoveryTask {
+            await deferredSaveRecoveryTask.task.value
+            return
+        }
+
+        let taskID = UUID()
+        isRetryingDeferredSaveOperations = true
+        preparePermanentlyFailedDeferredSavesForRetry()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let automaticTask = self.automaticDeferredSaveRecoveryTask?.task {
+                await automaticTask.value
+            }
+            _ = await self.syncUnsyncedOwnPlaces(backend: backend)
+            _ = await self.syncPendingPlaceLists(backend: backend)
+        }
+        deferredSaveRecoveryTask = (taskID, task)
+        await task.value
+        if deferredSaveRecoveryTask?.id == taskID {
+            deferredSaveRecoveryTask = nil
+        }
+        isRetryingDeferredSaveOperations = false
+    }
+
+    private func preparePermanentlyFailedDeferredSavesForRetry() {
+        var changed = false
+        let ownedListReferenceIDs = placeLists
+            .filter { $0.ownerUserID == currentUser.id && $0.deletedAt == nil }
+            .reduce(into: Set<String>()) { result, list in
+                result.formUnion([list.id, list.localID, list.serverID].compactMap { $0 })
+            }
+        for userPlace in userPlaces where userPlace.userID == currentUser.id
+            && userPlace.deletedAt == nil
+            && deferredSaveOperationKeys.contains(
+                Self.deferredSaveOperationKey(entity: "user_place", localID: userPlace.localID)
+            )
+            && userPlace.syncState == .serverDenied {
+            userPlace.syncStateRaw = SyncState.failed.rawValue
+            changed = true
+        }
+        for index in placeLists.indices where placeLists[index].ownerUserID == currentUser.id
+            && placeLists[index].deletedAt == nil
+            && deferredSaveOperationKeys.contains(
+                Self.deferredSaveOperationKey(
+                    entity: "place_list",
+                    localID: placeLists[index].localID
+                )
+            )
+            && placeLists[index].syncState == .serverDenied {
+            placeLists[index].syncStateRaw = SyncState.failed.rawValue
+            changed = true
+        }
+        for index in placeListItems.indices where
+            (placeListItems[index].addedByUserID == currentUser.id
+                || ownedListReferenceIDs.contains(placeListItems[index].listID))
+            && placeListItems[index].deletedAt == nil
+            && deferredSaveOperationKeys.contains(
+                Self.deferredSaveOperationKey(
+                    entity: "place_list_item",
+                    localID: placeListItems[index].localID
+                )
+            )
+            && placeListItems[index].syncState == .serverDenied {
+            placeListItems[index].syncStateRaw = SyncState.failed.rawValue
+            changed = true
+        }
+
+        guard changed else { return }
+        objectWillChange.send()
+        persist()
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
@@ -2488,6 +2732,48 @@ final class WanderStore: ObservableObject {
         return resolvedResult
     }
 
+    @discardableResult
+    func addVisiblePlaceOptimistically(
+        _ visiblePlace: VisiblePlace,
+        to list: LocalPlaceList,
+        backend: WanderBackend?,
+        analyticsSurface: String? = nil
+    ) async -> ListPlaceAddResult {
+        let baseline = deferredSaveOperationBaseline()
+        let result = await addVisiblePlace(
+            visiblePlace,
+            to: list,
+            backend: nil,
+            analyticsSurface: analyticsSurface
+        )
+        if result.outcome == .added {
+            registerDeferredSaveOperations(createdSince: baseline)
+            scheduleOptimisticSaveRecovery(backend: backend)
+        }
+        return result
+    }
+
+    @discardableResult
+    func addCandidateOptimistically(
+        _ candidate: PlaceCandidate,
+        to list: LocalPlaceList,
+        backend: WanderBackend?,
+        analyticsSurface: String? = nil
+    ) async -> ListPlaceAddResult {
+        let baseline = deferredSaveOperationBaseline()
+        let result = await addCandidate(
+            candidate,
+            to: list,
+            backend: nil,
+            analyticsSurface: analyticsSurface
+        )
+        if result.outcome == .added {
+            registerDeferredSaveOperations(createdSince: baseline)
+            scheduleOptimisticSaveRecovery(backend: backend)
+        }
+        return result
+    }
+
     private func trackListPlaceAdded(
         to list: LocalPlaceList,
         companionSave: ListPlaceAddResult.CompanionSave,
@@ -2798,6 +3084,36 @@ final class WanderStore: ObservableObject {
             }
         }
 
+        // Collaborators can add items without owning the list. Those writes
+        // still need the same durable retry path even though the parent list is
+        // not an owner-managed sync candidate.
+        let pendingCollaboratorItemIDs = placeListItems
+            .filter {
+                $0.addedByUserID == currentUser.id
+                    && $0.deletedAt == nil
+                    && ($0.syncState == .pendingCreate
+                        || $0.syncState == .pendingUpdate
+                        || $0.syncState == .failed)
+            }
+            .map(\.id)
+        for itemID in pendingCollaboratorItemIDs {
+            guard let item = placeListItems.first(where: { $0.id == itemID }),
+                  let list = placeLists.first(where: {
+                      $0.id == item.listID
+                          || $0.localID == item.listID
+                          || $0.serverID == item.listID
+                  })
+            else { continue }
+            await syncPlaceListItem(
+                localOrServerID: itemID,
+                listID: list.id,
+                backend: backend
+            )
+            if placeListItems.first(where: { $0.id == itemID })?.syncState == .synced {
+                syncedCount += 1
+            }
+        }
+
         #if DEBUG
         WanderDebugLog.sync.debug("place-list sync completed synced_count=\(syncedCount, privacy: .public)")
         #endif
@@ -2817,6 +3133,15 @@ final class WanderStore: ObservableObject {
             || list.syncState == .pendingUpdate
             || list.syncState == .pendingDelete
             || list.syncState == .failed
+            || placeListItems.contains { item in
+                (item.listID == list.id
+                    || item.listID == list.localID
+                    || item.listID == list.serverID)
+                    && (item.syncState == .pendingCreate
+                        || item.syncState == .pendingUpdate
+                        || item.syncState == .pendingDelete
+                        || item.syncState == .failed)
+            }
             || shouldBackfillLegacyPlaceList(list)
     }
 
@@ -5782,6 +6107,58 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }
 
+    /// Commits the complete save locally, returns that optimistic result to
+    /// the UI, then finishes remote persistence through the existing retryable
+    /// path. The local row remains the durable recovery payload.
+    @discardableResult
+    func saveCandidateOptimistically(
+        _ candidate: PlaceCandidate,
+        status: PlaceStatus,
+        visibility: PlaceVisibility,
+        note: String?,
+        sourceType: AddSourceType,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now,
+        plannedDate: Date? = nil,
+        attributes: [PlaceAttributeDraft]? = nil,
+        sourceUserPlaceID: String? = nil,
+        backend: WanderBackend?
+    ) -> SaveResult {
+        let localResult = saveCandidate(
+            candidate,
+            status: status,
+            visibility: visibility,
+            note: note,
+            sourceType: sourceType,
+            ratingScore: ratingScore,
+            visitedAt: visitedAt,
+            plannedDate: plannedDate,
+            attributes: attributes
+        )
+
+        if sourceType == .socialSave,
+           let sourceUserPlaceID,
+           let saved = currentUserPlace(matching: localResult.userPlaceID) {
+            saved.sourceUserPlaceID = sourceUserPlaceID
+            saved.updatedAt = .now
+            saved.localUpdatedAt = .now
+            persist()
+        }
+
+        registerDeferredSaveUserPlace(userPlaceID: localResult.userPlaceID)
+
+        switch localResult.syncState {
+        case .pendingCreate, .pendingUpdate, .failed:
+            scheduleOptimisticOwnPlaceSync(
+                userPlaceID: localResult.userPlaceID,
+                backend: backend
+            )
+        case .localOnly, .pendingDelete, .synced, .serverDenied, .tombstoned:
+            break
+        }
+        return localResult
+    }
+
     @discardableResult
     func saveCandidate(
         _ candidate: PlaceCandidate,
@@ -6491,7 +6868,6 @@ final class WanderStore: ObservableObject {
             .filter { userPlace in
                 userPlace.userID == currentUser.id
                     && userPlace.deletedAt == nil
-                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
                     && shouldSyncState(userPlace.syncState)
             }
             .map(\.id)
@@ -6617,9 +6993,31 @@ final class WanderStore: ObservableObject {
             saved.viewerFoodType = visiblePlace.owner.id == currentUser.id
                 ? visiblePlace.restaurantCuisine
                 : visiblePlace.userPlace.viewerFoodType
+            saved.sourceUserPlaceID = visiblePlace.userPlace.serverID
+                ?? visiblePlace.userPlace.id
             persist()
         }
         return result
+    }
+
+    @discardableResult
+    func saveVisiblePlaceOptimistically(
+        _ visiblePlace: VisiblePlace,
+        status: PlaceStatus = .wannaGo,
+        backend: WanderBackend?
+    ) -> SaveResult {
+        let localResult = saveVisiblePlace(visiblePlace, status: status)
+        registerDeferredSaveUserPlace(userPlaceID: localResult.userPlaceID)
+        switch localResult.syncState {
+        case .pendingCreate, .pendingUpdate, .failed:
+            scheduleOptimisticOwnPlaceSync(
+                userPlaceID: localResult.userPlaceID,
+                backend: backend
+            )
+        case .localOnly, .pendingDelete, .synced, .serverDenied, .tombstoned:
+            break
+        }
+        return localResult
     }
 
     @discardableResult
@@ -9623,6 +10021,37 @@ final class WanderStore: ObservableObject {
         trigger: OwnPlaceSyncTrigger,
         refreshVisiblePlacesAfterSuccess: Bool = true
     ) async -> OwnPlaceSyncOutcome {
+        let syncKey = userPlaces.first {
+            $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID
+        }?.localID ?? userPlaceID
+        if let existingTask = ownPlaceSyncTasks[syncKey] {
+            return await existingTask.task.value
+        }
+
+        let taskID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return OwnPlaceSyncOutcome.skipped }
+            return await self.performOwnPlaceSync(
+                userPlaceID: syncKey,
+                backend: backend,
+                trigger: trigger,
+                refreshVisiblePlacesAfterSuccess: refreshVisiblePlacesAfterSuccess
+            )
+        }
+        ownPlaceSyncTasks[syncKey] = (taskID, task)
+        let outcome = await task.value
+        if ownPlaceSyncTasks[syncKey]?.id == taskID {
+            ownPlaceSyncTasks[syncKey] = nil
+        }
+        return outcome
+    }
+
+    private func performOwnPlaceSync(
+        userPlaceID: String,
+        backend: WanderBackend,
+        trigger: OwnPlaceSyncTrigger,
+        refreshVisiblePlacesAfterSuccess: Bool
+    ) async -> OwnPlaceSyncOutcome {
         guard let draft = userPlaceDraft(for: userPlaceID) else {
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncSkipped,
@@ -9646,8 +10075,10 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("own-place sync attempt trigger=\(trigger.rawValue, privacy: .public) user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) place_has_server_id=\((draft.place.serverID != nil), privacy: .public) attribute_count=\(draft.attributes.count, privacy: .public)")
         #endif
 
-        let syncingUserPlace = userPlaces.first {
+        guard let syncingUserPlace = userPlaces.first(where: {
             $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID
+        }) else {
+            return .skipped
         }
         let explicitVisit = draft.status == .been
             ? visits(for: userPlaceID)
@@ -9660,13 +10091,43 @@ final class WanderStore: ObservableObject {
                 }
                 .first
             : nil
+        let socialRemoteIDs: (placeID: String, sourceUserPlaceID: String)?
+        if syncingUserPlace.sourceType == AddSourceType.socialSave.rawValue {
+            if let placeID = remotePlaceID(for: syncingUserPlace.placeID),
+               let sourceUserPlaceID = remoteID(syncingUserPlace.sourceUserPlaceID) {
+                socialRemoteIDs = (placeID, sourceUserPlaceID)
+            } else {
+                let message = "Missing durable social-save provenance"
+                markUserPlace(
+                    localOrServerID: userPlaceID,
+                    syncState: .serverDenied,
+                    error: message
+                )
+                trackOwnPlaceSyncEvent(
+                    name: WanderAnalyticsEvents.ownPlaceSyncFailed,
+                    properties: syncProperties.merging(
+                        ["error_kind": "missing_social_provenance"]
+                    ) { _, new in new }
+                )
+                return .failed
+            }
+        } else {
+            socialRemoteIDs = nil
+        }
 
         markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
         do {
             let remoteResult: SaveResult
-            if let explicitVisit,
-               let syncingUserPlace,
-               let atomicDraft = checkInDraft(for: explicitVisit.id, userPlace: syncingUserPlace) {
+            if let socialRemoteIDs {
+                remoteResult = try await backend.saveVisiblePlace(
+                    placeID: socialRemoteIDs.placeID,
+                    sourceUserPlaceID: socialRemoteIDs.sourceUserPlaceID
+                )
+            } else if let explicitVisit,
+                      let atomicDraft = checkInDraft(
+                        for: explicitVisit.id,
+                        userPlace: syncingUserPlace
+                      ) {
                 let checkInResult = try await backend.saveCheckIn(atomicDraft)
                 remoteResult = checkInResult.saveResult
                 markPlaceVisit(

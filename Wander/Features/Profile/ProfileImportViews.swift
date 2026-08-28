@@ -1255,7 +1255,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     in: store.currentUserVisiblePlaces
                 ) != nil
                 let status = item.stagedStatus
-                let result = await store.saveCandidate(
+                let result = store.saveCandidateOptimistically(
                     candidate,
                     status: status,
                     visibility: .selfOnly,
@@ -1374,7 +1374,11 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @MainActor
     private func add(visiblePlace: VisiblePlace?, to list: LocalPlaceList?, backend: WanderBackend?) async {
         guard let visiblePlace, let list else { return }
-        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        _ = await store.addVisiblePlaceOptimistically(
+            visiblePlace,
+            to: list,
+            backend: backend
+        )
     }
 
     private func markDisplayedReceiptsPresented() {
@@ -1990,7 +1994,7 @@ struct PlaceImportInboxScreen: View {
                     in: store.currentUserVisiblePlaces
                 ) != nil
                 let status = item.stagedStatus
-                let result = await store.saveCandidate(
+                let result = store.saveCandidateOptimistically(
                     candidate,
                     status: status,
                     visibility: .selfOnly,
@@ -2119,7 +2123,11 @@ struct PlaceImportInboxScreen: View {
         backend: WanderBackend?
     ) async {
         guard let visiblePlace, let list else { return }
-        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        _ = await store.addVisiblePlaceOptimistically(
+            visiblePlace,
+            to: list,
+            backend: backend
+        )
     }
 
     private func receiptDidDismiss() {
@@ -2141,7 +2149,7 @@ struct PlaceImportInboxScreen: View {
     private func save(_ submission: MapPlaceSaveSubmission, itemID: String) async -> SaveResult? {
         guard case .add(let sourceType) = submission.context.mode else { return nil }
         let remoteBackend = auth.isSignedIn ? backend : nil
-        let result = await store.saveCandidate(
+        let result = store.saveCandidateOptimistically(
             submission.candidate,
             status: submission.status,
             visibility: submission.visibility,
@@ -2149,6 +2157,7 @@ struct PlaceImportInboxScreen: View {
             sourceType: sourceType,
             ratingScore: submission.ratingScore,
             attributes: submission.attributes,
+            sourceUserPlaceID: submission.context.socialSourceUserPlaceID,
             backend: remoteBackend
         )
         let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil

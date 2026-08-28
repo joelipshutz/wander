@@ -7734,6 +7734,7 @@ struct MapPlaceSaveContext: Identifiable {
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
     let initialPhotoAttachments: [MapPlaceSavePhotoAttachment]
+    let socialSourceUserPlaceID: String?
     let existingCurrentUserSave: VisiblePlace?
     let existingLatestVisit: LocalPlaceVisit?
 
@@ -7752,6 +7753,7 @@ struct MapPlaceSaveContext: Identifiable {
         initialPersonalLabels: Set<String>,
         initialCuisine: String?,
         initialPhotoAttachments: [MapPlaceSavePhotoAttachment],
+        socialSourceUserPlaceID: String? = nil,
         existingCurrentUserSave: VisiblePlace? = nil,
         existingLatestVisit: LocalPlaceVisit? = nil
     ) {
@@ -7769,6 +7771,7 @@ struct MapPlaceSaveContext: Identifiable {
         self.initialPersonalLabels = initialPersonalLabels
         self.initialCuisine = initialCuisine
         self.initialPhotoAttachments = initialPhotoAttachments
+        self.socialSourceUserPlaceID = socialSourceUserPlaceID
         self.existingCurrentUserSave = existingCurrentUserSave
         self.existingLatestVisit = existingLatestVisit
     }
@@ -7963,7 +7966,9 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: initialNewSaveAnswers(from: attributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: attributes),
-            initialPhotoAttachments: []
+            initialPhotoAttachments: [],
+            socialSourceUserPlaceID: visiblePlace.userPlace.serverID
+                ?? visiblePlace.userPlace.id
         )
     }
 
@@ -7987,7 +7992,9 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: nil,
-            initialPhotoAttachments: []
+            initialPhotoAttachments: [],
+            socialSourceUserPlaceID: visiblePlace.userPlace.serverID
+                ?? visiblePlace.userPlace.id
         )
     }
 
@@ -8079,6 +8086,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialPersonalLabels: initialPersonalLabels,
             initialCuisine: initialCuisine,
             initialPhotoAttachments: initialPhotoAttachments,
+            socialSourceUserPlaceID: socialSourceUserPlaceID,
             existingCurrentUserSave: nil,
             existingLatestVisit: existingLatestVisit
         )
@@ -8575,7 +8583,7 @@ func persistNewPlaceSaveSubmission(
         return nil
     }
 
-    let result = await store.saveCandidate(
+    let result = store.saveCandidateOptimistically(
         submission.candidate,
         status: submission.status,
         visibility: submission.visibility,
@@ -8585,6 +8593,7 @@ func persistNewPlaceSaveSubmission(
         visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
+        sourceUserPlaceID: submission.context.socialSourceUserPlaceID,
         backend: backend
     )
     let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
@@ -8619,9 +8628,10 @@ func persistScopedVisitOrWantSubmission(
         guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
             return (nil, nil)
         }
-        if let backend {
-            _ = await store.syncVisit(visitID: visit.id, backend: backend)
-        }
+        store.scheduleOptimisticOwnPlaceSync(
+            userPlaceID: visit.userPlaceID,
+            backend: backend
+        )
         return (SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), visit)
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
@@ -8644,14 +8654,19 @@ func persistScopedVisitOrWantSubmission(
             ) else {
                 return (nil, nil)
             }
+            store.scheduleOptimisticOwnPlaceSync(
+                userPlaceID: transitioned.userPlaceID,
+                backend: backend
+            )
             return (transitioned, nil)
         }
-        if let backend {
-            _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
-        }
+        store.scheduleOptimisticOwnPlaceSync(
+            userPlaceID: updatedVisit.userPlaceID,
+            backend: backend
+        )
         return (SaveResult(userPlaceID: updatedVisit.userPlaceID, syncState: updatedVisit.syncState), updatedVisit)
     case .editWant(let visiblePlace):
-        let result = await store.saveCandidate(
+        let result = store.saveCandidateOptimistically(
             submission.candidate,
             status: submission.status,
             visibility: submission.visibility,
@@ -8661,6 +8676,7 @@ func persistScopedVisitOrWantSubmission(
             visitedAt: submission.visitedAt,
             plannedDate: submission.plannedDate,
             attributes: submission.attributes,
+            sourceUserPlaceID: submission.context.socialSourceUserPlaceID,
             backend: backend
         )
         return (result, nil)

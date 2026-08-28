@@ -3688,9 +3688,36 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(resultCard.contains("serverID: place.id"))
         XCTAssertFalse(resultCard.contains("googleMapsSearchURL"))
         XCTAssertTrue(discoverScreen.contains("guard currentUserSave(matching: visiblePlace) == nil"))
-        XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlace("))
+        XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlaceOptimistically("))
         XCTAssertTrue(discoverScreen.contains("status: .wannaGo"))
-        XCTAssertTrue(discoverScreen.contains("store.addVisiblePlace("))
+        XCTAssertTrue(discoverScreen.contains("store.addVisiblePlaceOptimistically("))
+    }
+
+    func testSaveSurfacesUseSharedOptimisticCompletionAndRecovery() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let listPicker = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/MapPlaceListPickerSheet.swift")
+        )
+        let imports = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+
+        XCTAssertTrue(root.contains("store.deferredSaveRecoveryPresentation"))
+        XCTAssertTrue(root.contains("store.retryDeferredSaveOperations("))
+        XCTAssertTrue(map.contains("store.saveCandidateOptimistically("))
+        XCTAssertTrue(map.contains("store.scheduleOptimisticOwnPlaceSync("))
+        XCTAssertTrue(lists.contains("store.addVisiblePlaceOptimistically("))
+        XCTAssertTrue(listPicker.contains("store.addVisiblePlaceOptimistically("))
+        XCTAssertTrue(imports.contains("store.saveCandidateOptimistically("))
+        XCTAssertTrue(imports.contains("store.addVisiblePlaceOptimistically("))
     }
 
     func testDiscoverUnboundedRowsAreLazyAndPlaceSearchIsSubmitDriven() throws {
