@@ -144,6 +144,20 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(saved.detail, "5 selected options")
     }
 
+    func testSavedLensSwipeOnlyRevealsTheTrailingDeleteAction() {
+        XCTAssertEqual(YourMapPrototypeLensSwipePolicy.clampedOffset(24), 0)
+        XCTAssertEqual(YourMapPrototypeLensSwipePolicy.clampedOffset(-28), -28)
+        XCTAssertEqual(
+            YourMapPrototypeLensSwipePolicy.clampedOffset(-120),
+            -YourMapPrototypeLensSwipePolicy.revealWidth
+        )
+        XCTAssertEqual(YourMapPrototypeLensSwipePolicy.settledOffset(for: -20), 0)
+        XCTAssertEqual(
+            YourMapPrototypeLensSwipePolicy.settledOffset(for: -60),
+            -YourMapPrototypeLensSwipePolicy.revealWidth
+        )
+    }
+
     func testShareLinksAreOpaqueAndDistinguishStaticFromLive() {
         let token = UUID(uuidString: "A94D4A30-31A3-48CB-B5BB-744F8F83B013")!
         let staticLink = YourMapPrototypeShareLink.make(format: .staticSnapshot, token: token)
@@ -199,12 +213,24 @@ final class YourMapPrototypeTests: XCTestCase {
             ratingScore: 4.5,
             tags: ["calm", "morning"]
         )
+        let owner = LocalProfile(
+            localID: "owner",
+            handle: "owner",
+            displayName: "Owner"
+        )
+        let visiblePlace = VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
 
         let dataset = YourMapPrototypeDataset.make(
             ownerID: "owner",
             userPlaces: [userPlace],
             visits: [visit],
             places: [place],
+            visiblePlaces: [visiblePlace],
             now: now
         )
         let result = try XCTUnwrap(dataset.places.first)
@@ -218,6 +244,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(result.tags, ["calm", "morning"])
         XCTAssertEqual(result.rating, 4.5)
         XCTAssertEqual(result.visitCount, 1)
+        XCTAssertEqual(dataset.visiblePlaceByPlaceID[result.id]?.userPlace.id, userPlace.id)
     }
 
     func testProfilePreviewPushesAFullMapWithoutReplicaBottomNavigation() throws {
@@ -246,6 +273,12 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertFalse(profileScreen.contains("WanderShowYourMapPrototype"))
         XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? \"Your Map\" : \"Patterns\")"))
         XCTAssertTrue(yourMapScreen.contains("MapPinOutlineStroke"))
+        XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSelectablePin"))
+        XCTAssertTrue(yourMapScreen.contains("PlaceProfileMapSurface("))
+        XCTAssertTrue(yourMapScreen.contains("Text(place.name)"))
+        XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSavedLensRow"))
+        XCTAssertTrue(yourMapScreen.contains("trash.fill"))
+        XCTAssertTrue(yourMapScreen.contains(".highPriorityGesture(swipeGesture)"))
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.monthHeatMap"))
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.citiesCountries"))
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.returnMagnets"))

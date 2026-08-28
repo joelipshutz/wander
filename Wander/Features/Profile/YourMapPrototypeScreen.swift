@@ -9,9 +9,11 @@ struct YourMapPrototypeScreen: View {
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
     @State private var cameraPosition: MapCameraPosition
+    @State private var cameraRegion: MKCoordinateRegion
     @State private var showsFilters = false
     @State private var showsSharePreview: Bool
     @State private var savedLenses: [YourMapPrototypeSavedLens] = []
+    @State private var selectedPlaceID: String?
 
     init(
         dataset: YourMapPrototypeDataset,
@@ -22,7 +24,9 @@ struct YourMapPrototypeScreen: View {
         _mode = State(initialValue: initialMode)
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
-        _cameraPosition = State(initialValue: .region(Self.initialRegion(for: dataset.places)))
+        let initialRegion = Self.initialRegion(for: dataset.places)
+        _cameraPosition = State(initialValue: .region(initialRegion))
+        _cameraRegion = State(initialValue: initialRegion)
     }
 
     init(
@@ -82,7 +86,14 @@ struct YourMapPrototypeScreen: View {
                 .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
             }
         }
-        .accessibilityIdentifier("yourMap.prototype")
+        .onChange(of: lens) { _, updatedLens in
+            guard let selectedPlaceID,
+                  !dataset.places.contains(where: {
+                      $0.id == selectedPlaceID && updatedLens.matches($0, now: dataset.now)
+                  })
+            else { return }
+            self.selectedPlaceID = nil
+        }
     }
 
     private var filteredPlaces: [YourMapPrototypePlace] {
@@ -97,23 +108,45 @@ struct YourMapPrototypeScreen: View {
         YourMapPrototypeInsights(places: filteredPlaces, now: dataset.now)
     }
 
+    private var selectedVisiblePlace: VisiblePlace? {
+        guard let selectedPlaceID,
+              renderedPlaces.contains(where: { $0.id == selectedPlaceID })
+        else { return nil }
+        return dataset.visiblePlaceByPlaceID[selectedPlaceID]
+    }
+
     private var mapWorkspace: some View {
         ZStack(alignment: .bottom) {
             Map(position: $cameraPosition, interactionModes: .all) {
                 ForEach(renderedPlaces) { place in
                     Annotation(place.name, coordinate: place.coordinate) {
-                        YourMapPrototypePin(place: place)
+                        YourMapPrototypeSelectablePin(
+                            place: place,
+                            isSelected: selectedPlaceID == place.id
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                selectedPlaceID = place.id
+                                cameraPosition = .region(selectedRegion(for: place))
+                            }
+                        }
                     }
                     .annotationTitles(.hidden)
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .onMapCameraChange(frequency: .onEnd) { context in
+                cameraRegion = context.region
+            }
             .ignoresSafeArea()
             .overlay {
                 if filteredPlaces.isEmpty {
                     mapEmptyState
                 }
             }
+
+            selectedPlaceProfileSurface
+                .padding(.bottom, 72)
+                .zIndex(30)
 
             VStack(spacing: 0) {
                 mapHeader
@@ -122,8 +155,30 @@ struct YourMapPrototypeScreen: View {
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing4)
             }
+            .zIndex(40)
         }
-        .accessibilityIdentifier("yourMap.prototype.map")
+    }
+
+    @ViewBuilder
+    private var selectedPlaceProfileSurface: some View {
+        if let selectedVisiblePlace {
+            PlaceProfileMapSurface(
+                place: PlaceSheetPlace(visiblePlace: selectedVisiblePlace),
+                saves: [
+                    PlaceSaveSummary(
+                        visiblePlace: selectedVisiblePlace,
+                        attributes: selectedVisiblePlace.attributes
+                    )
+                ],
+                tasteSaves: [],
+                currentUserID: selectedVisiblePlace.owner.id,
+                viewerLocation: nil,
+                action: .none,
+                onOpen: {},
+                onAction: {},
+                onReady: {}
+            )
+        }
     }
 
     private var mapHeader: some View {
@@ -440,6 +495,16 @@ struct YourMapPrototypeScreen: View {
         Int((insights.repeatRate * 100).rounded())
     }
 
+    private func selectedRegion(for place: YourMapPrototypePlace) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: place.coordinate.latitude - (cameraRegion.span.latitudeDelta * 0.18),
+                longitude: place.coordinate.longitude
+            ),
+            span: cameraRegion.span
+        )
+    }
+
     private static func initialRegion(for places: [YourMapPrototypePlace]) -> MKCoordinateRegion {
         let centerPlace = places.first { $0.city == "Los Angeles" }
         let center = centerPlace?.coordinate ?? CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437)
@@ -649,7 +714,6 @@ private struct YourMapPrototypeFilterSheet: View {
             }
         }
         .tint(WanderTheme.terracottaDark.color)
-        .accessibilityIdentifier("yourMap.prototype.filterSheet")
     }
 
     private var savedLensSection: some View {
@@ -677,35 +741,35 @@ private struct YourMapPrototypeFilterSheet: View {
                     .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
             } else {
-                ForEach(savedLenses) { savedLens in
-                    Button {
-                        lens = savedLens.lens
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing3) {
-                            Image(systemName: "bookmark.fill")
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(savedLens.title)
-                                    .font(WanderTypography.label)
-                                    .lineLimit(1)
-                                Text(savedLens.detail)
-                                    .font(WanderTypography.metadata)
-                                    .foregroundStyle(WanderTheme.textMuted.color)
-                                    .lineLimit(1)
+                VStack(spacing: 0) {
+                    ForEach(savedLenses) { savedLens in
+                        YourMapPrototypeSavedLensRow(
+                            savedLens: savedLens,
+                            isSelected: savedLens.lens == lens,
+                            onSelect: {
+                                lens = savedLens.lens
+                            },
+                            onDelete: {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    savedLenses.removeAll { $0.id == savedLens.id }
+                                }
                             }
-                            Spacer(minLength: 0)
-                            if savedLens.lens == lens {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(WanderTheme.categoryMoss.color)
-                            }
+                        )
+
+                        if savedLens.id != savedLenses.last?.id {
+                            Divider()
+                                .overlay(WanderTheme.borderHairline.color)
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-                        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
                     }
-                    .buttonStyle(.plain)
                 }
+                .background(WanderTheme.surfaceBone.color)
+                .overlay(alignment: .top) {
+                    Divider().overlay(WanderTheme.borderHairline.color)
+                }
+                .overlay(alignment: .bottom) {
+                    Divider().overlay(WanderTheme.borderHairline.color)
+                }
+                .padding(.horizontal, -WanderTheme.spacing4)
             }
         }
     }
@@ -1042,6 +1106,140 @@ private struct YourMapPrototypePin: View {
         )
         .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
         .accessibilityLabel("\(place.name), \(place.status.title), \(place.visitCount) visits")
+    }
+}
+
+private struct YourMapPrototypeSelectablePin: View {
+    let place: YourMapPrototypePlace
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                YourMapPrototypePin(place: place)
+
+                if isSelected {
+                    Text(place.name)
+                        .font(WanderTypography.metadata)
+                        .fontWeight(.bold)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .padding(.vertical, WanderTheme.spacing1)
+                        .background(WanderTheme.surfaceRaised.color.opacity(0.96), in: Capsule())
+                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 4, y: 2)
+                        .offset(y: (MapPinVisualMetrics.discDiameter / 2) + 18)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
+                }
+            }
+            .frame(width: 164, height: MapPinVisualMetrics.discDiameter)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Select \(place.name)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("yourMap.prototype.pin.\(place.id)")
+        .zIndex(isSelected ? 10 : 0)
+    }
+}
+
+private struct YourMapPrototypeSavedLensRow: View {
+    let savedLens: YourMapPrototypeSavedLens
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onDelete: () -> Void
+
+    @State private var restingOffset: CGFloat = 0
+    @GestureState private var dragTranslation: CGFloat = 0
+
+    private var contentOffset: CGFloat {
+        YourMapPrototypeLensSwipePolicy.clampedOffset(restingOffset + dragTranslation)
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(
+                        width: YourMapPrototypeLensSwipePolicy.revealWidth,
+                        height: 68
+                    )
+                    .background(WanderTheme.stateError.color)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete \(savedLens.title)")
+            .accessibilityIdentifier("yourMap.prototype.deleteLens.\(savedLens.id.uuidString)")
+            .allowsHitTesting(
+                restingOffset <= -(YourMapPrototypeLensSwipePolicy.revealWidth / 2)
+            )
+            .zIndex(
+                restingOffset <= -(YourMapPrototypeLensSwipePolicy.revealWidth / 2) ? 2 : 0
+            )
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    restingOffset = 0
+                }
+                onSelect()
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: "bookmark.fill")
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(savedLens.title)
+                            .font(WanderTypography.label)
+                            .lineLimit(1)
+                        Text(savedLens.detail)
+                            .font(WanderTypography.metadata)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(WanderTheme.categoryMoss.color)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+                .background(WanderTheme.surfaceBone.color)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("yourMap.prototype.savedLens.\(savedLens.id.uuidString)")
+            .offset(x: contentOffset)
+            .allowsHitTesting(
+                restingOffset > -(YourMapPrototypeLensSwipePolicy.revealWidth / 2)
+            )
+            .zIndex(1)
+            .highPriorityGesture(swipeGesture)
+        }
+        .frame(maxWidth: .infinity, minHeight: 68)
+        .clipped()
+        .accessibilityAction(named: "Delete lens", onDelete)
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .updating($dragTranslation) { value, translation, _ in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                translation = value.translation.width
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                let predictedOffset = restingOffset + value.predictedEndTranslation.width
+                withAnimation(.easeOut(duration: 0.18)) {
+                    restingOffset = YourMapPrototypeLensSwipePolicy.settledOffset(
+                        for: predictedOffset
+                    )
+                }
+            }
     }
 }
 

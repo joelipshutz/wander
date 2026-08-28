@@ -347,7 +347,8 @@ struct ProfileScreen: View {
             ownerID: store.currentUser.id,
             userPlaces: projection.userPlaces,
             visits: projection.visits,
-            places: projection.places
+            places: projection.places,
+            visiblePlaces: projection.visiblePlaces
         )
     }
     #endif

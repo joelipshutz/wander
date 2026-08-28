@@ -162,6 +162,18 @@ struct YourMapPrototypeSavedLens: Identifiable, Equatable {
     }
 }
 
+enum YourMapPrototypeLensSwipePolicy {
+    static let revealWidth: CGFloat = 72
+
+    static func clampedOffset(_ offset: CGFloat) -> CGFloat {
+        min(0, max(-revealWidth, offset))
+    }
+
+    static func settledOffset(for predictedOffset: CGFloat) -> CGFloat {
+        clampedOffset(predictedOffset) <= -(revealWidth / 2) ? -revealWidth : 0
+    }
+}
+
 enum YourMapPrototypeShareFormat: String, CaseIterable, Identifiable {
     case staticSnapshot = "static"
     case liveLens = "live"
@@ -251,6 +263,7 @@ struct YourMapPrototypeDataset {
     let places: [YourMapPrototypePlace]
     let now: Date
     let initialLens: YourMapPrototypeLens
+    let visiblePlaceByPlaceID: [String: VisiblePlace]
 
     static func make(
         volume: YourMapPrototypeDataVolume,
@@ -319,7 +332,8 @@ struct YourMapPrototypeDataset {
             volume: volume,
             places: places,
             now: now,
-            initialLens: initialLens
+            initialLens: initialLens,
+            visiblePlaceByPlaceID: [:]
         )
     }
 
@@ -328,6 +342,7 @@ struct YourMapPrototypeDataset {
         userPlaces: [LocalUserPlace],
         visits: [LocalPlaceVisit],
         places: [LocalPlace],
+        visiblePlaces: [VisiblePlace] = [],
         now: Date = .now
     ) -> Self {
         var placesByReferenceID: [String: LocalPlace] = [:]
@@ -402,12 +417,34 @@ struct YourMapPrototypeDataset {
             lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
 
+        var visiblePlacesByUserPlaceReferenceID: [String: VisiblePlace] = [:]
+        for visiblePlace in visiblePlaces where visiblePlace.owner.id == ownerID {
+            for referenceID in referenceIDs(for: visiblePlace.userPlace) {
+                visiblePlacesByUserPlaceReferenceID[referenceID] = visiblePlace
+            }
+        }
+
+        var visiblePlaceByPlaceID: [String: VisiblePlace] = [:]
+        for (placeID, saved) in latestSaveByPlaceID {
+            let visiblePlace = referenceIDs(for: saved.userPlace).lazy
+                .compactMap { visiblePlacesByUserPlaceReferenceID[$0] }
+                .first
+            if let visiblePlace {
+                visiblePlaceByPlaceID[placeID] = visiblePlace
+            }
+        }
+
         return Self(
             volume: representativeVolume(for: mappedPlaces.count),
             places: mappedPlaces,
             now: now,
-            initialLens: YourMapPrototypeLens()
+            initialLens: YourMapPrototypeLens(),
+            visiblePlaceByPlaceID: visiblePlaceByPlaceID
         )
+    }
+
+    private static func referenceIDs(for userPlace: LocalUserPlace) -> [String] {
+        [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
     }
 
     private static func representativeVolume(for count: Int) -> YourMapPrototypeDataVolume {
