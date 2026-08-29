@@ -70,7 +70,13 @@ test("build 122 fixture reconciles every commit and keeps c555 in tester copy", 
   assert.equal(report.excluded.length, 1);
   assert.equal(report.releaseOperations.length, 1);
 
-  const artifacts = buildReleaseArtifacts({ report, buildNumber: 122, status: "live" });
+  const artifacts = buildReleaseArtifacts({
+    report,
+    buildNumber: 122,
+    marketingVersion: "1.0",
+    status: "live",
+  });
+  assert.match(artifacts.slack, /^rec\.me 1\.0 \(122\) is live and approved in TestFlight\./);
   assert.match(artifacts.slack, /Map and Feed share trusted-place search/);
   assert.match(artifacts.slack, /#testflight-feedback/);
   assert.doesNotMatch(artifacts.slack, /Docs\/process-only/);

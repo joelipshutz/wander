@@ -291,4 +291,43 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertFalse(yourMapScreen.contains("navigationBarBackButtonHidden"))
         XCTAssertFalse(sharedScheme.contains("-WanderShowYourMapPrototype"))
     }
+
+    func testYourMapIsCompiledIntoReleaseBuilds() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let yourMapModels = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeModels.swift")
+        )
+        let yourMapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeScreen.swift")
+        )
+
+        XCTAssertFalse(
+            profileScreen.contains("#if DEBUG\n    @State private var showsYourMapPrototype"),
+            "The Profile route must remain available in TestFlight Release builds."
+        )
+        XCTAssertFalse(
+            profileHome.contains("#if DEBUG\n                if mode.isOwner, let yourMapAction"),
+            "The owner Profile preview must remain available in TestFlight Release builds."
+        )
+        XCTAssertFalse(
+            profileHome.contains("#if DEBUG\nprivate struct ProfileYourMapPreview"),
+            "The owner Profile preview type must remain available in TestFlight Release builds."
+        )
+        XCTAssertFalse(
+            yourMapModels.contains("#if DEBUG"),
+            "Your Map models must compile into Release builds."
+        )
+        XCTAssertFalse(
+            yourMapScreen.contains("#if DEBUG"),
+            "Your Map UI must compile into Release builds."
+        )
+    }
 }

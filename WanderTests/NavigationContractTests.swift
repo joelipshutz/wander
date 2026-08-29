@@ -1218,6 +1218,55 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testInCommonOverlapScoreUsesTheVisiblePlaceUnion() {
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 4,
+                viewerCount: 10,
+                profileCount: 8
+            ),
+            29
+        )
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 5,
+                viewerCount: 5,
+                profileCount: 5
+            ),
+            100
+        )
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 0,
+                viewerCount: 0,
+                profileCount: 0
+            ),
+            0
+        )
+    }
+
+    func testInCommonProductionSurfaceIsReleaseVisibleAndUsesRealData() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let releaseSurfaceRange = try XCTUnwrap(source.range(of: "enum InCommonReleaseProjection"))
+        let sourceBeforeReleaseSurface = String(source[..<releaseSurfaceRange.lowerBound])
+        let releaseSurface = String(source[releaseSurfaceRange.lowerBound...])
+
+        if let lastDebugStart = sourceBeforeReleaseSurface.range(of: "#if DEBUG", options: .backwards) {
+            let lastDebugEnd = try XCTUnwrap(
+                sourceBeforeReleaseSurface.range(of: "#endif", options: .backwards)
+            )
+            XCTAssertGreaterThan(lastDebugEnd.lowerBound, lastDebugStart.lowerBound)
+        }
+        XCTAssertTrue(releaseSurface.contains("store.placesInCommon(with: profileID)"))
+        XCTAssertTrue(releaseSurface.contains("InCommonReleaseHero("))
+        XCTAssertTrue(releaseSurface.contains("TextField(\"search \\(navigationTitle.lowercased())\""))
+        XCTAssertTrue(releaseSurface.contains("Label(\"Open your shared map\", systemImage: \"map.fill\")"))
+        XCTAssertTrue(releaseSurface.contains("InCommonReleaseMapScreen("))
+        XCTAssertTrue(releaseSurface.contains("ProfilePlaceCollectionMap("))
+    }
+
     func testSharedProfileHomeHidesUnusedNavigationBar() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
