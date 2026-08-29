@@ -84,7 +84,9 @@ enum MapSearchPerformancePolicy {
 
 enum MapInitialLoadingPolicy {
     static let defaultMinimumVisibleInterval: TimeInterval = 0.35
+    static let postRevealHydrationDelay: TimeInterval = 0.25
     static let testDelayArgument = "-WanderMapInitialLoadingDelayMilliseconds"
+    static let testRefreshStallArgument = "-WanderMapInitialLoadingRefreshStallMilliseconds"
 
     static func minimumVisibleInterval(
         arguments: [String] = ProcessInfo.processInfo.arguments
@@ -110,6 +112,25 @@ enum MapInitialLoadingPolicy {
     ) -> TimeInterval {
         max(0, minimumVisibleInterval - max(0, elapsed))
     }
+
+    static func refreshStallInterval(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> TimeInterval {
+        #if DEBUG
+        guard let argumentIndex = arguments.firstIndex(of: testRefreshStallArgument),
+              arguments.indices.contains(argumentIndex + 1),
+              let milliseconds = Double(arguments[argumentIndex + 1]),
+              milliseconds.isFinite,
+              milliseconds > 0
+        else {
+            return 0
+        }
+        return milliseconds / 1_000
+        #else
+        return 0
+        #endif
+    }
+
 }
 
 enum MapSubmittedSearchSelection {
@@ -1602,6 +1623,7 @@ struct MapScreen: View {
                 if !hasRevealedInitialMap {
                     OnboardingLaunchView(message: "Loading your map…")
                         .accessibilityIdentifier("map.initialLoading")
+                        .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
                         .zIndex(100)
                 }
@@ -1650,7 +1672,7 @@ struct MapScreen: View {
                 await handleMapSearchLaunchRequest(searchLaunchRequest)
             }
             .task {
-                await refreshInitialMapSourcesAndRevealMap()
+                await revealInitialMapThenRefreshSources()
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
@@ -2372,6 +2394,12 @@ struct MapScreen: View {
         featuredViewportRefreshTask?.cancel()
         isLoadingMapSources = true
 
+        let refreshStallInterval = MapInitialLoadingPolicy.refreshStallInterval()
+        if refreshStallInterval > 0 {
+            try? await Task.sleep(for: .seconds(refreshStallInterval))
+            guard !Task.isCancelled else { return }
+        }
+
         let requestedViewport = Self.initialRemoteViewport
         async let socialRefresh: Bool = store.refreshRemoteSocialSurfaces(
             in: requestedViewport,
@@ -2391,11 +2419,8 @@ struct MapScreen: View {
         handleFeaturedCameraChange(currentSearchRegion)
     }
 
-    private func refreshInitialMapSourcesAndRevealMap() async {
+    private func revealInitialMapThenRefreshSources() async {
         let startedAt = ProcessInfo.processInfo.systemUptime
-        await refreshInitialMapSources()
-        guard !Task.isCancelled else { return }
-
         let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
         let remainingInterval = MapInitialLoadingPolicy.remainingVisibleInterval(
             elapsed: elapsed,
@@ -2408,6 +2433,19 @@ struct MapScreen: View {
         }
         guard !Task.isCancelled else { return }
 
+        revealInitialMapIfNeeded()
+        do {
+            try await Task.sleep(for: .seconds(MapInitialLoadingPolicy.postRevealHydrationDelay))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+
+        await refreshInitialMapSources()
+    }
+
+    private func revealInitialMapIfNeeded() {
+        guard !hasRevealedInitialMap else { return }
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
             hasRevealedInitialMap = true
         }
