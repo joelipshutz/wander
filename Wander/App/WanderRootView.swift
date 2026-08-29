@@ -1420,6 +1420,14 @@ struct WanderRootView: View {
             pushNotifications.consumeNavigationRequest(id: request.id)
             return
         }
+        if request.destination == .wannaPlan {
+            isPresentingAdd = false
+            initialPresentation = nil
+            selectedTab = .profile
+            visitInvitationInboxRequestID = UUID()
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            return
+        }
 
         isPresentingAdd = false
         initialPresentation = nil
@@ -1461,7 +1469,7 @@ struct WanderRootView: View {
         switch destination {
         case .quickCapture: .map
         case .profile: .profile
-        case .people, .drafts: .profile
+        case .people, .drafts, .wannaPlan: .profile
         case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map

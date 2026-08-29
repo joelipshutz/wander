@@ -289,6 +289,7 @@ enum NotificationDestination: Equatable {
     case place(id: String)
     case activityComments(id: String)
     case sharedVisit(participantID: String, generation: Int)
+    case wannaPlan
     case drafts(extractionJobID: String?)
     case importReview(batchIDs: [String])
     case discover
@@ -657,6 +658,9 @@ final class PushNotificationManager: ObservableObject {
         case "activity_liked", "activity_commented":
             return (data?["activity_id"] as? String).map { .activityComments(id: $0) }
         case "shared_visit":
+            if data?["wanna_plan_participant_id"] != nil || data?["plan_id"] != nil {
+                return .wannaPlan
+            }
             guard let participantID = data?["participant_id"] as? String,
                   let generation = integerValue(data?["invitation_generation"])
             else { return nil }
@@ -723,6 +727,8 @@ final class PushNotificationManager: ObservableObject {
             return "activity_comments"
         case .sharedVisit:
             return "shared_visit"
+        case .wannaPlan:
+            return "wanna_plan"
         case .drafts:
             return "drafts"
         case .importReview:
@@ -775,6 +781,8 @@ final class PushNotificationManager: ObservableObject {
                   let generation = Int(generationString)
             else { return nil }
             return .sharedVisit(participantID: identifier, generation: generation)
+        case "wanna-plans":
+            return .wannaPlan
         case "extraction-jobs":
             return .drafts(extractionJobID: identifier)
         case "discover":

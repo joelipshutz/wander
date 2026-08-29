@@ -49,7 +49,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `wanna_plan_created`, `wanna_plan_invitation_accepted`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -80,6 +80,12 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `place_list_item_added` | A place is successfully added to a list from an instrumented surface | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |
+| `wanna_created` | A new immutable Wanna moment is saved locally | `has_date`, `invitee_count_bucket`, `sharing`, `was_visited_before` |
+| `wanna_plan_created` | A Wanna with one or more invitees is saved locally | `has_date`, `invitee_count_bucket`, `sharing`, `was_visited_before` |
+| `wanna_plan_invitation_accepted` | An invitation atomically becomes the recipient's own Wanna | `has_date`, `sharing` |
+| `wanna_plan_invitation_declined` | An invitation is declined without creating a Wanna | `has_date`, `sharing` |
+| `wanna_checkin_resolution_presented` | A repeat check-in has saved and the Keep/Remove speed bump appears | `default_choice` |
+| `wanna_checkin_resolved` | The repeat check-in resolution succeeds | `choice`, `resolved_count_bucket` |
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
 | `contact_invite_delivery_started` | Messages/share sheet begins | `surface`, `delivery_mode`, `recipient_count` |
 | `contact_invite_completed` | Invite handoff sends, cancels, or fails | `surface`, `delivery_mode`, `outcome`, `sent_count` |

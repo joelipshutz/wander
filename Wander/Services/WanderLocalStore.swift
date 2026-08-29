@@ -175,6 +175,9 @@ final class WanderStore: ObservableObject {
     @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
     @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
     private(set) var sharedVisitInboxUserID: String?
+    @Published private(set) var wannaEvents: [WannaEvent]
+    @Published private(set) var wannaPlanInvitations: [WannaPlanInvitation]
+    private(set) var wannaInboxUserID: String?
     @Published private(set) var follows: [LocalFollow]
     @Published private(set) var blocks: [LocalBlock]
     @Published private(set) var mutes: [LocalMute]
@@ -530,6 +533,9 @@ final class WanderStore: ObservableObject {
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
             self.sharedVisitInboxUserID = restored.sharedVisitInboxUserID
+            self.wannaEvents = restored.wannaEvents
+            self.wannaPlanInvitations = restored.wannaPlanInvitations
+            self.wannaInboxUserID = restored.wannaInboxUserID
             self.pendingSharedVisitInvites = restored.pendingSharedVisitInvites
             self.follows = restored.follows
             self.blocks = restored.blocks
@@ -560,6 +566,9 @@ final class WanderStore: ObservableObject {
             self.visitPhotos = fixtures.visitPhotos
             self.sharedVisitInvitations = []
             self.sharedVisitInboxUserID = nil
+            self.wannaEvents = []
+            self.wannaPlanInvitations = []
+            self.wannaInboxUserID = nil
             self.pendingSharedVisitInvites = []
             self.follows = fixtures.follows
             self.blocks = fixtures.blocks
@@ -733,6 +742,176 @@ final class WanderStore: ObservableObject {
             guard currentUser.id == requestUserID else { return false }
             lastRemoteError = remoteErrorMessage(error)
             return false
+        }
+    }
+
+    @discardableResult
+    func refreshWannaData(backend: WanderBackend?) async -> Bool {
+        guard let backend, backend.canUseWannaEvents else { return false }
+        let requestUserID = currentUser.id
+        do {
+            async let eventsRequest = backend.ownWannaEvents()
+            async let inboxRequest = backend.wannaPlanInbox(limit: 50)
+            let (events, invitations) = try await (eventsRequest, inboxRequest)
+            guard currentUser.id == requestUserID else { return false }
+            wannaEvents = events
+            wannaPlanInvitations = invitations
+            wannaInboxUserID = requestUserID
+            lastRemoteError = nil
+            persist()
+            return true
+        } catch {
+            guard currentUser.id == requestUserID else { return false }
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    func relationshipSnapshot(placeID: String, userPlaceID: String? = nil) -> PlaceRelationshipSnapshot {
+        let matchingUserPlaces = userPlaces.filter { userPlace in
+            guard userPlace.userID == currentUser.id, userPlace.deletedAt == nil else { return false }
+            let matchesUserPlace = userPlaceID.map {
+                userPlace.id == $0 || userPlace.localID == $0 || userPlace.serverID == $0
+            } ?? false
+            let matchesPlace = userPlace.placeID == placeID || places.contains { place in
+                (place.id == placeID || place.localID == placeID || place.serverID == placeID)
+                    && (userPlace.placeID == place.id || userPlace.placeID == place.localID || userPlace.placeID == place.serverID)
+            }
+            return matchesUserPlace || matchesPlace
+        }
+        let userPlaceIDs = Set(matchingUserPlaces.flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } })
+        let visitCount = placeVisits.filter {
+            $0.deletedAt == nil && userPlaceIDs.contains($0.userPlaceID)
+        }.count
+        let activeWannaCount = wannaEvents.filter { event in
+            event.state == .active
+                && (event.placeID == placeID || userPlaceIDs.contains(event.userPlaceID))
+        }.count
+        return PlaceRelationshipSnapshot(
+            visitCount: visitCount,
+            activeWannaCount: activeWannaCount
+        )
+    }
+
+    @discardableResult
+    func acceptWannaPlanInvitation(
+        _ invitation: WannaPlanInvitation,
+        backend: WanderBackend?
+    ) async -> WannaPlanAcceptanceResult? {
+        guard let backend, backend.canUseWannaEvents else { return nil }
+        let identifiers = WannaPlanAcceptanceIdentifiers.deterministic(
+            participantID: invitation.participantID,
+            invitationGeneration: invitation.invitationGeneration
+        )
+        do {
+            let result = try await backend.acceptWannaPlan(
+                participantID: invitation.participantID,
+                invitationGeneration: invitation.invitationGeneration,
+                identifiers: identifiers
+            )
+            wannaPlanInvitations.removeAll { $0.participantID == invitation.participantID }
+            _ = await refreshWannaData(backend: backend)
+            await refreshRemoteVisiblePlaces(backend: backend)
+            let properties = [
+                "has_date": invitation.plannedDate == nil ? "false" : "true",
+                "sharing": invitation.sharing.rawValue,
+            ]
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.wannaPlanInvitationAccepted,
+                    properties: properties
+                )
+            )
+            analytics.track(
+                .engagement(
+                    need: .connect,
+                    action: .wannaPlanInvitationAccepted,
+                    surface: "invitation_inbox",
+                    properties: properties
+                )
+            )
+            return result
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func declineWannaPlanInvitation(
+        _ invitation: WannaPlanInvitation,
+        backend: WanderBackend?
+    ) async -> Bool {
+        guard let backend, backend.canUseWannaEvents else { return false }
+        do {
+            try await backend.declineWannaPlan(
+                participantID: invitation.participantID,
+                invitationGeneration: invitation.invitationGeneration
+            )
+            wannaPlanInvitations.removeAll { $0.participantID == invitation.participantID }
+            persist()
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.wannaPlanInvitationDeclined,
+                    properties: [
+                        "has_date": invitation.plannedDate == nil ? "false" : "true",
+                        "sharing": invitation.sharing.rawValue,
+                    ]
+                )
+            )
+            return true
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func resolveActiveWannas(
+        placeID: String,
+        choice: WannaCheckInChoice,
+        visitID: String?,
+        backend: WanderBackend?
+    ) async -> Int {
+        guard let backend, backend.canUseWannaEvents else { return 0 }
+        do {
+            let count = try await backend.resolveOwnWannas(
+                placeID: placeID,
+                choice: choice,
+                visitID: visitID
+            )
+            _ = await refreshWannaData(backend: backend)
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.wannaCheckInResolved,
+                    properties: [
+                        "choice": choice.rawValue,
+                        "resolved_count_bucket": Self.wannaCountBucket(count),
+                    ]
+                )
+            )
+            return count
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return 0
+        }
+    }
+
+    func recordWannaCheckInResolutionPresented() {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.wannaCheckInResolutionPresented,
+                properties: ["default_choice": WannaCheckInChoice.keep.rawValue]
+            )
+        )
+    }
+
+    private static func wannaCountBucket(_ count: Int) -> String {
+        switch count {
+        case ...0: "0"
+        case 1: "1"
+        case 2...3: "2_3"
+        default: "4_plus"
         }
     }
 
@@ -5887,6 +6066,7 @@ final class WanderStore: ObservableObject {
         visitedAt: Date = .now,
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
+        wanna: WannaSaveDraft? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -5903,11 +6083,77 @@ final class WanderStore: ObservableObject {
             plannedDate: plannedDate,
             attributes: attributes
         )
+
+        if status == .wannaGo,
+           let wanna,
+           !wannaEvents.contains(where: { $0.id == wanna.eventID }),
+           let localUserPlace = currentUserPlace(matching: localResult.userPlaceID),
+           let localPlace = places.first(where: {
+               $0.id == localUserPlace.placeID
+                   || $0.localID == localUserPlace.placeID
+                   || $0.serverID == localUserPlace.placeID
+           }) {
+            let effectiveSharing = wanna.plan.map {
+                WannaPlanVisibilityPolicy.effectiveSharing(
+                    requested: $0.sharing,
+                    creatorIsPrivate: isPrivateProfile,
+                    saveVisibility: visibility
+                )
+            }
+            let wannaEvent = WannaEvent(
+                    id: wanna.eventID,
+                    userPlaceID: localUserPlace.id,
+                    placeID: localPlace.serverID ?? localPlace.id,
+                    state: .active,
+                    source: .direct,
+                    wasVisitedBefore: localUserPlace.status == .been || !visits(for: localUserPlace.id).isEmpty,
+                    plannedDate: plannedDate.map { WannaGoDate.normalized($0) },
+                    occurredAt: .now,
+                    planID: wanna.plan?.id,
+                    planSharing: effectiveSharing,
+                    planStatus: wanna.plan == nil ? nil : .active
+                )
+            wannaEvents.insert(
+                wannaEvent,
+                at: 0
+            )
+            persist()
+            let inviteeCount = wanna.plan?.inviteeUserIDs.count ?? 0
+            let properties = [
+                "has_date": wannaEvent.plannedDate == nil ? "false" : "true",
+                "invitee_count_bucket": Self.wannaCountBucket(inviteeCount),
+                "sharing": wannaEvent.planSharing?.rawValue ?? "ordinary",
+                "was_visited_before": wannaEvent.wasVisitedBefore ? "true" : "false",
+            ]
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.wannaCreated,
+                    properties: properties
+                )
+            )
+            if wanna.plan != nil {
+                analytics.track(
+                    AnalyticsEvent(
+                        name: WanderAnalyticsEvents.wannaPlanCreated,
+                        properties: properties
+                    )
+                )
+                analytics.track(
+                    .engagement(
+                        need: .connect,
+                        action: .wannaPlanCreated,
+                        surface: "save_wanna",
+                        properties: properties
+                    )
+                )
+            }
+        }
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
         #endif
 
         if status == .wannaGo,
+           wanna == nil,
            currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
             #if DEBUG
             WanderDebugLog.sync.debug("direct save skipped remote reason=already_checked_in user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
@@ -5920,6 +6166,63 @@ final class WanderStore: ObservableObject {
             WanderDebugLog.sync.debug("direct save skipped remote reason=missing_backend user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
             #endif
             return localResult
+        }
+
+        if status == .wannaGo, let wanna {
+            guard let currentDraft = userPlaceDraft(for: localResult.userPlaceID) else {
+                return localResult
+            }
+            let wannaDraft = UserPlaceDraft(
+                place: currentDraft.place,
+                status: .wannaGo,
+                visibility: visibilityForSave(visibility),
+                note: note,
+                ratingSignal: nil,
+                ratingScore: nil,
+                categoryOverride: currentDraft.categoryOverride,
+                subcategoryOverride: currentDraft.subcategoryOverride,
+                categoryOverrideSource: currentDraft.categoryOverrideSource,
+                categoryOverrideConfidence: currentDraft.categoryOverrideConfidence,
+                nearbyConfirmed: currentDraft.nearbyConfirmed,
+                plannedDate: plannedDate,
+                sourceType: currentDraft.sourceType,
+                attributes: currentDraft.attributes
+            )
+            do {
+                let remote = try await backend.saveWanna(userPlace: wannaDraft, wanna: wanna)
+                markPlace(
+                    localOrServerID: currentDraft.place.localID,
+                    serverID: remote.placeID,
+                    syncState: .synced
+                )
+                markUserPlace(
+                    localOrServerID: localResult.userPlaceID,
+                    serverID: remote.userPlaceID,
+                    syncState: .synced
+                )
+                lastRemoteError = nil
+                _ = await refreshWannaData(backend: backend)
+                await refreshRemoteVisiblePlaces(backend: backend)
+                return SaveResult(
+                    userPlaceID: remote.userPlaceID,
+                    syncState: .synced,
+                    placeID: remote.placeID
+                )
+            } catch {
+                let message = remoteErrorMessage(error)
+                if currentUserPlace(matching: localResult.userPlaceID)?.status == .wannaGo {
+                    markUserPlace(
+                        localOrServerID: localResult.userPlaceID,
+                        syncState: .failed,
+                        error: message
+                    )
+                }
+                lastRemoteError = message
+                return SaveResult(
+                    userPlaceID: localResult.userPlaceID,
+                    syncState: .failed
+                )
+            }
         }
 
         if status == .been,
@@ -8059,11 +8362,17 @@ final class WanderStore: ObservableObject {
             cancelSharedVisitInboxTask()
             sharedVisitInvitations = []
             sharedVisitInboxUserID = nil
+            wannaEvents = []
+            wannaPlanInvitations = []
+            wannaInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
         } else if sharedVisitInboxUserID != nil, sharedVisitInboxUserID != session.userID {
             cancelSharedVisitInboxTask()
             sharedVisitInvitations = []
             sharedVisitInboxUserID = nil
+            wannaEvents = []
+            wannaPlanInvitations = []
+            wannaInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
         }
         let sessionHandle = normalizedSessionHandle(from: session)
@@ -8157,6 +8466,9 @@ final class WanderStore: ObservableObject {
         cancelSharedVisitInboxTask()
         sharedVisitInvitations = []
         sharedVisitInboxUserID = nil
+        wannaEvents = []
+        wannaPlanInvitations = []
+        wannaInboxUserID = nil
         sharedVisitCompanionsByVisitID = [:]
         let profile = LocalProfile(
             localID: localID,

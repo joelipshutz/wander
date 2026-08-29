@@ -65,7 +65,8 @@ struct ProfileScreen: View {
                 saveStreak: store.saveStreakSummary,
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
-                sharedVisitInvitationCount: store.sharedVisitInvitations.count,
+                sharedVisitInvitationCount: store.sharedVisitInvitations.count
+                    + store.wannaPlanInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
                 avatarAction: presentProfilePhotoViewer,
@@ -203,6 +204,7 @@ struct ProfileScreen: View {
                     await store.refreshRemoteCurrentProfile(backend: backend)
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
+                    await store.refreshWannaData(backend: backend)
                     handleNotificationRoute(pushNotifications.navigationRequest)
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
@@ -344,9 +346,18 @@ struct ProfileScreen: View {
     }
 
     private var profileStats: ProfileStats {
-        store.currentUserCalendarProjection.profileStats(
+        let base = store.currentUserCalendarProjection.profileStats(
             currentUserID: store.currentUser.id,
             friends: store.friends(of: store.currentUser.id).count
+        )
+        let activeWannaPlaceCount = Set(
+            store.wannaEvents.filter(\.isActive).map(\.placeID)
+        ).count
+        return ProfileStats(
+            been: base.been,
+            checkIns: base.checkIns,
+            wanna: max(base.wanna, activeWannaPlaceCount),
+            friends: base.friends
         )
     }
 
@@ -355,7 +366,8 @@ struct ProfileScreen: View {
         return ProfileActivityPresenter.items(
             visiblePlaces: projection.visiblePlaces,
             visits: projection.visits,
-            currentUserID: store.currentUser.id
+            currentUserID: store.currentUser.id,
+            wannaEvents: store.wannaEvents
         )
     }
 

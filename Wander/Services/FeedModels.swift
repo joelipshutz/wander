@@ -66,6 +66,7 @@ struct FeedActivity: Identifiable {
     let note: String?
     let rating: Double?
     let media: [FeedMediaPreview]
+    let wannaContext: WannaPlanContext?
 
     init(
         id: String,
@@ -76,7 +77,8 @@ struct FeedActivity: Identifiable {
         occurredAt: Date,
         note: String? = nil,
         rating: Double? = nil,
-        media: [FeedMediaPreview] = []
+        media: [FeedMediaPreview] = [],
+        wannaContext: WannaPlanContext? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -87,6 +89,7 @@ struct FeedActivity: Identifiable {
         self.note = note
         self.rating = kind.supportsRating ? rating : nil
         self.media = media
+        self.wannaContext = wannaContext
     }
 
     /// `place_saved` is the legacy event name for saving from another person's

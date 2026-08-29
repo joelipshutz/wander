@@ -6,6 +6,9 @@ struct SharedVisitInviteSection: View {
     var isLoading = false
     var errorMessage: String?
     var onRetry: (() -> Void)?
+    var title = "friends"
+    var accessibilityLabel = "Add friends to this check-in"
+    var pickerTitle = "friends"
     @State private var isPresentingPicker = false
 
     private var selectedFriends: [LocalProfile] {
@@ -27,7 +30,7 @@ struct SharedVisitInviteSection: View {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                    Text("friends")
+                    Text(title)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
 
@@ -47,7 +50,7 @@ struct SharedVisitInviteSection: View {
             .buttonStyle(.plain)
             .disabled(isLoading || errorMessage != nil)
             .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
-            .accessibilityLabel("Add friends to this check-in")
+            .accessibilityLabel(accessibilityLabel)
             .accessibilityValue(selectedFriends.isEmpty ? "None added" : "\(selectedFriends.count) added")
 
             if isLoading {
@@ -111,7 +114,7 @@ struct SharedVisitInviteSection: View {
                 .stroke(WanderTheme.borderHairline.color)
         )
         .sheet(isPresented: $isPresentingPicker) {
-            SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs)
+            SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs, title: pickerTitle)
                 .environmentObject(store)
         }
     }
@@ -121,13 +124,14 @@ struct SharedVisitFriendPicker: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
+    var title = "friends"
     @State private var query = ""
     @State private var isPresentingContactInvites = false
 
     private var friends: [LocalProfile] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return store.following(of: store.currentUser.id)
-            .filter { store.relationship(to: $0.id) == .mutual && !$0.isPrivateProfile }
+            .filter { store.relationship(to: $0.id) == .mutual }
             .filter { profile in
                 normalizedQuery.isEmpty
                     || profile.displayName.lowercased().contains(normalizedQuery)
@@ -195,7 +199,7 @@ struct SharedVisitFriendPicker: View {
             }
             .scrollContentBackground(.hidden)
             .background(WanderTheme.canvasWarm.color)
-            .navigationTitle("add friends")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -461,16 +465,30 @@ struct SharedVisitInvitationInboxScreen: View {
     @State private var refreshError: String?
     @State private var decliningParticipantID: String?
     @State private var declineErrors: [String: String] = [:]
+    @State private var respondingWannaParticipantID: String?
+    @State private var wannaErrors: [String: String] = [:]
 
     var body: some View {
         Group {
-            if store.sharedVisitInvitations.isEmpty, !isRefreshing {
+            if store.sharedVisitInvitations.isEmpty,
+               store.wannaPlanInvitations.isEmpty,
+               !isRefreshing {
                 emptyState
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: WanderTheme.spacing4) {
                         if let refreshError {
                             refreshErrorRow(refreshError)
+                        }
+
+                        ForEach(store.wannaPlanInvitations) { invitation in
+                            WannaPlanInboxInvitationCard(
+                                invitation: invitation,
+                                isResponding: respondingWannaParticipantID == invitation.participantID,
+                                errorMessage: wannaErrors[invitation.participantID],
+                                onAccept: { Task { await accept(invitation) } },
+                                onDecline: { Task { await decline(invitation) } }
+                            )
                         }
 
                         ForEach(store.sharedVisitInvitations) { invitation in
@@ -491,7 +509,9 @@ struct SharedVisitInvitationInboxScreen: View {
             }
         }
         .overlay {
-            if isRefreshing, store.sharedVisitInvitations.isEmpty {
+            if isRefreshing,
+               store.sharedVisitInvitations.isEmpty,
+               store.wannaPlanInvitations.isEmpty {
                 ProgressView("Loading invitations...")
                     .font(.system(size: 13, weight: .bold))
                     .tint(WanderTheme.terracotta.color)
@@ -499,7 +519,7 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
-        .navigationTitle("check-in invitations")
+        .navigationTitle("invitations")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
     }
@@ -513,7 +533,7 @@ struct SharedVisitInvitationInboxScreen: View {
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
             Text("no invitations waiting")
                 .font(.system(size: 21, weight: .black, design: .rounded))
-            Text("New shared check-ins will show up here.")
+            Text("New Wanna plans and shared check-ins will show up here.")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -552,7 +572,11 @@ struct SharedVisitInvitationInboxScreen: View {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        let didRefresh = await store.refreshSharedVisitInbox(backend: backend)
+        async let sharedRefresh = store.refreshSharedVisitInbox(backend: backend)
+        async let wannaRefresh = store.refreshWannaData(backend: backend)
+        let sharedDidRefresh = await sharedRefresh
+        let wannaDidRefresh = await wannaRefresh
+        let didRefresh = sharedDidRefresh || wannaDidRefresh
         refreshError = didRefresh ? nil : "Could not refresh invitations. Your saved invitations are still here."
     }
 
@@ -570,6 +594,136 @@ struct SharedVisitInvitationInboxScreen: View {
         )
         if !didDecline {
             declineErrors[invitation.participantID] = "Could not decline this invitation. Try again."
+        }
+    }
+
+    @MainActor
+    private func accept(_ invitation: WannaPlanInvitation) async {
+        guard respondingWannaParticipantID == nil else { return }
+        respondingWannaParticipantID = invitation.participantID
+        wannaErrors[invitation.participantID] = nil
+        defer { respondingWannaParticipantID = nil }
+        if await store.acceptWannaPlanInvitation(invitation, backend: backend) == nil {
+            wannaErrors[invitation.participantID] = "Could not accept this invitation. Try again."
+        }
+    }
+
+    @MainActor
+    private func decline(_ invitation: WannaPlanInvitation) async {
+        guard respondingWannaParticipantID == nil else { return }
+        respondingWannaParticipantID = invitation.participantID
+        wannaErrors[invitation.participantID] = nil
+        defer { respondingWannaParticipantID = nil }
+        if !(await store.declineWannaPlanInvitation(invitation, backend: backend)) {
+            wannaErrors[invitation.participantID] = "Could not decline this invitation. Try again."
+        }
+    }
+}
+
+private struct WannaPlanInboxInvitationCard: View {
+    let invitation: WannaPlanInvitation
+    let isResponding: Bool
+    let errorMessage: String?
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderAvatar(
+                    initials: String(invitation.creatorDisplayName.prefix(2)).uppercased(),
+                    avatarURL: invitation.creatorAvatarURL,
+                    size: 38,
+                    color: WanderTheme.pinSocial.color
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(invitation.creatorDisplayName)
+                        .font(.system(size: 14, weight: .black))
+                    Text("wants to go with you")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                Spacer()
+                Text(invitation.invitedAt.formatted(.relative(presentation: .numeric)))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
+
+            Divider().overlay(WanderTheme.borderHairline.color.opacity(0.7))
+
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderCategoryEmoji(
+                    emoji: WanderPlaceCategory.emoji(for: invitation.candidate.categoryAssignment),
+                    size: 27
+                )
+                .frame(width: 72, height: 72)
+                .background(WanderTheme.categoryMoss.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(invitation.placeName)
+                        .font(.system(size: 20, weight: .black, design: .rounded))
+                        .lineLimit(2)
+                    if let plannedDate = invitation.plannedDate {
+                        Label(plannedDate.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    } else {
+                        Text("No date yet")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    Label(
+                        invitation.sharing == .privateOnly ? "Between the group" : "Shared on Feed",
+                        systemImage: invitation.sharing == .privateOnly ? "lock.fill" : "person.2.fill"
+                    )
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if invitation.participants.count > 2 {
+                Text("\(invitation.participants.count) people invited")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                Button("Decline", action: onDecline)
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .clipShape(Capsule())
+
+                Button(action: onAccept) {
+                    Group {
+                        if isResponding { ProgressView().tint(.white) }
+                        else { Text("Accept") }
+                    }
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .disabled(isResponding)
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.pinSocial.color.opacity(0.35), lineWidth: 1)
         }
     }
 }

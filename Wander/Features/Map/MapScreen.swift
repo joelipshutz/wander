@@ -429,7 +429,9 @@ struct MapPinRenderCatalog {
     init(
         groups: [VisiblePlaceGroup],
         currentUserPlaces: [VisiblePlace],
-        currentUserID: String
+        currentUserID: String,
+        activeWannaPlaceIDs: Set<String> = [],
+        activeWannaUserPlaceIDs: Set<String> = []
     ) {
         let currentUserGroups = VisiblePlaceGrouping.groups(
             from: currentUserPlaces,
@@ -467,11 +469,29 @@ struct MapPinRenderCatalog {
                }) {
                 places.append(currentUserSave)
             }
-            let states = places.map { visiblePlace in
+            var states = places.map { visiblePlace in
                 MapPinSaveState(
                     ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
                     status: visiblePlace.userPlace.status
                 )
+            }
+            let hasActiveWanna = places.contains { visiblePlace in
+                [visiblePlace.place.id, visiblePlace.place.localID, visiblePlace.place.serverID]
+                    .compactMap { $0 }
+                    .contains(where: activeWannaPlaceIDs.contains)
+                    || [
+                        visiblePlace.userPlace.id,
+                        visiblePlace.userPlace.localID,
+                        visiblePlace.userPlace.serverID,
+                    ]
+                    .compactMap { $0 }
+                    .contains(where: activeWannaUserPlaceIDs.contains)
+            }
+            if hasActiveWanna,
+               !states.contains(where: {
+                   $0.ownership == .currentUser && $0.status == .wannaGo
+               }) {
+                states.append(MapPinSaveState(ownership: .currentUser, status: .wannaGo))
             }
             outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
         }
@@ -785,7 +805,18 @@ struct MapScreen: View {
             return MapFilterSelection.ownPlaces(
                 from: store.visiblePlaces(),
                 currentUserID: store.currentUser.id,
-                refinements: mapFilterState.more
+                refinements: mapFilterState.more,
+                relationshipMatchesStatus: { visiblePlace, status in
+                    let relationship = store.relationshipSnapshot(
+                        placeID: visiblePlace.place.serverID ?? visiblePlace.place.id,
+                        userPlaceID: visiblePlace.userPlace.serverID ?? visiblePlace.userPlace.id
+                    )
+                    switch status {
+                    case .all: return true
+                    case .checkIns: return relationship.hasVisited
+                    case .wanna: return relationship.hasActiveWanna
+                    }
+                }
             )
         }
     }
@@ -815,6 +846,7 @@ struct MapScreen: View {
         ) {
             let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
             let currentUserPlaces = store.currentUserVisiblePlaces
+            let activeWannaEvents = store.wannaEvents.filter(\.isActive)
             let tasteSummaries = currentUserPlaces.map { visiblePlace in
                 PlaceSaveSummary(
                     visiblePlace: visiblePlace,
@@ -850,7 +882,9 @@ struct MapScreen: View {
                 pinRenderCatalog: MapPinRenderCatalog(
                     groups: groups,
                     currentUserPlaces: currentUserPlaces,
-                    currentUserID: currentUserID
+                    currentUserID: currentUserID,
+                    activeWannaPlaceIDs: Set(activeWannaEvents.map(\.placeID)),
+                    activeWannaUserPlaceIDs: Set(activeWannaEvents.map(\.userPlaceID))
                 ),
                 tasteSummaries: tasteSummaries
             )
@@ -1615,6 +1649,7 @@ struct MapScreen: View {
                 await refreshInitialMapSources()
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
+                    await store.refreshWannaData(backend: backend)
                 }
                 resolveInitialSelection()
             }
@@ -1630,6 +1665,7 @@ struct MapScreen: View {
                 Task {
                     await refreshInitialMapSources()
                     await store.refreshSharedVisitInbox(backend: backend)
+                    await store.refreshWannaData(backend: backend)
                     await handleNotificationRoute(pushNotifications.navigationRequest)
                     resolveInitialSelection()
                 }
@@ -2486,15 +2522,22 @@ struct MapScreen: View {
            }) {
             places.append(currentUserSave)
         }
+        var states = places.map { visiblePlace in
+            MapPinSaveState(
+                ownership: visiblePlace.owner.id == store.currentUser.id
+                    ? .currentUser
+                    : .social,
+                status: visiblePlace.userPlace.status
+            )
+        }
+        if currentUserHasActiveWanna(for: group.primary),
+           !states.contains(where: {
+               $0.ownership == .currentUser && $0.status == .wannaGo
+           }) {
+            states.append(MapPinSaveState(ownership: .currentUser, status: .wannaGo))
+        }
         return MapPinOutlineBuilder.outlines(
-            for: places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == store.currentUser.id
-                        ? .currentUser
-                        : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            for: states
         )
     }
 
@@ -2533,6 +2576,15 @@ struct MapScreen: View {
             viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
             displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
         )
+    }
+
+    private func currentUserHasActiveWanna(for visiblePlace: VisiblePlace) -> Bool {
+        store.relationshipSnapshot(
+            placeID: visiblePlace.place.serverID ?? visiblePlace.place.id,
+            userPlaceID: visiblePlace.owner.id == store.currentUser.id
+                ? (visiblePlace.userPlace.serverID ?? visiblePlace.userPlace.id)
+                : nil
+        ).hasActiveWanna
     }
 
     private func walkthroughDisplayNoteOverride(for visiblePlace: VisiblePlace) -> String? {
@@ -4341,11 +4393,17 @@ struct MapScreen: View {
     ) -> [MapSearchSuggestion] {
         groups
             .map { group in
-                let saveStates = group.places.map { visiblePlace in
+                var saveStates = group.places.map { visiblePlace in
                     MapPinSaveState(
                         ownership: visiblePlace.owner.id == store.currentUser.id ? .currentUser : .social,
                         status: visiblePlace.userPlace.status
                     )
+                }
+                if currentUserHasActiveWanna(for: group.primary),
+                   !saveStates.contains(where: {
+                       $0.ownership == .currentUser && $0.status == .wannaGo
+                   }) {
+                    saveStates.append(MapPinSaveState(ownership: .currentUser, status: .wannaGo))
                 }
                 return MapSearchSuggestion.saved(group.primary, saveCount: group.saveCount, saveStates: saveStates)
             }
@@ -5991,17 +6049,20 @@ enum MapFilterSelection {
     static func ownPlaces(
         from candidates: [VisiblePlace],
         currentUserID: String,
-        refinements: MapMoreFilterSelection
+        refinements: MapMoreFilterSelection,
+        relationshipMatchesStatus: ((VisiblePlace, MapStatusFilter) -> Bool)? = nil
     ) -> [VisiblePlace] {
         applying(
             refinements,
-            to: candidates.filter { $0.owner.id == currentUserID }
+            to: candidates.filter { $0.owner.id == currentUserID },
+            relationshipMatchesStatus: relationshipMatchesStatus
         )
     }
 
     static func applying(
         _ selection: MapMoreFilterSelection,
-        to places: [VisiblePlace]
+        to places: [VisiblePlace],
+        relationshipMatchesStatus: ((VisiblePlace, MapStatusFilter) -> Bool)? = nil
     ) -> [VisiblePlace] {
         guard selection.activeSectionCount > 0 else { return places }
 
@@ -6017,8 +6078,8 @@ enum MapFilterSelection {
                 )
             let matchesPerson = selection.people.isEmpty
                 || selection.people.contains(visiblePlace.owner.id)
-            let matchesStatus = selectedStatuses.isEmpty
-                || selectedStatuses.contains(visiblePlace.userPlace.status)
+            let matchesStatus = relationshipMatchesStatus?(visiblePlace, selection.status)
+                ?? (selectedStatuses.isEmpty || selectedStatuses.contains(visiblePlace.userPlace.status))
             return matchesCategory && matchesPerson && matchesStatus
         }
     }
@@ -7586,7 +7647,7 @@ enum MapPinOutlineBuilder {
         let hasBeen = matchingStates.contains { $0.status == .been }
         let hasWanna = matchingStates.contains { $0.status == .wannaGo }
 
-        if ownership == .social && hasBeen && hasWanna {
+        if hasBeen && hasWanna {
             return MapPinOutline(
                 ownership: ownership,
                 status: .been,
@@ -8468,6 +8529,9 @@ struct MapPlaceSaveSubmission {
     let reconcilesSharedVisitInvitees: Bool
     var visitedAt: Date = .now
     var plannedDate: Date? = nil
+    var wannaEventID: String? = nil
+    var wannaPlanID: String? = nil
+    var wannaPlanSharing: WannaPlanSharing = .feed
 }
 
 struct MapPlaceSavePhotoAttachment: Identifiable {
@@ -8694,6 +8758,18 @@ func persistNewPlaceSaveSubmission(
         visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
+        wanna: submission.status == .wannaGo
+            ? WannaSaveDraft(
+                eventID: submission.wannaEventID ?? UUID().uuidString.lowercased(),
+                plan: submission.inviteeUserIDs.isEmpty
+                    ? nil
+                    : WannaPlanDraft(
+                        id: submission.wannaPlanID ?? UUID().uuidString.lowercased(),
+                        inviteeUserIDs: submission.inviteeUserIDs,
+                        sharing: submission.wannaPlanSharing
+                    )
+            )
+            : nil,
         backend: backend
     )
     let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
@@ -8725,13 +8801,32 @@ func persistScopedVisitOrWantSubmission(
     case .sharedVisit:
         return (nil, nil)
     case .addVisit:
+        let relationshipBefore = store.relationshipSnapshot(
+            placeID: submission.context.candidate.id,
+            userPlaceID: submission.context.existingCurrentUserSave?.userPlace.id
+        )
         guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
             return (nil, nil)
         }
         if let backend {
             _ = await store.syncVisit(visitID: visit.id, backend: backend)
+            _ = await store.refreshWannaData(backend: backend)
         }
-        return (SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), visit)
+        let placeID = submission.context.existingCurrentUserSave?.place.serverID
+            ?? submission.context.existingCurrentUserSave?.place.id
+            ?? submission.context.candidate.id
+        return (
+            SaveResult(
+                userPlaceID: visit.userPlaceID,
+                syncState: visit.syncState,
+                placeID: placeID,
+                wannaCheckInResolution: WannaCheckInResolution.afterSavingCheckIn(
+                    previousRelationship: relationshipBefore
+                ),
+                wannaResolutionVisitID: visit.serverID ?? visit.id
+            ),
+            visit
+        )
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
             visitID: visit.id,
@@ -8868,6 +8963,13 @@ struct MapPlaceSaveQuestionBlocksCache {
 private enum MapPlaceSaveStep {
     case confirm
     case details
+}
+
+private struct PendingWannaCheckInResolution: Identifiable {
+    let id = UUID()
+    let result: SaveResult
+    let placeID: String
+    let visitID: String?
 }
 
 struct MapPlaceSaveModeDraft<Photo> {
@@ -9307,6 +9409,9 @@ struct MapPlaceSaveEditor: View {
     @State private var isShowingRemoveConfirmation = false
     @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var selectedInviteeUserIDs: [String] = []
+    @State private var wannaPlanSharing: WannaPlanSharing = .feed
+    @State private var wannaEventID = UUID().uuidString.lowercased()
+    @State private var wannaPlanID = UUID().uuidString.lowercased()
     @State private var isLoadingSharedVisitInvitees = false
     @State private var didLoadSharedVisitInvitees = false
     @State private var sharedVisitInviteesError: String?
@@ -9316,6 +9421,7 @@ struct MapPlaceSaveEditor: View {
     @State private var saveAttemptedAt: Date?
     @State private var didStartWalkthroughAutoSave = false
     @State private var pendingWalkthroughSaveResult: SaveResult?
+    @State private var pendingWannaCheckInResolution: PendingWannaCheckInResolution?
     @State private var modeDrafts: MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>
 
     init(
@@ -9587,10 +9693,14 @@ struct MapPlaceSaveEditor: View {
                 .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
                     if isPrivateProfile {
                         selectedVisibility = .selfOnly
-                        selectedInviteeUserIDs = []
+                        if selectedStatus == .been {
+                            selectedInviteeUserIDs = []
+                        } else {
+                            wannaPlanSharing = .privateOnly
+                        }
                     }
                 }
-                .onChange(of: canInviteFriends) { _, canInvite in
+                .onChange(of: canInviteAnyone) { _, canInvite in
                     if !canInvite {
                         selectedInviteeUserIDs = []
                     }
@@ -9756,6 +9866,12 @@ struct MapPlaceSaveEditor: View {
                 plannedDateSection
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
+
+                if canPlanWithFriends {
+                    wannaPlanSection
+                        .id(WalkthroughTargetID.saveFriends)
+                        .walkthroughTarget(.saveFriends)
+                }
             }
 
             placeTypeSection
@@ -9820,12 +9936,36 @@ struct MapPlaceSaveEditor: View {
         .walkthroughTarget(.saveSubmit)
         .walkthroughEmphasis(.saveSubmit)
         .walkthroughTarget(.saveReview)
+        .alert(
+            "Keep this place in Wanna?",
+            isPresented: Binding(
+                get: { pendingWannaCheckInResolution != nil },
+                set: { isPresented in
+                    if !isPresented { pendingWannaCheckInResolution = nil }
+                }
+            ),
+            presenting: pendingWannaCheckInResolution
+        ) { pending in
+            Button("Keep in Wanna") {
+                finishWannaCheckInResolution(pending, choice: .keep)
+            }
+            Button("Remove from Wanna", role: .destructive) {
+                finishWannaCheckInResolution(pending, choice: .remove)
+            }
+        } message: { _ in
+            Text("You checked in again. Does this check-in fulfill the Wanna, or do you still want to go back?")
+        }
     }
 
     private var primaryActionTitle: String {
         if selectedStatus == .wannaGo {
             if case .editWant = context.mode {
                 return "Update Wanna"
+            }
+            if !selectedInviteeUserIDs.isEmpty {
+                return selectedInviteeUserIDs.count == 1
+                    ? "Save & invite"
+                    : "Save & invite \(selectedInviteeUserIDs.count)"
             }
             return "Add to Wanna"
         }
@@ -10043,6 +10183,36 @@ struct MapPlaceSaveEditor: View {
         )
     }
 
+    private var wannaPlanSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            SharedVisitInviteSection(
+                selectedUserIDs: $selectedInviteeUserIDs,
+                title: "wanna go with",
+                accessibilityLabel: "Choose people to invite to this Wanna",
+                pickerTitle: "wanna go with"
+            )
+
+            if !selectedInviteeUserIDs.isEmpty {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Picker("Who can see this?", selection: $wannaPlanSharing) {
+                        ForEach(WannaPlanSharing.allCases, id: \.self) { sharing in
+                            Text(sharing.title).tag(sharing)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(store.isPrivateProfile || saveVisibility == .selfOnly)
+
+                    Text(effectiveWannaPlanSharing.helperCopy)
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing3)
+            }
+        }
+    }
+
     private var visibilitySection: some View {
         PlaceVisibilityStealthToggle(
             title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
@@ -10182,6 +10352,24 @@ struct MapPlaceSaveEditor: View {
         case .sharedVisit, .editWant:
             return false
         }
+    }
+
+    private var canPlanWithFriends: Bool {
+        guard selectedStatus == .wannaGo, auth.isSignedIn else { return false }
+        if case .add = context.mode { return true }
+        return false
+    }
+
+    private var canInviteAnyone: Bool {
+        canInviteFriends || canPlanWithFriends
+    }
+
+    private var effectiveWannaPlanSharing: WannaPlanSharing {
+        WannaPlanVisibilityPolicy.effectiveSharing(
+            requested: wannaPlanSharing,
+            creatorIsPrivate: store.isPrivateProfile,
+            saveVisibility: saveVisibility
+        )
     }
 
     private var placeTypeSection: some View {
@@ -11020,12 +11208,14 @@ struct MapPlaceSaveEditor: View {
                 visitPhotoAttachments,
                 status: selectedStatus
             ),
-            inviteeUserIDs: canInviteFriends
-                ? MapPlaceSaveSubmissionPolicy.checkInValues(
-                    selectedInviteeUserIDs,
-                    status: selectedStatus
-                )
-                : [],
+            inviteeUserIDs: selectedStatus == .been
+                ? (canInviteFriends
+                    ? MapPlaceSaveSubmissionPolicy.checkInValues(
+                        selectedInviteeUserIDs,
+                        status: selectedStatus
+                    )
+                    : [])
+                : (canPlanWithFriends ? selectedInviteeUserIDs : []),
             reconcilesSharedVisitInvitees: context.editedVisit != nil
                 && canInviteFriends
                 && didLoadSharedVisitInvitees,
@@ -11033,7 +11223,12 @@ struct MapPlaceSaveEditor: View {
             plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
                 plannedDate,
                 status: selectedStatus
-            )
+            ),
+            wannaEventID: selectedStatus == .wannaGo ? wannaEventID : nil,
+            wannaPlanID: selectedStatus == .wannaGo && !selectedInviteeUserIDs.isEmpty
+                ? wannaPlanID
+                : nil,
+            wannaPlanSharing: effectiveWannaPlanSharing
         )
 
         Task {
@@ -11041,6 +11236,16 @@ struct MapPlaceSaveEditor: View {
             await MainActor.run {
                 isSaving = false
                 if let result {
+                    if case .askAfterRepeatVisit = result.wannaCheckInResolution,
+                       let placeID = result.placeID {
+                        pendingWannaCheckInResolution = PendingWannaCheckInResolution(
+                            result: result,
+                            placeID: placeID,
+                            visitID: result.wannaResolutionVisitID
+                        )
+                        store.recordWannaCheckInResolutionPresented()
+                        return
+                    }
                     if let tutorialSnapshot {
                         walkthroughs.recordTutorialMemorySnapshot(tutorialSnapshot)
                     }
@@ -11080,6 +11285,21 @@ struct MapPlaceSaveEditor: View {
             from: nil,
             for: nil
         )
+    }
+
+    private func finishWannaCheckInResolution(
+        _ pending: PendingWannaCheckInResolution,
+        choice: WannaCheckInChoice
+    ) {
+        Task { @MainActor in
+            _ = await store.resolveActiveWannas(
+                placeID: pending.placeID,
+                choice: choice,
+                visitID: pending.visitID,
+                backend: backend
+            )
+            onSaveCompleted(pending.result)
+        }
     }
 
     private func resetWalkthroughAutoSaveForRetry() {
