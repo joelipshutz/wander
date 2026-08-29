@@ -24,6 +24,93 @@ final class SyncStateMachineTests: XCTestCase {
     }
 }
 
+final class DeferredSaveLifecycleStateMachineTests: XCTestCase {
+    private let stateMachine = DeferredSaveLifecycleStateMachine()
+
+    func testOptimisticSaveCanConfirmOrEnterRecoverableFailure() {
+        XCTAssertTrue(stateMachine.canTransition(from: .pending, to: .optimisticallyCompleted))
+        XCTAssertTrue(stateMachine.canTransition(from: .optimisticallyCompleted, to: .confirmed))
+        XCTAssertTrue(stateMachine.canTransition(from: .optimisticallyCompleted, to: .failed))
+        XCTAssertTrue(stateMachine.canTransition(from: .failed, to: .retrying))
+        XCTAssertTrue(stateMachine.canTransition(from: .retrying, to: .confirmed))
+    }
+
+    func testPermanentFailureStopsAutomaticProgressButAllowsExplicitRetry() {
+        XCTAssertTrue(stateMachine.canTransition(from: .failed, to: .permanentlyFailed))
+        XCTAssertFalse(stateMachine.canTransition(from: .permanentlyFailed, to: .confirmed))
+        XCTAssertTrue(stateMachine.canTransition(from: .permanentlyFailed, to: .retrying))
+    }
+
+    func testConfirmedSaveIsTerminal() {
+        for state in DeferredSaveLifecycleState.allCases where state != .confirmed {
+            XCTAssertFalse(stateMachine.canTransition(from: .confirmed, to: state))
+        }
+    }
+}
+
+final class DeferredSaveRecoveryPresentationTests: XCTestCase {
+    func testPendingDurableWriteUsesHonestOptimisticCopy() throws {
+        let presentation = try XCTUnwrap(
+            DeferredSaveRecoveryPresentation(
+                syncStates: [.synced, .pendingCreate],
+                isRetrying: false
+            )
+        )
+
+        XCTAssertEqual(presentation.state, .optimisticallyCompleted)
+        XCTAssertEqual(presentation.title, "Saved — syncing…")
+        XCTAssertNil(presentation.retryTitle)
+    }
+
+    func testRecoverableFailureOffersRetryAndKeepsLocalCopy() throws {
+        let presentation = try XCTUnwrap(
+            DeferredSaveRecoveryPresentation(
+                syncStates: [.failed],
+                isRetrying: false
+            )
+        )
+
+        XCTAssertEqual(presentation.state, .failed)
+        XCTAssertEqual(presentation.title, "Saved here, not synced")
+        XCTAssertTrue(presentation.message.contains("safe on this phone"))
+        XCTAssertEqual(presentation.retryTitle, "Retry")
+    }
+
+    func testPermanentFailureTakesPriorityAcrossOutstandingOperations() throws {
+        let presentation = try XCTUnwrap(
+            DeferredSaveRecoveryPresentation(
+                syncStates: [.pendingUpdate, .failed, .serverDenied],
+                isRetrying: false
+            )
+        )
+
+        XCTAssertEqual(presentation.state, .permanentlyFailed)
+        XCTAssertEqual(presentation.operationCount, 3)
+        XCTAssertEqual(presentation.retryTitle, "Try again")
+    }
+
+    func testRetryingOverridesFailurePresentation() throws {
+        let presentation = try XCTUnwrap(
+            DeferredSaveRecoveryPresentation(
+                syncStates: [.failed],
+                isRetrying: true
+            )
+        )
+
+        XCTAssertEqual(presentation.state, .retrying)
+        XCTAssertNil(presentation.retryTitle)
+    }
+
+    func testNoBannerRemainsAfterConfirmation() {
+        XCTAssertNil(
+            DeferredSaveRecoveryPresentation(
+                syncStates: [.synced, .tombstoned],
+                isRetrying: false
+            )
+        )
+    }
+}
+
 final class SaveSyncFeedbackTests: XCTestCase {
     func testSyncedSaveUsesSuccessPresentation() {
         let feedback = SaveSyncFeedback(syncState: .synced, canSignIn: false)
@@ -51,10 +138,10 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testQueuedSaveDistinguishesLocalPersistenceFromRemoteSync() {
         let feedback = SaveSyncFeedback(syncState: .pendingCreate, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "saved on this phone")
-        XCTAssertEqual(feedback.message, "Sync is queued.")
+        XCTAssertEqual(feedback.title, "saved")
+        XCTAssertEqual(feedback.message, "Syncing in the background.")
         XCTAssertFalse(feedback.usesWarningHaptic)
-        XCTAssertEqual(feedback.mapMessage(successMessage: "Visit saved."), "Saved on this phone. Sync is queued.")
+        XCTAssertEqual(feedback.mapMessage(successMessage: "Visit saved."), "Visit saved. Syncing in the background.")
     }
 
     func testSignedOutLocalSaveOffersSignInWithoutClaimingSync() {

@@ -199,6 +199,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let unresolvedDrafts: [UnresolvedDraftRecord]
     let sourceArtifacts: [SourceArtifactRecord]
     let extractionJobs: [ExtractionJobRecord]
+    let deferredSaveOperationKeys: [String]?
     let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]?
     let saveStreakDatesByUserID: [String: [Date]]?
     let saveStreakRecoveryDatesByUserID: [String: [Date]]?
@@ -238,6 +239,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         unresolvedDrafts = store.unresolvedDrafts.map(UnresolvedDraftRecord.init)
         sourceArtifacts = store.sourceArtifacts.map(SourceArtifactRecord.init)
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
+        deferredSaveOperationKeys = store.deferredSaveOperationKeys.sorted()
         providerCategoryEnrichmentAttemptedAtByKey = store.providerCategoryEnrichmentAttemptedAtByKey
         saveStreakDatesByUserID = store.saveStreakDatesByUserID
         saveStreakRecoveryDatesByUserID = store.saveStreakRecoveryDatesByUserID
@@ -287,6 +289,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             unresolvedDrafts: shouldResetSavedPlaces ? [] : unresolvedDrafts.map { $0.model() },
             sourceArtifacts: shouldResetSavedPlaces ? [] : sourceArtifacts.map { $0.model() },
             extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
+            deferredSaveOperationKeys: shouldResetSavedPlaces
+                ? []
+                : Set(deferredSaveOperationKeys ?? []),
             providerCategoryEnrichmentAttemptedAtByKey: providerCategoryEnrichmentAttemptedAtByKey ?? [:],
             saveStreakDatesByUserID: shouldResetSavedPlaces
                 ? [:]
@@ -325,6 +330,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let unresolvedDrafts: [UnresolvedDraft]
         let sourceArtifacts: [LocalSourceArtifact]
         let extractionJobs: [LocalExtractionJob]
+        let deferredSaveOperationKeys: Set<String>
         let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
         let saveStreakDatesByUserID: [String: [Date]]
         let saveStreakRecoveryDatesByUserID: [String: [Date]]

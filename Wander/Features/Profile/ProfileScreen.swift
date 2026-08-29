@@ -2951,7 +2951,7 @@ private struct SavedPlacesListScreen: View {
         case .sharedVisit:
             return nil
         case .add(let sourceType):
-            let result = await store.saveCandidate(
+            let result = store.saveCandidateOptimistically(
                 submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
@@ -2959,6 +2959,7 @@ private struct SavedPlacesListScreen: View {
                 sourceType: sourceType,
                 ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
+                sourceUserPlaceID: submission.context.socialSourceUserPlaceID,
                 backend: auth.isSignedIn ? backend : nil
             )
             let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil

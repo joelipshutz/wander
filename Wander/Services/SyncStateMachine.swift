@@ -18,3 +18,23 @@ struct SyncStateMachine {
         ]
     }
 }
+
+struct DeferredSaveLifecycleStateMachine {
+    func canTransition(
+        from current: DeferredSaveLifecycleState,
+        to next: DeferredSaveLifecycleState
+    ) -> Bool {
+        allowedTransitions[current, default: []].contains(next)
+    }
+
+    private var allowedTransitions: [DeferredSaveLifecycleState: Set<DeferredSaveLifecycleState>] {
+        [
+            .pending: [.optimisticallyCompleted, .failed, .permanentlyFailed],
+            .optimisticallyCompleted: [.confirmed, .failed, .retrying, .permanentlyFailed],
+            .confirmed: [],
+            .failed: [.retrying, .permanentlyFailed],
+            .retrying: [.confirmed, .failed, .permanentlyFailed],
+            .permanentlyFailed: [.retrying]
+        ]
+    }
+}

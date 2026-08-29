@@ -1378,16 +1378,16 @@ struct DiscoverScreen: View {
         auth.requireSignIn(for: .socialSave) {
             Task { @MainActor in
                 guard currentUserSave(matching: visiblePlace) == nil else { return }
-                let result = await store.saveVisiblePlace(
+                _ = store.saveVisiblePlaceOptimistically(
                     visiblePlace,
                     status: .wannaGo,
                     backend: auth.isSignedIn ? backend : nil
                 )
-                await refreshPlaces(query: placesQuery)
-                await refreshMembers(query: memberQuery)
-                savedMessage = result.syncState == .synced
-                    ? "Added to Wanna Go."
-                    : "Added to Wanna Go locally. We'll retry sync."
+                savedMessage = "Added to Wanna. Syncing in the background."
+                Task { @MainActor in
+                    await refreshPlaces(query: placesQuery)
+                    await refreshMembers(query: memberQuery)
+                }
             }
         }
     }
@@ -1397,7 +1397,7 @@ struct DiscoverScreen: View {
         listSelectionPlace = nil
 
         Task { @MainActor in
-            let result = await store.addVisiblePlace(
+            let result = await store.addVisiblePlaceOptimistically(
                 visiblePlace,
                 to: list,
                 backend: auth.isSignedIn ? backend : nil
@@ -1454,7 +1454,7 @@ struct DiscoverScreen: View {
                 return nil
             }
 
-            let result = await store.saveCandidate(
+            let result = store.saveCandidateOptimistically(
                 submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
@@ -1462,6 +1462,7 @@ struct DiscoverScreen: View {
                 sourceType: sourceType,
                 ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
+                sourceUserPlaceID: submission.context.socialSourceUserPlaceID,
                 backend: auth.isSignedIn ? backend : nil
             )
             let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
@@ -1471,9 +1472,11 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await refreshPlaces(query: placesQuery)
-            await refreshMembers(query: memberQuery)
-            savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            savedMessage = "Saved. Syncing in the background."
+            Task { @MainActor in
+                await refreshPlaces(query: placesQuery)
+                await refreshMembers(query: memberQuery)
+            }
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
@@ -1491,9 +1494,11 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await refreshPlaces(query: placesQuery)
-            await refreshMembers(query: memberQuery)
             savedMessage = scopedDiscoverMessage(for: submission.context, syncState: result.syncState)
+            Task { @MainActor in
+                await refreshPlaces(query: placesQuery)
+                await refreshMembers(query: memberQuery)
+            }
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
@@ -1502,10 +1507,10 @@ struct DiscoverScreen: View {
     }
 
     private func scopedDiscoverMessage(for context: MapPlaceSaveContext, syncState: SyncState) -> String {
-        let suffix = syncState == .synced ? "" : " We'll retry sync."
+        let suffix = syncState == .synced ? "" : " Syncing in the background."
         switch context.mode {
         case .add:
-            return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            return syncState == .synced ? "Saved." : "Saved. Syncing in the background."
         case .addVisit:
             return "Check-in saved." + suffix
         case .sharedVisit:

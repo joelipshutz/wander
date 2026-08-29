@@ -1348,7 +1348,11 @@ private struct ListDetailScreen: View {
               suggestionBatch.beginAdding(suggestionID: suggestion.id)
         else { return }
 
-        let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend)
+        let result = await store.addVisiblePlaceOptimistically(
+            suggestion.visiblePlace,
+            to: sourceList,
+            backend: backend
+        )
         let didExhaustBatch = suggestionBatch.finishAdding(
             suggestionID: suggestion.id,
             outcome: result.outcome
@@ -1752,7 +1756,11 @@ private struct ListAddPlacesScreen: View {
     private func add(_ visiblePlace: VisiblePlace) async {
         guard suggestionBatch.beginAdding(suggestionID: visiblePlace.id) else { return }
 
-        let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        let result = await store.addVisiblePlaceOptimistically(
+            visiblePlace,
+            to: list,
+            backend: backend
+        )
         let didExhaustBatch = suggestionBatch.finishAdding(
             suggestionID: visiblePlace.id,
             outcome: result.outcome
@@ -1799,7 +1807,11 @@ private struct ListAddPlacesScreen: View {
     private func add(_ candidate: PlaceCandidate) async {
         guard pendingSearchCandidateIDs.insert(candidate.id).inserted else { return }
 
-        let result = await store.addCandidate(candidate, to: list, backend: backend)
+        let result = await store.addCandidateOptimistically(
+            candidate,
+            to: list,
+            backend: backend
+        )
         pendingSearchCandidateIDs.remove(candidate.id)
         if result.outcome == .added || result.outcome == .alreadyInList {
             searchCandidates.removeAll { $0.id == candidate.id }

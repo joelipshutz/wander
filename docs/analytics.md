@@ -104,6 +104,13 @@ only aggregates to the Edge Function/PostHog.
 
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
 
+For optimistic completion, `place_saved`, `check_in_created`, `place_list_created`,
+and `place_list_item_added` continue to mean that the complete local transaction
+was durably accepted. They do not claim remote confirmation. The existing
+`own_place_sync_attempted`, `own_place_sync_succeeded`, and
+`own_place_sync_failed` operational events describe the deferred remote half;
+explicit Retry reuses that same path and must not emit a second product action.
+
 ## Privacy rules
 
 Analytics must never receive:
