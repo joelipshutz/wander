@@ -42,7 +42,9 @@ npm run eval:social-import -- --providers current,current-improved --resolve non
 ```
 
 After a scoring-only change, regenerate an existing run's `results.json` and
-summaries without reacquiring social media or rerunning understanding:
+summaries without reacquiring social media or rerunning understanding. Every
+invocation appends a `score-contract-v3` transform and chained input/output
+result hashes to the run manifest:
 
 ```bash
 npm run eval:social-import:rescore -- social-import-eval/runs/<run>
@@ -60,6 +62,22 @@ The source run must have been created with `--resolve mapkit`; the command fails
 closed for resolver-none runs. Batch replays pace MapKit requests and retry only
 transient server/throttling errors so replay pressure is not counted as POI
 candidate-quality loss.
+
+To rebuild hints from saved Gemini structured candidates and rerun MapKit, with
+no new scraper or model request:
+
+```bash
+npm run eval:social-import:rescore -- \
+  social-import-eval/runs/<run> \
+  --rebuild-understanding-hints \
+  --reresolve-mapkit
+```
+
+For a MapKit-backed run, hint rebuilding requires re-resolution so stale POI
+results cannot be reported against changed extraction output. The run manifest
+records both replay operations, the exact applied transforms, chained input/output
+result hashes, the fallback-assisted case count, and that they made no paid
+acquisition or understanding calls.
 
 Add `--resolve mapkit` to use the same POI provider and a scoring mirror of
 `ManualPlaceSearchPlan` / `PlaceImportCandidateMatcher` from the iOS app. The
@@ -141,6 +159,28 @@ identity. One initial transport timeout and one initial HTTP 503 recovered via
 retry, while the three-503 case remained failed in the frozen benchmark.
 Neither run establishes launch readiness.
 
+A later no-paid-call replay, saved as
+`apify-gemini-grounded-replay-2026-08-28`, rebuilt hints from the frozen Gemini
+structured candidates, used bounded deterministic evidence only for the one
+failed Gemini case, required matching successful media ingestion for model-only
+image/video/speech claims, and reran MapKit with the v5 resolver mirror. The
+final rebuild is recorded as `grounded-hints-v3`. It measured:
+
+- 93.8%/100% macro and 97.7%/100% micro hint precision/recall;
+- 121/121 required mentions, 3 scored extras, and 6/8 exact hint sets;
+- 100% video-text and speech scenario-group recall, including the failed
+  multi-place TikTok request recovered from its numbered caption;
+- 64.8% MapKit lookup health and 17.2% candidate selection; and
+- 86.4%/14.0% micro selected-name precision/recall, with 17/121 required names
+  surviving selection and 4/8 exact selected-name sets.
+
+The three scored extras are `Castle Crags Wilderness`, `Shasta-Trinity National
+Forest`, and `Wind River Brewing`; all are plausible destinations present in
+the source evidence, so they also expose corpus-label ambiguity. This replay is
+strong evidence for grounded filtering and failure fallback, not a new live
+Gemini reliability result. Its 87.5% understanding-success rate and original
+model latency are unchanged, and the corpus still cannot verify branch identity.
+
 ## Provider environment variables
 
 Provider adapters fail closed with a structured `not_configured` result when
@@ -172,7 +212,10 @@ the repository and makes CI/provider injection explicit.
 The Apify adapter invokes actor runs through `/v2/actors`, disables the actor's
 AI video description, and does not request, fetch, ingest, or score vendor
 transcript artifacts. Apify STT remains a documented capability to evaluate
-separately, not a measured feature of this harness.
+separately, not a measured feature of this harness. If a vendor nevertheless
+returns an AI scene description, it is retained as separately typed vendor-model
+evidence and cannot feed deterministic extraction or independently ground
+Gemini output.
 
 Private Apify key-value-store media can require the same process token used for
 acquisition. The runner attaches that Bearer header only to the exact Apify API
@@ -188,10 +231,22 @@ cross-host redirects.
   Media parts precede the untrusted creator-text prompt.
 - Gemini uses the current nested JSON `responseFormat`. The schema intentionally
   omits `maxItems`: a synthetic A/B request changed from HTTP 400 with
-  `maxItems: 150` to HTTP 200 after removing it.
+  `maxItems: 150` to HTTP 200 after removing it. A JSON response that does not
+  match the required candidate schema is a recorded model failure and invokes
+  deterministic fallback.
 - Gemini retries transport failures and HTTP 408, 429, and 5xx responses with a
   bounded attempt count and jittered/`Retry-After`-aware backoff. Attempt
   metadata is preserved without credentials.
+- A successful Gemini response contributes only schema-validated destination or
+  itinerary candidates. Caption and tagged-location candidates must match
+  evidence that exists independently outside the model's own evidence sentence.
+  Image-, video-, and speech-only candidates may instead carry explicit
+  `model_attested_media_evidence` only when a matching image/video asset was
+  successfully ingested into the model request; the model's evidence text alone
+  is insufficient. Independent name matching uses token boundaries so `Park`
+  cannot be grounded by `parking`. Raw heuristic hints are not merged into a
+  successful model result. A failed Gemini response uses bounded deterministic
+  extraction from acquired evidence and records that fallback explicitly.
 - Google Video Intelligence attempts every acquired video child, issuing one
   annotation operation per successfully fetched video. It does not stop after
   the first video. Stills remain the responsibility of a still-image path.
@@ -213,14 +268,18 @@ cross-host redirects.
   a local, zero-API-cost comparator; it is evaluation code, not app code.
 - Deterministic hint extraction approximates the production evidence ordering
   and trust model in `SocialPlaceHintExtractor`.
-- The v4 MapKit benchmark mirror adds production-style provider-name query
+- The v5 MapKit benchmark mirror adds production-style provider-name query
   variants, coordinate/region hints, exact-country and area-conflict filters,
   production pre-limit result ranking, OCR-specific near-spelling handling,
-  and the candidate clear-lead threshold.
+  creator-qualified venue-name matching, and the candidate clear-lead threshold.
   It also ports the production LA/Georgia ambiguity rules and District of
   Columbia region handling, covered by executable parity fixtures. It remains
   copied evaluation logic; production Swift regression fixtures are the
   authoritative parity check.
 
-The benchmark does not mutate the iOS app, Supabase, provider accounts, or user
-place data.
+The evaluator does not mutate Supabase, provider accounts, or user place data.
+The adjacent production changes in this branch are deliberately smaller than
+the evaluated architecture: the iOS fallback can parse numbered caption
+itineraries, demote redundant geography context, and match creator-qualified
+venue names. The app still does not call Apify or Gemini, acquire complete reel
+media, sample video frames, or transcribe speech.

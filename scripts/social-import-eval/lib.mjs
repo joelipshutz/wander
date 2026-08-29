@@ -10,9 +10,9 @@ const genericTerms = new Set([
 ]);
 
 const genericVenueTokens = new Set([
-  "a", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
+  "a", "all", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
   "for", "in", "instagram", "local", "new", "of", "place", "restaurant",
-  "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit",
+  "shop", "spot", "spots", "the", "these", "those", "tiktok", "to", "try", "viral", "visit",
 ]);
 
 const strongPlaceDesignators = new Set([
@@ -25,8 +25,31 @@ const strongPlaceDesignators = new Set([
 ]);
 
 const weakPlaceDesignators = new Set([
-  "bar", "cafe", "coffee", "deli", "eatery", "grill", "kitchen", "restaurant",
+  "bar", "cafe", "coffee", "deli", "eatery", "grill", "izakaya", "kitchen", "restaurant",
 ]);
+
+const numberedAreaVenueDesignators = new Set([
+  "bakery", "bar", "brewery", "brewing", "cafe", "coffee", "deli", "eatery",
+  "gallery", "grill", "hotel", "inn", "izakaya", "kitchen", "lodge", "market", "mercantile",
+  "museum", "pub", "resort", "restaurant", "store", "supply", "tavern",
+]);
+
+const numberedLowercaseInstructionVerbs = new Set([
+  "buy", "catch", "enjoy", "find", "get", "have", "look", "make", "see",
+  "take", "try", "watch",
+]);
+
+// Keep this narrow and mirrored with SocialPlaceHintExtractor. These are
+// common venue-name phrases where `in` belongs to the name, not an area split.
+const numberedFixedInNameLeads = new Set(["baked", "made"]);
+
+const geographyCountrySuffixes = [
+  ["united", "states", "of", "america"],
+  ["united", "states"],
+  ["u", "s", "a"],
+  ["usa"],
+  ["us"],
+];
 
 const actionWords = new Set([
   "admiring", "adventure", "at", "because", "finish", "fishing", "grab",
@@ -63,6 +86,27 @@ export function stableHash(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+export function buildRescoreProvenance({
+  rebuildUnderstandingHints,
+  reresolveMapKit,
+  mapKitResolverID,
+}) {
+  return {
+    appliedTransforms: [
+      { kind: "scoring", revision: "score-contract-v3" },
+      ...(rebuildUnderstandingHints
+        ? [{ kind: "understanding_hints", revision: "grounded-hints-v3" }]
+        : []),
+      ...(reresolveMapKit
+        ? [{ kind: "mapkit_resolution", revision: mapKitResolverID }]
+        : []),
+    ],
+    mapKitHintSource: rebuildUnderstandingHints
+      ? "rebuilt_understanding_hints"
+      : "saved_understanding_hints",
+  };
+}
+
 export function safeSegment(value) {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -84,7 +128,7 @@ export function canonicalPlaceName(value) {
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/\bmerc\b/g, "mercantile")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
@@ -199,6 +243,271 @@ function isStrongVisibleName(value) {
   return strong ? distinctive > 0 : weak && distinctive >= 1;
 }
 
+function normalizedWords(value) {
+  return canonicalPlaceName(value).split(/\s+/).filter(Boolean);
+}
+
+function containsTokenSequence(shorter, longer) {
+  if (shorter.length === 0 || shorter.length > longer.length) return false;
+  for (let start = 0; start <= longer.length - shorter.length; start += 1) {
+    if (shorter.every((token, index) => token === longer[start + index])) return true;
+  }
+  return false;
+}
+
+function geographyWords(value) {
+  const words = normalizedWords(value);
+  for (const suffix of geographyCountrySuffixes) {
+    if (suffix.length > words.length) continue;
+    if (suffix.every((token, index) => token === words[words.length - suffix.length + index])) {
+      return words.slice(0, -suffix.length);
+    }
+  }
+  return words;
+}
+
+function hasVenueDesignator(value) {
+  const words = new Set(normalizedWords(value));
+  return [...strongPlaceDesignators, ...weakPlaceDesignators]
+    .some((designator) => words.has(designator));
+}
+
+function hasKnownAdministrativeArea(value) {
+  const words = normalizedWords(value);
+  if (words.length === 0) return false;
+  if (stateNames.some((state) => canonicalPlaceName(state) === words.join(" "))) return true;
+  return geographyCountrySuffixes.some((country) => (
+    country.length === words.length
+    && country.every((token, index) => token === words[index])
+  ));
+}
+
+function numberedItineraryLines(text) {
+  if (!text) return [];
+  return text.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/^\s*\d{1,3}[.)]\s+(.{3,160}?)\s*$/u);
+    return match ? [{ line, content: match[1].trim() }] : [];
+  });
+}
+
+function isMultiStopNumberedItinerary(text) {
+  return numberedItineraryLines(text).length >= 2;
+}
+
+function cleanNumberedObject(value) {
+  return String(value ?? "")
+    .replace(/^[\s"'\[\]{}:;,@\-–—]+/u, "")
+    .replace(/[\s"',;:!?.\-–—]+$/u, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function trimNumberedCommentary(value) {
+  let result = cleanNumberedObject(value)
+    .replace(/\s+(?:with|by)\s+@[A-Za-z0-9._]{3,40}(?=\s|$)/giu, "")
+    .trim();
+  for (const match of result.matchAll(/\s+for\s+(\S+)/gu)) {
+    if (/^\p{Ll}/u.test(match[1])) {
+      result = result.slice(0, match.index).trim();
+      break;
+    }
+  }
+  return cleanNumberedObject(result);
+}
+
+function splitNumberedNameAndArea(value) {
+  const rawValue = String(value ?? "").replace(
+    /^\s*(?:the|a|an)\s+(?=@)/iu,
+    "",
+  );
+  const isHandle = /^\s*@/u.test(rawValue);
+  let cleaned = trimNumberedCommentary(rawValue);
+  if (!cleaned) return null;
+  if (isHandle) {
+    const handle = /^([A-Za-z0-9._]+)(.*)$/u.exec(cleaned);
+    if (handle) cleaned = readableHandle(handle[1]) + handle[2];
+  }
+  const matches = [...cleaned.matchAll(/\s+in\s+/giu)];
+  if (matches.length > 0) {
+    const match = matches.at(-1);
+    const name = cleanNumberedObject(cleaned.slice(0, match.index));
+    const area = cleanNumberedObject(cleaned.slice(match.index + match[0].length));
+    if (
+      name
+      && area
+      && !numberedFixedInNameLeads.has(canonicalPlaceName(name))
+      && normalizedWords(area).length <= 6
+      && !normalizedWords(area).some((word) => numberedAreaVenueDesignators.has(word))
+      && /^[\p{Lu}\d]/u.test(area)
+    ) return { name, area, isHandle };
+  }
+  return { name: cleaned, area: null, isHandle };
+}
+
+function isNamedNumberedObject(value, {
+  allowLowercaseDistinctiveToken = false,
+  allowLowercaseMultiwordName = false,
+} = {}) {
+  const words = normalizedWords(value);
+  if (words.length === 0 || words.length > 10) return false;
+  if (isGeneric(value) || !hasDistinctiveToken(value) || isAttribution(value)) return false;
+  const originalWords = value.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const genericObjectTokens = new Set([
+    ...genericVenueTokens,
+    ...strongPlaceDesignators,
+    ...weakPlaceDesignators,
+    "area", "areas", "cities", "city", "hotel", "hotels", "market", "markets",
+    "neighborhood", "neighborhoods", "neighbourhood", "neighbourhoods", "place",
+    "places", "town", "towns",
+  ]);
+  const hasDistinctiveObjectToken = originalWords.some((word) => (
+    word.length >= 2
+    && !genericObjectTokens.has(canonicalPlaceName(word))
+  ));
+  const hasDistinctiveProperToken = originalWords.some((word) => (
+    word.length >= 2
+    && /^[\p{Lu}\d]/u.test(word)
+    && !genericObjectTokens.has(canonicalPlaceName(word))
+  ));
+  const hasPlaceDesignator = words.some((word) => (
+    strongPlaceDesignators.has(word) || weakPlaceDesignators.has(word)
+  ));
+  const beginsWithLowercaseInstruction = numberedLowercaseInstructionVerbs.has(words[0]);
+  const validLowercaseGrounding = allowLowercaseDistinctiveToken
+    && !beginsWithLowercaseInstruction
+    && (words.length === 1 || hasPlaceDesignator || allowLowercaseMultiwordName);
+  return hasDistinctiveObjectToken
+    && (validLowercaseGrounding || hasDistinctiveProperToken);
+}
+
+function isStrongPlainNumberedPlaceName(value) {
+  const words = normalizedWords(value);
+  if (words.length < 2 || words.length > 8) return false;
+  if (!words.some((word) => strongPlaceDesignators.has(word))) return false;
+  return words.some((word) => (
+    !genericVenueTokens.has(word)
+    && !strongPlaceDesignators.has(word)
+    && !weakPlaceDesignators.has(word)
+  ));
+}
+
+function numberedItineraryObjects(rawLine) {
+  const nextAction = String.raw`(?:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|stop|visit|visited|base\s+camp|stroll|walk|go|head|drive|hike|return|take\s+(?:a\s+)?(?:photo|picture)|photo|picture|grab|buy|pick(?:ed|ing)?\s+up|eat|fish|drink|shop|stay|base|explore|gawk|look)`;
+  const tail = String.raw`(?=\s*(?:(?:,\s*)?(?:(?:and\s+)?then|and)\s+${nextAction}\b|with\s+@[A-Za-z0-9._]+\b|[#\n.!?]|$))`;
+  const patterns = [
+    [new RegExp(String.raw`\bstop(?:\s+for\s+[^#\n.!?]{0,30})?\s+at\s+(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\bstay\s+(?:at|in)\s+(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\b(?:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|visit|visited|base\s+camp)\s+(?:at\s+)?(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\b(?:stroll|walk)\b[^#\n.!?]{0,35}?\b(?:down|through|around|to)\s+(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\b(?:go|head|drive|hike|return)\s+(?:back\s+)?to\s+(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\b(?:take\s+(?:a\s+)?(?:photo|picture)|photo|picture)\s+(?:with|at|of)\s+(?:the\s+)?(.+?)${tail}`, "giu"), false],
+    [new RegExp(String.raw`\b(?:grab|buy|pick(?:ed|ing)?\s+up|eat|fish|drink)\b[^#\n.!?]{0,55}?\b(?:from|at|through)\s+(.+?)${tail}`, "giu"), true],
+    [new RegExp(String.raw`\bshop\b[^#\n.!?]{0,60}?\bin\s+(.+?)${tail}`, "giu"), false],
+    [new RegExp(String.raw`\bexplore\s+(.+?)${tail}`, "giu"), false],
+  ];
+  const values = [];
+  if (/\b(?:base|stay)\b/iu.test(rawLine)) {
+    const destinationHandleLine = rawLine.replace(
+      /\s+(?:with|by)\s+@[A-Za-z0-9._]{3,40}\b/giu,
+      "",
+    );
+    const displayName = /@([\p{L}\p{N}][^#\n.!?]{2,90}?)(?=\s+(?:to\s+(?:explore|visit|walk|see)|while|where)\b|\s+for\s+\p{Ll}[\p{L}\p{N}'’&-]*\b|[#\n.!?]|$)/iu.exec(destinationHandleLine)?.[1];
+    const parsed = displayName ? splitNumberedNameAndArea("@" + displayName) : null;
+    if (parsed && isNamedNumberedObject(parsed.name, {
+      allowLowercaseDistinctiveToken: true,
+    })) values.push(parsed);
+  }
+  for (const [expression, allowLowercaseMultiwordName] of patterns) {
+    for (const match of rawLine.matchAll(expression)) {
+      const parsed = splitNumberedNameAndArea(match[1]);
+      if (parsed && isNamedNumberedObject(parsed.name, {
+        allowLowercaseDistinctiveToken: true,
+        allowLowercaseMultiwordName,
+      })) values.push(parsed);
+    }
+  }
+  return values.filter((value, index) => values.findIndex((other) => (
+    canonicalPlaceName(other.name) === canonicalPlaceName(value.name)
+    && canonicalPlaceName(other.area) === canonicalPlaceName(value.area)
+  )) === index);
+}
+
+function containsNumberedItineraryAction(value) {
+  return /^\s*(?:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|stop|visit|visited|base\s+camp|stroll|walk|go|head|drive|hike|return|take\s+(?:a\s+)?(?:photo|picture)|photo|picture|grab|buy|pick(?:ed|ing)?\s+up|eat|fish|drink|shop|stay|base|explore)\b/iu.test(value);
+}
+
+function extractNumberedItineraryHints(text, output, source) {
+  const lines = numberedItineraryLines(text);
+  if (lines.length < 2) return { active: false, residualText: text };
+  const numberedByLine = new Map(lines.map((item) => [item.line, item.content]));
+  const residualLines = [];
+  for (const line of text.split(/\r?\n/)) {
+    const content = numberedByLine.get(line);
+    if (!content) {
+      residualLines.push(line);
+      continue;
+    }
+    const parsedValues = numberedItineraryObjects(content);
+    if (parsedValues.length === 0 && !containsNumberedItineraryAction(content)) {
+      const directName = splitNumberedNameAndArea(content);
+      if (
+        directName
+        && isNamedNumberedObject(directName.name)
+        && isStrongPlainNumberedPlaceName(directName.name)
+      ) parsedValues.push(directName);
+    }
+    if (parsedValues.length === 0 && !containsNumberedItineraryAction(content)) {
+      residualLines.push(content);
+    }
+    for (const parsed of parsedValues) {
+      const usesVisibleMediaTrust = ["ocr", "video_text", "accessibility_text"]
+        .includes(source);
+      addHint(output, {
+        name: parsed.name,
+        area: parsed.area,
+        modality: source,
+        evidence: parsed.isHandle
+          ? "itinerary_handle"
+          : (usesVisibleMediaTrust ? "image_or_video_text" : "numbered_itinerary"),
+        classification: "destination",
+        durable: !parsed.isHandle,
+        trustRank: parsed.isHandle ? 1 : (usesVisibleMediaTrust ? 3 : 4),
+        preserveStructuredName: true,
+      });
+    }
+  }
+  return { active: true, residualText: residualLines.join("\n") };
+}
+
+function demoteGeographyContexts(hints, { hasNumberedItinerary = false } = {}) {
+  const contexts = [];
+  const retained = hints.filter((hint, index) => {
+    const words = geographyWords(hint.name);
+    if (words.length === 0 || words.length > 4 || hasVenueDesignator(hint.name)) return true;
+    // Without an explicit semantic geography type, only platform-tagged
+    // locations are safe to demote. A short attraction/neighborhood extracted
+    // from caption or media must not disappear merely because another venue
+    // repeats it as an area.
+    const hasAdministrativeProvenance = hint.modality === "tagged_location"
+      || hint.classification === "itinerary"
+      || hasKnownAdministrativeArea(hint.area);
+    const usedByAnotherDestination = hasAdministrativeProvenance
+      && hints.some((other, otherIndex) => (
+      otherIndex !== index
+      && other.durable !== false
+      && containsTokenSequence(words, geographyWords(other.area))
+      ));
+    const administrativeNumberedTag = hasNumberedItinerary
+      && hint.modality === "tagged_location"
+      && hints.some((other, otherIndex) => otherIndex !== index && other.durable !== false)
+      && containsTokenSequence(words, geographyWords(hint.area));
+    if (!usedByAnotherDestination && !administrativeNumberedTag) return true;
+    contexts.push({ name: hint.name, area: hint.area ?? null, modality: hint.modality });
+    return false;
+  });
+  return { hints: retained, contexts };
+}
+
 function postWideArea(text) {
   const matches = stateNames.filter((state) =>
     new RegExp("\\b" + state.replaceAll(" ", "\\s+") + "\\b", "i").test(text)
@@ -210,7 +519,13 @@ function postWideArea(text) {
 
 function addHint(output, hint) {
   if (!hint?.name) return;
-  const name = trimPhrase(hint.name);
+  const {
+    preserveStructuredName = false,
+    ...persistedHint
+  } = hint;
+  const name = preserveStructuredName
+    ? cleanNumberedObject(hint.name)
+    : trimPhrase(hint.name);
   if (
     name.length < 3
     || name.length > 100
@@ -222,7 +537,7 @@ function addHint(output, hint) {
   const existingIndex = output.findIndex((item) =>
     canonicalPlaceName(item.name) + "|" + canonicalPlaceName(item.area) === normalized
   );
-  const value = { ...hint, name, area: hint.area || null };
+  const value = { ...persistedHint, name, area: hint.area || null };
   if (existingIndex < 0) {
     output.push(value);
     return;
@@ -280,12 +595,14 @@ function extractFromCreatorText(text, output, source) {
       trustRank: 5,
     });
   }
+  const numberedItinerary = extractNumberedItineraryHints(text, output, source);
+  const phraseText = numberedItinerary.residualText;
   const itineraryPatterns = [
     /\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\b)|[#\n.!?]|$)/giu,
     /\b(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?|before|after|for|where|which|with)\b|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\b|make\s+sure\b)|[#\n.!?]|$)/giu,
   ];
   for (const pattern of itineraryPatterns) {
-    for (const value of captures(text, pattern)) {
+    for (const value of captures(phraseText, pattern)) {
       addParsedHint(output, value, {
         modality: source,
         evidence: "itinerary_phrase",
@@ -296,7 +613,7 @@ function extractFromCreatorText(text, output, source) {
     }
   }
   for (const value of captures(
-    text,
+    phraseText,
     /\b(?:grab|grabbing|get|getting|order|ordering|buy|buying|pick(?:ed|ing)?\s+up|rent|renting|eat|eating|drink|drinking|try|trying)\b[^#\n.!?]{0,70}?\bfrom\s+(@?[^#\n.!?]{3,90}?)(?=[#\n.!?]|$)/giu,
   )) {
     addParsedHint(output, value, {
@@ -307,7 +624,7 @@ function extractFromCreatorText(text, output, source) {
       trustRank: 2,
     });
   }
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of phraseText.split(/\r?\n/)) {
     const stripped = line
       .replace(/^\s*(?:[-*•▪︎◦]|\d{1,3}[.)]|[^\p{L}\p{N}@#]{1,3})\s*/u, "")
       .trim();
@@ -326,7 +643,24 @@ function extractFromCreatorText(text, output, source) {
       });
     }
   }
-  for (const handle of captures(text, /@([A-Za-z0-9._]{3,40})/gu)) {
+  const handleText = numberedItinerary.active
+    ? text.split(/\r?\n/).map((line) => {
+      const numbered = line.match(/^\s*\d{1,3}[.)]\s+(.{3,160}?)\s*$/u);
+      if (!numbered) return line;
+      let filtered = line.replace(/\s+(?:with|by)\s+@[A-Za-z0-9._]{3,40}\b/giu, "");
+      if (/\b(?:base|stay)\b/iu.test(numbered[1])) {
+        const acceptedNames = numberedItineraryObjects(numbered[1]).map((item) => (
+          canonicalPlaceName(item.name)
+        ));
+        filtered = filtered.replace(/@([A-Za-z0-9._]{3,40})/gu, (match, handle) => {
+          const handleKey = canonicalPlaceName(readableHandle(handle));
+          return acceptedNames.some((name) => name.startsWith(handleKey)) ? handle : match;
+        });
+      }
+      return filtered;
+    }).join("\n")
+    : text;
+  for (const handle of captures(handleText, /@([A-Za-z0-9._]{3,40})/gu)) {
     addHint(output, {
       name: readableHandle(handle),
       area: null,
@@ -341,7 +675,12 @@ function extractFromCreatorText(text, output, source) {
 
 function extractFromVisibleText(text, output, source) {
   if (!text) return;
+  const itineraryLines = numberedItineraryLines(text);
+  const numberedLineSet = itineraryLines.length >= 2
+    ? new Set(itineraryLines.map((item) => item.line))
+    : new Set();
   for (const line of text.split(/\r?\n/)) {
+    if (numberedLineSet.has(line)) continue;
     const stripped = line
       .replace(/^\s*(?:[-*•▪︎◦]|\d{1,3}[.)])\s*/u, "")
       .trim();
@@ -362,15 +701,34 @@ function extractFromVisibleText(text, output, source) {
   extractFromCreatorText(text, output, source);
 }
 
+function normalizedEvidenceText(value) {
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    const joined = value.map(normalizedEvidenceText).filter(Boolean).join("\n");
+    return joined || null;
+  }
+  if (value && typeof value === "object") {
+    for (const key of ["text", "description", "sceneDescription", "caption", "value"]) {
+      const normalized = normalizedEvidenceText(value[key]);
+      if (normalized) return normalized;
+    }
+  }
+  return null;
+}
+
 export function normalizeEvidence(value) {
   return {
-    title: value?.title ?? null,
-    caption: value?.caption ?? null,
-    authorName: value?.authorName ?? null,
+    title: normalizedEvidenceText(value?.title),
+    caption: normalizedEvidenceText(value?.caption),
+    authorName: normalizedEvidenceText(value?.authorName),
     taggedLocations: Array.isArray(value?.taggedLocations) ? value.taggedLocations : [],
     media: Array.isArray(value?.media) ? value.media : [],
     transcript: value?.transcript ?? null,
-    sceneDescription: value?.sceneDescription ?? null,
+    sceneDescription: normalizedEvidenceText(value?.sceneDescription),
+    vendorModelEvidence: Array.isArray(value?.vendorModelEvidence)
+      ? value.vendorModelEvidence
+      : [],
     modelCandidates: Array.isArray(value?.modelCandidates) ? value.modelCandidates : [],
   };
 }
@@ -417,10 +775,213 @@ export function extractDeterministicHints(rawEvidence, limit = 150) {
   }
   const combinedText = [evidence.caption, evidence.title].filter(Boolean).join("\n");
   const area = postWideArea(combinedText);
-  return output.slice(0, limit).map((hint) => ({
+  const contextualHints = output.map((hint) => ({
     ...hint,
     area: hint.area ?? area,
   }));
+  const collapsedHints = collapseAliasHints(contextualHints);
+  return demoteGeographyContexts(collapsedHints, {
+    hasNumberedItinerary: isMultiStopNumberedItinerary(combinedText),
+  }).hints.slice(0, limit);
+}
+
+function modelGroundingText(evidence) {
+  return [
+    evidence.title,
+    evidence.caption,
+    ...evidence.taggedLocations.flatMap((location) => [
+      location.name,
+      location.address,
+      location.area,
+    ]),
+    ...evidence.media.flatMap((media) => [
+      media.ocrText,
+      media.videoText,
+      media.altText,
+    ]),
+    evidence.transcript?.text,
+    evidence.sceneDescription,
+  ].filter(Boolean).join("\n");
+}
+
+function groundingContainsName(name, value) {
+  const nameWords = normalizedWords(name);
+  const valueWords = normalizedWords(value);
+  const compactName = nameWords.join("");
+  return compactName.length >= 3 && (
+    containsTokenSequence(nameWords, valueWords)
+    || valueWords.includes(compactName)
+  );
+}
+
+function modelCandidateGrounding(candidate, evidence, mediaIngestion) {
+  if (groundingContainsName(candidate.name, modelGroundingText(evidence))) {
+    return { grounding: "independent_text_evidence", rejectionReason: null };
+  }
+  if (["image_text", "video_text", "speech"].includes(candidate.modality)
+      && groundingContainsName(candidate.name, candidate.evidence)) {
+    const requiredMediaType = candidate.modality === "image_text" ? "image" : "video";
+    const matchingMediaWasIngested = mediaIngestion.some((item) => (
+      item?.status === "ok" && item?.type === requiredMediaType
+    ));
+    if (!matchingMediaWasIngested) {
+      return { grounding: null, rejectionReason: "missing_ingested_media" };
+    }
+    // The model directly inspected media bytes, so no independent OCR/STT text
+    // may exist. Keep this path explicit: it is model-attested media evidence,
+    // not independently verified grounding.
+    return { grounding: "model_attested_media_evidence", rejectionReason: null };
+  }
+  return { grounding: null, rejectionReason: null };
+}
+
+function modelCandidateRejectionReason(candidate) {
+  if (!candidate || typeof candidate.name !== "string") return "missing_name";
+  if (!["destination", "itinerary"].includes(candidate.classification)) {
+    return "non_destination_classification";
+  }
+  if (![
+    "caption", "tagged_location", "image_text", "video_text", "speech",
+  ].includes(candidate.modality)) {
+    return "unsupported_modality";
+  }
+  if (!Number.isFinite(candidate.confidence)
+      || candidate.confidence < 0
+      || candidate.confidence > 1) {
+    return "invalid_confidence";
+  }
+  if (typeof candidate.evidence !== "string" || candidate.evidence.trim().length < 3) {
+    return "missing_evidence";
+  }
+  if (candidate.name.length > 100 || isGeneric(candidate.name)
+      || !hasDistinctiveToken(candidate.name) || isAttribution(candidate.name)) {
+    return "invalid_place_name";
+  }
+  return null;
+}
+
+function modelHintsAreAliases(lhs, rhs) {
+  if (lhs.area && rhs.area && canonicalPlaceName(lhs.area) !== canonicalPlaceName(rhs.area)) {
+    return false;
+  }
+  const first = canonicalPlaceName(lhs.name).split(/\s+/).filter(Boolean);
+  const second = canonicalPlaceName(rhs.name).split(/\s+/).filter(Boolean);
+  if (first.length === 0 || second.length === 0) return false;
+  if (first.join(" ") === second.join(" ")) return true;
+  const ignoredEntitySuffixes = new Set(["co", "company", "inc", "llc", "restaurant"]);
+  const withoutSuffixes = (tokens) => {
+    const result = [...tokens];
+    while (result.length > 0 && ignoredEntitySuffixes.has(result.at(-1))) result.pop();
+    return result;
+  };
+  return withoutSuffixes(first).join(" ") === withoutSuffixes(second).join(" ");
+}
+
+function preferredModelHint(lhs, rhs) {
+  const actionWrapper = (value) => /^(?:base|drive|eat|explore|finish|fish|go|grab|head|hike|shop|stay|stroll|take|walk)\b/i
+    .test(value.trim());
+  if (actionWrapper(lhs.name) !== actionWrapper(rhs.name)) {
+    return actionWrapper(rhs.name) ? lhs : rhs;
+  }
+  const specificity = (value) => normalizedWords(value).reduce((score, token) => (
+    score + (strongPlaceDesignators.has(token) ? 2 : (weakPlaceDesignators.has(token) ? 1 : 0))
+  ), 0);
+  const lhsSpecificity = specificity(lhs.name);
+  const rhsSpecificity = specificity(rhs.name);
+  if (lhsSpecificity !== rhsSpecificity) {
+    return rhsSpecificity > lhsSpecificity ? rhs : lhs;
+  }
+  if (lhs.trustRank !== rhs.trustRank) return rhs.trustRank > lhs.trustRank ? rhs : lhs;
+  if (Boolean(lhs.area) !== Boolean(rhs.area)) return rhs.area ? rhs : lhs;
+  return normalizedWords(rhs.name).length < normalizedWords(lhs.name).length ? rhs : lhs;
+}
+
+function collapseAliasHints(hints) {
+  const collapsed = [];
+  for (const hint of hints) {
+    const existingIndex = collapsed.findIndex((item) => modelHintsAreAliases(item, hint));
+    if (existingIndex < 0) collapsed.push(hint);
+    else collapsed[existingIndex] = preferredModelHint(collapsed[existingIndex], hint);
+  }
+  return collapsed;
+}
+
+/**
+ * Converts a successful structured-model response into the only hints that may
+ * reach POI lookup. Raw caption/OCR heuristics are deliberately not merged back
+ * into a successful semantic result: doing so reintroduced the source chrome,
+ * creator handles, geography, and instruction fragments the model classified.
+ */
+export function extractGroundedModelHints(
+  rawEvidence,
+  limit = 150,
+  { mediaIngestion = [] } = {},
+) {
+  const evidence = normalizeEvidence(rawEvidence);
+  const hints = [];
+  const rejections = [];
+  let mergedAliasCount = 0;
+  let independentlyGroundedCount = 0;
+  let modelAttestedMediaCount = 0;
+  for (const candidate of evidence.modelCandidates) {
+    let reason = modelCandidateRejectionReason(candidate);
+    const groundingSelection = reason
+      ? { grounding: null, rejectionReason: null }
+      : modelCandidateGrounding(candidate, evidence, mediaIngestion);
+    const grounding = groundingSelection.grounding;
+    if (!reason && groundingSelection.rejectionReason) {
+      reason = groundingSelection.rejectionReason;
+    }
+    if (!reason && !grounding) reason = "ungrounded_name";
+    if (reason) {
+      rejections.push({
+        name: typeof candidate?.name === "string" ? candidate.name : null,
+        classification: candidate?.classification ?? null,
+        reason,
+      });
+      continue;
+    }
+    const hint = {
+      // The structured candidate name is already a dedicated field. Creator-
+      // text phrase trimming would corrupt legitimate names such as "Atte for
+      // Coffee" and "Story and Soil Coffee".
+      name: candidate.name.trim(),
+      area: candidate.area || null,
+      modality: candidate.modality,
+      evidence: candidate.evidence,
+      classification: candidate.classification,
+      durable: true,
+      trustRank: candidate.classification === "destination" ? 5 : 3,
+      startMs: candidate.startMs ?? null,
+      endMs: candidate.endMs ?? null,
+      providerConfidence: candidate.confidence,
+      grounding,
+    };
+    if (grounding === "independent_text_evidence") independentlyGroundedCount += 1;
+    if (grounding === "model_attested_media_evidence") modelAttestedMediaCount += 1;
+    const existingIndex = hints.findIndex((item) => modelHintsAreAliases(item, hint));
+    if (existingIndex < 0) hints.push(hint);
+    else {
+      hints[existingIndex] = preferredModelHint(hints[existingIndex], hint);
+      mergedAliasCount += 1;
+    }
+  }
+  const contextSelection = demoteGeographyContexts(hints);
+  return {
+    hints: contextSelection.hints.slice(0, limit),
+    validation: {
+      candidateCount: evidence.modelCandidates.length,
+      acceptedCount: Math.min(contextSelection.hints.length, limit),
+      rejectedCount: rejections.length,
+      mergedAliasCount,
+      independentlyGroundedCount,
+      modelAttestedMediaCount,
+      demotedContextCount: contextSelection.contexts.length,
+      truncatedCount: Math.max(0, contextSelection.hints.length - limit),
+      rejections,
+      demotedContexts: contextSelection.contexts,
+    },
+  };
 }
 
 function labelMatchesPrediction(label, prediction) {
@@ -549,7 +1110,15 @@ function average(values) {
 
 function microScore(scores) {
   if (scores.length === 0) {
-    return { precision: null, recall: null, f1: null };
+    return {
+      required: 0,
+      requiredHits: 0,
+      predictions: 0,
+      correctPredictions: 0,
+      precision: null,
+      recall: null,
+      f1: null,
+    };
   }
   const totals = scores.reduce((output, score) => {
     output.required += score.requiredCount;
@@ -635,12 +1204,30 @@ export function buildSummary(results) {
     );
     const extractionMicro = microScore(extractionScored);
     const placeMicro = microScore(scored);
+    const fallbackAssistedItems = primary.filter((item) => item.understanding?.fallback?.used === true);
+    const modelSuccessScores = primary
+      .filter((item) => item.understanding?.fallback?.used !== true
+        && ["ok", "partial"].includes(item.understanding?.status))
+      .map((item) => item.scores?.extraction)
+      .filter((score) => score?.scorable);
+    const modelSuccessMicro = microScore(modelSuccessScores);
     summaries.push({
       variant,
       casesAttempted: items.length,
       acquisitionTransportSuccessRate: average(transportSuccess),
       completeAcquisitionRate: average(completeAcquisition),
       understandingSuccessRate: average(items.map((item) => item.understanding.status === "ok" ? 1 : 0)),
+      fallbackAssistedCaseCount: fallbackAssistedItems.length,
+      fallbackAssistedCaseRate: average(primary.map((item) =>
+        item.understanding?.fallback?.used === true ? 1 : 0
+      )),
+      modelSuccessLabeledCaseCount: modelSuccessScores.length,
+      modelSuccessExtractionPrecision: average(modelSuccessScores.map((score) => score.precision)),
+      modelSuccessExtractionRecall: average(modelSuccessScores.map((score) => score.recall)),
+      modelSuccessExtractionMicroPrecision: modelSuccessMicro.precision,
+      modelSuccessExtractionMicroRecall: modelSuccessMicro.recall,
+      modelSuccessRequiredPlaceCount: modelSuccessMicro.required,
+      modelSuccessRequiredPlaceHitCount: modelSuccessMicro.requiredHits,
       primaryLabeledCaseCount: extractionScored.length,
       selectedNameLabeledCaseCount: scored.length,
       extractionPrecision: average(extractionScored.map((score) => score.precision)),
@@ -682,6 +1269,8 @@ export function buildSummary(results) {
       exactSet: "Every required place and no false-positive place was extracted from the post.",
       acquisitionTransport: "The source/provider request returned usable evidence, even if some required modalities were missing.",
       completeAcquisition: "Every expected modality and minimum expected media asset passed a bounded fetch/MIME probe.",
+      fallbackAssisted: "Cases where failed model understanding was replaced by explicitly recorded deterministic extraction from acquired evidence.",
+      modelSuccessQuality: "Extraction quality restricted to labeled cases with successful/partial model understanding and no deterministic failure fallback.",
       byExpectedModality: "Case-group metrics for posts declaring that expected modality; individual labels are not assigned to one modality.",
       selectedName: "Name/alias accuracy for candidates selected by MapKit. The corpus does not yet validate physical branch identity, address, provider ID, or coordinates.",
     },
@@ -701,8 +1290,8 @@ export function renderSummaryMarkdown(summary) {
     "",
     "Hint and selected-name P/R are shown as macro (equal post weight), then micro (equal place-mention weight). Selected-name quality does not validate physical POI identity.",
     "",
-    "| Variant | Transport | Complete acquisition | Understanding | Hint macro P/R | Hint micro P/R | Post ≥1 | Exact set | Selected-name macro P/R | POI lookup health | POI selection | Mean latency |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    "| Variant | Transport | Complete acquisition | Understanding | Fallback-assisted | Hint macro P/R | Hint micro P/R | Post ≥1 | Exact set | Selected-name macro P/R | POI lookup health | POI selection | Mean latency |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
   ];
   for (const item of summary.variants) {
     lines.push(
@@ -710,6 +1299,7 @@ export function renderSummaryMarkdown(summary) {
       + " | " + percentage(item.acquisitionTransportSuccessRate)
       + " | " + percentage(item.completeAcquisitionRate)
       + " | " + percentage(item.understandingSuccessRate)
+      + " | " + percentage(item.fallbackAssistedCaseRate)
       + " | " + percentage(item.extractionPrecision) + " / " + percentage(item.extractionRecall)
       + " | " + percentage(item.extractionMicroPrecision) + " / " + percentage(item.extractionMicroRecall)
       + " | " + percentage(item.extractionPostSuccessRate)

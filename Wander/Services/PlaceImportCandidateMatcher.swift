@@ -358,7 +358,8 @@ enum PlaceImportCandidateMatcher {
         }
         let lhsCore = coreTokens(lhs)
         let rhsCore = coreTokens(rhs)
-        return !lhsCore.isEmpty && lhsCore == rhsCore
+        return (!lhsCore.isEmpty && lhsCore == rhsCore)
+            || creatorQualifiedVenueNamesMatch(lhs, rhs)
     }
 
     private static func score(
@@ -379,6 +380,8 @@ enum PlaceImportCandidateMatcher {
         if hintKey == candidateKey {
             score = 0.82
         } else if hintCore == candidateCore, !hintCore.isEmpty {
+            score = 0.8
+        } else if creatorQualifiedVenueNamesMatch(candidate.name, nameHint) {
             score = 0.8
         } else if min(hintKey.count, candidateKey.count) >= 5,
                   hintKey.contains(candidateKey) || candidateKey.contains(hintKey) {
@@ -461,6 +464,32 @@ enum PlaceImportCandidateMatcher {
             .filter { !$0.isEmpty }
     }
 
+    private static func creatorQualifiedVenueNamesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsWords = nameWords(lhs)
+        let rhsWords = nameWords(rhs)
+        return creatorQualifiedVenueName(base: lhsWords, qualified: rhsWords)
+            || creatorQualifiedVenueName(base: rhsWords, qualified: lhsWords)
+    }
+
+    private static func creatorQualifiedVenueName(
+        base: [String],
+        qualified: [String]
+    ) -> Bool {
+        guard qualified.count >= base.count + 2,
+              Array(qualified.prefix(base.count)) == base,
+              qualified[base.count] == "by",
+              !Set(base).isDisjoint(with: creatorQualifiedVenueDesignators),
+              base.contains(where: isDistinctiveCreatorQualifiedToken)
+        else { return false }
+        return true
+    }
+
+    private static func isDistinctiveCreatorQualifiedToken(_ token: String) -> Bool {
+        token.count >= 2
+            && !creatorQualifiedVenueDesignators.contains(token)
+            && !creatorQualifiedVenueGenericTokens.contains(token)
+    }
+
     private static func hasUnrequestedStreetDesignator(_ candidateName: String, comparedWith hint: String) -> Bool {
         let candidateDesignators = canonicalNameTokens(candidateName).intersection(streetDesignators)
         guard !candidateDesignators.isEmpty else { return false }
@@ -512,5 +541,18 @@ enum PlaceImportCandidateMatcher {
     private static let streetDesignators: Set<String> = [
         "avenue", "ave", "boulevard", "blvd", "court", "ct", "highway", "hwy",
         "lane", "ln", "parkway", "pkwy", "road", "rd", "street", "st", "way"
+    ]
+
+    private static let creatorQualifiedVenueDesignators: Set<String> = [
+        "bakery", "bar", "brewery", "brewing", "cafe", "coffee", "deli", "eatery",
+        "gallery", "grill", "hotel", "inn", "kitchen", "lodge", "market", "museum",
+        "pub", "resort", "restaurant", "tavern"
+    ]
+
+    private static let creatorQualifiedVenueGenericTokens: Set<String> = [
+        "a", "an", "and", "at", "avenue", "ave", "boulevard", "blvd", "by", "co",
+        "coffeehouse", "company", "court", "ct", "highway", "house", "hwy", "in",
+        "lane", "ln", "local", "neighborhood", "neighbourhood", "of", "on", "parkway",
+        "pkwy", "place", "road", "rd", "shop", "spot", "street", "st", "the", "way"
     ]
 }

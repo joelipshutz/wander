@@ -994,7 +994,38 @@ enum SocialPlaceHintExtractor {
     }
 
     private static func appendHandles(from text: String, to output: inout [SocialPlaceSearchHint]) {
-        for handle in captures(pattern: #"@([A-Za-z0-9._]{3,40})"#, in: text) {
+        let lines = text.components(separatedBy: .newlines)
+        let isNumberedItinerary = lines.compactMap(numberedItineraryContent(from:)).count >= 2
+        let handleText = isNumberedItinerary
+            ? lines.map { line in
+                guard numberedItineraryContent(from: line) != nil else { return line }
+                var filtered = line.replacingOccurrences(
+                    of: #"(?i)\s+(?:with|by)\s+@[A-Za-z0-9._]{3,40}\b"#,
+                    with: "",
+                    options: .regularExpression
+                )
+                if let content = numberedItineraryContent(from: line),
+                   matches(pattern: #"\b(?i:base|stay)\b"#, in: content) {
+                    let acceptedNames = numberedItineraryHints(
+                        from: content,
+                        evidence: .itineraryPhrase
+                    ).map(\.name)
+                    for handle in captures(pattern: #"@([A-Za-z0-9._]{3,40})"#, in: line) {
+                        let handleKey = normalized(readableHandle(handle))
+                        guard acceptedNames.contains(where: {
+                            normalized($0).hasPrefix(handleKey)
+                        }) else { continue }
+                        filtered = filtered.replacingOccurrences(
+                            of: "@\(handle)",
+                            with: handle
+                        )
+                    }
+                }
+                return filtered
+            }.joined(separator: "\n")
+            : text
+
+        for handle in captures(pattern: #"@([A-Za-z0-9._]{3,40})"#, in: handleText) {
             let name = readableHandle(handle)
             guard !isGenericSocialTerm(name) else { continue }
             append(
@@ -1014,25 +1045,272 @@ enum SocialPlaceHintExtractor {
     }
 
     private static func appendPhraseHints(from text: String, to output: inout [SocialPlaceSearchHint]) {
-        for value in captures(pattern: itineraryPattern, in: text) {
+        let numbered = numberedItineraryExtraction(from: text, evidence: .itineraryPhrase)
+        for hint in numbered.hints {
+            append(hint, to: &output)
+        }
+        let phraseText = numbered.residualText
+
+        for value in captures(pattern: itineraryPattern, in: phraseText) {
             appendItineraryHint(value, to: &output)
         }
 
         for pattern in creatorNamedItineraryPatterns {
-            for value in captures(pattern: pattern, in: text) {
+            for value in captures(pattern: pattern, in: phraseText) {
                 let cleaned = trimPhrase(value)
                 guard isCreatorNamedDestination(cleaned) else { continue }
                 appendItineraryHint(cleaned, to: &output)
             }
         }
 
-        for value in captures(pattern: acquisitionPattern, in: text) {
+        for value in captures(pattern: acquisitionPattern, in: phraseText) {
             let cleaned = trimPhrase(value)
             guard !isAttributionPhrase(cleaned) else { continue }
             let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
                 ? .itineraryHandle
                 : .acquisitionPhrase
             append(parsedHint(from: cleaned, evidence: evidence), to: &output)
+        }
+    }
+
+    private static func numberedItineraryContent(from line: String) -> String? {
+        captures(
+            pattern: #"^\s*\d{1,3}[.)]\s+(.{3,160}?)\s*$"#,
+            in: line
+        ).first?.trimmedNil
+    }
+
+    private static func numberedItineraryExtraction(
+        from text: String,
+        evidence: SocialPlaceSearchHint.Evidence
+    ) -> (hints: [SocialPlaceSearchHint], residualText: String) {
+        let lines = text.components(separatedBy: .newlines)
+        let numberedCount = lines.compactMap(numberedItineraryContent(from:)).count
+        guard numberedCount >= 2 else { return ([], text) }
+
+        var hints: [SocialPlaceSearchHint] = []
+        var residualLines: [String] = []
+        for line in lines {
+            guard let content = numberedItineraryContent(from: line) else {
+                residualLines.append(line)
+                continue
+            }
+            var parsed = numberedItineraryHints(from: content, evidence: evidence)
+            if parsed.isEmpty,
+               !containsNumberedItineraryAction(content),
+               let direct = structuredNumberedHint(from: content, evidence: evidence),
+               isStrongPlainNumberedPlaceName(direct.name) {
+                parsed = [direct]
+            }
+            for hint in parsed {
+                append(hint, to: &hints)
+            }
+            // Preserve genuinely unsupported numbered prose for the legacy
+            // grammar, but do not let a recognized generic instruction become
+            // a durable place merely because structured validation rejected it.
+            if parsed.isEmpty, !containsNumberedItineraryAction(content) {
+                residualLines.append(content)
+            }
+        }
+        return (hints, residualLines.joined(separator: "\n"))
+    }
+
+    private static func numberedItineraryHints(
+        from line: String,
+        evidence: SocialPlaceSearchHint.Evidence
+    ) -> [SocialPlaceSearchHint] {
+        let nextAction = #"(?i:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|visit|stop|go|head|drive|walk|stroll|explore|eat|grab|shop|fish|stay|base|take|gawk|look)"#
+        let boundary = #"(?=\s*(?:(?:(?:,\s*)?(?:(?:and\s+)?then|and)\s+)"# + nextAction
+            + #"\b|with\s+@[A-Za-z0-9._]+\b|for\s+\p{Ll}[\p{L}\p{N}'’&-]*\b)|[#\n.!?]|$)"#
+        let patterns: [(expression: String, allowsLowercaseMultiwordName: Bool)] = [
+            (#"\b(?i:stop)(?:\s+(?i:for)\s+[^#\n.!?]{0,30})?\s+(?i:at)\s+(.+?)"# + boundary, true),
+            (#"\b(?i:stay)\s+(?i:at|in)\s+(.+?)"# + boundary, true),
+            (#"\b(?i:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|visit|visited|base\s+camp)\s+(?:(?i:at)\s+)?(.+?)"# + boundary, true),
+            (#"\b(?i:stroll|walk)\b[^#\n.!?]{0,35}?\b(?i:down|through|around|to)\s+(.+?)"# + boundary, true),
+            (#"\b(?i:go|head|drive|hike|return)\s+(?:(?i:back)\s+)?(?i:to)\s+(.+?)"# + boundary, true),
+            (#"\b(?i:take\s+(?:a\s+)?(?:photo|picture)|photo|picture)\s+(?:(?i:with|at|of)\s+)(?:(?i:the)\s+)?(.+?)"# + boundary, false),
+            (#"\b(?i:grab|buy|pick(?:ed|ing)?\s+up|eat|fish|drink)\b[^#\n.!?]{0,55}?\b(?i:from|at|through)\s+(.+?)"# + boundary, true),
+            (#"\b(?i:shop)\b[^#\n.!?]{0,60}?\b(?i:in)\s+(.+?)"# + boundary, false),
+            (#"\b(?i:explore)\s+(.+?)"# + boundary, false)
+        ]
+
+        var result: [SocialPlaceSearchHint] = []
+        if matches(pattern: #"\b(?i:base|stay)\b"#, in: line) {
+            let destinationHandleLine = line.replacingOccurrences(
+                of: #"(?i)\s+(?:with|by)\s+@[A-Za-z0-9._]{3,40}\b"#,
+                with: "",
+                options: .regularExpression
+            )
+            let displayBoundary = #"(?=\s+(?:(?i:to\s+(?:explore|visit|walk|see)|while|where)\b|for\s+\p{Ll}[\p{L}\p{N}'’&-]*\b)|[#\n.!?]|$)"#
+            for captured in captures(
+                pattern: #"@([\p{L}\p{N}][^#\n.!?]{2,90}?)"# + displayBoundary,
+                in: destinationHandleLine
+            ) {
+                append(
+                    structuredNumberedHint(
+                        from: "@" + captured,
+                        evidence: evidence,
+                        allowsLowercaseDistinctiveToken: true
+                    ),
+                    to: &result
+                )
+            }
+        }
+        for pattern in patterns {
+            for captured in captures(pattern: pattern.expression, in: line) {
+                append(
+                    structuredNumberedHint(
+                        from: captured,
+                        evidence: evidence,
+                        allowsLowercaseDistinctiveToken: true,
+                        allowsLowercaseMultiwordName: pattern.allowsLowercaseMultiwordName
+                    ),
+                    to: &result
+                )
+            }
+        }
+        return result
+    }
+
+    private static func containsNumberedItineraryAction(_ line: String) -> Bool {
+        matches(
+            pattern: #"^\s*(?i:coffee|dinner|lunch|breakfast|brunch|dessert|drinks?|stop|visit|visited|base\s+camp|stroll|walk|go|head|drive|hike|return|take\s+(?:a\s+)?(?:photo|picture)|photo|picture|grab|buy|pick(?:ed|ing)?\s+up|eat|fish|drink|shop|stay|base|explore)\b"#,
+            in: line
+        )
+    }
+
+    private static func structuredNumberedHint(
+        from rawValue: String,
+        evidence: SocialPlaceSearchHint.Evidence,
+        allowsLowercaseDistinctiveToken: Bool = false,
+        allowsLowercaseMultiwordName: Bool = false
+    ) -> SocialPlaceSearchHint? {
+        var value = rawValue.trimmingCharacters(
+            in: CharacterSet(charactersIn: " \t\n\r\"'[]{}:;,-–—!?.")
+        )
+        if value.range(
+            of: #"(?i)^(?:the|a|an)\s+@"#,
+            options: .regularExpression
+        ) != nil {
+            value = value.replacingOccurrences(
+                of: #"(?i)^(?:the|a|an)\s+"#,
+                with: "",
+                options: .regularExpression
+            )
+        }
+        let isHandle = value.hasPrefix("@")
+        if isHandle {
+            let handleEnd = value.firstIndex(where: { $0.isWhitespace }) ?? value.endIndex
+            let handle = readableHandle(String(value[value.index(after: value.startIndex)..<handleEnd]))
+            value = handle + String(value[handleEnd...])
+            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !value.isEmpty else { return nil }
+
+        var name = value
+        var area: String?
+        if let range = value.range(of: " in ", options: [.caseInsensitive, .backwards]) {
+            let candidateName = String(value[..<range.lowerBound]).trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let candidateArea = String(value[range.upperBound...]).trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let areaWords = candidateArea.components(
+                separatedBy: CharacterSet.alphanumerics.inverted
+            ).filter { !$0.isEmpty }
+            let foldedAreaWords = Set(areaWords.map {
+                $0.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                ).lowercased()
+            })
+            let foldedCandidateName = candidateName.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            ).lowercased()
+            if !candidateName.isEmpty,
+               !candidateArea.isEmpty,
+               !numberedFixedInNameLeads.contains(foldedCandidateName),
+               areaWords.count <= 6,
+               foldedAreaWords.isDisjoint(with: numberedAreaVenueDesignators),
+               (candidateArea.first?.isUppercase == true || candidateArea.first?.isNumber == true) {
+                name = candidateName
+                area = candidateArea
+            }
+        }
+
+        let originalWords = name.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        let foldedNameWords = originalWords.map {
+            $0.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            ).lowercased()
+        }
+        let genericTokens = genericVenueTokens
+            .union(strongPlaceDesignators)
+            .union(weakPlaceDesignators)
+            .union([
+                "area", "areas", "cities", "city", "hotel", "hotels", "market", "markets",
+                "neighborhood", "neighborhoods", "neighbourhood", "neighbourhoods", "place",
+                "places", "town", "towns"
+            ])
+        let hasDistinctiveToken = originalWords.contains { word in
+            let folded = word.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            ).lowercased()
+            return word.count >= 2 && !genericTokens.contains(folded)
+        }
+        let hasDistinctiveProperToken = originalWords.contains { word in
+            let folded = word.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            ).lowercased()
+            return (word.first?.isUppercase == true || word.contains(where: \.isNumber))
+                && word.count >= 2
+                && !genericTokens.contains(folded)
+        }
+        let hasPlaceDesignator = !Set(foldedNameWords).isDisjoint(
+            with: strongPlaceDesignators.union(weakPlaceDesignators)
+        )
+        let beginsWithLowercaseInstruction = foldedNameWords.first.map(
+            numberedLowercaseInstructionVerbs.contains
+        ) ?? false
+        let validLowercaseGrounding = allowsLowercaseDistinctiveToken
+            && !beginsWithLowercaseInstruction
+            && (foldedNameWords.count == 1 || hasPlaceDesignator || allowsLowercaseMultiwordName)
+        guard name.count <= 80,
+              hasDistinctiveToken,
+              validLowercaseGrounding || hasDistinctiveProperToken,
+              !isGenericSocialTerm(name),
+              !isAttributionPhrase(name),
+              hasDistinctiveVenueToken(name)
+        else { return nil }
+        return SocialPlaceSearchHint(
+            name: name,
+            area: area,
+            evidence: isHandle ? .itineraryHandle : evidence
+        )
+    }
+
+    private static func isStrongPlainNumberedPlaceName(_ value: String) -> Bool {
+        let words = value.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .map {
+                $0.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                ).lowercased()
+            }
+        guard (2...8).contains(words.count),
+              !Set(words).isDisjoint(with: strongPlaceDesignators)
+        else { return false }
+        return words.contains { word in
+            !genericVenueTokens.contains(word)
+                && !strongPlaceDesignators.contains(word)
+                && !weakPlaceDesignators.contains(word)
         }
     }
 
@@ -1057,8 +1335,14 @@ enum SocialPlaceHintExtractor {
             return
         }
 
+        let numbered = numberedItineraryExtraction(from: text, evidence: .imageText)
+        for hint in numbered.hints {
+            append(hint, to: &output)
+        }
+        let phraseText = numbered.residualText
+
         for pattern in [itineraryPattern] + creatorNamedItineraryPatterns {
-            for value in captures(pattern: pattern, in: text) {
+            for value in captures(pattern: pattern, in: phraseText) {
                 let cleaned = trimPhrase(value)
                 guard !isAttributionPhrase(cleaned) else { continue }
                 guard let hint = parsedHint(from: cleaned, evidence: .imageText),
@@ -1068,8 +1352,8 @@ enum SocialPlaceHintExtractor {
             }
         }
 
-        for query in adjacentNameLineQueries(from: text)
-            + PhotoPlaceTextExtractor.searchQueries(from: text, limit: 12) {
+        for query in adjacentNameLineQueries(from: phraseText)
+            + PhotoPlaceTextExtractor.searchQueries(from: phraseText, limit: 12) {
             guard let hint = parsedHint(from: query, evidence: .imageText),
                   isStrongMediaPlaceName(hint.name)
             else { continue }
@@ -1203,6 +1487,14 @@ enum SocialPlaceHintExtractor {
             else { return nil }
             return String(text[valueRange])
         }
+    }
+
+    private static func matches(pattern: String, in text: String) -> Bool {
+        guard let expression = try? NSRegularExpression(pattern: pattern), !text.isEmpty else {
+            return false
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return expression.firstMatch(in: text, range: range) != nil
     }
 
     private static func readableHandle(_ rawValue: String) -> String {
@@ -1340,9 +1632,9 @@ enum SocialPlaceHintExtractor {
     ]
 
     private static let genericVenueTokens: Set<String> = [
-        "a", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
+        "a", "all", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
         "for", "in", "instagram", "local", "new", "of", "place", "restaurant",
-        "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
+        "shop", "spot", "spots", "the", "these", "those", "tiktok", "to", "try", "viral", "visit"
     ]
 
     private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\b)|[#\n.!?]|$)"#
@@ -1372,7 +1664,25 @@ enum SocialPlaceHintExtractor {
     ]
 
     private static let weakPlaceDesignators: Set<String> = [
-        "bar", "cafe", "coffee", "deli", "eatery", "grill", "kitchen", "restaurant"
+        "bar", "cafe", "coffee", "deli", "eatery", "grill", "izakaya", "kitchen", "restaurant"
+    ]
+
+    private static let numberedAreaVenueDesignators: Set<String> = [
+        "bakery", "bar", "brewery", "brewing", "cafe", "coffee", "deli", "eatery",
+        "gallery", "grill", "hotel", "inn", "izakaya", "kitchen", "lodge", "market", "mercantile",
+        "museum", "pub", "resort", "restaurant", "store", "supply", "tavern"
+    ]
+
+    private static let numberedLowercaseInstructionVerbs: Set<String> = [
+        "buy", "catch", "enjoy", "find", "get", "have", "look", "make", "see",
+        "take", "try", "watch"
+    ]
+
+    // Preserve a deliberately narrow set of common proper names whose `in`
+    // phrase is part of the venue name, while still splitting ordinary
+    // one-token venue + locality forms such as `Nobu in Malibu`.
+    private static let numberedFixedInNameLeads: Set<String> = [
+        "baked", "made"
     ]
 
     private static let mediaActionWords: Set<String> = [
@@ -1404,7 +1714,9 @@ enum SocialImportEvidencePlanner {
                 result.append(hint)
             }
         }
-        return result
+        return result.enumerated().compactMap { index, hint in
+            isContextOnlyGeography(hint, at: index, among: result) ? nil : hint
+        }
     }
 
     private static func preferred(
@@ -1454,6 +1766,33 @@ enum SocialImportEvidencePlanner {
 
     private static func hasVenueDesignator(_ value: String) -> Bool {
         !Set(normalizedWords(value)).isDisjoint(with: venueDesignators)
+    }
+
+    private static func isContextOnlyGeography(
+        _ hint: SocialPlaceSearchHint,
+        at index: Int,
+        among hints: [SocialPlaceSearchHint]
+    ) -> Bool {
+        switch hint.evidence {
+        case .explicitLocation, .imageText, .namedEntity:
+            break
+        case .itineraryPhrase, .acquisitionPhrase, .itineraryHandle, .socialHandle:
+            return false
+        }
+        let nameWords = normalizedWords(hint.name)
+        guard !nameWords.isEmpty,
+              nameWords.count <= 4,
+              !hasVenueDesignator(hint.name)
+        else { return false }
+
+        return hints.enumerated().contains { otherIndex, other in
+            guard otherIndex != index,
+                  other.evidence.shouldRemainVisibleWithoutCandidates,
+                  hasVenueDesignator(other.name),
+                  let area = other.area
+            else { return false }
+            return normalizedWords(area) == nameWords
+        }
     }
 
     private static func isSourceChrome(_ value: String) -> Bool {

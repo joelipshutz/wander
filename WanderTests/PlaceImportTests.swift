@@ -2836,6 +2836,68 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         XCTAssertEqual(planned.map(\.name), ["Presidio National Park"])
     }
 
+    func testEvidencePlannerDemotesExactGeographyUsedByDurableVenueAsArea() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "San Diego",
+                area: "California",
+                evidence: .explicitLocation
+            ),
+            SocialPlaceSearchHint(
+                name: "Caroline's Seaside Cafe",
+                area: "San Diego",
+                evidence: .imageText
+            )
+        ]
+
+        let planned = SocialImportEvidencePlanner.reviewHints(hints)
+
+        XCTAssertEqual(planned.map(\.name), ["Caroline's Seaside Cafe"])
+        XCTAssertEqual(planned.first?.area, "San Diego")
+    }
+
+    func testEvidencePlannerKeepsGeographyWithoutDurableVenueContext() {
+        let geography = SocialPlaceSearchHint(
+            name: "San Diego",
+            area: "California",
+            evidence: .explicitLocation
+        )
+        let nonDurableVenue = SocialPlaceSearchHint(
+            name: "Caroline's Seaside Cafe",
+            area: "San Diego",
+            evidence: .socialHandle
+        )
+
+        XCTAssertEqual(
+            SocialImportEvidencePlanner.reviewHints([geography]).map(\.name),
+            ["San Diego"]
+        )
+        XCTAssertEqual(
+            SocialImportEvidencePlanner.reviewHints([geography, nonDurableVenue]).map(\.name),
+            ["San Diego", "Caroline's Seaside Cafe"]
+        )
+    }
+
+    func testEvidencePlannerDoesNotDemoteVenueLikeGeographicName() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "San Diego Zoo",
+                area: "California",
+                evidence: .explicitLocation
+            ),
+            SocialPlaceSearchHint(
+                name: "Safari Kitchen",
+                area: "San Diego Zoo",
+                evidence: .imageText
+            )
+        ]
+
+        XCTAssertEqual(
+            SocialImportEvidencePlanner.reviewHints(hints).map(\.name),
+            ["San Diego Zoo", "Safari Kitchen"]
+        )
+    }
+
     func testSeveralUnmatchedCaptionHintsProduceOneHonestRecoveryItem() async throws {
         let metadata = SocialImportMetadata(
             title: "Wyoming itinerary",
@@ -3748,6 +3810,228 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         XCTAssertEqual(hints.first?.evidence, .itineraryPhrase)
     }
 
+    func testNumberedItineraryExtractsDestinationTailsWithoutInstructionWrappers() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            First time in Osaka? Here are the stops.
+            1. Eat takoyaki (octopus balls). Osaka's soul food that can be found everywhere.
+            2. Stroll down Dotonbori and gawk at the giant restaurant signboards
+            3. Take a photo with the Glico man
+            4. Grab a Japanese cheesecake from Rikuro
+            5. Go to Teppanyaro izakaya in Namba for okonomiyaki
+            6. Shop til you drop in Amerikamura
+            7. Eat your way through Kuromon Market
+            8. Explore Kitchen Street (Doguyasuji)
+            9. Fish your own meal at Turikichi
+            10. Base yourself in the heart of Osaka @Caption by Hyatt Namba to explore the city
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+        )
+
+        XCTAssertEqual(
+            Set(hints.map(\.name)),
+            Set([
+                "Dotonbori",
+                "Glico man",
+                "Rikuro",
+                "Teppanyaro izakaya",
+                "Amerikamura",
+                "Kuromon Market",
+                "Kitchen Street (Doguyasuji)",
+                "Turikichi",
+                "Caption by Hyatt Namba"
+            ])
+        )
+        XCTAssertEqual(
+            hints.first(where: { $0.name == "Teppanyaro izakaya" })?.area,
+            "Namba"
+        )
+        XCTAssertFalse(hints.contains { hint in
+            ["the giant restaurant signboards", "Shop til you drop", "Eat your way through Kuromon Market",
+             "Fish your own meal at Turikichi", "Eat takoyaki"].contains(hint.name)
+        })
+    }
+
+    func testNumberedItineraryPreservesLegacyFormsConnectorsAndMultipleStops() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            1. Dinner at Gjusta
+            2. Stop at Fremont Lake
+            3. Visit Griffith Observatory
+            4. Base camp at Half Moon Lake Lodge
+            5. Visit Story and Soil Coffee
+            6. Go to Atte for Coffee
+            7. Breakfast at Republique, then drinks at Bar Stella
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+
+        XCTAssertEqual(
+            hints.map(\.name),
+            [
+                "Gjusta",
+                "Fremont Lake",
+                "Griffith Observatory",
+                "Half Moon Lake Lodge",
+                "Story and Soil Coffee",
+                "Atte for Coffee",
+                "Republique",
+                "Bar Stella"
+            ]
+        )
+    }
+
+    func testNumberedItineraryKeepsPlainNamesAndRejectsGenericInstructionsOrMentions() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            1. Pine Coffee Supply
+            2. Farson Mercantile
+            3. Go get coffee
+            4. Grab lunch at the hotel
+            5. Shop in local markets
+            6. Eat at Gjusta with @Ryan
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+
+        XCTAssertEqual(hints.map(\.name), ["Pine Coffee Supply", "Farson Mercantile", "Gjusta"])
+        XCTAssertFalse(hints.contains { $0.name == "Ryan" })
+    }
+
+    func testNumberedItineraryRejectsProseWhilePreservingLowercaseAndNamesContainingIn() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            1. Pack sunscreen
+            2. Check the weather
+            3. Dinner at gjusta
+            4. Base yourself at @captionbyhyattnambaosaka
+            5. Visit Alice in Wonderland Cafe
+            6. Explore all of these spots
+            7. Visit frank n franks
+            8. Visit @carolines_seaside_cafe
+            9. Visit Baked in Brooklyn
+            10. Visit 麺屋 一燈
+            11. Dinner at the @sunrise_bakery
+            12. Visit Nobu in Malibu
+            13. Go to dave and busters
+            14. Walk to mama shelter
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+
+        XCTAssertEqual(
+            hints.map(\.name),
+            [
+                "gjusta",
+                "captionbyhyattnambaosaka",
+                "Alice in Wonderland Cafe",
+                "frank n franks",
+                "carolines seaside cafe",
+                "Baked in Brooklyn",
+                "麺屋 一燈",
+                "sunrise bakery",
+                "Nobu",
+                "dave and busters",
+                "mama shelter"
+            ]
+        )
+        XCTAssertNil(hints.first(where: { $0.name == "Alice in Wonderland Cafe" })?.area)
+        XCTAssertNil(hints.first(where: { $0.name == "Baked in Brooklyn" })?.area)
+        XCTAssertEqual(hints.first(where: { $0.name == "Nobu" })?.area, "Malibu")
+        XCTAssertEqual(
+            hints.first(where: { $0.name == "captionbyhyattnambaosaka" })?.evidence,
+            .itineraryHandle
+        )
+        let handleHint = try? XCTUnwrap(
+            hints.first(where: { $0.name == "carolines seaside cafe" })
+        )
+        XCTAssertEqual(handleHint?.evidence, .itineraryHandle)
+        XCTAssertEqual(handleHint?.evidence.shouldRemainVisibleWithoutCandidates, false)
+        XCTAssertEqual(
+            hints.first(where: { $0.name == "sunrise bakery" })?.evidence,
+            .itineraryHandle
+        )
+    }
+
+    func testNumberedItineraryRejectsActivityWrappersAndIncidentalStayMention() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            1. Stay at Hotel Juno with @ryan for two nights
+            2. Walk to get ice cream
+            3. Go to see the sunset
+            4. Drive to find parking
+            5. Visit Made in Italy
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+
+        XCTAssertEqual(hints.map(\.name), ["Hotel Juno", "Made in Italy"])
+        XCTAssertTrue(hints.allSatisfy { $0.area == nil })
+    }
+
+    func testNumberedItineraryOnRecognizedSlideUsesImageEvidence() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: nil,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialPlaceHintExtractor.hints(
+            from: metadata,
+            recognizedTexts: [
+                """
+                1. Dinner at Gjusta
+                2. Visit Griffith Observatory
+                """
+            ]
+        )
+
+        XCTAssertEqual(hints.map(\.name), ["Gjusta", "Griffith Observatory"])
+        XCTAssertTrue(hints.allSatisfy { $0.evidence == .imageText })
+    }
+
+    func testExtractorAndPlannerDemoteExplicitGeographyUsedAsVenueArea() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            📍 San Diego
+            Dinner at Caroline's Seaside Cafe in San Diego.
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+        )
+
+        XCTAssertEqual(hints.map(\.name), ["Caroline's Seaside Cafe"])
+        XCTAssertEqual(hints.first?.area, "San Diego")
+    }
+
     func testCandidateMatcherTreatsRestaurantSuffixAsTheSamePlaceName() {
         let candidate = placeImportCandidate(name: "Mendocino Farms")
 
@@ -3758,6 +4042,54 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         )
 
         XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testCandidateMatcherTreatsCreatorQualifiedCafeNameAsTheSameVenue() {
+        let candidate = placeImportCandidate(
+            name: "Caroline's Seaside Cafe",
+            address: "8610 Kennel Way, La Jolla, CA"
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Caroline's Seaside Cafe by Giuseppe",
+            areaHint: "San Diego"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testCandidateMatcherDoesNotCollapseGenericByNameWithoutVenueDesignator() {
+        let candidate = placeImportCandidate(name: "Caption")
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Caption by Hyatt Namba",
+            areaHint: "Osaka"
+        )
+
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testCandidateMatcherDoesNotCollapseGenericCreatorQualifiedVenueNames() {
+        for (candidateName, hint) in [
+            ("Cafe", "Cafe by the Bay"),
+            ("Hotel", "Hotel by Marriott"),
+            ("Coffee Shop", "Coffee Shop by Jane"),
+            ("Coffee House", "Coffee House by Jane"),
+            ("Coffeehouse Cafe", "Coffeehouse Cafe by Jane"),
+            ("Local Cafe", "Local Cafe by Jane"),
+            ("Neighborhood Cafe", "Neighborhood Cafe by Jane"),
+            ("Street Cafe", "Street Cafe by Jane")
+        ] {
+            let candidate = placeImportCandidate(name: candidateName)
+            let match = PlaceImportCandidateMatcher.match(
+                [candidate],
+                nameHint: hint,
+                areaHint: nil
+            )
+            XCTAssertNil(match.selectedCandidateID, "Unexpected generic alias: \(candidateName)")
+        }
     }
 
     func testCandidateMatcherTreatsMercAsMercantileAcrossStateNameFormats() {

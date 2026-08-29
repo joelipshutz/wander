@@ -548,6 +548,8 @@ private enum Resolver {
             score = 0.82
         } else if !hintCore.isEmpty, hintCore == candidateCore {
             score = 0.8
+        } else if creatorQualifiedVenueNamesMatch(name, nameHint) {
+            score = 0.8
         } else if min(hintKey.count, candidateKey.count) >= 5,
                   hintKey.contains(candidateKey) || candidateKey.contains(hintKey) {
             score = 0.72
@@ -583,7 +585,8 @@ private enum Resolver {
         }
         let lhsCore = coreTokens(lhs)
         let rhsCore = coreTokens(rhs)
-        return !lhsCore.isEmpty && lhsCore == rhsCore
+        return (!lhsCore.isEmpty && lhsCore == rhsCore)
+            || creatorQualifiedVenueNamesMatch(lhs, rhs)
     }
 
     private static func normalizedWords(_ value: String) -> [String] {
@@ -598,12 +601,51 @@ private enum Resolver {
         normalizedWords(value).joined()
     }
 
+    private static func creatorQualifiedVenueNamesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsWords = normalizedWords(lhs)
+        let rhsWords = normalizedWords(rhs)
+        return creatorQualifiedVenueName(base: lhsWords, qualified: rhsWords)
+            || creatorQualifiedVenueName(base: rhsWords, qualified: lhsWords)
+    }
+
+    private static func creatorQualifiedVenueName(
+        base: [String],
+        qualified: [String]
+    ) -> Bool {
+        guard qualified.count >= base.count + 2,
+              Array(qualified.prefix(base.count)) == base,
+              qualified[base.count] == "by",
+              !Set(base).isDisjoint(with: creatorQualifiedVenueDesignators),
+              base.contains(where: isDistinctiveCreatorQualifiedToken)
+        else { return false }
+        return true
+    }
+
+    private static func isDistinctiveCreatorQualifiedToken(_ token: String) -> Bool {
+        token.count >= 2
+            && !creatorQualifiedVenueDesignators.contains(token)
+            && !creatorQualifiedVenueGenericTokens.contains(token)
+    }
+
     private static func coreTokens(_ value: String) -> Set<String> {
         Set(normalizedWords(value)).subtracting([
             "the", "restaurant", "restaurants", "eatery", "company", "co",
             "inc", "llc", "reservoir"
         ])
     }
+
+    private static let creatorQualifiedVenueDesignators: Set<String> = [
+        "bakery", "bar", "brewery", "brewing", "cafe", "coffee", "deli", "eatery",
+        "gallery", "grill", "hotel", "inn", "kitchen", "lodge", "market", "museum",
+        "pub", "resort", "restaurant", "tavern"
+    ]
+
+    private static let creatorQualifiedVenueGenericTokens: Set<String> = [
+        "a", "an", "and", "at", "avenue", "ave", "boulevard", "blvd", "by", "co",
+        "coffeehouse", "company", "court", "ct", "highway", "house", "hwy", "in",
+        "lane", "ln", "local", "neighborhood", "neighbourhood", "of", "on", "parkway",
+        "pkwy", "place", "road", "rd", "shop", "spot", "street", "st", "the", "way"
+    ]
 
     private static func areaTokens(_ value: String) -> Set<String> {
         var result = Set(normalizedWords(value))
@@ -890,7 +932,7 @@ private struct Main {
                 results.append(await Resolver.resolve(hint))
             }
             let response = BatchResponse(
-                resolver: "mapkit-production-query-ranking-and-threshold-mirror-v4",
+                resolver: "mapkit-production-query-ranking-and-threshold-mirror-v5",
                 results: results,
                 geographyProbes: request.geographyProbes?.map(Resolver.inspectGeography),
                 rankingProbes: request.rankingProbes?.map(Resolver.inspectRanking),
@@ -901,7 +943,7 @@ private struct Main {
             FileHandle.standardOutput.write(Data([0x0A]))
         } catch {
             let response = [
-                "resolver": "mapkit-production-query-ranking-and-threshold-mirror-v4",
+                "resolver": "mapkit-production-query-ranking-and-threshold-mirror-v5",
                 "fatalError": error.localizedDescription
             ]
             let encoded = try? JSONSerialization.data(withJSONObject: response)
