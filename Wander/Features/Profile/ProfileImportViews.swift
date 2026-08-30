@@ -69,6 +69,7 @@ struct PlaceImportHubScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let completionAction: ([String]) -> Void
     let inboxAction: () -> Void
+    var cancelAction: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var input = ""
@@ -192,7 +193,13 @@ struct PlaceImportHubScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") {
+                    if let cancelAction {
+                        cancelAction()
+                    } else {
+                        dismiss()
+                    }
+                }
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
             ToolbarItem(placement: .primaryAction) {
@@ -248,6 +255,49 @@ struct PlaceImportHubScreen: View {
         guard let clipboardText = UIPasteboard.general.string else { return }
         input = clipboardText
         isInputFocused = true
+    }
+}
+
+struct PlaceImportHubOverlay: View {
+    @ObservedObject var importStore: PlaceImportStore
+    let completionAction: ([String]) -> Void
+    let inboxAction: () -> Void
+    let cancelAction: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.08)
+                .ignoresSafeArea()
+
+            NavigationStack {
+                PlaceImportHubScreen(
+                    importStore: importStore,
+                    completionAction: completionAction,
+                    inboxAction: inboxAction,
+                    cancelAction: cancelAction
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: AddSheetLayout.importEntryHeight)
+            .background(WanderTheme.canvasWarm.color)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: WanderTheme.radiusSheet,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: WanderTheme.radiusSheet,
+                    style: .continuous
+                )
+            )
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(WanderTheme.textMuted.color.opacity(0.52))
+                    .frame(width: 36, height: 5)
+                    .padding(.top, 5)
+                    .accessibilityHidden(true)
+            }
+        }
+        .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
     }
 }
 

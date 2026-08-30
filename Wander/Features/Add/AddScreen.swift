@@ -111,6 +111,7 @@ enum AddCameraPreviewLayout {
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
     static let pendingReviewRestingHeight: CGFloat = 570
+    static let importEntryHeight: CGFloat = 410
     static let importCompletionHeight: CGFloat = 710
 
     static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
@@ -164,7 +165,7 @@ struct AddScreen: View {
     let launchRequest: WanderAddLaunchRequest?
     let onLaunchRequestHandled: (UUID) -> Void
     let walkthroughParkSuggestion: @MainActor () async -> PlaceCandidate?
-    let onImportStarted: ([String]) -> Void
+    let onOpenImportHub: () -> Void
     let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
@@ -188,9 +189,6 @@ struct AddScreen: View {
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
-    @State private var showsImportHub = ProcessInfo.processInfo.arguments.contains(
-        "-WanderOpenImportHub"
-    )
     @State private var showsImportInbox = false
     @State private var isAutoClosingWalkthrough = false
     @State private var isRunningWalkthroughSearch = false
@@ -206,7 +204,7 @@ struct AddScreen: View {
         launchRequest: WanderAddLaunchRequest? = nil,
         onLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         walkthroughParkSuggestion: @escaping @MainActor () async -> PlaceCandidate? = { nil },
-        onImportStarted: @escaping ([String]) -> Void = { _ in },
+        onOpenImportHub: @escaping () -> Void = {},
         onClose: @escaping () -> Void
     ) {
         self.importStore = importStore
@@ -216,7 +214,7 @@ struct AddScreen: View {
         self.launchRequest = launchRequest
         self.onLaunchRequestHandled = onLaunchRequestHandled
         self.walkthroughParkSuggestion = walkthroughParkSuggestion
-        self.onImportStarted = onImportStarted
+        self.onOpenImportHub = onOpenImportHub
         self.onClose = onClose
     }
 
@@ -385,7 +383,9 @@ struct AddScreen: View {
                     expandSheet()
                     await resolveCurrentLocationCandidates()
                 case .importHub:
-                    showsImportHub = true
+                    onLaunchRequestHandled(launchRequest.id)
+                    onOpenImportHub()
+                    return
                 case .search(let query):
                     expandSheet()
                     quickAddQuery = query
@@ -430,13 +430,6 @@ struct AddScreen: View {
                 Task {
                     await importPhotoDraft(from: item)
                 }
-            }
-            .navigationDestination(isPresented: $showsImportHub) {
-                PlaceImportHubScreen(
-                    importStore: importStore,
-                    completionAction: handleImportStarted,
-                    inboxAction: openImportInbox
-                )
             }
             .navigationDestination(isPresented: $showsImportReview) {
                 PlaceImportAdaptiveReviewScreen(
@@ -1034,7 +1027,6 @@ struct AddScreen: View {
         isImportingPhoto = false
         addSaveFlow = nil
         placeSaveDraftStore.clear()
-        showsImportHub = false
         showsImportInbox = false
         selectedDetent = restingDetent
     }
@@ -1086,12 +1078,7 @@ struct AddScreen: View {
     }
 
     private func openImportHub() {
-        showsImportHub = true
-    }
-
-    private func handleImportStarted(_ batchIDs: [String]) {
-        guard !batchIDs.isEmpty else { return }
-        onImportStarted(batchIDs)
+        onOpenImportHub()
     }
 
     private func openImportInbox() {
