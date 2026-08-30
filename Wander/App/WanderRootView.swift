@@ -295,6 +295,7 @@ struct WanderRootView: View {
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
+    @State private var isPresentingImportHub: Bool
     @State private var addSheetDetent: PresentationDetent
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
@@ -386,8 +387,12 @@ struct WanderRootView: View {
         self.firstVisitWalkthroughEligibilityContext = firstVisitWalkthroughEligibilityContext
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
+        let opensImportHub = launchArguments.contains("-WanderOpenImportHub")
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
-        _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
+        _isPresentingAdd = State(
+            initialValue: opensImportHub ? false : Self.resolvedInitialAddPresentation()
+        )
+        _isPresentingImportHub = State(initialValue: opensImportHub)
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
         _placeProfileFloatingActionVariant = State(
@@ -433,11 +438,9 @@ struct WanderRootView: View {
             )
         )
         _addSheetDetent = State(
-            initialValue: launchArguments.contains("-WanderOpenImportHub")
-                ? AddSheetLayout.restingDetent(hasPendingImports: false)
-                : AddSheetLayout.restingDetent(
-                    hasPendingImports: importStore.summary.hasPendingImports
-                )
+            initialValue: AddSheetLayout.restingDetent(
+                hasPendingImports: importStore.summary.hasPendingImports
+            )
         )
     }
 
@@ -602,6 +605,22 @@ struct WanderRootView: View {
 
     private var presentedRoot: some View {
         tabRoot
+        .overlay {
+            if isPresentingImportHub {
+                PlaceImportHubOverlay(
+                    importStore: importStore,
+                    completionAction: beginInteractivePlaceImport,
+                    inboxAction: openImportInboxFromHub,
+                    cancelAction: dismissImportHub
+                )
+                .transition(
+                    accessibilityReduceMotion
+                        ? .opacity
+                        : .move(edge: .bottom).combined(with: .opacity)
+                )
+                .zIndex(200)
+            }
+        }
         .walkthroughPresenterScrim(
             isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
         )
@@ -619,7 +638,7 @@ struct WanderRootView: View {
                     launchRequest: addLaunchRequest,
                     onLaunchRequestHandled: consumeAddLaunchRequest,
                     walkthroughParkSuggestion: resolveFirstVisitParkSuggestion,
-                    onImportStarted: beginInteractivePlaceImport
+                    onOpenImportHub: presentImportHub
                 ) {
                     isPresentingAdd = false
                 }
@@ -1267,6 +1286,7 @@ struct WanderRootView: View {
 
         selectedTab = .map
         isPresentingAdd = false
+        isPresentingImportHub = false
         activeImportCompletionNotice = nil
         importCompletionBannerTask?.cancel()
         completedInteractiveImportBatchIDs.subtract(batchIDs)
@@ -1981,9 +2001,28 @@ struct WanderRootView: View {
 
     private func presentWalkthroughImportHub() {
         store.saveFlowDidPresent(.addSheet)
+        presentImportHub()
+    }
+
+    private func presentImportHub() {
+        selectedTab = .map
+        isPresentingAdd = false
+        withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.24)) {
+            isPresentingImportHub = true
+        }
+    }
+
+    private func dismissImportHub() {
+        withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.2)) {
+            isPresentingImportHub = false
+        }
+    }
+
+    private func openImportInboxFromHub() {
+        isPresentingImportHub = false
         addTabResetToken = UUID()
-        addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
-        addSheetDetent = addSheetRestingDetent
+        addSheetDetent = .large
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)
         isPresentingAdd = true
     }
 
