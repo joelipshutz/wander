@@ -4,24 +4,24 @@ Status: exploratory prototype
 
 ## Purpose
 
-Make the Astir name and event expansion tangible in a real SwiftUI shell before
-the production rec.me product or design system is renamed. The shell is entered
-only through the debug launch argument `-AstirBrandShell [page]` and has no
-backend, authentication, or analytics dependency.
+Make the Astir name tangible across the product that exists today before the
+production rec.me product or design system is renamed. The shell is entered only
+through the debug launch argument `-AstirBrandShell [page]` and has no backend,
+authentication, or analytics dependency.
 
 ## Brand thesis
 
-Astir is a cinematic neighborhood signal: warm and useful by day, deeper and
-more atmospheric around live events, then intimate and editorial the morning
-after. It helps someone feel that something worth doing is close and that they
-already have a place in it.
+Astir is a warm neighborhood memory: personal enough to feel authored, useful
+enough to reach for whenever someone needs a place, and social without becoming
+an influencer feed. It should make trusted taste feel alive while keeping the
+map and saved-place utility immediate.
 
 The system combines four useful ingredients from the supplied handoff without
 adopting any board as a source of truth:
 
-- Cult Classic's emotional pull and authored sequence.
+- Cult Classic's emotional pull and authored character.
 - Living Almanac's information clarity and accumulated record.
-- Local Frequency's time, distance, and live-state energy.
+- Local Frequency's neighborhood energy and visual contrast.
 - Open House's generous welcome and social safety.
 
 ## Design system
@@ -30,9 +30,10 @@ adopting any board as a source of truth:
 
 - Hybrid editorial/native layout: expressive full-bleed moments sit on a strict,
   scannable iPhone grid.
-- Intentional decoration: frame corners, chapter numbers, and restrained
-  metadata appear only where they organize the experience.
-- Mystery lives in photography, pacing, and partial reveal. Logistics never hide.
+- Intentional decoration: small section numbers and restrained metadata appear
+  only where they organize the experience.
+- Personality lives in photography, typography, color, and specific copy. Core
+  place actions remain obvious.
 
 ### Color
 
@@ -40,10 +41,10 @@ adopting any board as a source of truth:
 |---|---|---|
 | Paper | `#F2E9DB` | Daylight canvas and memory surfaces |
 | Raised paper | `#FFF9EF` | Cards and notes |
-| Ink | `#141714` | Primary text and event-night canvas |
-| Deep ocean | `#0E3033` | Arrival and wayfinding |
+| Ink | `#141714` | Primary text, controls, and contrast |
+| Deep ocean | `#0E3033` | Place and list accents |
 | Clay | `#C65A3C` | Warm action and editorial emphasis |
-| Signal | `#F05A3C` | Live state and time-sensitive emphasis |
+| Signal | `#F05A3C` | High-energy emphasis |
 | Pool | `#3D6A78` | Places, people, and coastal context |
 | Gold | `#C99B3E` | Rituals and secondary highlights |
 
@@ -55,54 +56,53 @@ adopting any board as a source of truth:
 
 ### Motion
 
-- Fast native navigation and one short entry dissolve.
+- Fast native navigation and native sheet presentation.
 - No cinematic delays, decorative loading sequences, or disorienting map motion.
 
 ## Safe choices
 
-- Native map behavior and four-item bottom navigation.
-- Obvious primary actions and fully visible date, time, price, location, guest,
-  and arrival details.
+- Native map behavior and the product's real four-item bottom navigation.
+- Obvious save, check-in, search, list, profile, and add actions.
 - At least 44-point interaction targets and non-color status cues.
 
 ## Deliberate risks
 
-- Lifecycle palette shift: warm daylight utility becomes a dark event world,
-  then returns to paper for memory. This creates emotional progression but must
-  still feel like one product.
-- Authored post-event memory: selected photographs, a host note, and contextual
-  people replace a chronological photo dump. This gains meaning at the cost of
-  requiring real editorial and consent operations.
-- Sparse film vocabulary: `chapter` and frame marks make events memorable, but
-  appear rarely enough to avoid film-distributor cosplay.
+- The editorial serif and wide-tracked wordmark introduce more personality than
+  the current utility shell, while compact sans-serif controls preserve clarity.
+- Warm paper, clay, ocean, and gold deliberately reject both generic travel blue
+  and an all-beige lifestyle app.
+- Feed and profile are treated as records of trusted place behavior rather than
+  content-creator surfaces.
 
 ## Prototype pages
 
-1. Intro and brand promise.
-2. Today in Ocean Park.
-3. Map with places and a live event.
-4. Event detail and RSVP.
-5. Arrival guidance.
-6. Minimal at-event screen that returns attention to the room.
-7. Morning-after photographs, host note, and connections.
-8. Personal history.
+1. Map — search, filters, trusted-person signals, selected-place actions, and
+   the entry point to Add.
+2. Feed — recent place activity from people the user trusts.
+3. Lists — the user's saved and shared place collections.
+4. Profile — Been, Wanna Go, friends, monthly pattern, and recent activity.
+5. Add sheet — current location, link, manual search, photo, and unresolved
+   drafts.
+
+The bottom tabs are exactly `Map`, `Feed`, `Lists`, and `Profile`. Add is a sheet,
+not a fifth tab. Event discovery, event details, arrival, at-event presence, and
+post-event memory are intentionally excluded from this pass. They remain future
+product directions rather than current navigation.
 
 ## Asset note
 
-`AstirWestsideBoard` is a cropped reference-board asset supplied for this
-exploration. It is not a production photography asset or final creative.
+`PlaceCarouselPhotos` provides existing in-app photography for the shell. The
+reference board remains directional inspiration, not production creative or a
+source of truth.
 
 ## Running
 
-Generate the Xcode project, then launch the Debug app with one of:
+Launch the Debug app with one of:
 
 ```text
--AstirBrandShell intro
--AstirBrandShell today
 -AstirBrandShell map
--AstirBrandShell event
--AstirBrandShell arrival
--AstirBrandShell present
--AstirBrandShell memory
+-AstirBrandShell feed
+-AstirBrandShell lists
+-AstirBrandShell add
 -AstirBrandShell profile
 ```
