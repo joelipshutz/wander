@@ -4,7 +4,7 @@ import {
   groundedHints,
   minimumGroundedConfidence,
 } from "./evidence.ts";
-import { parseGeminiCandidates } from "./gemini.ts";
+import { parseGeminiCandidates, parseGeminiUnderstanding } from "./gemini.ts";
 import {
   handleRequest,
   maximumHandlerDurationMilliseconds,
@@ -18,6 +18,7 @@ import { parseSocialSource } from "./source.ts";
 import type {
   AcquisitionEvidence,
   ModelCandidate,
+  ModelPostContext,
   RuntimeDependencies,
   SocialSource,
 } from "./types.ts";
@@ -180,6 +181,20 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
           .candidates.items
           .properties.evidenceIds.type,
         "array",
+      );
+      assertEquals(
+        requestBody.generationConfig.responseFormat.text.schema.required,
+        ["postContext", "candidates"],
+      );
+      assertEquals(
+        requestBody.generationConfig.responseFormat.text.schema.properties
+          .candidates.items.required.includes("entityType"),
+        true,
+      );
+      assertEquals(
+        requestBody.generationConfig.responseFormat.text.schema.properties
+          .candidates.items.required.includes("itemIndex"),
+        true,
       );
       return geminiResponse([candidate({
         name: "Carbon Beach Club",
@@ -492,7 +507,7 @@ Deno.test("streamed request bodies are rejected as soon as they exceed the limit
   assertEquals(admissionCalls, 0);
 });
 
-Deno.test("no_places is reserved for complete ingestion with zero model candidates", async () => {
+Deno.test("handler separates honest emptiness, uncertainty, and intentional exclusions", async () => {
   const complete = await runOutcomeScenario([], true);
   assertEquals(complete.outcome, "no_places");
   assertEquals(complete.failure_category, null);
@@ -505,9 +520,113 @@ Deno.test("no_places is reserved for complete ingestion with zero model candidat
   assertEquals(rejected.outcome, "fallback");
   assertEquals(rejected.failure_category, "grounding_rejected");
 
+  const ambiguous = await runOutcomeScenario([candidate({
+    name: "An uncertain venue",
+    classification: "ambiguous",
+    modality: "caption",
+    evidenceIds: ["caption:0"],
+  })], true);
+  assertEquals(ambiguous.outcome, "fallback");
+  assertEquals(ambiguous.failure_category, "grounding_rejected");
+
   const incomplete = await runOutcomeScenario([], false);
-  assertEquals(incomplete.outcome, "fallback");
+  assertEquals(incomplete.outcome, "partial");
+  assertEquals(incomplete.provider_path, "apify_gemini");
+  assertEquals(incomplete.hints, []);
   assertEquals(incomplete.failure_category, "media_incomplete");
+
+  const intentionalExclusions = await runOutcomeScenario([candidate({
+    name: "Vital Links",
+    area: "Texas",
+    classification: "incidental",
+    modality: "image_text",
+    evidenceIds: ["media:0"],
+  })], true);
+  assertEquals(intentionalExclusions.outcome, "no_places");
+  assertEquals(intentionalExclusions.hints, []);
+  assertEquals(intentionalExclusions.failure_category, null);
+});
+
+Deno.test("intentional exclusions survive failed media and rejected candidates", async () => {
+  const excludedLocation = candidate({
+    name: "Los Angeles",
+    area: "California",
+    entityType: "locality",
+    classification: "incidental",
+    modality: "tagged_location",
+    evidenceIds: ["tagged_location:0"],
+  });
+  const dataset = {
+    description: "Los Angeles is context, not a destination.",
+    locationName: "Los Angeles",
+    address: "California",
+  };
+
+  const excludedWithFailedMedia = await runOutcomeScenario(
+    [excludedLocation],
+    false,
+    dataset,
+  );
+  assertEquals(excludedWithFailedMedia.outcome, "partial");
+  assertEquals(excludedWithFailedMedia.provider_path, "apify_gemini");
+  assertEquals(excludedWithFailedMedia.hints, []);
+  assertEquals(
+    excludedWithFailedMedia.failure_category,
+    "media_incomplete",
+  );
+
+  const excludedWithRejected = await runOutcomeScenario(
+    [
+      excludedLocation,
+      candidate({
+        name: "Invented Venue",
+        area: "",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      }),
+    ],
+    true,
+    dataset,
+  );
+  assertEquals(excludedWithRejected.outcome, "partial");
+  assertEquals(excludedWithRejected.provider_path, "apify_gemini");
+  assertEquals(excludedWithRejected.hints, []);
+  assertEquals(excludedWithRejected.failure_category, "grounding_rejected");
+
+  const groundedWithMixedFailures = await runOutcomeScenario(
+    [
+      candidate({
+        name: "Carbon Beach Club",
+        area: "",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      }),
+      excludedLocation,
+      candidate({
+        name: "Invented Venue",
+        area: "",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      }),
+    ],
+    true,
+    {
+      ...dataset,
+      description:
+        "Visit Carbon Beach Club. Los Angeles is context, not a destination.",
+    },
+  );
+  assertEquals(groundedWithMixedFailures.outcome, "partial");
+  assertEquals(
+    (groundedWithMixedFailures.hints as Array<{ name: string }>).map((hint) =>
+      hint.name
+    ),
+    ["Carbon Beach Club"],
+  );
+  assertEquals(
+    groundedWithMixedFailures.failure_category,
+    "grounding_rejected",
+  );
 });
 
 Deno.test("dataset validation rejects item errors, source mismatch, and missing media", () => {
@@ -588,7 +707,9 @@ Deno.test("grounding accepts cited source evidence and rejects distractors or un
   );
   assertEquals(result.hints.map((hint) => hint.name), ["Hotel Bel-Air"]);
   assertEquals(result.hints[0].area, null);
-  assertEquals(result.rejectedCount, 3);
+  assertEquals(result.rejectedCount, 2);
+  assertEquals(result.excludedCount, 1);
+  assertEquals(result.intentionalExcludedCount, 1);
 
   const areaAndConfidence = groundedHints(
     [
@@ -644,6 +765,413 @@ Deno.test("grounding accepts cited source evidence and rejects distractors or un
   assertEquals(strippedAreaDedup.hints[0].area, null);
 });
 
+Deno.test("post context keeps one POI per item, demotes city context, and caps to the declared count", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: [{
+      id: "media:0",
+      index: 0,
+      kind: "image",
+      url: mediaURL,
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const context = postContext({
+    intent: "place_list",
+    declaredCount: 8,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const places: Array<[string, string]> = [
+    ["Carbon Beach Club", "Malibu"],
+    ["Vasquez Rocks Natural Area and Nature Center", "Agua Dulce"],
+    ["Naples Canal", "Long Beach"],
+    ["Cafe on 27", "Topanga"],
+    ["Hotel Bel-Air", "Los Angeles"],
+    ["Storrier Stearns Japanese Garden", "Pasadena"],
+    ["The Stonehaus", "Westlake Village"],
+    ["Sunset Ranch Hollywood", "Los Angeles"],
+  ];
+  const candidates = places.flatMap(([name, area], itemIndex) => [
+    candidate({
+      name,
+      area,
+      modality: "image_text",
+      evidenceIds: ["media:0"],
+      itemIndex,
+    }),
+    candidate({
+      name: area,
+      area: "California",
+      entityType: "locality",
+      modality: "image_text",
+      evidenceIds: ["media:0"],
+      itemIndex,
+    }),
+  ]);
+
+  const result = groundedHints(
+    candidates,
+    evidenceCatalog(evidence),
+    [successfulMediaIngestion("image")],
+    150,
+    context,
+  );
+
+  assertEquals(
+    result.hints.map((hint) => hint.name),
+    places.map(([name]) => name),
+  );
+  assertEquals(result.hints[6].area, "Westlake Village");
+  assertEquals(result.rejectedCount, 0);
+  assertEquals(result.excludedCount, 8);
+});
+
+Deno.test("grounded global area sharpens POIs without erasing a geography list", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: "Ten LA hikes. #losangeles",
+    taggedLocations: [],
+    media: [{
+      id: "media:0",
+      index: 0,
+      kind: "video",
+      url: mediaURL,
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const catalog = evidenceCatalog(evidence);
+  const ingestions = [successfulMediaIngestion("video")];
+  const placeResult = groundedHints(
+    [
+      candidate({
+        name: "Vetter Mountain",
+        area: "",
+        modality: "video_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "losangeles",
+        area: "California",
+        entityType: "locality",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "LA",
+        area: "",
+        entityType: "unknown",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+      candidate({
+        name: "Los Angeles, California",
+        area: "",
+        entityType: "unknown",
+        modality: "video_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 2,
+      }),
+      candidate({
+        name: "Vital Links",
+        area: "Texas",
+        classification: "incidental",
+        modality: "video_text",
+        evidenceIds: ["media:0"],
+      }),
+    ],
+    catalog,
+    ingestions,
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 10,
+      declaredCountEvidenceIds: ["caption:0"],
+      globalArea: "Los Angeles, California",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(placeResult.hints.map((hint) => [hint.name, hint.area]), [
+    ["Vetter Mountain", "Los Angeles, California"],
+  ]);
+  assertEquals(placeResult.rejectedCount, 0);
+  assertEquals(placeResult.excludedCount, 4);
+
+  const geographyResult = groundedHints(
+    [
+      candidate({
+        name: "Malibu",
+        area: "California",
+        entityType: "locality",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Pasadena",
+        area: "California",
+        entityType: "locality",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+      candidate({
+        name: "California",
+        area: "",
+        entityType: "region",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 2,
+      }),
+    ],
+    evidenceCatalog({
+      ...evidence,
+      caption: "Three places: Malibu, Pasadena, and California.",
+    }),
+    ingestions,
+    150,
+    postContext({
+      intent: "geography_list",
+      declaredCount: 3,
+      declaredCountEvidenceIds: ["caption:0"],
+      globalArea: "California",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(geographyResult.hints.map((hint) => hint.name), [
+    "Malibu",
+    "Pasadena",
+    "California",
+  ]);
+});
+
+Deno.test("cross-hint area demotion only removes geography entities", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: [{
+      id: "media:0",
+      index: 0,
+      kind: "image",
+      url: mediaURL,
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const result = groundedHints(
+    [
+      candidate({
+        name: "San Diego Zoo",
+        area: "San Diego",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Albert's Restaurant",
+        area: "San Diego Zoo",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 1,
+      }),
+      candidate({
+        name: "San Diego",
+        area: "California",
+        entityType: "locality",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 2,
+      }),
+      candidate({
+        name: "Hotel del Coronado",
+        area: "San Diego",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 3,
+      }),
+    ],
+    evidenceCatalog(evidence),
+    [successfulMediaIngestion("image")],
+    150,
+    postContext({ intent: "mixed" }),
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "San Diego Zoo",
+    "Albert's Restaurant",
+    "Hotel del Coronado",
+  ]);
+  assertEquals(result.excludedCount, 1);
+});
+
+Deno.test("declared count is an upper bound and never pads missing destinations", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: "Two places: Alpha Cafe, Bravo Hotel, and Charlie Park.",
+    taggedLocations: [],
+    media: [],
+  };
+  const overCompleteCandidates = [
+    candidate({
+      name: "Charlie Park",
+      area: "",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: 2,
+    }),
+    candidate({
+      name: "Alpha Cafe",
+      area: "",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: 0,
+    }),
+    candidate({
+      name: "Bravo Hotel",
+      area: "",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: 1,
+    }),
+  ];
+  const result = groundedHints(
+    overCompleteCandidates,
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "Alpha Cafe",
+    "Bravo Hotel",
+  ]);
+  assertEquals(result.excludedCount, 1);
+
+  const mixed = groundedHints(
+    overCompleteCandidates,
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "mixed",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(mixed.hints.map((hint) => hint.name), [
+    "Alpha Cafe",
+    "Bravo Hotel",
+    "Charlie Park",
+  ]);
+
+  const unindexed = groundedHints(
+    overCompleteCandidates.map((value) => ({ ...value, itemIndex: -1 })),
+    evidenceCatalog(evidence),
+    [],
+  );
+  assertEquals(unindexed.hints.map((hint) => hint.name), [
+    "Charlie Park",
+    "Alpha Cafe",
+    "Bravo Hotel",
+  ]);
+
+  const underCount = groundedHints(
+    [candidate({
+      name: "Alpha Cafe",
+      area: "",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: 0,
+    })],
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(underCount.hints.map((hint) => hint.name), ["Alpha Cafe"]);
+});
+
+Deno.test("declared count requires count semantics or the complete numbered list", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: [
+      "1. Alpha Cafe",
+      "2. Bravo Hotel",
+      "3. Charlie Park",
+      "Bonus: Delta Museum",
+    ].join("\n"),
+    taggedLocations: [],
+    media: [],
+  };
+  const candidates = [
+    ["Alpha Cafe", 0],
+    ["Bravo Hotel", 1],
+    ["Charlie Park", 2],
+    ["Delta Museum", 3],
+  ].map(([name, itemIndex]) =>
+    candidate({
+      name: String(name),
+      area: "",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: Number(itemIndex),
+    })
+  );
+
+  const bareMarker = groundedHints(
+    candidates,
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 1,
+      declaredCountEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(bareMarker.hints.map((hint) => hint.name), [
+    "Alpha Cafe",
+    "Bravo Hotel",
+    "Charlie Park",
+    "Delta Museum",
+  ]);
+
+  const completeNumberedList = groundedHints(
+    candidates,
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 3,
+      declaredCountEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(completeNumberedList.hints.map((hint) => hint.name), [
+    "Alpha Cafe",
+    "Bravo Hotel",
+    "Charlie Park",
+  ]);
+});
+
 Deno.test("Gemini response validation rejects missing fields and additional properties", () => {
   const valid = parseGeminiCandidates(
     geminiPayload([candidate({ name: "Hotel Bel-Air" })]),
@@ -660,6 +1188,50 @@ Deno.test("Gemini response validation rejects missing fields and additional prop
     () => parseGeminiCandidates(geminiPayload([missing])),
     "gemini_invalid_schema",
   );
+});
+
+Deno.test("Gemini parser accepts structured post context and defaults legacy test payloads safely", () => {
+  const structured = parseGeminiUnderstanding(geminiPayload(
+    [candidate({
+      name: "The Stonehaus",
+      area: "Westlake Village",
+      itemIndex: 6,
+    })],
+    postContext({
+      intent: "place_list",
+      declaredCount: 8,
+      declaredCountEvidenceIds: ["media:0"],
+      globalArea: "Los Angeles",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  ));
+  assertEquals(structured.postContext.intent, "place_list");
+  assertEquals(structured.postContext.declaredCount, 8);
+  assertEquals(structured.candidates[0].entityType, "poi");
+  assertEquals(structured.candidates[0].itemIndex, 6);
+
+  const legacy = parseGeminiUnderstanding(geminiPayload([{
+    ...candidate({ name: "Legacy Place" }),
+    entityType: undefined,
+    itemIndex: undefined,
+  }]));
+  assertEquals(legacy.postContext, postContext());
+  assertEquals(legacy.candidates[0].entityType, "unknown");
+  assertEquals(legacy.candidates[0].itemIndex, -1);
+
+  for (const missingField of ["entityType", "itemIndex"] as const) {
+    const missing = candidate({
+      name: `Structured missing ${missingField}`,
+    }) as unknown as Record<string, unknown>;
+    delete missing[missingField];
+    assertErrorCode(
+      () =>
+        parseGeminiUnderstanding(
+          geminiPayload([missing], postContext()),
+        ),
+      "gemini_invalid_schema",
+    );
+  }
 });
 
 Deno.test("media URL policy blocks SSRF and strips Apify authorization on redirect", async () => {
@@ -756,6 +1328,8 @@ Deno.test("media policy rejects cross-host unsafe redirects and MIME masqueradin
 async function runOutcomeScenario(
   candidates: ModelCandidate[],
   mediaSucceeds: boolean,
+  datasetOverrides: Record<string, unknown> = {},
+  context?: ModelPostContext,
 ): Promise<Record<string, unknown>> {
   const dependencies = runtime((input) => {
     const url = String(input);
@@ -776,6 +1350,7 @@ async function runOutcomeScenario(
         inputUrl: instagramURL,
         description: "An ordinary caption without a destination name.",
         images: [mediaURL],
+        ...datasetOverrides,
       }]);
     }
     if (url === mediaURL) {
@@ -784,7 +1359,7 @@ async function runOutcomeScenario(
         : new Response(null, { status: 503 });
     }
     if (url.includes("generativelanguage.googleapis.com")) {
-      return geminiResponse(candidates);
+      return geminiResponse(candidates, context);
     }
     throw new Error(`unexpected fetch ${url}`);
   });
@@ -909,6 +1484,8 @@ function candidate(overrides: Partial<ModelCandidate> = {}): ModelCandidate {
   return {
     name: "Carbon Beach Club",
     area: "Malibu",
+    entityType: "poi",
+    itemIndex: -1,
     classification: "destination",
     modality: "caption",
     evidenceIds: ["caption:0"],
@@ -919,14 +1496,56 @@ function candidate(overrides: Partial<ModelCandidate> = {}): ModelCandidate {
   };
 }
 
-function geminiResponse(candidates: unknown[]): Response {
-  return Response.json(geminiPayload(candidates));
+function postContext(
+  overrides: Partial<ModelPostContext> = {},
+): ModelPostContext {
+  return {
+    intent: "unknown",
+    declaredCount: -1,
+    declaredCountEvidenceIds: [],
+    globalArea: "",
+    globalAreaEvidenceIds: [],
+    ...overrides,
+  };
 }
 
-function geminiPayload(candidates: unknown[]): unknown {
+function successfulMediaIngestion(
+  kind: "image" | "video",
+): {
+  mediaID: string;
+  kind: "image" | "video";
+  status: "ok";
+  byteCount: number;
+  mimeType: string;
+  errorCode: null;
+} {
+  return {
+    mediaID: "media:0",
+    kind,
+    status: "ok",
+    byteCount: jpeg.byteLength,
+    mimeType: kind === "image" ? "image/jpeg" : "video/mp4",
+    errorCode: null,
+  };
+}
+
+function geminiResponse(
+  candidates: unknown[],
+  context?: ModelPostContext,
+): Response {
+  return Response.json(geminiPayload(candidates, context));
+}
+
+function geminiPayload(
+  candidates: unknown[],
+  context?: ModelPostContext,
+): unknown {
+  const payload = context === undefined
+    ? { candidates }
+    : { postContext: context, candidates };
   return {
     candidates: [{
-      content: { parts: [{ text: JSON.stringify({ candidates }) }] },
+      content: { parts: [{ text: JSON.stringify(payload) }] },
     }],
   };
 }

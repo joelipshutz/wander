@@ -192,6 +192,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var discoveredMediaCount = 0
         var understandingPath = "local_fallback"
         var understandingWasPartial = false
+        var remoteGeminiPartialIsAuthoritative = false
         var remoteHintsWereAccepted = false
         var hints: [SocialPlaceSearchHint] = []
 
@@ -219,6 +220,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     hints = SocialImportEvidencePlanner.reviewHints(remote.hints)
                     remoteHintsWereAccepted = !hints.isEmpty
                     understandingWasPartial = remote.outcome == .partial
+                    remoteGeminiPartialIsAuthoritative = remote.outcome == .partial
+                        && remote.diagnostics.providerPath == "apify_gemini"
                 case .noPlaces:
                     WanderDebugLog.imports.notice(
                         "social import understanding source=\(source.rawValue, privacy: .public) path=\(understandingPath, privacy: .public) outcome=no_places discovered_media_count=\(discoveredMediaCount, privacy: .public)"
@@ -246,7 +249,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         }
 
-        if hints.isEmpty || understandingWasPartial {
+        if remoteGeminiPartialIsAuthoritative, hints.isEmpty {
+            return .needsHelp(
+                "This post was only partially scanned. Retry automatic matching before using local text guesses."
+            )
+        }
+
+        if hints.isEmpty || (understandingWasPartial && !remoteGeminiPartialIsAuthoritative) {
             let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
             try Task.checkCancellation()
             let metadata = socialMetadata(
@@ -396,7 +405,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 candidates,
                 nameHint: hint.name,
                 areaHint: hint.area,
-                allowNearSpellingMatch: hint.evidence == .imageText
+                allowNearSpellingMatch: hint.evidence == .imageText,
+                selectionPolicy: .socialGroundedArea
             )
             if let selectedCandidateID = match.selectedCandidateID,
                let providerCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {

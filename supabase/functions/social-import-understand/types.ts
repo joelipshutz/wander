@@ -64,6 +64,8 @@ export type MediaIngestion = {
 export type ModelCandidate = {
   name: string;
   area: string;
+  entityType: "poi" | "locality" | "region" | "country" | "route" | "unknown";
+  itemIndex: number;
   classification:
     | "destination"
     | "itinerary"
@@ -76,6 +78,14 @@ export type ModelCandidate = {
   confidence: number;
   startMs: number;
   endMs: number;
+};
+
+export type ModelPostContext = {
+  intent: "place_list" | "geography_list" | "mixed" | "unknown";
+  declaredCount: number;
+  declaredCountEvidenceIds: string[];
+  globalArea: string;
+  globalAreaEvidenceIds: string[];
 };
 
 export type PlaceHint = {

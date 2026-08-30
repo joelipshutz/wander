@@ -3394,7 +3394,68 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(understanding.requests.first?.source, .instagram)
     }
 
-    func testPartialServerUnderstandingSupplementsLocalEvidenceAndStaysRetryable() async throws {
+    func testSocialMatchingSelectsUniqueGroundedLocalityDefaultAndRetainsAlternatives() async throws {
+        let expected = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let sameStateAlternative = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Pasadena",
+            region: "CA",
+            latitude: 34.1478,
+            longitude: -118.1445
+        )
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .ok,
+                hints: [
+                    SocialPlaceSearchHint(
+                        name: "Summit Archive",
+                        area: "Los Angeles, California",
+                        evidence: .imageText
+                    )
+                ],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 1,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "summit archive": [sameStateAlternative, expected]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/grounded-locality/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .candidates(let candidates, let selectedCandidateID) = resolution else {
+            return XCTFail("Expected a selected default with alternatives, got \(resolution)")
+        }
+        XCTAssertEqual(selectedCandidateID, expected.id)
+        XCTAssertEqual(candidates.map(\.id), [expected.id, sameStateAlternative.id])
+    }
+
+    func testPartialGeminiUnderstandingDoesNotResurrectFilteredLocalEvidence() async throws {
         let remoteCandidate = placeImportCandidate(
             name: "Fremont Lake",
             address: "Wyoming",
@@ -3457,16 +3518,16 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         guard case .partialExpandedResolved(let entries, _) = resolution else {
             return XCTFail("Expected a retryable partial result, got \(resolution)")
         }
-        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake", "Half Moon Lake Lodge"])
-        XCTAssertEqual(entries.count, 3)
-        XCTAssertTrue(entries.prefix(2).allSatisfy { $0.selectedCandidateID != nil })
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertNotNil(entries.first?.selectedCandidateID)
         XCTAssertNil(entries.last?.seed.nameHint)
         XCTAssertTrue(entries.last?.candidates.isEmpty == true)
         XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
-        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
     }
 
-    func testEmptyPartialServerScanKeepsLocalRecoveryRetryable() async throws {
+    func testEmptyPartialGeminiScanRequiresRetryWithoutLocalGuessResurrection() async throws {
         let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
@@ -3509,13 +3570,11 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             source: .instagram
         )
 
-        guard case .partialExpandedResolved(let entries, _) = resolution else {
-            return XCTFail("Expected an honest partial result, got \(resolution)")
+        guard case .needsHelp(let message) = resolution else {
+            return XCTFail("Expected an explicit retry requirement, got \(resolution)")
         }
-        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
-        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
-        XCTAssertNil(entries.last?.seed.nameHint)
-        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+        XCTAssertTrue(message.contains("partially scanned"))
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
     }
 
     func testServerGroundedMapKitMissesAllRemainVisibleInOrder() async throws {
@@ -5183,6 +5242,271 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         XCTAssertEqual(match.selectedCandidateID, candidate.id)
     }
 
+    func testSocialCandidateMatcherRejectsExactNameInConflictingState() {
+        let texas = placeImportCandidate(
+            name: "Vital Junction",
+            locality: "Austin",
+            region: "TX",
+            latitude: 30.2672,
+            longitude: -97.7431
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [texas],
+            nameHint: "Vital Junction",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertTrue(match.candidates.isEmpty)
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testSocialCandidateMatcherDoesNotSelectExactNameWhenLocalityContextConflicts() {
+        let texas = placeImportCandidate(
+            name: "Vital Junction",
+            locality: "Austin",
+            region: "TX",
+            latitude: 30.2672,
+            longitude: -97.7431
+        )
+
+        for areaHint in ["Los Angeles", "LA"] {
+            let match = PlaceImportCandidateMatcher.match(
+                [texas],
+                nameHint: "Vital Junction",
+                areaHint: areaHint,
+                selectionPolicy: .socialGroundedArea
+            )
+
+            XCTAssertEqual(match.candidates.map(\.id), [texas.id])
+            XCTAssertNil(match.selectedCandidateID, "Unexpected selection for area hint \(areaHint)")
+        }
+    }
+
+    func testSocialCandidateMatcherDoesNotTreatSameStateAsLocalityEvidence() {
+        let sanDiego = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "San Diego",
+            region: "CA",
+            latitude: 32.7157,
+            longitude: -117.1611
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [sanDiego],
+            nameHint: "Summit Archive",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.candidates.map(\.id), [sanDiego.id])
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testSocialCandidateMatcherTreatsLAAliasAsLosAngelesEvidence() {
+        let losAngeles = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [losAngeles],
+            nameHint: "Summit Archive",
+            areaHint: "LA",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, losAngeles.id)
+    }
+
+    func testSocialCandidateMatcherLeavesSameLocalityTieAmbiguous() {
+        let first = placeImportCandidate(
+            name: "Summit Archive",
+            address: "100 First St",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let second = placeImportCandidate(
+            name: "Summit Archive",
+            address: "200 Second St",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0622,
+            longitude: -118.2537
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [first, second],
+            nameHint: "Summit Archive",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertNil(match.selectedCandidateID)
+        XCTAssertEqual(match.candidates.count, 2)
+    }
+
+    func testSocialCandidateMatcherSelectsGroundedLandmarkProviderLeadAndKeepsAlternatives() {
+        let providerLead = placeImportCandidate(
+            name: "Mount Meridian",
+            region: "CA",
+            latitude: 34.2244,
+            longitude: -118.0575
+        )
+        let lowerRankedAlternative = placeImportCandidate(
+            name: "Mount Meridian",
+            locality: "Pasadena",
+            region: "CA",
+            latitude: 34.1478,
+            longitude: -118.1445
+        )
+
+        let socialMatch = PlaceImportCandidateMatcher.match(
+            [lowerRankedAlternative, providerLead],
+            nameHint: "Mount Meridian",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+        let manualMatch = PlaceImportCandidateMatcher.match(
+            [lowerRankedAlternative, providerLead],
+            nameHint: "Mount Meridian",
+            areaHint: "Los Angeles, California"
+        )
+
+        XCTAssertEqual(socialMatch.selectedCandidateID, providerLead.id)
+        XCTAssertEqual(
+            socialMatch.candidates.map(\.id),
+            [providerLead.id, lowerRankedAlternative.id]
+        )
+        XCTAssertNil(manualMatch.selectedCandidateID)
+    }
+
+    func testSocialCandidateMatcherSelectsUniqueSameStateLandmarkWithoutLocality() {
+        let landmark = placeImportCandidate(
+            name: "Vetter Mountain",
+            region: "CA",
+            latitude: 34.2914,
+            longitude: -118.0281
+        )
+        let trail = placeImportCandidate(
+            name: "Vetter Mountain Trail",
+            locality: "Palmdale",
+            region: "CA",
+            latitude: 34.2901,
+            longitude: -118.0302
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [trail, landmark],
+            nameHint: "Vetter Mountain",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, landmark.id)
+        XCTAssertEqual(match.candidates.map(\.id), [landmark.id, trail.id])
+    }
+
+    func testSocialCandidateMatcherSelectsColocatedProviderDuplicateAndKeepsAlternatives() {
+        let first = placeImportCandidate(
+            name: "Griffith Observatory",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.118105,
+            longitude: -118.300376
+        )
+        let duplicate = placeImportCandidate(
+            name: "Griffith Observatory",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.118099,
+            longitude: -118.300400
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [first, duplicate],
+            nameHint: "Griffith Observatory",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, first.id)
+        XCTAssertEqual(match.candidates.map(\.id), [first.id, duplicate.id])
+    }
+
+    func testSocialCandidateMatcherSelectsGroundedFeatureCoreAndKeepsAlternatives() {
+        let losAngeles = placeImportCandidate(
+            name: "Paseo del Mar",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 33.706426,
+            longitude: -118.289488
+        )
+        let palosVerdes = placeImportCandidate(
+            name: "Paseo del Mar",
+            locality: "Palos Verdes Estates",
+            region: "CA",
+            latitude: 33.778918,
+            longitude: -118.422794
+        )
+        let unrelatedStreet = placeImportCandidate(
+            name: "Puerto del Mar St",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.039837,
+            longitude: -118.538601
+        )
+
+        let socialMatch = PlaceImportCandidateMatcher.match(
+            [palosVerdes, unrelatedStreet, losAngeles],
+            nameHint: "Paseo del Mar Bluffs",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+        let manualMatch = PlaceImportCandidateMatcher.match(
+            [palosVerdes, unrelatedStreet, losAngeles],
+            nameHint: "Paseo del Mar Bluffs",
+            areaHint: "Los Angeles, California"
+        )
+
+        XCTAssertEqual(socialMatch.selectedCandidateID, losAngeles.id)
+        XCTAssertEqual(socialMatch.candidates.first?.id, losAngeles.id)
+        XCTAssertEqual(socialMatch.candidates.count, 3)
+        XCTAssertNil(manualMatch.selectedCandidateID)
+    }
+
+    func testGroundedSocialDefaultDoesNotChangeConservativeManualMatching() {
+        let expected = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let sameStateAlternative = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Pasadena",
+            region: "CA",
+            latitude: 34.1478,
+            longitude: -118.1445
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [sameStateAlternative, expected],
+            nameHint: "Summit Archive",
+            areaHint: "Los Angeles, California"
+        )
+
+        XCTAssertNil(match.selectedCandidateID)
+        XCTAssertEqual(match.candidates.first?.id, expected.id)
+    }
+
     func testStateAreaHintUsesMapRegionWithoutPollutingSearchText() {
         let plan = ManualPlaceSearchPlan(
             name: "Farson Mercantile",
@@ -5190,6 +5514,43 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.query, "Farson Mercantile")
+    }
+
+    func testFeatureSuffixSearchAddsDistinctiveCoreFallbackWithoutBroadOneWordQuery() {
+        let recoverable = ManualPlaceSearchPlan(
+            name: "Paseo del Mar Bluffs",
+            areaHint: "Los Angeles, California"
+        )
+        let tooBroad = ManualPlaceSearchPlan(
+            name: "Sunset Peak",
+            areaHint: "Los Angeles, California"
+        )
+        let prefixedLandmark = ManualPlaceSearchPlan(
+            name: "Mount Wilson",
+            areaHint: "Los Angeles, California"
+        )
+        let ordinaryBusiness = ManualPlaceSearchPlan(
+            name: "Starbucks",
+            areaHint: "Los Angeles, California"
+        )
+
+        XCTAssertEqual(recoverable.queries, [
+            "Paseo del Mar Bluffs Los Angeles",
+            "Paseo del Mar Bluffs",
+            "Paseo del Mar Los Angeles",
+            "Paseo del Mar"
+        ])
+        XCTAssertEqual(tooBroad.queries, [
+            "Sunset Peak Los Angeles",
+            "Sunset Peak"
+        ])
+        XCTAssertEqual(prefixedLandmark.queries, [
+            "Mount Wilson Los Angeles",
+            "Mount Wilson"
+        ])
+        XCTAssertEqual(ordinaryBusiness.queries, [
+            "Starbucks Los Angeles"
+        ])
     }
 
     func testStateRegionSearchKeepsCityInQuery() {

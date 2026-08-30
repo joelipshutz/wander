@@ -260,24 +260,49 @@ async function runAdmittedImport(
     );
   }
 
-  const grounded = groundedHints(understanding.candidates, catalog, ingestions);
+  const grounded = groundedHints(
+    understanding.candidates,
+    catalog,
+    ingestions,
+    150,
+    understanding.postContext,
+  );
   const ingestedCount =
     ingestions.filter((item) => item.status === "ok").length;
   const failedCount = ingestions.length - ingestedCount;
+  const failureCategory = failedCount > 0
+    ? "media_incomplete"
+    : grounded.rejectedCount > 0
+    ? "grounding_rejected"
+    : null;
+  const hasIntentionalExclusions = grounded.intentionalExcludedCount > 0;
   clearMediaBytes(ingestions);
   if (grounded.hints.length === 0) {
-    if (understanding.candidates.length > 0) {
+    if (failedCount > 0) {
+      return {
+        schema_version: 1,
+        outcome: "partial",
+        provider_path: "apify_gemini",
+        hints: [],
+        media_count: evidence.media.length,
+        model_attempt_count: understanding.attemptCount,
+        failure_category: "media_incomplete",
+      };
+    }
+    if (grounded.rejectedCount > 0) {
+      if (hasIntentionalExclusions) {
+        return {
+          schema_version: 1,
+          outcome: "partial",
+          provider_path: "apify_gemini",
+          hints: [],
+          media_count: evidence.media.length,
+          model_attempt_count: understanding.attemptCount,
+          failure_category: "grounding_rejected",
+        };
+      }
       return fallbackResponse(
         "grounding_rejected",
-        evidence,
-        catalog,
-        ingestions,
-        understanding.attemptCount,
-      );
-    }
-    if (failedCount > 0) {
-      return fallbackResponse(
-        "media_incomplete",
         evidence,
         catalog,
         ingestions,
@@ -295,11 +320,6 @@ async function runAdmittedImport(
     };
   }
 
-  const failureCategory = failedCount > 0
-    ? "media_incomplete"
-    : grounded.rejectedCount > 0
-    ? "grounding_rejected"
-    : null;
   return {
     schema_version: 1,
     outcome: failureCategory === null ? "ok" : "partial",

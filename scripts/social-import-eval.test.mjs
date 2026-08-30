@@ -732,6 +732,276 @@ test("MapKit geography mirror preserves production LA, Georgia, and DC semantics
   }
 });
 
+test("MapKit query mirror retries distinctive bluffs without over-broadening businesses", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitGeography([
+    {
+      id: "paseo-del-mar-bluffs",
+      area: "Los Angeles, California",
+      searchPlanName: "Paseo del Mar Bluffs",
+    },
+    {
+      id: "ordinary-business",
+      area: "Los Angeles, California",
+      searchPlanName: "Starbucks",
+    },
+  ], null);
+
+  assert.deepEqual(actual[0].queryVariants, [
+    "Paseo del Mar Bluffs Los Angeles",
+    "Paseo del Mar Bluffs",
+    "Paseo del Mar Los Angeles",
+    "Paseo del Mar",
+  ]);
+  assert.deepEqual(actual[1].queryVariants, ["Starbucks Los Angeles"]);
+});
+
+test("MapKit social mirror selects a same-state Mount Wilson provider lead and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "mount-wilson-provider-lead",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Mount Wilson",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "pasadena-alternative",
+          name: "Mount Wilson",
+          locality: "Pasadena",
+          region: "CA",
+        },
+        {
+          id: "provider-lead",
+          name: "Mount Wilson",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "provider-lead",
+    "pasadena-alternative",
+  ]);
+  assert.equal(actual.candidateSelection.selectedCandidateID, "provider-lead");
+  assert.equal(actual.candidateSelection.didSelectCandidate, true);
+});
+
+test("MapKit social mirror selects a unique same-state landmark without locality", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "unique-landmark",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Vetter Mountain",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "trail",
+          name: "Vetter Mountain Trail",
+          locality: "Palmdale",
+          region: "CA",
+          latitude: 34.2901,
+          longitude: -118.0302,
+        },
+        {
+          id: "landmark",
+          name: "Vetter Mountain",
+          region: "CA",
+          latitude: 34.2914,
+          longitude: -118.0281,
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "landmark");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, ["landmark", "trail"]);
+});
+
+test("MapKit social mirror selects colocated provider duplicates and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "colocated-duplicate",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Griffith Observatory",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "first",
+          name: "Griffith Observatory",
+          locality: "Los Angeles",
+          region: "CA",
+          latitude: 34.118105,
+          longitude: -118.300376,
+        },
+        {
+          id: "duplicate",
+          name: "Griffith Observatory",
+          locality: "Los Angeles",
+          region: "CA",
+          latitude: 34.118099,
+          longitude: -118.300400,
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "first");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, ["first", "duplicate"]);
+});
+
+test("MapKit social mirror selects a grounded feature-core result and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "feature-core",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Paseo del Mar Bluffs",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "palos-verdes",
+          name: "Paseo del Mar",
+          locality: "Palos Verdes Estates",
+          region: "CA",
+        },
+        {
+          id: "unrelated-street",
+          name: "Puerto del Mar St",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+        {
+          id: "los-angeles",
+          name: "Paseo del Mar",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "los-angeles");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "palos-verdes",
+    "unrelated-street",
+  ]);
+});
+
+test("MapKit social mirror treats LA as Los Angeles locality evidence", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "la-locality-alias",
+    area: "LA",
+    candidateSelection: {
+      nameHint: "Summit Archive",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "los-angeles",
+          name: "Summit Archive",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+        {
+          id: "pasadena",
+          name: "Summit Archive",
+          locality: "Pasadena",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "los-angeles");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "pasadena",
+  ]);
+});
+
+test("MapKit social mirror rejects conflicting states and unsupported same-state locality guesses", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitGeography([
+    {
+      id: "state-conflict",
+      area: "Los Angeles, California",
+      candidateSelection: {
+        nameHint: "Vital Junction",
+        policy: "socialGroundedArea",
+        candidates: [{
+          id: "austin",
+          name: "Vital Junction",
+          locality: "Austin",
+          region: "TX",
+        }],
+      },
+    },
+    {
+      id: "same-state-without-locality",
+      area: "Los Angeles, California",
+      candidateSelection: {
+        nameHint: "Vital Junction",
+        policy: "socialGroundedArea",
+        candidates: [{
+          id: "california-only",
+          name: "Vital Junction",
+          region: "CA",
+        }],
+      },
+    },
+  ], null);
+
+  assert.deepEqual(actual[0].candidateSelection.orderedCandidateIDs, []);
+  assert.equal(actual[0].candidateSelection.didSelectCandidate, false);
+  assert.equal(actual[1].candidateSelection.didSelectCandidate, false);
+  assert.deepEqual(actual[1].candidateSelection.orderedCandidateIDs, ["california-only"]);
+});
+
+test("MapKit grounded-area defaults do not change conservative manual selection", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "conservative-manual",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Summit Archive",
+      policy: "conservative",
+      candidates: [
+        {
+          id: "pasadena",
+          name: "Summit Archive",
+          locality: "Pasadena",
+          region: "CA",
+        },
+        {
+          id: "los-angeles",
+          name: "Summit Archive",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.didSelectCandidate, false);
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "pasadena",
+  ]);
+});
+
 test("MapKit ranking mirror applies production category ordering before truncation", {
   skip: process.platform !== "darwin",
 }, async () => {
