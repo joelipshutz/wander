@@ -1974,6 +1974,169 @@ struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
     }
 }
 
+private struct SocialImportUnderstandingBody: Encodable {
+    let schemaVersion = 1
+    let platform: String
+    let url: String
+    let clientRequestID: String
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case platform
+        case url
+        case clientRequestID = "client_request_id"
+    }
+}
+
+private struct SocialImportUnderstandingFunctionResponse: Decodable {
+    struct Hint: Decodable {
+        let name: String
+        let area: String?
+        let modality: String
+        let classification: String
+    }
+
+    let schemaVersion: Int
+    let outcome: String
+    let providerPath: String?
+    let hints: [Hint]
+    let mediaCount: Int?
+    let modelAttemptCount: Int?
+    let failureCategory: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case outcome
+        case providerPath = "provider_path"
+        case hints
+        case mediaCount = "media_count"
+        case modelAttemptCount = "model_attempt_count"
+        case failureCategory = "failure_category"
+    }
+}
+
+struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    private static let maximumHints = 150
+    private let functions: RemoteFunctionCalling
+
+    init(functions: RemoteFunctionCalling) {
+        self.functions = functions
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        guard [.instagram, .tiktok].contains(source),
+              url.scheme?.lowercased() == "https"
+        else {
+            throw WanderRemoteError.invalidResponse("Unsupported social import source")
+        }
+
+        let response: SocialImportUnderstandingFunctionResponse = try await functions.invoke(
+            "social-import-understand",
+            body: SocialImportUnderstandingBody(
+                platform: source.rawValue,
+                url: url.absoluteString,
+                clientRequestID: clientRequestID
+            )
+        )
+        guard response.schemaVersion == 1 else {
+            throw WanderRemoteError.invalidResponse("Unsupported social import response schema")
+        }
+
+        let decodedOutcome: SocialImportUnderstandingOutcome
+        switch response.outcome {
+        case "ok":
+            decodedOutcome = .ok
+        case "partial":
+            decodedOutcome = .partial
+        case "no_places":
+            decodedOutcome = .noPlaces
+        case "fallback":
+            decodedOutcome = .fallback
+        default:
+            throw WanderRemoteError.invalidResponse("Unknown social import response outcome")
+        }
+
+        var seen = Set<String>()
+        let hints = response.hints.prefix(Self.maximumHints).compactMap { hint -> SocialPlaceSearchHint? in
+            guard ["destination", "itinerary"].contains(hint.classification),
+                  let name = Self.cleaned(hint.name, maximumLength: 160)
+            else { return nil }
+            let area = Self.cleaned(hint.area, maximumLength: 160)
+            let evidence: SocialPlaceSearchHint.Evidence
+            switch hint.modality {
+            case "tagged_location":
+                evidence = .explicitLocation
+            case "image_text", "video_text":
+                evidence = .imageText
+            case "caption", "speech":
+                evidence = .itineraryPhrase
+            default:
+                return nil
+            }
+            let identity = [name, area ?? ""]
+                .joined(separator: "|")
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seen.insert(identity).inserted else { return nil }
+            return SocialPlaceSearchHint(name: name, area: area, evidence: evidence)
+        }
+
+        let outcome: SocialImportUnderstandingOutcome
+        switch decodedOutcome {
+        case .ok where hints.isEmpty:
+            // A complete, honestly empty model result is distinct from a
+            // malformed hint set and may authoritatively report no places.
+            outcome = response.hints.isEmpty ? .noPlaces : .fallback
+        case .partial where hints.isEmpty:
+            // An incomplete scan cannot authoritatively say there are no
+            // places. Preserve the on-device caption/Vision rescue path.
+            outcome = .fallback
+        default:
+            outcome = decodedOutcome
+        }
+
+        return SocialImportUnderstandingResult(
+            outcome: outcome,
+            hints: hints,
+            diagnostics: SocialImportUnderstandingDiagnostics(
+                providerPath: Self.providerPath(response.providerPath),
+                mediaCount: Self.clamped(response.mediaCount, maximum: Self.maximumHints),
+                modelAttemptCount: Self.clamped(response.modelAttemptCount, maximum: 5),
+                failureCategory: Self.cleaned(response.failureCategory, maximumLength: 64)
+            )
+        )
+    }
+
+    private static func providerPath(_ value: String?) -> String {
+        switch value {
+        case "apify_gemini", "apify_deterministic":
+            value ?? "unknown"
+        default:
+            "unknown"
+        }
+    }
+
+    private static func clamped(_ value: Int?, maximum: Int) -> Int {
+        max(0, min(maximum, value ?? 0))
+    }
+
+    private static func cleaned(_ value: String?, maximumLength: Int) -> String? {
+        guard let value else { return nil }
+        let withoutControls = value.unicodeScalars.map { scalar in
+            CharacterSet.controlCharacters.contains(scalar) ? " " : String(scalar)
+        }.joined()
+        let cleaned = withoutControls
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, cleaned.count <= maximumLength else { return nil }
+        return cleaned
+    }
+}
+
 @MainActor
 final class RemoteDiscoverFilterParser: LLMFilterParser {
     private enum ParseError: Error {

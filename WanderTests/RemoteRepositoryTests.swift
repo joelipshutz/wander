@@ -3,6 +3,131 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testSocialImportUnderstandingInvokesAuthenticatedFunctionAndKeepsOnlyGroundedPlaceHints() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "Carbon Beach Club",
+                  "area": "Malibu",
+                  "modality": "image_text",
+                  "classification": "destination"
+                },
+                {
+                  "name": "Los Angeles, California",
+                  "area": null,
+                  "modality": "caption",
+                  "classification": "ambiguous"
+                },
+                {
+                  "name": "Hotel Bel-Air",
+                  "area": "Los Angeles",
+                  "modality": "tagged_location",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 9,
+              "model_attempt_count": 1,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+        let url = try XCTUnwrap(URL(string: "https://www.instagram.com/p/DcAU9e5DYcH/"))
+
+        let result = try await repository.understand(
+            url: url,
+            source: .instagram,
+            clientRequestID: "stable-request-id"
+        )
+
+        XCTAssertEqual(result.outcome, .ok)
+        XCTAssertEqual(result.hints, [
+            SocialPlaceSearchHint(
+                name: "Carbon Beach Club",
+                area: "Malibu",
+                evidence: .imageText
+            ),
+            SocialPlaceSearchHint(
+                name: "Hotel Bel-Air",
+                area: "Los Angeles",
+                evidence: .explicitLocation
+            )
+        ])
+        XCTAssertEqual(result.diagnostics.mediaCount, 9)
+        XCTAssertEqual(functions.calls.map(\.name), ["function:social-import-understand"])
+        XCTAssertEqual(functions.rawBodies.first?["schema_version"] as? Int, 1)
+        XCTAssertEqual(functions.rawBodies.first?["platform"] as? String, "instagram")
+        XCTAssertEqual(functions.rawBodies.first?["url"] as? String, url.absoluteString)
+        XCTAssertEqual(functions.rawBodies.first?["client_request_id"] as? String, "stable-request-id")
+    }
+
+    func testSocialImportUnderstandingFailsClosedToFallbackWhenAllReturnedHintsAreInvalid() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "A Venue",
+                  "area": null,
+                  "modality": "visual_scene",
+                  "classification": "destination"
+                }
+              ],
+              "media_count": 1,
+              "model_attempt_count": 1,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.tiktok.com/@creator/video/1234567890123")),
+            source: .tiktok,
+            clientRequestID: "request"
+        )
+
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertTrue(result.hints.isEmpty)
+    }
+
+    func testSocialImportUnderstandingUsesLocalFallbackForAnEmptyPartialScan() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "partial",
+              "provider_path": "apify_gemini",
+              "hints": [],
+              "media_count": 4,
+              "model_attempt_count": 1,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/reel/partial-example/")),
+            source: .instagram,
+            clientRequestID: "partial-request"
+        )
+
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertTrue(result.hints.isEmpty)
+    }
+
     func testVisiblePlaceDecodesDuplicatePrivateViewerTaxonomyEnvelopeWithoutPersistingItAsSaveContent() throws {
         let data = """
         {
@@ -213,6 +338,71 @@ final class RemoteRepositoryTests: XCTestCase {
             JSONSerialization.jsonObject(with: firstRequestBody) as? [String: String]
         )
         XCTAssertEqual(decodedBody["marker"], "photo-retry-probe")
+    }
+
+    func testSocialImportFunctionAllowsTheBoundedServerRunToFinish() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [(200, #"{"value":"understood"}"#.data(using: .utf8)!)]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: FeedTokenAuthSession(),
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "social-import-understand",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "understood")
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125])
+    }
+
+    func testSocialImportFunctionRefreshesTheClerkTokenAfterForbiddenResponse() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (403, #"{"message":"JWT rejected"}"#.data(using: .utf8)!),
+                (200, #"{"value":"understood"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "social-import-understand",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "understood")
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.requestPaths,
+            [
+                "/functions/v1/social-import-understand",
+                "/functions/v1/social-import-understand"
+            ]
+        )
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125, 125])
     }
 
     func testEdgeFunctionStopsAfterOneFreshTokenRetry() async throws {
@@ -3607,7 +3797,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testFeatureFlagRepositoryAppliesSupportedOverridesAndKeepsSemanticGlobal() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"social_import_apify_gemini_v1","user_id":null,"enabled":false},{"key":"social_import_apify_gemini_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -3632,6 +3822,10 @@ final class RemoteRepositoryTests: XCTestCase {
                     isEnabled: false,
                     source: .globalDefault
                 ),
+                .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                ),
                 .placeProfileActionVariant: ResolvedFeatureFlagValue(
                     value: .integer(2),
                     source: .accountOverride
@@ -3650,7 +3844,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,place_profile_action_variant)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant)"
                 )
             ]
         )
@@ -3783,13 +3977,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_without_row"))
     }
 
-    func testBackendIgnoresAnOlderFeatureFlagSuccessThatFinishesLast() async {
-        let disabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
-            .firstVisitNUX: ResolvedFeatureFlagValue(
-                isEnabled: false,
-                source: .accountOverride
-            )
-        ]
+    func testBackendCoalescesConcurrentFeatureFlagRefreshesForTheSameAccount() async {
         let enabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
             .firstVisitNUX: ResolvedFeatureFlagValue(
                 isEnabled: true,
@@ -3797,21 +3985,18 @@ final class RemoteRepositoryTests: XCTestCase {
             )
         ]
         let repository = ControlledFeatureFlagRepository(
-            responses: [
-                .success(disabled),
-                .success(enabled)
-            ]
+            responses: [.success(enabled)]
         )
         let backend = WanderBackend(featureFlagRepository: repository)
 
-        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        let first = Task { await backend.refreshFeatureFlags(for: "user") }
         while repository.startedRequestCount < 1 { await Task.yield() }
-        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
-        while repository.startedRequestCount < 2 { await Task.yield() }
-        repository.completeRequest(at: 1)
-        await newer.value
+        let second = Task { await backend.refreshFeatureFlags(for: "user") }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(repository.startedRequestCount, 1)
         repository.completeRequest(at: 0)
-        await older.value
+        await first.value
+        await second.value
 
         XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
     }
@@ -3831,17 +4016,17 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         let backend = WanderBackend(featureFlagRepository: repository)
 
-        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        let older = Task { await backend.refreshFeatureFlags(for: "user_a") }
         while repository.startedRequestCount < 1 { await Task.yield() }
-        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
+        let newer = Task { await backend.refreshFeatureFlags(for: "user_b") }
         while repository.startedRequestCount < 2 { await Task.yield() }
         repository.completeRequest(at: 1)
         await newer.value
         repository.completeRequest(at: 0)
         await older.value
 
-        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
-        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user"))
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_b"), true)
+        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_b"))
     }
 
     func testBackendClearFeatureFlagsInvalidatesAnInFlightRefresh() async {
@@ -4077,6 +4262,12 @@ private final class FeedRPCURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return bodies.compactMap { $0 }
+    }
+
+    static var requestTimeoutIntervals: [TimeInterval] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.map(\.timeoutInterval)
     }
 
     static var requestCount: Int {

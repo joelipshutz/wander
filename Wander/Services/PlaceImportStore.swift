@@ -90,17 +90,20 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     private let metadataProvider: any SocialImportMetadataProviding
     private let googleListLoader: any GoogleMapsSharedListLoading
     private let thumbnailRecognizer: any SocialThumbnailTextRecognizing
+    private let socialUnderstandingRepository: (any SocialImportUnderstandingRepository)?
 
     init(
         placeResolver: any PlaceCandidateResolving = MapKitPlaceResolver(),
         metadataProvider: any SocialImportMetadataProviding = PublicSocialImportMetadataProvider(),
         googleListLoader: any GoogleMapsSharedListLoading = GoogleMapsSharedListImporter(),
-        thumbnailRecognizer: any SocialThumbnailTextRecognizing = VisionSocialThumbnailTextRecognizer()
+        thumbnailRecognizer: any SocialThumbnailTextRecognizing = VisionSocialThumbnailTextRecognizer(),
+        socialUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil
     ) {
         self.placeResolver = placeResolver
         self.metadataProvider = metadataProvider
         self.googleListLoader = googleListLoader
         self.thumbnailRecognizer = thumbnailRecognizer
+        self.socialUnderstandingRepository = socialUnderstandingRepository
     }
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
@@ -179,24 +182,75 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         source: PlaceImportSource,
         seed: PlaceImportSeed
     ) async throws -> PlaceImportResolution {
-        let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
-        try Task.checkCancellation()
-        guard let metadata = socialMetadata(
-            fetched: fetchedMetadata,
-            capturedCaption: seed.socialCaptionHint
-        ) else {
-            return .needsHelp(
-                "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
+        var recognition = SocialMediaRecognition(
+            recognizedTexts: [],
+            attemptedCount: 0,
+            emptyOrFailedCount: 0
+        )
+        var discoveredMediaCount = 0
+        var understandingPath = "local_fallback"
+        var understandingWasPartial = false
+        var hints: [SocialPlaceSearchHint] = []
+
+        if let socialUnderstandingRepository {
+            do {
+                let remote = try await socialUnderstandingRepository.understand(
+                    url: url,
+                    source: source,
+                    clientRequestID: seed.id
+                )
+                try Task.checkCancellation()
+                understandingPath = remote.diagnostics.providerPath
+                discoveredMediaCount = remote.diagnostics.mediaCount
+                switch remote.outcome {
+                case .ok, .partial:
+                    hints = SocialImportEvidencePlanner.reviewHints(remote.hints)
+                    understandingWasPartial = remote.outcome == .partial
+                case .noPlaces:
+                    WanderDebugLog.imports.notice(
+                        "social import understanding source=\(source.rawValue, privacy: .public) path=\(understandingPath, privacy: .public) outcome=no_places discovered_media_count=\(discoveredMediaCount, privacy: .public)"
+                    )
+                    return .needsHelp(
+                        "No destination was explicitly identified in this post. Add a place name and nearby city to match it."
+                    )
+                case .fallback:
+                    break
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                try Task.checkCancellation()
+                // Provider, auth, and timeout failures are deliberately non-fatal.
+                // The existing public-metadata and on-device Vision path remains
+                // available without exposing the source URL in logs.
+                understandingPath = "local_fallback"
+            }
+        }
+
+        if hints.isEmpty {
+            let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
+            try Task.checkCancellation()
+            guard let metadata = socialMetadata(
+                fetched: fetchedMetadata,
+                capturedCaption: seed.socialCaptionHint
+            ) else {
+                return .needsHelp(
+                    "This public post did not expose readable place evidence. Check the link and retry automatic matching."
+                )
+            }
+            recognition = try await recognizeSocialMedia(in: metadata)
+            discoveredMediaCount = metadata.mediaItems.isEmpty
+                ? (metadata.thumbnailURL == nil ? 0 : 1)
+                : metadata.mediaItems.count
+            understandingPath = "local_fallback"
+            hints = SocialImportEvidencePlanner.reviewHints(
+                SocialPlaceHintExtractor.hints(
+                    from: metadata,
+                    recognizedTexts: recognition.recognizedTexts,
+                    limit: Self.maximumExtractedSocialHints
+                )
             )
         }
-        let recognition = try await recognizeSocialMedia(in: metadata)
-        let hints = SocialImportEvidencePlanner.reviewHints(
-            SocialPlaceHintExtractor.hints(
-                from: metadata,
-                recognizedTexts: recognition.recognizedTexts,
-                limit: Self.maximumExtractedSocialHints
-            )
-        )
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
         if durableHints.count > Self.maximumImmediateSocialLookups {
@@ -211,11 +265,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     sourceLine: seed.sourceLine
                 )
             }
-            let discoveredMediaCount = metadata.mediaItems.isEmpty
-                ? (metadata.thumbnailURL == nil ? 0 : 1)
-                : metadata.mediaItems.count
             WanderDebugLog.imports.notice(
-                "social guide expansion source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) durable_row_count=\(expandedSeeds.count, privacy: .public) deferred_lookup_count=\(expandedSeeds.count, privacy: .public)"
+                "social guide expansion source=\(source.rawValue, privacy: .public) understanding_path=\(understandingPath, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) durable_row_count=\(expandedSeeds.count, privacy: .public) deferred_lookup_count=\(expandedSeeds.count, privacy: .public)"
             )
             return .expanded(expandedSeeds, sourceName: nil)
         }
@@ -350,11 +401,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             rejectedHintCount += recoveryHints.count
         }
 
-        let discoveredMediaCount = metadata.mediaItems.isEmpty
-            ? (metadata.thumbnailURL == nil ? 0 : 1)
-            : metadata.mediaItems.count
         WanderDebugLog.imports.notice(
-            "social import resolution source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) resolved_count=\(resolvedCount, privacy: .public) unresolved_count=\(unresolvedCount, privacy: .public) no_candidate_count=\(noCandidateCount, privacy: .public) low_confidence_count=\(lowConfidenceCount, privacy: .public) lookup_failure_count=\(lookupFailureCount, privacy: .public) rejected_hint_count=\(rejectedHintCount, privacy: .public)"
+            "social import resolution source=\(source.rawValue, privacy: .public) understanding_path=\(understandingPath, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) resolved_count=\(resolvedCount, privacy: .public) unresolved_count=\(unresolvedCount, privacy: .public) no_candidate_count=\(noCandidateCount, privacy: .public) low_confidence_count=\(lowConfidenceCount, privacy: .public) lookup_failure_count=\(lookupFailureCount, privacy: .public) rejected_hint_count=\(rejectedHintCount, privacy: .public)"
         )
         if lookupFailureCount > 0 {
             if !entries.isEmpty {
@@ -363,6 +411,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             return .needsHelp(
                 "Apple Maps matching was temporarily unavailable. Retry later."
             )
+        }
+        if understandingWasPartial, !entries.isEmpty {
+            return .partialExpandedResolved(entries, sourceName: nil)
         }
         if entries.count == 1, let entry = entries.first {
             if entry.selectedCandidateID != nil {

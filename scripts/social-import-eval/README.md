@@ -278,8 +278,11 @@ cross-host redirects.
   authoritative parity check.
 
 The evaluator does not mutate Supabase, provider accounts, or user place data.
-The adjacent production changes in this branch are deliberately smaller than
-the evaluated architecture: the iOS fallback can parse numbered caption
-itineraries, demote redundant geography context, and match creator-qualified
-venue names. The app still does not call Apify or Gemini, acquire complete reel
-media, sample video frames, or transcribe speech.
+The production path is separate and feature-flagged: an authenticated iOS
+import may call the `social-import-understand` Supabase Edge Function, which
+acquires bounded Instagram or TikTok evidence with Apify and asks Gemini for
+grounded place hints. The app still resolves those hints through its existing
+MapKit trust boundary before presenting or saving a place. Missing
+configuration, quota admission, acquisition, media, model, or deadline failures
+fall back to the existing device-side parser instead of treating a provider
+guess as a canonical POI.

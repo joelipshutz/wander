@@ -55,12 +55,73 @@ enum SemanticPlaceSearchAccessPolicy {
 }
 
 @MainActor
+private final class FeatureGatedSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    private weak var backend: WanderBackend?
+    private let userID: String
+
+    init(backend: WanderBackend, userID: String) {
+        self.backend = backend
+        self.userID = userID
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        if backend?.resolvedFeatureFlag(.socialImportApifyGeminiV1, for: userID) == nil {
+            // Import resumption can race the root view's first flag refresh on
+            // cold launch. Resolve the account-scoped flag here so a queued
+            // link is not permanently stamped by the local fallback first.
+            await backend?.refreshFeatureFlags(for: userID)
+            try Task.checkCancellation()
+        }
+        guard let backend,
+              backend.featureFlag(.socialImportApifyGeminiV1, for: userID) == true
+        else {
+            return SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "local_fallback",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "feature_disabled"
+                )
+            )
+        }
+        guard let repository = backend.socialImportUnderstandingRepository else {
+            return SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "local_fallback",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "not_configured"
+                )
+            )
+        }
+        return try await repository.understand(
+            url: url,
+            source: source,
+            clientRequestID: clientRequestID
+        )
+    }
+}
+
+@MainActor
 protocol FeatureFlagRepository {
     func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue]
 }
 
 @MainActor
 final class WanderBackend: ObservableObject {
+    private struct InFlightFeatureFlagRefresh {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
     private static let placePhotoMetadataCacheLimit = 256
 
     let configuration: WanderBackendConfiguration
@@ -79,6 +140,7 @@ final class WanderBackend: ObservableObject {
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
     let visitRepository: (any VisitRepository)?
     let extractionRepository: (any ExtractionRepository)?
+    let socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)?
     let placeListRepository: (any PlaceListRepository)?
     let surfaceSnapshotRepository: (any SurfaceSnapshotRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
@@ -87,6 +149,7 @@ final class WanderBackend: ObservableObject {
     let sharedVisitRepository: (any SharedVisitRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
+    private var inFlightFeatureFlagRefreshes: [String: InFlightFeatureFlagRefresh] = [:]
     private let featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot
     private var placePhotoCache: [String: PlacePhoto] = [:]
     private var placePhotoCacheRecency: [String] = []
@@ -124,6 +187,7 @@ final class WanderBackend: ObservableObject {
             self.socialPlaceSaveRepository = userPlaceRepository
             self.visitRepository = SupabaseVisitRepository(table: client, storage: client)
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
+            self.socialImportUnderstandingRepository = SupabaseSocialImportUnderstandingRepository(functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.surfaceSnapshotRepository = SupabaseSurfaceSnapshotRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
@@ -145,6 +209,7 @@ final class WanderBackend: ObservableObject {
             self.socialPlaceSaveRepository = nil
             self.visitRepository = nil
             self.extractionRepository = nil
+            self.socialImportUnderstandingRepository = nil
             self.placeListRepository = nil
             self.surfaceSnapshotRepository = nil
             self.listSuggestionRepository = nil
@@ -174,6 +239,7 @@ final class WanderBackend: ObservableObject {
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
         visitRepository: (any VisitRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
+        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil,
         placeListRepository: (any PlaceListRepository)? = nil,
         surfaceSnapshotRepository: (any SurfaceSnapshotRepository)? = nil,
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
@@ -203,6 +269,7 @@ final class WanderBackend: ObservableObject {
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
         self.visitRepository = visitRepository
         self.extractionRepository = extractionRepository
+        self.socialImportUnderstandingRepository = socialImportUnderstandingRepository
         self.placeListRepository = placeListRepository
         self.surfaceSnapshotRepository = surfaceSnapshotRepository
         self.listSuggestionRepository = listSuggestionRepository
@@ -226,6 +293,7 @@ final class WanderBackend: ObservableObject {
             || socialPlaceSaveRepository != nil
             || visitRepository != nil
             || extractionRepository != nil
+            || socialImportUnderstandingRepository != nil
             || placeListRepository != nil
             || surfaceSnapshotRepository != nil
             || listSuggestionRepository != nil
@@ -234,7 +302,18 @@ final class WanderBackend: ObservableObject {
             || sharedVisitRepository != nil
     }
 
+    func socialImportUnderstandingProvider(
+        for userID: String
+    ) -> any SocialImportUnderstandingRepository {
+        FeatureGatedSocialImportUnderstandingRepository(backend: self, userID: userID)
+    }
+
     func refreshFeatureFlags(for userID: String) async {
+        if let inFlight = inFlightFeatureFlagRefreshes[userID] {
+            await inFlight.task.value
+            return
+        }
+
         featureFlagRefreshGeneration &+= 1
         let refreshGeneration = featureFlagRefreshGeneration
 
@@ -244,21 +323,40 @@ final class WanderBackend: ObservableObject {
             return
         }
 
-        do {
-            let values = try await featureFlagRepository.resolvedFlags(for: userID)
-            try Task.checkCancellation()
-            guard refreshGeneration == featureFlagRefreshGeneration else { return }
-            featureFlagResolution = .resolved(userID: userID, values: values)
-        } catch is CancellationError {
-            return
-        } catch {
-            guard refreshGeneration == featureFlagRefreshGeneration else { return }
-            featureFlagResolution = .failed(userID: userID)
+        let refreshID = UUID()
+        let task = Task { @MainActor [weak self] in
+            defer {
+                if self?.inFlightFeatureFlagRefreshes[userID]?.id == refreshID {
+                    self?.inFlightFeatureFlagRefreshes.removeValue(forKey: userID)
+                }
+            }
+            do {
+                let values = try await featureFlagRepository.resolvedFlags(for: userID)
+                try Task.checkCancellation()
+                guard let self,
+                      refreshGeneration == self.featureFlagRefreshGeneration
+                else { return }
+                self.featureFlagResolution = .resolved(userID: userID, values: values)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard let self,
+                      refreshGeneration == self.featureFlagRefreshGeneration
+                else { return }
+                self.featureFlagResolution = .failed(userID: userID)
+            }
         }
+        inFlightFeatureFlagRefreshes[userID] = InFlightFeatureFlagRefresh(
+            id: refreshID,
+            task: task
+        )
+        await task.value
     }
 
     func clearFeatureFlags() {
         featureFlagRefreshGeneration &+= 1
+        inFlightFeatureFlagRefreshes.values.forEach { $0.task.cancel() }
+        inFlightFeatureFlagRefreshes.removeAll()
         featureFlagResolution = .unresolved
     }
 

@@ -1,6 +1,6 @@
 # Setup
 
-Last updated: 2026-07-24
+Last updated: 2026-08-30
 
 ## Requirements
 
@@ -355,6 +355,57 @@ The `parse-discover-query` Edge Function sends only the raw query plus the fixed
 ```bash
 npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
+### Social import understanding
+
+REC-120 adds a feature-flagged production path for Instagram and TikTok import
+understanding. A signed-in iOS client sends only the supported social URL,
+platform, schema version, and stable client request id to the authenticated
+`social-import-understand` Edge Function. The function acquires bounded source
+evidence through Apify, sends only that evidence and bounded media to Gemini,
+and returns grounded place-name hints. MapKit remains the authoritative POI
+resolver in the app; provider output is never saved directly as a place.
+
+Keep both paid-provider credentials server-side. Never add either value to an
+xcconfig, the app bundle, logs, fixtures, PR text, or tracked evaluator runs:
+
+```bash
+npx supabase secrets set \
+  WANDER_APIFY_TOKEN=<server-token> \
+  WANDER_GEMINI_API_KEY=<server-key> \
+  WANDER_GEMINI_MODEL=gemini-3.5-flash \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy social-import-understand \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF" \
+  --no-verify-jwt \
+  --use-api
+```
+
+`--no-verify-jwt` delegates bearer validation to the function's existing
+`current_profile` contract; it does not make the function anonymous. The
+function fails closed before paid work unless the caller maps to a current
+profile, validates social hosts and media redirects, bounds request/media/model
+work, and admits the request through the database-backed per-account
+idempotency and concurrency/rate limits. Gemini video files are temporary and
+are deleted best-effort after understanding. Responses and logs contain only
+aggregate diagnostics and grounded hints, never raw provider payloads, media
+URLs, social URLs, captions, bearer tokens, or provider keys.
+
+The registered `social_import_apify_gemini_v1` feature flag defaults Off
+globally. Canary testers need an explicit hosted per-account On override; a
+device-side On cannot bypass the server gate. The Settings override can still
+force the feature Off, including in Debug and Simulator builds. After changing
+either override, fully quit and relaunch because behavior is snapshotted at
+cold launch.
+
+After changing this function or its admission RPCs, apply reviewed migrations,
+run the hosted smoke test, deploy the function, and verify an unauthenticated
+request receives `401` before enabling the flag:
+
+```bash
+npm --prefix scripts ci --ignore-scripts
+node scripts/supabase-smoke-test.mjs --linked
 ```
 
 ### Google Places venue photos

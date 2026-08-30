@@ -2808,6 +2808,177 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
+
+    func testServerUnderstandingTurnsBlindCarouselIntoEightResolvedMapKitRows() async throws {
+        let places: [(String, String)] = [
+            ("Carbon Beach Club", "Malibu"),
+            ("Vasquez Rocks Natural Area and Nature Center", "Agua Dulce"),
+            ("Naples Canal", "Long Beach"),
+            ("Cafe on 27", "Topanga"),
+            ("Hotel Bel-Air", "Los Angeles"),
+            ("Storrier Stearns Japanese Garden", "Pasadena"),
+            ("The Stonehaus", "Westlake Village"),
+            ("Sunset Ranch Hollywood", "Los Angeles")
+        ]
+        let routes = Dictionary(uniqueKeysWithValues: places.map { name, area in
+            (name.lowercased(), [placeImportCandidate(name: name, address: area)])
+        })
+        let placeResolver = RoutingDevicePlaceResolver(routes: routes)
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .ok,
+                hints: places.map { name, area in
+                    SocialPlaceSearchHint(name: name, area: area, evidence: .imageText)
+                },
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 9,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/DcAU9e5DYcH/"
+        let seed = PlaceImportSeed(
+            id: "blind-carousel-request",
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected eight resolved rows, got \(resolution)")
+        }
+        XCTAssertEqual(entries.map(\.seed.nameHint), places.map { Optional($0.0) })
+        XCTAssertEqual(entries.count, 8)
+        XCTAssertTrue(entries.allSatisfy { $0.selectedCandidateID != nil })
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), places.map { $0.0 })
+        XCTAssertEqual(understanding.requests.first?.clientRequestID, "blind-carousel-request")
+        XCTAssertEqual(understanding.requests.first?.source, .instagram)
+    }
+
+    func testServerFallbackUsesExistingCaptionAndVisionPath() async throws {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: .localFallback
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [candidate]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: nil,
+                    caption: "Lunch at @mendocinofarms restaurant in Los Angeles.",
+                    authorName: nil,
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/fallback-example/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+        XCTAssertEqual(understanding.requests.count, 1)
+    }
+
+    func testServerNoPlacesRemainsHonestWithoutRunningLocalGuessing() async throws {
+        let placeResolver = FakeDevicePlaceResolver(
+            candidates: [placeImportCandidate(name: "Unrelated Place")]
+        )
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .noPlaces,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 1,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Los Angeles",
+                    caption: "A nice day",
+                    authorName: nil,
+                    thumbnailURL: nil
+                )
+            ),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/no-place-example/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        XCTAssertEqual(
+            resolution,
+            .needsHelp("No destination was explicitly identified in this post. Add a place name and nearby city to match it.")
+        )
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testCancelledServerUnderstandingDoesNotStartTheLocalNetworkFallback() async throws {
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: []),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: SelfCancellingSocialImportUnderstandingRepository()
+        )
+        let sourceURL = "https://www.instagram.com/reel/cancelled-example/"
+
+        do {
+            _ = try await resolver.resolve(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                source: .instagram
+            )
+            XCTFail("Expected cancellation to stop before local fallback")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
 }
 
 @MainActor
@@ -4821,6 +4992,47 @@ private final class PartiallyThrowingDevicePlaceResolver: PlaceCandidateResolvin
         throw URLError(.timedOut)
     }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
+}
+
+@MainActor
+private final class FakeSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    struct Request: Equatable {
+        let url: URL
+        let source: PlaceImportSource
+        let clientRequestID: String
+    }
+
+    let result: SocialImportUnderstandingResult
+    private(set) var requests: [Request] = []
+
+    init(result: SocialImportUnderstandingResult) {
+        self.result = result
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        requests.append(
+            Request(url: url, source: source, clientRequestID: clientRequestID)
+        )
+        return result
+    }
+}
+
+@MainActor
+private final class SelfCancellingSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        withUnsafeCurrentTask { task in
+            task?.cancel()
+        }
+        throw URLError(.cancelled)
+    }
 }
 
 @MainActor

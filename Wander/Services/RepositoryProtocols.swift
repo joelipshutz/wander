@@ -2014,6 +2014,42 @@ protocol ExtractionRepository {
     func result(jobID: String) async throws -> ExtractionJobResult
 }
 
+enum SocialImportUnderstandingOutcome: String, Equatable {
+    case ok
+    case partial
+    case noPlaces
+    case fallback
+}
+
+struct SocialImportUnderstandingDiagnostics: Equatable {
+    let providerPath: String
+    let mediaCount: Int
+    let modelAttemptCount: Int
+    let failureCategory: String?
+
+    static let localFallback = SocialImportUnderstandingDiagnostics(
+        providerPath: "local_fallback",
+        mediaCount: 0,
+        modelAttemptCount: 0,
+        failureCategory: nil
+    )
+}
+
+struct SocialImportUnderstandingResult: Equatable {
+    let outcome: SocialImportUnderstandingOutcome
+    let hints: [SocialPlaceSearchHint]
+    let diagnostics: SocialImportUnderstandingDiagnostics
+}
+
+@MainActor
+protocol SocialImportUnderstandingRepository {
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult
+}
+
 @MainActor
 protocol PlaceListRepository {
     func visibleLists() async throws -> [RemotePlaceListSummary]

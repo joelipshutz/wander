@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(22);
+select plan(23);
 
 select is(
   (select enabled from public.feature_flags where key = 'first_visit_nux' and user_id is null),
@@ -36,7 +36,7 @@ select has_column(
 
 select results_eq(
   $$
-    select conname::text
+    select conname::text collate "C"
     from pg_constraint
     where conrelid = 'public.feature_flags'::regclass
       and conname in (
@@ -44,17 +44,17 @@ select results_eq(
         'feature_flags_registered_key_check',
         'feature_flags_key_value_contract_check'
       )
-    order by conname
+    order by conname collate "C"
   $$,
   $$
-    select conname
+    select conname::text collate "C"
     from (
       values
         ('feature_flags_key_value_contract_check'),
         ('feature_flags_registered_key_check'),
         ('feature_flags_value_type_check')
     ) as expected(conname)
-    order by conname
+    order by conname collate "C"
   $$,
   'feature flags enforce their registered key, type, and range contracts'
 );
@@ -71,10 +71,22 @@ select is(
   'place-profile save tray is globally disabled'
 );
 
+select ok(
+  exists (
+    select 1
+    from public.feature_flags
+    where key = 'semantic_place_search_v1'
+      and user_id is null
+      and value_type = 'boolean'
+      and integer_value is null
+  ),
+  'semantic place search remains a registered Boolean rollout control'
+);
+
 select is(
-  (select enabled from public.feature_flags where key = 'semantic_place_search_v1' and user_id is null),
+  (select enabled from public.feature_flags where key = 'social_import_apify_gemini_v1' and user_id is null),
   false,
-  'semantic place search remains globally disabled for Release builds'
+  'server-backed social import is globally disabled'
 );
 
 select ok(
