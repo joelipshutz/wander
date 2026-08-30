@@ -167,6 +167,72 @@ enum PlaceImportReceiptOutcome: String, Codable, Equatable {
     case failed
 }
 
+struct PlaceImportCompletionNotice: Equatable, Identifiable {
+    let batchIDs: [String]
+    let foundCount: Int
+    let matchedCount: Int
+    let needsReviewCount: Int
+    let sourceName: String
+
+    var id: String {
+        batchIDs.sorted().joined(separator: "|")
+    }
+
+    var bannerTitle: String {
+        "Your import is ready"
+    }
+
+    var bannerDetail: String {
+        if needsReviewCount > 0 {
+            return "\(matchedCount) matched · \(needsReviewCount) need a look"
+        }
+        return matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
+    }
+
+    static func resolved(
+        batchIDs: [String],
+        batches: [PlaceImportBatch],
+        items: [PlaceImportItem]
+    ) -> PlaceImportCompletionNotice? {
+        let requestedIDs = Set(batchIDs)
+        let scopedBatches = batches.filter { requestedIDs.contains($0.id) }
+        let scopedItems = items.filter {
+            requestedIDs.contains($0.batchID) && $0.state != .dismissed
+        }
+        guard !scopedBatches.isEmpty, !scopedItems.isEmpty else { return nil }
+
+        let matchedCount = scopedItems.filter {
+            [.ready, .duplicate, .saved].contains($0.state)
+        }.count
+        let needsReviewCount = scopedItems.filter {
+            [.ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        let foundCount = matchedCount + needsReviewCount
+        guard foundCount > 0 else { return nil }
+
+        let sources = Set(scopedBatches.map(\.source))
+        let sourceName: String
+        if sources.count == 1, let source = sources.first {
+            sourceName = switch source {
+            case .googleMaps: "Google Maps"
+            case .instagram: "Instagram"
+            case .tiktok: "TikTok"
+            case .textNotes: "Your notes"
+            }
+        } else {
+            sourceName = "Multiple sources"
+        }
+
+        return PlaceImportCompletionNotice(
+            batchIDs: scopedBatches.map(\.id),
+            foundCount: foundCount,
+            matchedCount: matchedCount,
+            needsReviewCount: needsReviewCount,
+            sourceName: sourceName
+        )
+    }
+}
+
 struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
     let id: String
     let itemID: String
