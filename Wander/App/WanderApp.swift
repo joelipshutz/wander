@@ -126,7 +126,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let streakMockupPage = SaveStreakMockupPage.resolved() {
+            if let astirBrandShellPage = AstirBrandShellPage.resolved() {
+                AstirBrandShellRoot(page: astirBrandShellPage)
+            } else if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
