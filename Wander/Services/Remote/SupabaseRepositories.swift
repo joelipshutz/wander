@@ -2092,8 +2092,9 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
             outcome = response.hints.isEmpty ? .noPlaces : .fallback
         case .partial where hints.isEmpty:
             // An incomplete scan cannot authoritatively say there are no
-            // places. Preserve the on-device caption/Vision rescue path.
-            outcome = .fallback
+            // places. Preserve both the on-device caption/Vision rescue path
+            // and the incomplete signal so recovered rows remain retryable.
+            outcome = .partial
         default:
             outcome = decodedOutcome
         }

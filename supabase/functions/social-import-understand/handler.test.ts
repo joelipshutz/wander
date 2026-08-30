@@ -408,6 +408,7 @@ Deno.test("paid-work admission denials stop before Apify and return safe fallbac
   const cases = [
     ["disabled", "feature_disabled"],
     ["duplicate", "duplicate_request"],
+    ["replay_required", "retry_required"],
     ["busy", "capacity_limited"],
     ["quota", "quota_exceeded"],
   ] as const;
@@ -801,7 +802,13 @@ type TestFetcher = (
 type RuntimeOptions = {
   admission?: {
     admitted: boolean;
-    decision: "started" | "disabled" | "duplicate" | "busy" | "quota";
+    decision:
+      | "started"
+      | "disabled"
+      | "duplicate"
+      | "replay_required"
+      | "busy"
+      | "quota";
     admission_id: string | null;
   };
   beginStatus?: number;

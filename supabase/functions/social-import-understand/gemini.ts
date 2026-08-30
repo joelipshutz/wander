@@ -345,7 +345,9 @@ async function uploadGeminiFile(
           "x-goog-upload-offset": "0",
           "x-goog-upload-command": "upload, finalize",
         },
-        body: bytes,
+        // Materialize an ArrayBuffer-backed view for the Fetch BodyInit
+        // contract (TypeScript 6 no longer accepts ArrayBufferLike here).
+        body: Uint8Array.from(bytes),
         redirect: "error",
         signal: requestSignal,
       },

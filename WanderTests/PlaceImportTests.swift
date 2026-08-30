@@ -958,6 +958,460 @@ final class PlaceImportReviewPlanTests: XCTestCase {
 
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
+    func testExplicitSocialRetryRotatesRemoteAttemptID() async throws {
+        let resolver = RecordingPlaceImportResolver(
+            resolution: .needsHelp("Try the remote import again.")
+        )
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/reel/retry-attempt/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store.items(for: batchID).first?.id)
+        let firstSeed = try XCTUnwrap(resolver.seeds.first)
+
+        store.retry(itemID: itemID)
+        await store.waitForProcessing(batchID: batchID)
+
+        XCTAssertEqual(resolver.seeds.count, 2)
+        XCTAssertEqual(firstSeed.effectiveSocialUnderstandingRequestID, firstSeed.id)
+        XCTAssertNotEqual(
+            resolver.seeds[1].effectiveSocialUnderstandingRequestID,
+            firstSeed.effectiveSocialUnderstandingRequestID
+        )
+        XCTAssertEqual(
+            store.item(id: itemID)?.seed.socialUnderstandingRequestID,
+            resolver.seeds[1].effectiveSocialUnderstandingRequestID
+        )
+    }
+
+    func testResumedSocialAttemptKeepsPersistedRemoteAttemptID() async throws {
+        let requestID = "persisted-social-attempt"
+        let sourceURL = "https://www.instagram.com/reel/resumed-attempt/"
+        let batch = PlaceImportBatch(
+            id: "resumed-social-batch",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "resumed-social-item",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                id: "stable-resumed-seed",
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1,
+                socialUnderstandingRequestID: requestID
+            ),
+            state: .resolving
+        )
+        let resolver = RecordingPlaceImportResolver(
+            resolution: .needsHelp("The resumed attempt finished.")
+        )
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+            ),
+            resolver: resolver
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        XCTAssertEqual(resolver.seeds.count, 1)
+        XCTAssertEqual(resolver.seeds[0].effectiveSocialUnderstandingRequestID, requestID)
+    }
+
+    func testReplayRequiredPersistsFreshIDBeforeTheSecondAttempt() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let resolver = SequencedPlaceImportResolver(resolutions: [
+            .retrySocialUnderstanding(requestID: "persisted-replay-attempt"),
+            .needsHelp("The replay completed without a match.")
+        ])
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/reel/persisted-replay/"
+        )
+
+        await store.waitForProcessing(batchID: batchID)
+
+        XCTAssertEqual(resolver.seeds.count, 2)
+        XCTAssertNotEqual(
+            resolver.seeds[0].effectiveSocialUnderstandingRequestID,
+            resolver.seeds[1].effectiveSocialUnderstandingRequestID
+        )
+        XCTAssertEqual(
+            resolver.seeds[1].effectiveSocialUnderstandingRequestID,
+            "persisted-replay-attempt"
+        )
+        XCTAssertEqual(
+            persistence.snapshot.items.first?.seed.socialUnderstandingRequestID,
+            "persisted-replay-attempt"
+        )
+    }
+
+    func testPartialSourceRetryMergesNewPlacesWithoutDuplicatingExistingRows() async throws {
+        let sourceURL = "https://www.instagram.com/p/partial-source-retry/"
+        let firstCandidate = placeImportCandidate(name: "First Place", address: "Los Angeles")
+        let secondCandidate = placeImportCandidate(name: "Second Place", address: "Malibu")
+        let retrySeed = PlaceImportSeed(
+            id: "partial-source-seed",
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let unresolvedFirstEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "First Place",
+                areaHint: "Los Angeles",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [],
+            selectedCandidateID: nil,
+            helpMessage: "Apple Maps needs your help matching it."
+        )
+        let resolvedFirstEntry = PlaceImportResolvedEntry(
+            seed: unresolvedFirstEntry.seed,
+            candidates: [firstCandidate],
+            selectedCandidateID: firstCandidate.id,
+            helpMessage: nil
+        )
+        let secondEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Second Place",
+                areaHint: "Malibu",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [secondCandidate],
+            selectedCandidateID: secondCandidate.id,
+            helpMessage: nil
+        )
+        let resolver = SequencedPlaceImportResolver(resolutions: [
+            .partialExpandedResolved([
+                unresolvedFirstEntry,
+                PlaceImportResolvedEntry(
+                    seed: retrySeed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Some media in this post could not be read."
+                )
+            ], sourceName: nil),
+            .expandedResolved([resolvedFirstEntry, secondEntry], sourceName: nil)
+        ])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+        let originalFirstItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.displayName == "First Place" })?.id
+        )
+        let retryItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.seed.nameHint == nil })?.id
+        )
+
+        store.retry(itemID: retryItemID)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["First Place", "Second Place"])
+        XCTAssertEqual(items.map(\.state), [.ready, .ready])
+        XCTAssertEqual(items.first?.id, originalFirstItemID)
+        XCTAssertEqual(resolver.seeds.count, 2)
+        XCTAssertNotEqual(
+            resolver.seeds[0].effectiveSocialUnderstandingRequestID,
+            resolver.seeds[1].effectiveSocialUnderstandingRequestID
+        )
+    }
+
+    func testPartialSourceRetryDoesNotReintroduceAnAlreadySavedPlace() async throws {
+        let sourceURL = "https://www.instagram.com/p/partial-saved-retry/"
+        let candidate = placeImportCandidate(name: "Saved Place", address: "Los Angeles")
+        let resolvedEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Saved Place",
+                areaHint: "Los Angeles",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            helpMessage: nil
+        )
+        let retrySeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let resolver = SequencedPlaceImportResolver(resolutions: [
+            .partialExpandedResolved([
+                resolvedEntry,
+                PlaceImportResolvedEntry(
+                    seed: retrySeed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Some media in this post could not be read."
+                )
+            ], sourceName: nil),
+            .expandedResolved([resolvedEntry], sourceName: nil)
+        ])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+        let savedItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.displayName == "Saved Place" })?.id
+        )
+        let retryItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.seed.nameHint == nil })?.id
+        )
+        store.markSaved(itemID: savedItemID, userPlaceID: "saved-user-place")
+
+        store.retry(itemID: retryItemID)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.id, savedItemID)
+        XCTAssertEqual(items.first?.state, .saved)
+        XCTAssertEqual(items.first?.savedUserPlaceID, "saved-user-place")
+    }
+
+    func testPartialSourceRetryDoesNotReintroduceADismissedPlace() async throws {
+        let sourceURL = "https://www.instagram.com/p/partial-dismissed-retry/"
+        let candidate = placeImportCandidate(name: "Dismissed Place", address: "Los Angeles")
+        let resolvedEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Dismissed Place",
+                areaHint: "Los Angeles",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            helpMessage: nil
+        )
+        let retrySeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let resolver = SequencedPlaceImportResolver(resolutions: [
+            .partialExpandedResolved([
+                resolvedEntry,
+                PlaceImportResolvedEntry(
+                    seed: retrySeed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Some media in this post could not be read."
+                )
+            ], sourceName: nil),
+            .expandedResolved([resolvedEntry], sourceName: nil)
+        ])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+        let dismissedItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.displayName == "Dismissed Place" })?.id
+        )
+        let retryItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.seed.nameHint == nil })?.id
+        )
+        store.dismiss(itemID: dismissedItemID)
+
+        store.retry(itemID: retryItemID)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.id, dismissedItemID)
+        XCTAssertEqual(items.first?.state, .dismissed)
+    }
+
+    func testSocialDedupKeepsSameNameSameCityBranchesWithDistinctProviderIDs() async throws {
+        let sourceURL = "https://www.instagram.com/p/same-name-branches/"
+        let firstCandidate = PlaceCandidate(
+            id: "branch-one",
+            name: "Starbucks",
+            category: "cafe",
+            address: "Via A 1",
+            locality: "Firenze",
+            region: "Toscana",
+            country: "IT",
+            latitude: 43.7696,
+            longitude: 11.2558,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-branch-one",
+            confidence: 0.9
+        )
+        let secondCandidate = PlaceCandidate(
+            id: "branch-two",
+            name: "Starbucks",
+            category: "cafe",
+            address: "Via B 2",
+            locality: "Firenze",
+            region: "Toscana",
+            country: "IT",
+            latitude: 43.7710,
+            longitude: 11.2580,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-branch-two",
+            confidence: 0.9
+        )
+        let entries = [firstCandidate, secondCandidate].enumerated().map { index, candidate in
+            PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: candidate.name,
+                    areaHint: candidate.address,
+                    sourceURLString: sourceURL,
+                    sourceLine: index + 1
+                ),
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                helpMessage: nil
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(
+                resolutions: [.expandedResolved(entries, sourceName: nil)]
+            )
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.map(\.state), [.ready, .ready])
+        XCTAssertEqual(
+            items.compactMap { $0.selectedCandidate?.sourceProviderPlaceID },
+            ["mapkit-branch-one", "mapkit-branch-two"]
+        )
+    }
+
+    func testCountryOnlyPartialMissDeduplicatesAfterResolvedRetry() async throws {
+        let sourceURL = "https://www.instagram.com/p/italy-partial-retry/"
+        let unresolvedSeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: "Ditta Artigianale",
+            areaHint: "ITALY",
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let candidate = PlaceCandidate(
+            id: "italy-mapkit-place",
+            name: "Ditta Artigianale",
+            category: "cafe",
+            address: "Via dei Neri 32R",
+            locality: "Firenze",
+            region: "Toscana",
+            country: "IT",
+            latitude: 43.7697,
+            longitude: 11.2556,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "italy-provider-place",
+            confidence: 0.9
+        )
+        let ambiguousCandidate = PlaceCandidate(
+            id: "italy-ambiguous-place",
+            name: "Ditta Artigianale",
+            category: "cafe",
+            address: "Via dello Sprone 5R",
+            locality: "Firenze",
+            region: "Toscana",
+            country: "Italy",
+            latitude: 43.7680,
+            longitude: 11.2480,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "different-italy-provider-place",
+            confidence: 0.7
+        )
+        let resolvedEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Ditta Artigianale",
+                areaHint: candidate.address,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            helpMessage: nil
+        )
+        let retrySeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let resolver = SequencedPlaceImportResolver(resolutions: [
+            .partialExpandedResolved([
+                PlaceImportResolvedEntry(
+                    seed: unresolvedSeed,
+                    candidates: [ambiguousCandidate],
+                    selectedCandidateID: nil,
+                    helpMessage: "Choose the matching venue from this post."
+                ),
+                PlaceImportResolvedEntry(
+                    seed: retrySeed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Some media in this post could not be read."
+                )
+            ], sourceName: nil),
+            .expandedResolved([resolvedEntry], sourceName: nil)
+        ])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+        let retryItemID = try XCTUnwrap(
+            store.items(for: batchID).first(where: { $0.seed.nameHint == nil })?.id
+        )
+
+        store.retry(itemID: retryItemID)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.displayName, "Ditta Artigianale")
+        XCTAssertEqual(items.first?.state, .ready)
+        XCTAssertEqual(items.first?.selectedCandidateID, candidate.id)
+    }
+
     func testBindingASecondAccountClearsTheFirstAccountsImportSnapshot() throws {
         let candidate = placeImportCandidate(name: "Private caption place")
         let firstAccountItem = PlaceImportItem(
@@ -2295,6 +2749,79 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(persistence.snapshot.items, oldItems)
     }
 
+    func testPartialSocialUpgradeMergesRecoveredPlacesAndKeepsSourceRetry() async throws {
+        let sourceURL = "https://www.instagram.com/p/partial-upgrade-merge/"
+        let batch = PlaceImportBatch(
+            id: "partial-upgrade-merge",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 1
+        )
+        let existingCandidate = placeImportCandidate(name: "Existing Place", address: "Los Angeles")
+        let existingItem = PlaceImportItem(
+            id: "partial-upgrade-existing",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Existing Place",
+                areaHint: "Los Angeles",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [existingCandidate],
+            selectedCandidateID: existingCandidate.id,
+            resolverVersion: 4
+        )
+        let recoveredCandidate = placeImportCandidate(name: "Recovered Place", address: "Malibu")
+        let recoveredEntry = PlaceImportResolvedEntry(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Recovered Place",
+                areaHint: "Malibu",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            candidates: [recoveredCandidate],
+            selectedCandidateID: recoveredCandidate.id,
+            helpMessage: nil
+        )
+        let retrySeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: [existingItem])
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: SequencedPlaceImportResolver(resolutions: [
+                .partialExpandedResolved([
+                    recoveredEntry,
+                    PlaceImportResolvedEntry(
+                        seed: retrySeed,
+                        candidates: [],
+                        selectedCandidateID: nil,
+                        helpMessage: "Some media in this post could not be read."
+                    )
+                ], sourceName: nil)
+            ])
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        let items = store.items(for: batch.id)
+        XCTAssertEqual(items.map(\.displayName), ["Existing Place", "Recovered Place", "Instagram post"])
+        XCTAssertEqual(items.map(\.state), [.ready, .ready, .needsHelp])
+        XCTAssertEqual(items.first?.id, existingItem.id)
+        XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
+    }
+
     func testCurrentGoogleResolverVersionIsNotRequeuedBySocialVersionBump() {
         let batch = PlaceImportBatch(id: "google-current", source: .googleMaps, sourceName: nil, totalCount: 1)
         let candidate = placeImportCandidate(name: "Maru Coffee")
@@ -2865,6 +3392,292 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), places.map { $0.0 })
         XCTAssertEqual(understanding.requests.first?.clientRequestID, "blind-carousel-request")
         XCTAssertEqual(understanding.requests.first?.source, .instagram)
+    }
+
+    func testPartialServerUnderstandingSupplementsLocalEvidenceAndStaysRetryable() async throws {
+        let remoteCandidate = placeImportCandidate(
+            name: "Fremont Lake",
+            address: "Wyoming",
+            locality: "Wyoming",
+            region: ""
+        )
+        let localCandidate = placeImportCandidate(
+            name: "Half Moon Lake Lodge",
+            address: "Wyoming",
+            locality: "Wyoming",
+            region: ""
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [remoteCandidate],
+            "half moon lake lodge": [localCandidate]
+        ])
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .partial,
+                hints: [
+                    SocialPlaceSearchHint(
+                        name: "Fremont Lake",
+                        area: "Wyoming",
+                        evidence: .imageText
+                    )
+                ],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 2,
+                    modelAttemptCount: 1,
+                    failureCategory: "media_incomplete"
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Base camp at Half Moon Lake Lodge!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/partial-carousel/"
+        let seed = PlaceImportSeed(
+            id: "partial-carousel-request",
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected a retryable partial result, got \(resolution)")
+        }
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertTrue(entries.prefix(2).allSatisfy { $0.selectedCandidateID != nil })
+        XCTAssertNil(entries.last?.seed.nameHint)
+        XCTAssertTrue(entries.last?.candidates.isEmpty == true)
+        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake", "Half Moon Lake Lodge"])
+    }
+
+    func testEmptyPartialServerScanKeepsLocalRecoveryRetryable() async throws {
+        let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .partial,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 3,
+                    modelAttemptCount: 1,
+                    failureCategory: "media_incomplete"
+                )
+            )
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [candidate]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Stop at Fremont Lake!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/empty-partial/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected an honest partial result, got \(resolution)")
+        }
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
+        XCTAssertNil(entries.last?.seed.nameHint)
+        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+    }
+
+    func testServerGroundedMapKitMissesAllRemainVisibleInOrder() async throws {
+        let names = ["First Grounded Place", "Second Grounded Place", "Third Grounded Place"]
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .ok,
+                hints: names.map {
+                    SocialPlaceSearchHint(name: $0, area: "California", evidence: .imageText)
+                },
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 3,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [:]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/grounded-mapkit-misses/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected every grounded miss to remain reviewable, got \(resolution)")
+        }
+        XCTAssertEqual(entries.map(\.seed.nameHint), names.map(Optional.some))
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertTrue(entries.allSatisfy { $0.candidates.isEmpty && $0.helpMessage != nil })
+    }
+
+    func testServerUnderstandingUsesAttemptScopedRequestIDWhenPresent() async throws {
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .noPlaces,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 1,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/attempt-scoped/"
+        let seed = PlaceImportSeed(
+            id: "stable-import-seed",
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1,
+            socialUnderstandingRequestID: "explicit-retry-attempt"
+        )
+
+        _ = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(understanding.requests.first?.clientRequestID, "explicit-retry-attempt")
+    }
+
+    func testFinishedAttemptRequestsOnePersistableFreshID() async throws {
+        let understanding = SequencedSocialImportUnderstandingRepository(results: [
+            SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_deterministic",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "retry_required"
+                )
+            )
+        ])
+        let resolver = DevicePlaceImportResolver(
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/replay-finished/"
+        let seed = PlaceImportSeed(
+            id: "persisted-attempt-id",
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .retrySocialUnderstanding(let freshRequestID) = resolution else {
+            return XCTFail("Expected a persistable replay request, got \(resolution)")
+        }
+        XCTAssertEqual(understanding.requests.count, 1)
+        XCTAssertEqual(understanding.requests[0].clientRequestID, "persisted-attempt-id")
+        XCTAssertNotEqual(freshRequestID, understanding.requests[0].clientRequestID)
+        XCTAssertNotNil(UUID(uuidString: freshRequestID))
+    }
+
+    func testInFlightDuplicateKeepsLocalResultsVisiblyRetryable() async throws {
+        let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_deterministic",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "duplicate_request"
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "fremont lake": [candidate]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Stop at Fremont Lake!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/in-flight-duplicate/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected an honest partial result, got \(resolution)")
+        }
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
+        XCTAssertNil(entries.last?.seed.nameHint)
+        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
     }
 
     func testServerFallbackUsesExistingCaptionAndVisionPath() async throws {
@@ -4714,6 +5527,7 @@ private final class FakePlaceImportResolver: PlaceImportResolving {
 @MainActor
 private final class RecordingPlaceImportResolver: PlaceImportResolving {
     let resolution: PlaceImportResolution
+    private(set) var seeds: [PlaceImportSeed] = []
     private(set) var lastSeed: PlaceImportSeed?
     private(set) var lastSource: PlaceImportSource?
 
@@ -4722,9 +5536,25 @@ private final class RecordingPlaceImportResolver: PlaceImportResolving {
     }
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        seeds.append(seed)
         lastSeed = seed
         lastSource = source
         return resolution
+    }
+}
+
+@MainActor
+private final class SequencedPlaceImportResolver: PlaceImportResolving {
+    private let resolutions: [PlaceImportResolution]
+    private(set) var seeds: [PlaceImportSeed] = []
+
+    init(resolutions: [PlaceImportResolution]) {
+        self.resolutions = resolutions
+    }
+
+    func resolve(seed: PlaceImportSeed, source _: PlaceImportSource) async throws -> PlaceImportResolution {
+        seeds.append(seed)
+        return resolutions[min(seeds.count - 1, resolutions.count - 1)]
     }
 }
 
@@ -5018,6 +5848,28 @@ private final class FakeSocialImportUnderstandingRepository: SocialImportUnderst
             Request(url: url, source: source, clientRequestID: clientRequestID)
         )
         return result
+    }
+}
+
+@MainActor
+private final class SequencedSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    typealias Request = FakeSocialImportUnderstandingRepository.Request
+
+    private let results: [SocialImportUnderstandingResult]
+    private(set) var requests: [Request] = []
+
+    init(results: [SocialImportUnderstandingResult]) {
+        precondition(!results.isEmpty)
+        self.results = results
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        requests.append(Request(url: url, source: source, clientRequestID: clientRequestID))
+        return results[min(requests.count - 1, results.count - 1)]
     }
 }
 

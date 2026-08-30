@@ -94,6 +94,7 @@ export type PublicFallbackReason =
   | "admission_unavailable"
   | "feature_disabled"
   | "duplicate_request"
+  | "retry_required"
   | "capacity_limited"
   | "quota_exceeded"
   | "acquisition_unavailable"

@@ -281,6 +281,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
     let socialCaptionHint: String?
+    var socialUnderstandingRequestID: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -293,7 +294,8 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         longitude: Double? = nil,
         sourceProvider: String? = nil,
         sourceProviderPlaceID: String? = nil,
-        socialCaptionHint: String? = nil
+        socialCaptionHint: String? = nil,
+        socialUnderstandingRequestID: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -306,6 +308,11 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.socialCaptionHint = socialCaptionHint
+        self.socialUnderstandingRequestID = socialUnderstandingRequestID
+    }
+
+    var effectiveSocialUnderstandingRequestID: String {
+        socialUnderstandingRequestID ?? id
     }
 }
 

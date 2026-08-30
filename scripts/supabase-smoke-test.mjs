@@ -221,11 +221,11 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
   );
   await expectQuery(
     client,
-    "finished paid social-import requests remain deduplicated",
+    "finished paid social-import requests request a content-free replay",
     `select * from public.begin_social_import_paid_work($1)`,
     ["smoke-first"],
     (result) => result.rows[0]?.admitted === false
-      && result.rows[0]?.decision === "duplicate",
+      && result.rows[0]?.decision === "replay_required",
   );
 
   await client.query("reset role");

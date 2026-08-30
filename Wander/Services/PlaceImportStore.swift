@@ -42,7 +42,9 @@ struct PlaceImportResolvedEntry: Equatable, Sendable {
 enum PlaceImportResolution: Equatable, Sendable {
     case candidates([PlaceCandidate], selectedCandidateID: String?)
     case needsHelp(String)
+    case retrySocialUnderstanding(requestID: String)
     case expanded([PlaceImportSeed], sourceName: String?)
+    case partialExpanded([PlaceImportSeed], retrySeed: PlaceImportSeed, sourceName: String?)
     case expandedResolved([PlaceImportResolvedEntry], sourceName: String?)
     case partialExpandedResolved([PlaceImportResolvedEntry], sourceName: String?)
 }
@@ -190,6 +192,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var discoveredMediaCount = 0
         var understandingPath = "local_fallback"
         var understandingWasPartial = false
+        var remoteHintsWereAccepted = false
         var hints: [SocialPlaceSearchHint] = []
 
         if let socialUnderstandingRepository {
@@ -197,14 +200,24 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 let remote = try await socialUnderstandingRepository.understand(
                     url: url,
                     source: source,
-                    clientRequestID: seed.id
+                    clientRequestID: seed.effectiveSocialUnderstandingRequestID
                 )
                 try Task.checkCancellation()
+                if remote.outcome == .fallback,
+                   remote.diagnostics.failureCategory == "retry_required" {
+                    // Persist the replacement ID in the store before any paid
+                    // replay starts. If the app is interrupted again, relaunch
+                    // resumes that exact attempt rather than paying repeatedly.
+                    return .retrySocialUnderstanding(
+                        requestID: UUID().uuidString.lowercased()
+                    )
+                }
                 understandingPath = remote.diagnostics.providerPath
                 discoveredMediaCount = remote.diagnostics.mediaCount
                 switch remote.outcome {
                 case .ok, .partial:
                     hints = SocialImportEvidencePlanner.reviewHints(remote.hints)
+                    remoteHintsWereAccepted = !hints.isEmpty
                     understandingWasPartial = remote.outcome == .partial
                 case .noPlaces:
                     WanderDebugLog.imports.notice(
@@ -214,6 +227,12 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         "No destination was explicitly identified in this post. Add a place name and nearby city to match it."
                     )
                 case .fallback:
+                    if remote.diagnostics.failureCategory == "duplicate_request" {
+                        // A previous invocation is still running. Local evidence
+                        // may provide useful rows, but keep a source-level Retry
+                        // item so incomplete video/carousel coverage is visible.
+                        understandingWasPartial = true
+                    }
                     break
                 }
             } catch is CancellationError {
@@ -227,30 +246,75 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         }
 
-        if hints.isEmpty {
+        if hints.isEmpty || understandingWasPartial {
             let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
             try Task.checkCancellation()
-            guard let metadata = socialMetadata(
+            let metadata = socialMetadata(
                 fetched: fetchedMetadata,
                 capturedCaption: seed.socialCaptionHint
-            ) else {
+            )
+            guard let metadata else {
+                if !hints.isEmpty {
+                    // Keep grounded server results when public metadata is not
+                    // available, while retaining the partial outcome below.
+                    return try await resolveSocialHints(
+                        hints,
+                        source: source,
+                        seed: seed,
+                        recognition: recognition,
+                        discoveredMediaCount: discoveredMediaCount,
+                        understandingPath: understandingPath,
+                        understandingWasPartial: understandingWasPartial,
+                        remoteHintsWereAccepted: remoteHintsWereAccepted
+                    )
+                }
+                if understandingWasPartial {
+                    return .needsHelp(
+                        "This post is still being processed. Wait a moment, then retry automatic matching."
+                    )
+                }
                 return .needsHelp(
                     "This public post did not expose readable place evidence. Check the link and retry automatic matching."
                 )
             }
             recognition = try await recognizeSocialMedia(in: metadata)
-            discoveredMediaCount = metadata.mediaItems.isEmpty
+            let localMediaCount = metadata.mediaItems.isEmpty
                 ? (metadata.thumbnailURL == nil ? 0 : 1)
                 : metadata.mediaItems.count
-            understandingPath = "local_fallback"
-            hints = SocialImportEvidencePlanner.reviewHints(
-                SocialPlaceHintExtractor.hints(
-                    from: metadata,
-                    recognizedTexts: recognition.recognizedTexts,
-                    limit: Self.maximumExtractedSocialHints
-                )
+            discoveredMediaCount = max(discoveredMediaCount, localMediaCount)
+            if !remoteHintsWereAccepted {
+                understandingPath = "local_fallback"
+            }
+            let localHints = SocialPlaceHintExtractor.hints(
+                from: metadata,
+                recognizedTexts: recognition.recognizedTexts,
+                limit: Self.maximumExtractedSocialHints
             )
+            hints = SocialImportEvidencePlanner.reviewHints(hints + localHints)
         }
+
+        return try await resolveSocialHints(
+            hints,
+            source: source,
+            seed: seed,
+            recognition: recognition,
+            discoveredMediaCount: discoveredMediaCount,
+            understandingPath: understandingPath,
+            understandingWasPartial: understandingWasPartial,
+            remoteHintsWereAccepted: remoteHintsWereAccepted
+        )
+    }
+
+    private func resolveSocialHints(
+        _ hints: [SocialPlaceSearchHint],
+        source: PlaceImportSource,
+        seed: PlaceImportSeed,
+        recognition: SocialMediaRecognition,
+        discoveredMediaCount: Int,
+        understandingPath: String,
+        understandingWasPartial: Bool,
+        remoteHintsWereAccepted: Bool
+    ) async throws -> PlaceImportResolution {
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
         if durableHints.count > Self.maximumImmediateSocialLookups {
@@ -268,6 +332,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             WanderDebugLog.imports.notice(
                 "social guide expansion source=\(source.rawValue, privacy: .public) understanding_path=\(understandingPath, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) durable_row_count=\(expandedSeeds.count, privacy: .public) deferred_lookup_count=\(expandedSeeds.count, privacy: .public)"
             )
+            if understandingWasPartial {
+                return .partialExpanded(expandedSeeds, retrySeed: seed, sourceName: nil)
+            }
             return .expanded(expandedSeeds, sourceName: nil)
         }
 
@@ -387,18 +454,43 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         }
 
-        if let recovery = bestRecoveryHint(recoveryHints),
-           appendUnresolvedSocialHint(
-               recovery.hint,
-               originalSeed: seed,
-               to: &entries,
-               seenHints: &seenPlausibleHints,
-               helpMessage: recovery.helpMessage
-           ) {
+        if remoteHintsWereAccepted {
+            for recovery in recoveryHints {
+                if appendUnresolvedSocialHint(
+                    recovery.hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints,
+                    helpMessage: recovery.helpMessage
+                ) {
+                    unresolvedCount += 1
+                } else {
+                    rejectedHintCount += 1
+                }
+            }
+        } else if let recovery = bestRecoveryHint(recoveryHints),
+                  appendUnresolvedSocialHint(
+                      recovery.hint,
+                      originalSeed: seed,
+                      to: &entries,
+                      seenHints: &seenPlausibleHints,
+                      helpMessage: recovery.helpMessage
+                  ) {
             unresolvedCount += 1
             rejectedHintCount += max(0, recoveryHints.count - 1)
         } else {
             rejectedHintCount += recoveryHints.count
+        }
+
+        if understandingWasPartial, !entries.isEmpty {
+            entries.append(
+                PlaceImportResolvedEntry(
+                    seed: seed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Some media in this post could not be read. Retry automatic matching to look for more places."
+                )
+            )
         }
 
         WanderDebugLog.imports.notice(
@@ -426,6 +518,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         }
         if let strongest, strongest.bestScore >= 0.38 {
             return candidateResolution(strongest)
+        }
+        if understandingWasPartial {
+            return .needsHelp(
+                "Some media in this post could not be read. Retry automatic matching to look for places."
+            )
         }
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
@@ -903,7 +1000,8 @@ final class PlaceImportStore: ObservableObject {
                     areaHint: nil,
                     sourceURLString: sourceURLString,
                     sourceLine: item.seed.sourceLine,
-                    socialCaptionHint: item.seed.socialCaptionHint
+                    socialCaptionHint: item.seed.socialCaptionHint,
+                    socialUnderstandingRequestID: item.seed.socialUnderstandingRequestID
                 )
             }
 
@@ -1255,6 +1353,17 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let existingName = items[index].seed.nameHint?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasNameHint = existingName?.isEmpty == false
+        if [.instagram, .tiktok].contains(items[index].source),
+           items[index].seed.sourceURLString != nil,
+           !hasNameHint {
+            // Preserve one idempotency key across pause/crash resumption, but a
+            // user-requested retry is a new paid attempt and must not be rejected
+            // by the server's durable completed-request duplicate marker.
+            items[index].seed.socialUnderstandingRequestID = UUID().uuidString.lowercased()
+        }
         items[index].pendingManualSearch = nil
         items[index].state = .queued
         items[index].candidates = []
@@ -1323,7 +1432,8 @@ final class PlaceImportStore: ObservableObject {
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
-            socialCaptionHint: existingSeed.socialCaptionHint
+            socialCaptionHint: existingSeed.socialCaptionHint,
+            socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
 
         do {
@@ -1342,7 +1452,8 @@ final class PlaceImportStore: ObservableObject {
                 return .results(candidates)
             case .needsHelp(let message):
                 return .failed(message)
-            case .expanded, .expandedResolved, .partialExpandedResolved:
+            case .retrySocialUnderstanding, .expanded, .partialExpanded,
+                 .expandedResolved, .partialExpandedResolved:
                 return .failed("No matching Apple Maps place was found. Try a more specific search.")
             }
         } catch let error as LocalizedError {
@@ -1381,7 +1492,8 @@ final class PlaceImportStore: ObservableObject {
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
-            socialCaptionHint: existingSeed.socialCaptionHint
+            socialCaptionHint: existingSeed.socialCaptionHint,
+            socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].pendingManualSearch = nil
         items[index].candidates = candidates
@@ -1410,7 +1522,8 @@ final class PlaceImportStore: ObservableObject {
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
-            socialCaptionHint: existingSeed.socialCaptionHint
+            socialCaptionHint: existingSeed.socialCaptionHint,
+            socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil
@@ -1696,23 +1809,49 @@ final class PlaceImportStore: ObservableObject {
             // A newer search, retry, pause, or dismissal superseded this request.
             return
         }
+        let batchID = items[index].batchID
 
         switch attempt {
         case .resolved(let resolution):
+            if case .retrySocialUnderstanding(let requestID) = resolution {
+                if var previousRows = replacedSocialItemsByPlaceholderID[claim.itemID] {
+                    for previousIndex in previousRows.indices {
+                        previousRows[previousIndex].seed.socialUnderstandingRequestID = requestID
+                    }
+                    replacedSocialItemsByPlaceholderID[claim.itemID] = previousRows
+                }
+                apply(resolution, at: index)
+                break
+            }
             let shouldRestorePreviousRows: Bool
             switch resolution {
-            case .needsHelp, .partialExpandedResolved:
+            case .needsHelp, .partialExpanded, .partialExpandedResolved:
                 shouldRestorePreviousRows = true
-            case .candidates, .expanded, .expandedResolved:
+            case .retrySocialUnderstanding, .candidates, .expanded, .expandedResolved:
                 shouldRestorePreviousRows = false
             }
-            if shouldRestorePreviousRows,
+            if partialResolutionHasSourceRetry(resolution),
+               mergeReplacedSocialItems(
+                   resolution: resolution,
+                   placeholderID: claim.itemID,
+                   at: index
+               ) {
+                // Preserve pre-upgrade rows, add newly recovered places, and
+                // retain the source-level retry marker for incomplete media.
+            } else if shouldRestorePreviousRows,
                restoreReplacedSocialItems(placeholderID: claim.itemID, at: index) {
                 // A transient metadata failure must not erase previously useful rows.
             } else {
                 replacedSocialItemsByPlaceholderID[claim.itemID] = nil
                 items[index].pendingManualSearch = nil
                 apply(resolution, at: index)
+            }
+            if [.instagram, .tiktok].contains(claim.source),
+               let sourceURLString = claim.seed.sourceURLString {
+                deduplicateSocialSourceItems(
+                    batchID: batchID,
+                    sourceURLString: sourceURLString
+                )
             }
         case .failed(let message):
             if !restoreReplacedSocialItems(placeholderID: claim.itemID, at: index) {
@@ -1744,6 +1883,34 @@ final class PlaceImportStore: ObservableObject {
         return true
     }
 
+    private func partialResolutionHasSourceRetry(_ resolution: PlaceImportResolution) -> Bool {
+        switch resolution {
+        case .partialExpanded:
+            true
+        case .partialExpandedResolved(let entries, _):
+            entries.contains { $0.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
+        case .candidates, .needsHelp, .retrySocialUnderstanding, .expanded, .expandedResolved:
+            false
+        }
+    }
+
+    @discardableResult
+    private func mergeReplacedSocialItems(
+        resolution: PlaceImportResolution,
+        placeholderID: String,
+        at index: Int
+    ) -> Bool {
+        guard let previousRows = replacedSocialItemsByPlaceholderID.removeValue(forKey: placeholderID) else {
+            return false
+        }
+        let placeholder = items[index]
+        items.replaceSubrange(index...index, with: previousRows + [placeholder])
+        let placeholderIndex = index + previousRows.count
+        items[placeholderIndex].pendingManualSearch = nil
+        apply(resolution, at: placeholderIndex)
+        return true
+    }
+
     private func apply(_ resolution: PlaceImportResolution, at index: Int) {
         switch resolution {
         case .candidates(let candidates, let selectedCandidateID):
@@ -1765,6 +1932,12 @@ final class PlaceImportStore: ObservableObject {
             items[index].selectedCandidateID = nil
             items[index].state = .needsHelp
             items[index].helpMessage = message
+        case .retrySocialUnderstanding(let requestID):
+            items[index].seed.socialUnderstandingRequestID = requestID
+            items[index].state = .queued
+            items[index].candidates = []
+            items[index].selectedCandidateID = nil
+            items[index].helpMessage = nil
         case .expanded(let seeds, let sourceName):
             let original = items[index]
             let expandedItems = seeds.map { seed in
@@ -1779,6 +1952,36 @@ final class PlaceImportStore: ObservableObject {
                 )
             }
             items.replaceSubrange(index...index, with: expandedItems)
+            if let sourceName,
+               let batchIndex = batches.firstIndex(where: { $0.id == original.batchID }) {
+                batches[batchIndex].sourceName = sourceName
+            }
+            return
+        case .partialExpanded(let seeds, let retrySeed, let sourceName):
+            let original = items[index]
+            let expandedItems = seeds.map { seed in
+                PlaceImportItem(
+                    batchID: original.batchID,
+                    source: original.source,
+                    seed: seed,
+                    resolverVersion: PlaceImportItem.currentResolverVersion,
+                    stagedStatus: original.stagedStatus,
+                    stagedRatingScore: original.stagedRatingScore,
+                    createdAt: original.createdAt
+                )
+            }
+            let retryItem = PlaceImportItem(
+                batchID: original.batchID,
+                source: original.source,
+                seed: retrySeed,
+                state: .needsHelp,
+                helpMessage: "Some media in this post could not be read. Retry automatic matching to look for more places.",
+                resolverVersion: PlaceImportItem.currentResolverVersion,
+                stagedStatus: original.stagedStatus,
+                stagedRatingScore: original.stagedRatingScore,
+                createdAt: original.createdAt
+            )
+            items.replaceSubrange(index...index, with: expandedItems + [retryItem])
             if let sourceName,
                let batchIndex = batches.firstIndex(where: { $0.id == original.batchID }) {
                 batches[batchIndex].sourceName = sourceName
@@ -1819,6 +2022,144 @@ final class PlaceImportStore: ObservableObject {
         }
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         items[index].updatedAt = .now
+    }
+
+    private func deduplicateSocialSourceItems(
+        batchID: String,
+        sourceURLString: String
+    ) {
+        let matchingIndices = items.indices.filter { index in
+            let item = items[index]
+            return item.batchID == batchID
+                && item.seed.sourceURLString == sourceURLString
+        }
+        var retainedIndices: [Int] = []
+        var duplicateIndices = Set<Int>()
+
+        for index in matchingIndices {
+            guard let existingIndex = retainedIndices.first(where: {
+                socialSourceItemsReferToSamePlace(items[$0], items[index])
+            }) else {
+                retainedIndices.append(index)
+                continue
+            }
+            if socialSourceItemQuality(items[index]) > socialSourceItemQuality(items[existingIndex]) {
+                // Keep the original row identity and staged user edits while
+                // accepting a better result from the source-level retry.
+                items[existingIndex].seed = items[index].seed
+                items[existingIndex].state = items[index].state
+                items[existingIndex].candidates = items[index].candidates
+                items[existingIndex].selectedCandidateID = items[index].selectedCandidateID
+                items[existingIndex].helpMessage = items[index].helpMessage
+                items[existingIndex].duplicateUserPlaceID = items[index].duplicateUserPlaceID
+                items[existingIndex].resolverVersion = items[index].resolverVersion
+                items[existingIndex].updatedAt = items[index].updatedAt
+            }
+            duplicateIndices.insert(index)
+        }
+
+        for index in duplicateIndices.sorted(by: >) {
+            items.remove(at: index)
+        }
+    }
+
+    private func socialSourceItemsReferToSamePlace(
+        _ lhs: PlaceImportItem,
+        _ rhs: PlaceImportItem
+    ) -> Bool {
+        let lhsName = lhs.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhsName = rhs.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if lhsName?.isEmpty != false || rhsName?.isEmpty != false {
+            return lhsName?.isEmpty != false && rhsName?.isEmpty != false
+        }
+
+        let lhsSelectedCandidate = lhs.selectedCandidate
+        let rhsSelectedCandidate = rhs.selectedCandidate
+        if let lhsProviderID = lhsSelectedCandidate?.sourceProviderPlaceID,
+           let rhsProviderID = rhsSelectedCandidate?.sourceProviderPlaceID,
+           lhsSelectedCandidate?.sourceProvider == rhsSelectedCandidate?.sourceProvider {
+            // Two confidently selected branches from the same provider are
+            // distinct when their provider identities differ, even if their
+            // creator-facing names and cities are identical.
+            return lhsProviderID == rhsProviderID
+        }
+        let lhsCandidate = lhsSelectedCandidate ?? lhs.candidates.first
+        let rhsCandidate = rhsSelectedCandidate ?? rhs.candidates.first
+        if let lhsProviderID = lhsCandidate?.sourceProviderPlaceID,
+           let rhsProviderID = rhsCandidate?.sourceProviderPlaceID,
+           lhsCandidate?.sourceProvider == rhsCandidate?.sourceProvider,
+           lhsProviderID == rhsProviderID {
+            return true
+        }
+        guard PlaceImportCandidateMatcher.namesAreEquivalent(
+            lhsName ?? "",
+            rhsName ?? ""
+        ) else { return false }
+
+        let lhsCountryCodes = socialSourceItemCountryCodes(lhs)
+        let rhsCountryCodes = socialSourceItemCountryCodes(rhs)
+        if !lhsCountryCodes.isEmpty,
+           !rhsCountryCodes.isEmpty,
+           lhsCountryCodes.isDisjoint(with: rhsCountryCodes) {
+            return false
+        }
+
+        let lhsAreas = socialSourceItemAreas(lhs)
+        let rhsAreas = socialSourceItemAreas(rhs)
+        guard !lhsAreas.isEmpty, !rhsAreas.isEmpty else { return true }
+        return lhsAreas.contains { lhsArea in
+            rhsAreas.contains { rhsArea in
+                lhsArea == rhsArea
+                    || lhsArea.contains(rhsArea)
+                    || rhsArea.contains(lhsArea)
+            }
+        }
+    }
+
+    private func socialSourceItemCountryCodes(_ item: PlaceImportItem) -> Set<String> {
+        let candidate = item.selectedCandidate ?? item.candidates.first
+        return Set([
+            item.seed.areaHint,
+            item.displayArea,
+            candidate?.country
+        ].compactMap { SocialImportCountry.isoCode(for: $0) })
+    }
+
+    private func socialSourceItemAreas(_ item: PlaceImportItem) -> Set<String> {
+        let candidate = item.selectedCandidate ?? item.candidates.first
+        let combinedLocalityAndRegion = [candidate?.locality, candidate?.region]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        let localityAndRegion = combinedLocalityAndRegion.isEmpty
+            ? nil
+            : combinedLocalityAndRegion
+        let rawAreas: [String?] = [
+            item.seed.areaHint,
+            item.displayArea,
+            candidate?.address,
+            candidate?.locality,
+            candidate?.region,
+            localityAndRegion
+        ]
+        let normalizedAreas = rawAreas.compactMap { value in
+            SocialImportCountry.isoCode(for: value) == nil ? value : nil
+        }
+            .map(normalizedName)
+            .filter { !$0.isEmpty }
+        return Set(normalizedAreas)
+    }
+
+    private func socialSourceItemQuality(_ item: PlaceImportItem) -> Int {
+        switch item.state {
+        case .ready: 4
+        case .ambiguous: 3
+        case .needsHelp: 2
+        case .queued, .resolving: 1
+        case .failed: 0
+        case .dismissed: 6
+        case .saved, .duplicate: 5
+        }
     }
 
     private func synchronizeAllBatches(persist: Bool) {

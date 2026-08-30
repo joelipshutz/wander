@@ -26,6 +26,7 @@ type PaidWorkAdmissionDecision =
   | "started"
   | "disabled"
   | "duplicate"
+  | "replay_required"
   | "busy"
   | "quota";
 
@@ -392,7 +393,9 @@ export async function beginPaidWorkAdmission(
   }
   if (
     row?.admitted === false &&
-    ["disabled", "duplicate", "busy", "quota"].includes(String(decision)) &&
+    ["disabled", "duplicate", "replay_required", "busy", "quota"].includes(
+      String(decision),
+    ) &&
     (row.admission_id === null || row.admission_id === undefined)
   ) {
     return {
@@ -469,6 +472,8 @@ function admissionFallbackReason(
       return "feature_disabled";
     case "duplicate":
       return "duplicate_request";
+    case "replay_required":
+      return "retry_required";
     case "busy":
       return "capacity_limited";
     case "quota":

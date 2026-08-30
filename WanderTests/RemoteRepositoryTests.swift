@@ -101,7 +101,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(result.hints.isEmpty)
     }
 
-    func testSocialImportUnderstandingUsesLocalFallbackForAnEmptyPartialScan() async throws {
+    func testSocialImportUnderstandingPreservesAnEmptyPartialScan() async throws {
         let functions = RecordingRPC()
         functions.responses["function:social-import-understand"] = Data(
             """
@@ -124,7 +124,7 @@ final class RemoteRepositoryTests: XCTestCase {
             clientRequestID: "partial-request"
         )
 
-        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertEqual(result.outcome, .partial)
         XCTAssertTrue(result.hints.isEmpty)
     }
 

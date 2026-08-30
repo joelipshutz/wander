@@ -296,8 +296,8 @@ select results_eq(
     select admitted, decision, admission_id is not null
     from public.begin_social_import_paid_work('request-first')
   $$,
-  $$values (false, 'duplicate'::text, false)$$,
-  'a finished client request remains a durable duplicate marker'
+  $$values (false, 'replay_required'::text, false)$$,
+  'a finished client request requests a content-free replay with a fresh ID'
 );
 
 reset role;
