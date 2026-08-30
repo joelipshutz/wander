@@ -2139,25 +2139,13 @@ struct PlaceImportInboxScreen: View {
 
     @MainActor
     private func save(_ submission: MapPlaceSaveSubmission, itemID: String) async -> SaveResult? {
-        guard case .add(let sourceType) = submission.context.mode else { return nil }
+        guard case .add = submission.context.mode else { return nil }
         let remoteBackend = auth.isSignedIn ? backend : nil
-        let result = await store.saveCandidate(
-            submission.candidate,
-            status: submission.status,
-            visibility: submission.visibility,
-            note: submission.note,
-            sourceType: sourceType,
-            ratingScore: submission.ratingScore,
-            attributes: submission.attributes,
-            backend: remoteBackend
-        )
-        let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-        await persistVisitPhotoAttachments(
-            submission.photoAttachments,
-            to: targetVisit,
+        guard let result = await persistNewPlaceSaveSubmission(
+            submission,
             store: store,
             backend: remoteBackend
-        )
+        ) else { return nil }
         importStore.markSaved(itemID: itemID, userPlaceID: result.userPlaceID)
         if !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
