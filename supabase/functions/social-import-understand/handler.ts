@@ -1,8 +1,10 @@
-import { acquireWithApify } from "./apify.ts";
+import { acquireInstagramProfileAliases, acquireWithApify } from "./apify.ts";
 import {
   deterministicFallbackHints,
   evidenceCatalog,
   groundedHints,
+  profileAliasCandidates,
+  recommendedCaptionHandles,
 } from "./evidence.ts";
 import { understandWithGemini } from "./gemini.ts";
 import { boundedRequestBody, fetchJSON } from "./http.ts";
@@ -11,6 +13,7 @@ import { asRecord, cleanString, parseSocialSource } from "./source.ts";
 import type {
   AcquisitionEvidence,
   EvidenceCatalog,
+  InstagramProfileAlias,
   MediaIngestion,
   PublicFallbackReason,
   RuntimeDependencies,
@@ -215,15 +218,34 @@ async function runAdmittedImport(
   }
 
   const catalog = evidenceCatalog(evidence);
+  const profileAliasesPromise: Promise<InstagramProfileAlias[]> =
+    source.platform === "instagram" && evidence.caption
+      ? acquireInstagramProfileAliases(
+        recommendedCaptionHandles(evidence.caption),
+        apifyToken,
+        deadline,
+        dependencies,
+        signal,
+      )
+      : Promise.resolve([]);
   let ingestions: MediaIngestion[] = [];
+  let profileAliases: InstagramProfileAlias[] = [];
   try {
-    ingestions = await ingestAcquiredMedia(
-      evidence.media,
-      source,
-      apifyToken,
-      deadline,
-      dependencies,
-    );
+    const [mediaResult, profileResult] = await Promise.allSettled([
+      ingestAcquiredMedia(
+        evidence.media,
+        source,
+        apifyToken,
+        deadline,
+        dependencies,
+      ),
+      profileAliasesPromise,
+    ]);
+    profileAliases = profileResult.status === "fulfilled"
+      ? profileResult.value
+      : [];
+    if (mediaResult.status === "rejected") throw mediaResult.reason;
+    ingestions = mediaResult.value;
   } catch (error) {
     return fallbackResponse(
       fallbackReason(error, "media_unavailable"),
@@ -245,6 +267,7 @@ async function runAdmittedImport(
       deadline,
       dependencies,
       signal,
+      profileAliases,
     );
   } catch (error) {
     const attempts = error instanceof SocialImportError
@@ -261,11 +284,15 @@ async function runAdmittedImport(
   }
 
   const grounded = groundedHints(
-    understanding.candidates,
+    [
+      ...understanding.candidates,
+      ...profileAliasCandidates(profileAliases, catalog),
+    ],
     catalog,
     ingestions,
     150,
     understanding.postContext,
+    profileAliases,
   );
   const ingestedCount =
     ingestions.filter((item) => item.status === "ok").length;

@@ -8,6 +8,7 @@ import {
 import type {
   AcquiredMedia,
   AcquisitionEvidence,
+  InstagramProfileAlias,
   RuntimeDependencies,
   SocialSource,
   TaggedLocation,
@@ -22,6 +23,23 @@ const terminalRunStatuses = new Set([
   "TIMED_OUT",
   "FINISHED",
 ]);
+
+export const maximumInstagramProfileAliases = 20;
+export const instagramProfileEnrichmentDeadlineMilliseconds = 12_000;
+export const minimumProfileEnrichmentGlobalBudgetMilliseconds = 45_000;
+
+type ApifyRunConfiguration = {
+  actor: string;
+  input: Record<string, unknown>;
+  timeoutSeconds: number;
+  maxItems: number;
+  maxTotalChargeUsd: string;
+  startRequestTimeoutMilliseconds: number;
+  pollRequestTimeoutMilliseconds: number;
+  maximumPollAttempts: number;
+  initialPollDelayMilliseconds: number;
+  maximumPollDelayMilliseconds: number;
+};
 
 export type ApifyActorRequest = {
   actor: string;
@@ -68,25 +86,182 @@ export async function acquireWithApify(
   dependencies: RuntimeDependencies,
   cancellationSignal?: AbortSignal,
 ): Promise<AcquisitionEvidence> {
-  assertNotCancelled(cancellationSignal);
   const actorRequest = apifyActorRequest(source);
-  const actorSlug = actorRequest.actor.replace("/", "~");
-  const runURL =
-    `https://api.apify.com/v2/actors/${encodeURIComponent(actorSlug)}` +
-    "/runs?waitForFinish=0&timeout=90&maxItems=1&maxTotalChargeUsd=1";
+  const run = await runApifyActor(
+    {
+      ...actorRequest,
+      timeoutSeconds: 90,
+      maxItems: 1,
+      maxTotalChargeUsd: "1",
+      startRequestTimeoutMilliseconds: 15_000,
+      pollRequestTimeoutMilliseconds: 15_000,
+      maximumPollAttempts: 24,
+      initialPollDelayMilliseconds: 750,
+      maximumPollDelayMilliseconds: 4_000,
+    },
+    token,
+    deadline,
+    dependencies,
+    cancellationSignal,
+  );
+  const cancellableDependencies = dependenciesWithCancellation(
+    dependencies,
+    cancellationSignal,
+  );
+
+  const datasetID = cleanString(run.defaultDatasetId, 160);
+  if (!datasetID) throw new SocialImportError("apify_dataset_missing");
+  const dataset = await fetchJSON(
+    `https://api.apify.com/v2/datasets/${
+      encodeURIComponent(datasetID)
+    }/items?clean=true&format=json`,
+    { headers: providerHeaders(token) },
+    10_000_000,
+    25_000,
+    deadline,
+    cancellableDependencies,
+  );
+  if (!dataset.response.ok) {
+    throw new SocialImportError("apify_dataset_http_error");
+  }
+  return normalizeApifyDataset(dataset.body, source);
+}
+
+export async function acquireInstagramProfileAliases(
+  usernames: string[],
+  token: string,
+  parentDeadline: Deadline,
+  dependencies: RuntimeDependencies,
+  cancellationSignal?: AbortSignal,
+): Promise<InstagramProfileAlias[]> {
+  const requested = normalizedRequestedUsernames(usernames);
+  if (requested.length === 0) return [];
+  assertNotCancelled(cancellationSignal);
+
+  let globalRemaining: number;
+  try {
+    globalRemaining = parentDeadline.remaining();
+  } catch {
+    return [];
+  }
+  if (globalRemaining < minimumProfileEnrichmentGlobalBudgetMilliseconds) {
+    return [];
+  }
+
+  const childDeadline = new Deadline(
+    Math.min(
+      instagramProfileEnrichmentDeadlineMilliseconds,
+      globalRemaining,
+    ),
+    dependencies.now,
+  );
+  const run = await runApifyActor(
+    {
+      actor: "apify/instagram-profile-scraper",
+      input: {
+        usernames: requested,
+        includeAboutSection: false,
+      },
+      timeoutSeconds: 10,
+      maxItems: maximumInstagramProfileAliases,
+      maxTotalChargeUsd: "0.10",
+      startRequestTimeoutMilliseconds: 5_000,
+      pollRequestTimeoutMilliseconds: 4_000,
+      maximumPollAttempts: 16,
+      initialPollDelayMilliseconds: 350,
+      maximumPollDelayMilliseconds: 1_000,
+    },
+    token,
+    childDeadline,
+    dependencies,
+    cancellationSignal,
+  );
+  const datasetID = cleanString(run.defaultDatasetId, 160);
+  if (!datasetID) throw new SocialImportError("apify_dataset_missing");
+
+  const datasetURL = new URL(
+    `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetID)}/items`,
+  );
+  datasetURL.searchParams.set("clean", "true");
+  datasetURL.searchParams.set("format", "json");
+  datasetURL.searchParams.set("fields", "username,fullName");
+  datasetURL.searchParams.set(
+    "limit",
+    String(maximumInstagramProfileAliases),
+  );
+  const dataset = await fetchJSON(
+    datasetURL.toString(),
+    { headers: providerHeaders(token) },
+    256_000,
+    4_000,
+    childDeadline,
+    dependenciesWithCancellation(dependencies, cancellationSignal),
+  );
+  if (!dataset.response.ok) {
+    throw new SocialImportError("apify_dataset_http_error");
+  }
+  return normalizeInstagramProfileAliases(dataset.body, requested);
+}
+
+export function normalizeInstagramProfileAliases(
+  raw: unknown,
+  requestedUsernames: string[],
+): InstagramProfileAlias[] {
+  const requested = new Set(normalizedRequestedUsernames(requestedUsernames));
+  const aliases = new Map<string, InstagramProfileAlias>();
+  const duplicated = new Set<string>();
+  for (
+    const record of recordsFrom(raw).slice(
+      0,
+      2 * maximumInstagramProfileAliases,
+    )
+  ) {
+    const username = normalizedInstagramUsername(record.username);
+    const fullName = cleanString(record.fullName, 160);
+    if (!username || !requested.has(username) || !fullName) continue;
+    if (aliases.has(username)) {
+      aliases.delete(username);
+      duplicated.add(username);
+      continue;
+    }
+    if (duplicated.has(username)) continue;
+    aliases.set(username, { username, fullName });
+  }
+  return [...aliases.values()];
+}
+
+async function runApifyActor(
+  configuration: ApifyRunConfiguration,
+  token: string,
+  deadline: Deadline,
+  dependencies: RuntimeDependencies,
+  cancellationSignal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  assertNotCancelled(cancellationSignal);
+  const actorSlug = configuration.actor.replace("/", "~");
+  const runURL = new URL(
+    `https://api.apify.com/v2/actors/${encodeURIComponent(actorSlug)}/runs`,
+  );
+  runURL.searchParams.set("waitForFinish", "0");
+  runURL.searchParams.set("timeout", String(configuration.timeoutSeconds));
+  runURL.searchParams.set("maxItems", String(configuration.maxItems));
+  runURL.searchParams.set(
+    "maxTotalChargeUsd",
+    configuration.maxTotalChargeUsd,
+  );
   // Do not apply request cancellation to this first call. Once Apify accepts
   // paid work, its response is the only safe way to learn the exact run ID we
   // may need to abort. The call is still bounded by its own short timeout and
-  // the overall deadline.
+  // the supplied deadline.
   const started = await fetchJSON(
-    runURL,
+    runURL.toString(),
     {
       method: "POST",
       headers: providerHeaders(token),
-      body: JSON.stringify(actorRequest.input),
+      body: JSON.stringify(configuration.input),
     },
     1_000_000,
-    15_000,
+    configuration.startRequestTimeoutMilliseconds,
     deadline,
     dependencies,
   );
@@ -105,23 +280,21 @@ export async function acquireWithApify(
     try {
       for (let attempt = 0; !terminalRunStatuses.has(status); attempt += 1) {
         assertNotCancelled(cancellationSignal);
-        if (attempt >= 24) throw new SocialImportError("apify_run_timeout");
+        if (attempt >= configuration.maximumPollAttempts) {
+          throw new SocialImportError("apify_run_timeout");
+        }
         const delay = Math.min(
-          4_000,
-          750 + attempt * 250,
-          deadline.remaining(4_000),
+          configuration.maximumPollDelayMilliseconds,
+          configuration.initialPollDelayMilliseconds + attempt * 250,
+          deadline.remaining(configuration.maximumPollDelayMilliseconds),
         );
-        await cancellableSleep(
-          delay,
-          dependencies,
-          cancellationSignal,
-        );
+        await cancellableSleep(delay, dependencies, cancellationSignal);
         deadline.assertAvailable();
         const polled = await fetchJSON(
           `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runID)}`,
           { headers: providerHeaders(token) },
           1_000_000,
-          15_000,
+          configuration.pollRequestTimeoutMilliseconds,
           deadline,
           cancellableDependencies,
         );
@@ -149,23 +322,7 @@ export async function acquireWithApify(
   if (status !== "SUCCEEDED") {
     throw new SocialImportError("apify_run_failed");
   }
-
-  const datasetID = cleanString(run.defaultDatasetId, 160);
-  if (!datasetID) throw new SocialImportError("apify_dataset_missing");
-  const dataset = await fetchJSON(
-    `https://api.apify.com/v2/datasets/${
-      encodeURIComponent(datasetID)
-    }/items?clean=true&format=json`,
-    { headers: providerHeaders(token) },
-    10_000_000,
-    25_000,
-    deadline,
-    cancellableDependencies,
-  );
-  if (!dataset.response.ok) {
-    throw new SocialImportError("apify_dataset_http_error");
-  }
-  return normalizeApifyDataset(dataset.body, source);
+  return run;
 }
 
 async function abortApifyRun(
@@ -252,6 +409,27 @@ function dependenciesWithCancellation(
       });
     }) as typeof fetch,
   };
+}
+
+function normalizedRequestedUsernames(values: string[]): string[] {
+  const usernames: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const username = normalizedInstagramUsername(value);
+    if (!username || seen.has(username)) continue;
+    seen.add(username);
+    usernames.push(username);
+    if (usernames.length >= maximumInstagramProfileAliases) break;
+  }
+  return usernames;
+}
+
+function normalizedInstagramUsername(value: unknown): string | null {
+  const username = cleanString(value, 64)?.toLocaleLowerCase("en-US") ?? null;
+  return username &&
+      /^[a-z0-9_](?:[a-z0-9_]|\.(?=[a-z0-9_])){0,29}$/u.test(username)
+    ? username
+    : null;
 }
 
 export function normalizeApifyDataset(

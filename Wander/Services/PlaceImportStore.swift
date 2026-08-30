@@ -2093,6 +2093,13 @@ final class PlaceImportStore: ObservableObject {
             // creator-facing names and cities are identical.
             return lhsProviderID == rhsProviderID
         }
+        guard socialSourceItemNamesAreEquivalent(
+            lhsName ?? "",
+            rhsName ?? "",
+            lhs: lhs,
+            rhs: rhs
+        ) else { return false }
+
         let lhsCandidate = lhsSelectedCandidate ?? lhs.candidates.first
         let rhsCandidate = rhsSelectedCandidate ?? rhs.candidates.first
         if let lhsProviderID = lhsCandidate?.sourceProviderPlaceID,
@@ -2101,10 +2108,6 @@ final class PlaceImportStore: ObservableObject {
            lhsProviderID == rhsProviderID {
             return true
         }
-        guard PlaceImportCandidateMatcher.namesAreEquivalent(
-            lhsName ?? "",
-            rhsName ?? ""
-        ) else { return false }
 
         let lhsCountryCodes = socialSourceItemCountryCodes(lhs)
         let rhsCountryCodes = socialSourceItemCountryCodes(rhs)
@@ -2124,6 +2127,51 @@ final class PlaceImportStore: ObservableObject {
                     || rhsArea.contains(lhsArea)
             }
         }
+    }
+
+    private func socialSourceItemNamesAreEquivalent(
+        _ lhsName: String,
+        _ rhsName: String,
+        lhs: PlaceImportItem,
+        rhs: PlaceImportItem
+    ) -> Bool {
+        if PlaceImportCandidateMatcher.namesAreEquivalent(lhsName, rhsName) {
+            return true
+        }
+
+        let lhsWords = normalizedWords(lhsName)
+        let rhsWords = normalizedWords(rhsName)
+        let shorterWords: [String]
+        let longerWords: [String]
+        if lhsWords.count < rhsWords.count {
+            shorterWords = lhsWords
+            longerWords = rhsWords
+        } else if rhsWords.count < lhsWords.count {
+            shorterWords = rhsWords
+            longerWords = lhsWords
+        } else {
+            return false
+        }
+        guard !shorterWords.isEmpty,
+              Array(longerWords.prefix(shorterWords.count)) == shorterWords
+        else { return false }
+
+        let suffixWords = Set(longerWords.dropFirst(shorterWords.count))
+        guard !suffixWords.isEmpty else { return false }
+        return suffixWords.isSubset(of: socialSourceItemAreaWords(lhs))
+            && suffixWords.isSubset(of: socialSourceItemAreaWords(rhs))
+    }
+
+    private func socialSourceItemAreaWords(_ item: PlaceImportItem) -> Set<String> {
+        let candidate = item.selectedCandidate ?? item.candidates.first
+        return Set([
+            item.seed.areaHint,
+            item.displayArea,
+            candidate?.locality,
+            candidate?.region
+        ]
+        .compactMap { $0 }
+        .flatMap(normalizedWords))
     }
 
     private func socialSourceItemCountryCodes(_ item: PlaceImportItem) -> Set<String> {
@@ -2254,6 +2302,13 @@ final class PlaceImportStore: ObservableObject {
     private func normalizedName(_ value: String) -> String {
         value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func normalizedWords(_ value: String) -> [String] {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 
     private static func shouldUpgradeResolution(for item: PlaceImportItem) -> Bool {

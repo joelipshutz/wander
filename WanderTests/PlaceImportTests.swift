@@ -1319,6 +1319,188 @@ final class PlaceImportStoreTests: XCTestCase {
         )
     }
 
+    func testSocialDedupKeepsDistinctAmbiguousVenuesWithTheSameLeadingCandidate() async throws {
+        let sourceURL = "https://www.instagram.com/reel/distinct-overlapping-candidates/"
+        let rorysPlace = placeImportCandidate(
+            name: "Rory's Place",
+            address: "Ojai, CA",
+            locality: "Ojai",
+            latitude: 34.4480,
+            longitude: -119.2429
+        )
+        let rorysOtherPlace = placeImportCandidate(
+            name: "Rory's Other Place",
+            address: "Ojai, CA",
+            locality: "Ojai",
+            latitude: 34.4490,
+            longitude: -119.2440
+        )
+        let candidates = [rorysPlace, rorysOtherPlace]
+        let entries = ["Rory's Place", "Rory's Other Place"].map { name in
+            PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Ojai, CA",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                candidates: candidates,
+                selectedCandidateID: nil,
+                helpMessage: "Choose the matching venue from this post."
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(
+                resolutions: [.expandedResolved(entries, sourceName: nil)]
+            )
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Rory's Place", "Rory's Other Place"])
+        XCTAssertEqual(items.map(\.state), [.ambiguous, .ambiguous])
+        XCTAssertTrue(items.allSatisfy { $0.candidates.map(\.id) == candidates.map(\.id) })
+    }
+
+    func testSocialDedupCollapsesAmbiguousVenueWithGroundedAreaNameSuffix() async throws {
+        let sourceURL = "https://www.instagram.com/reel/grounded-area-name-suffix/"
+        let rorysPlace = placeImportCandidate(
+            name: "Rory's Place",
+            address: "139 E Ojai Ave, Ojai, CA",
+            locality: "Ojai",
+            latitude: 34.4480,
+            longitude: -119.2429
+        )
+        let alternatives = [
+            rorysPlace,
+            placeImportCandidate(
+                name: "Rory's Other Place",
+                address: "250 E Ojai Ave, Ojai, CA",
+                locality: "Ojai",
+                latitude: 34.4490,
+                longitude: -119.2440
+            )
+        ]
+        let entries = ["Rory's Place", "Rory's Place Ojai"].map { name in
+            PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Ojai, CA",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                candidates: alternatives,
+                selectedCandidateID: nil,
+                helpMessage: "Choose the matching venue from this post."
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(
+                resolutions: [.expandedResolved(entries, sourceName: nil)]
+            )
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Rory's Place"])
+        XCTAssertEqual(items.map(\.state), [.ambiguous])
+    }
+
+    func testSocialDedupKeepsAmbiguousAreaSuffixWithoutGroundedAreaEvidence() async throws {
+        let sourceURL = "https://www.instagram.com/reel/ungrounded-area-name-suffix/"
+        let sharedCandidate = placeImportCandidate(
+            name: "Rory's Place",
+            address: "Ventura, CA",
+            locality: "Ventura",
+            latitude: 34.2805,
+            longitude: -119.2945
+        )
+        let entries = ["Rory's Place", "Rory's Place Ojai"].map { name in
+            PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Ventura, CA",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                candidates: [sharedCandidate],
+                selectedCandidateID: nil,
+                helpMessage: "Choose the matching venue from this post."
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(
+                resolutions: [.expandedResolved(entries, sourceName: nil)]
+            )
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Rory's Place", "Rory's Place Ojai"])
+        XCTAssertEqual(items.map(\.state), [.ambiguous, .ambiguous])
+    }
+
+    func testSocialDedupKeepsRorysPlaceAndRorysOtherPlaceWhenBothResolve() async throws {
+        let sourceURL = "https://www.instagram.com/reel/rorys-distinct-resolved-venues/"
+        let rorysPlace = placeImportCandidate(
+            name: "Rory's Place",
+            address: "139 E Ojai Ave, Ojai, CA",
+            locality: "Ojai",
+            latitude: 34.4480,
+            longitude: -119.2429
+        )
+        let rorysOtherPlace = placeImportCandidate(
+            name: "Rory's Other Place",
+            address: "250 E Ojai Ave, Ojai, CA",
+            locality: "Ojai",
+            latitude: 34.4490,
+            longitude: -119.2440
+        )
+        let entries = [rorysPlace, rorysOtherPlace].enumerated().map { index, place in
+            PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: place.name,
+                    areaHint: "Ojai, CA",
+                    sourceURLString: sourceURL,
+                    sourceLine: index + 1
+                ),
+                candidates: [place],
+                selectedCandidateID: place.id,
+                helpMessage: nil
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(
+                resolutions: [.expandedResolved(entries, sourceName: nil)]
+            )
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Rory's Place", "Rory's Other Place"])
+        XCTAssertEqual(items.map(\.state), [.ready, .ready])
+        XCTAssertEqual(
+            items.compactMap { $0.selectedCandidate?.sourceProviderPlaceID },
+            [rorysPlace.sourceProviderPlaceID, rorysOtherPlace.sourceProviderPlaceID]
+        )
+    }
+
     func testCountryOnlyPartialMissDeduplicatesAfterResolvedRetry() async throws {
         let sourceURL = "https://www.instagram.com/p/italy-partial-retry/"
         let unresolvedSeed = PlaceImportSeed(
@@ -5152,6 +5334,27 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         )
 
         XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testSocialCandidateMatcherTreatsVgnAsVeganForGroundedVenue() {
+        let candidate = placeImportCandidate(
+            name: "Hip Vgn",
+            address: "201 N Montgomery St, Ojai, CA",
+            locality: "Ojai",
+            region: "CA",
+            latitude: 34.4490,
+            longitude: -119.2433
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Hip Vegan",
+            areaHint: "Ojai, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+        XCTAssertGreaterThanOrEqual(match.bestScore, 0.9)
     }
 
     func testExplicitStateCodeWinsOverStateNameInsideCity() {

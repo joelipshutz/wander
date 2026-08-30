@@ -1002,6 +1002,28 @@ test("MapKit grounded-area defaults do not change conservative manual selection"
   ]);
 });
 
+test("MapKit social mirror treats Vgn as Vegan for a grounded venue", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "hip-vegan-alias",
+    area: "Ojai, California",
+    candidateSelection: {
+      nameHint: "Hip Vegan",
+      policy: "socialGroundedArea",
+      candidates: [{
+        id: "hip-vgn",
+        name: "Hip Vgn",
+        locality: "Ojai",
+        region: "CA",
+      }],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.didSelectCandidate, true);
+  assert.equal(actual.candidateSelection.selectedCandidateID, "hip-vgn");
+});
+
 test("MapKit ranking mirror applies production category ordering before truncation", {
   skip: process.platform !== "darwin",
 }, async () => {

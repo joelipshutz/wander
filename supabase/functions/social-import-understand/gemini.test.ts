@@ -104,6 +104,128 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
   assertEquals(evidence.allowed_media_evidence_ids, ["media:0"]);
 });
 
+Deno.test("Gemini requests bounded integer indexes and evidence arrays", async () => {
+  const generatedBodies: Record<string, unknown>[] = [];
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    if (!url.includes(":generateContent")) {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    generatedBodies.push(JSON.parse(String(init?.body)));
+    return geminiResponse([]);
+  });
+
+  await understandWithGemini(
+    source,
+    {
+      texts: [{
+        id: "caption:0",
+        modality: "caption",
+        text: "Visit Bart's Books",
+        area: null,
+        mediaID: null,
+      }],
+      media: [],
+    },
+    [],
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  const generatedBody = generatedBodies[0] ?? null;
+  const generationConfig = asRecord(generatedBody?.generationConfig);
+  const responseFormat = asRecord(generationConfig?.responseFormat);
+  const textFormat = asRecord(responseFormat?.text);
+  const schema = asRecord(textFormat?.schema);
+  const rootProperties = asRecord(schema?.properties);
+  const postContext = asRecord(rootProperties?.postContext);
+  const postContextProperties = asRecord(postContext?.properties);
+  assertEquals(postContextProperties?.declaredCount, {
+    type: "integer",
+    minimum: -1,
+    maximum: 150,
+  });
+  assertEquals(postContextProperties?.declaredCountEvidenceIds, {
+    type: "array",
+    maxItems: 8,
+    items: { type: "string" },
+  });
+  assertEquals(postContextProperties?.globalAreaEvidenceIds, {
+    type: "array",
+    maxItems: 8,
+    items: { type: "string" },
+  });
+
+  const candidates = asRecord(rootProperties?.candidates);
+  assertEquals(candidates?.maxItems, 300);
+  const candidateItems = asRecord(candidates?.items);
+  const candidateProperties = asRecord(candidateItems?.properties);
+  assertEquals(candidateProperties?.itemIndex, {
+    type: "integer",
+    minimum: -1,
+    maximum: 299,
+  });
+  assertEquals(candidateProperties?.evidenceIds, {
+    type: "array",
+    minItems: 1,
+    maxItems: 8,
+    items: { type: "string" },
+  });
+});
+
+Deno.test("Gemini receives profile display names only as scoped handle identities", async () => {
+  const generatedBodies: Record<string, unknown>[] = [];
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    if (!url.includes(":generateContent")) {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    generatedBodies.push(JSON.parse(String(init?.body)));
+    return geminiResponse([]);
+  });
+
+  await understandWithGemini(
+    source,
+    {
+      texts: [{
+        id: "caption:0",
+        modality: "caption",
+        text: "Lunch at @hvojai. Photo by @creator.",
+        area: null,
+        mediaID: null,
+      }],
+      media: [],
+    },
+    [],
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+    undefined,
+    [
+      { username: "hvojai", fullName: "Hip Vegan" },
+      { username: "bad handle", fullName: "Rejected" },
+      { username: "creator", fullName: "Caption Creator" },
+      { username: "duplicate", fullName: "First Name" },
+      { username: "duplicate", fullName: "Conflicting Name" },
+    ],
+  );
+
+  const evidence = JSON.parse(
+    String(asRecord(requestParts(generatedBodies[0]).at(-1))?.text),
+  );
+  assertEquals(evidence.caption_handle_identity_aliases, [
+    { source_mention: "@hvojai", profile_name: "Hip Vegan" },
+    { source_mention: "@creator", profile_name: "Caption Creator" },
+  ]);
+  assertEquals(
+    JSON.stringify(evidence).includes("biography"),
+    false,
+  );
+});
+
 Deno.test("Gemini rejects non-Google resumable upload URLs without fetching them", async () => {
   for (
     const value of [

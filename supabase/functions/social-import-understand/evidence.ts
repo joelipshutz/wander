@@ -3,6 +3,7 @@ import type {
   AcquisitionEvidence,
   EvidenceCatalog,
   EvidenceModality,
+  InstagramProfileAlias,
   MediaIngestion,
   ModelCandidate,
   ModelPostContext,
@@ -103,8 +104,12 @@ const declaredCountNames = [
 
 type PreparedHint = {
   hint: PlaceHint;
+  directEvidenceIDs: string[];
   entityType: ModelCandidate["entityType"];
   itemIndex: number;
+  sourceIdentity: string | null;
+  usesProfileAlias: boolean;
+  usesLiteralHandleFallback: boolean;
 };
 
 type GroundedPostContext = {
@@ -155,6 +160,7 @@ export function groundedHints(
   ingestions: MediaIngestion[],
   limit = 150,
   postContext?: ModelPostContext,
+  profileAliases: InstagramProfileAlias[] = [],
 ): {
   hints: PlaceHint[];
   rejectedCount: number;
@@ -170,16 +176,24 @@ export function groundedHints(
     mediaByID,
     ingestionByID,
   );
+  const profileAliasNames = profileAliasNameMap(profileAliases);
   const prepared: PreparedHint[] = [];
   const preparedIndexes = new Map<string, number>();
   let rejectedCount = 0;
   let excludedCount = 0;
   let intentionalExcludedCount = 0;
 
-  for (const candidate of candidates.slice(0, 300)) {
-    if (!acceptedClassifications.has(candidate.classification)) {
+  for (const candidate of candidates.slice(0, 320)) {
+    const sourceMention = cleanString(candidate.sourceMention, 200);
+    const classification = promotedClassification(
+      candidate.classification,
+      sourceMention,
+      candidate.evidenceIds,
+      textByID,
+    );
+    if (!acceptedClassifications.has(classification)) {
       if (
-        intentionalExclusionClassifications.has(candidate.classification)
+        intentionalExclusionClassifications.has(classification)
       ) {
         excludedCount += 1;
         intentionalExcludedCount += 1;
@@ -198,20 +212,27 @@ export function groundedHints(
       ),
     ]
       .slice(0, 8);
+    const groundedName = name && sourceMention
+      ? groundedCandidateName(
+        name,
+        sourceMention,
+        candidate.modality,
+        evidenceIDs,
+        textByID,
+        mediaByID,
+        ingestionByID,
+        context.globalArea,
+        profileAliasNames,
+        !acceptedClassifications.has(candidate.classification),
+      )
+      : null;
     if (
       !name ||
       !acceptedModalities.has(candidate.modality) ||
       !Number.isFinite(candidate.confidence) ||
       candidate.confidence < minimumGroundedConfidence ||
       candidate.confidence > 1 || evidenceIDs.length === 0 ||
-      !isGrounded(
-        name,
-        candidate.modality,
-        evidenceIDs,
-        textByID,
-        mediaByID,
-        ingestionByID,
-      )
+      !groundedName
     ) {
       rejectedCount += 1;
       continue;
@@ -228,9 +249,9 @@ export function groundedHints(
     const usesGlobalArea = !geographyEntityTypes.has(candidate.entityType) &&
       !attestedArea && context.globalArea !== null;
     const hint: PlaceHint = {
-      name,
+      name: groundedName,
       area: attestedArea ?? (usesGlobalArea ? context.globalArea : null),
-      classification: candidate.classification as "destination" | "itinerary",
+      classification: classification as "destination" | "itinerary",
       // The iOS contract treats accessibility text as image-derived text.
       modality: candidate.modality === "alt_text"
         ? "image_text"
@@ -246,12 +267,24 @@ export function groundedHints(
       start_ms: finiteTimestamp(candidate.startMs),
       end_ms: finiteTimestamp(candidate.endMs),
     };
-    const identity = normalizedIdentity(name, hint.area);
+    const identity = normalizedIdentity(groundedName, hint.area);
     const existingIndex = preparedIndexes.get(identity);
     const value: PreparedHint = {
       hint,
+      directEvidenceIDs: evidenceIDs,
       entityType: candidate.entityType,
       itemIndex: candidate.itemIndex,
+      sourceIdentity: textualModality(candidate.modality) && sourceMention
+        ? normalizedSourceIdentity(sourceMention)
+        : null,
+      usesProfileAlias: textualModality(candidate.modality) && sourceMention
+        ? profileAliasSupportsName(
+          name,
+          sourceMention,
+          profileAliasNames,
+        )
+        : false,
+      usesLiteralHandleFallback: groundedName !== name,
     };
     if (existingIndex === undefined) {
       preparedIndexes.set(identity, prepared.length);
@@ -264,7 +297,53 @@ export function groundedHints(
     }
   }
 
-  const withoutGeographyContext = prepared.filter(
+  const sourceIndexes = new Map<string, number[]>();
+  const withoutDuplicateSources: PreparedHint[] = [];
+  for (const candidate of prepared) {
+    const sourceIdentity = candidate.sourceIdentity;
+    if (!sourceIdentity) {
+      withoutDuplicateSources.push(candidate);
+      continue;
+    }
+    const matchingIndexes = sourceIndexes.get(sourceIdentity) ?? [];
+    const existingIndex = matchingIndexes.find((index) =>
+      sourceAreasReferToSamePlace(
+        withoutDuplicateSources[index].hint.area,
+        candidate.hint.area,
+      )
+    );
+    if (existingIndex === undefined) {
+      sourceIndexes.set(sourceIdentity, [
+        ...matchingIndexes,
+        withoutDuplicateSources.length,
+      ]);
+      withoutDuplicateSources.push(candidate);
+      continue;
+    }
+    excludedCount += 1;
+    const existing = withoutDuplicateSources[existingIndex];
+    const existingHasArea = existing.hint.area !== null;
+    const candidateHasArea = candidate.hint.area !== null;
+    const equallySpecificAreas = existingHasArea === candidateHasArea;
+    if (
+      (!existingHasArea && candidateHasArea) ||
+      (equallySpecificAreas &&
+        !existing.usesProfileAlias && candidate.usesProfileAlias) ||
+      (existing.usesProfileAlias === candidate.usesProfileAlias &&
+        equallySpecificAreas &&
+        existing.usesLiteralHandleFallback &&
+        !candidate.usesLiteralHandleFallback) ||
+      (existing.usesProfileAlias === candidate.usesProfileAlias &&
+        equallySpecificAreas &&
+        existing.usesLiteralHandleFallback ===
+          candidate.usesLiteralHandleFallback &&
+        candidate.hint.confidence > existing.hint.confidence)
+    ) {
+      withoutDuplicateSources[existingIndex] = candidate;
+    }
+  }
+
+  const withoutGeographyContext = withoutDuplicateSources.filter(
     (candidate, index, values) => {
       if (context.intent === "geography_list") return true;
       if (
@@ -284,39 +363,37 @@ export function groundedHints(
         otherIndex !== index && other.hint.area !== null &&
         nameIdentity === normalizedValue(other.hint.area)
       );
-      if (!matchesGlobalArea && !matchesAnotherArea) return true;
+      const unknownMatchesPOIArea = candidate.entityType === "unknown" &&
+        values.some((other, otherIndex) =>
+          otherIndex !== index && other.entityType === "poi" &&
+          candidate.itemIndex >= 0 && candidate.itemIndex === other.itemIndex &&
+          other.hint.area !== null &&
+          nameIdentity === normalizedValue(other.hint.area)
+        );
+      const likelyMistypedGeography = context.intent === "place_list" &&
+        context.declaredCount !== null &&
+        values.length > context.declaredCount &&
+        values.some((other, otherIndex) =>
+          otherIndex !== index && other.entityType === "poi" &&
+          other.hint.area !== null &&
+          nameIdentity === normalizedValue(other.hint.area) &&
+          sharesDirectEvidence(candidate, other)
+        );
+      if (
+        !matchesGlobalArea && !matchesAnotherArea && !unknownMatchesPOIArea &&
+        !likelyMistypedGeography
+      ) return true;
       excludedCount += 1;
       return false;
     },
   );
-
-  const onePerItem: PreparedHint[] = [];
-  const itemIndexes = new Map<number, number>();
-  for (const candidate of withoutGeographyContext) {
-    if (candidate.itemIndex < 0) {
-      onePerItem.push(candidate);
-      continue;
-    }
-    const existingIndex = itemIndexes.get(candidate.itemIndex);
-    if (existingIndex === undefined) {
-      itemIndexes.set(candidate.itemIndex, onePerItem.length);
-      onePerItem.push(candidate);
-      continue;
-    }
-    excludedCount += 1;
-    if (
-      candidate.hint.confidence > onePerItem[existingIndex].hint.confidence
-    ) {
-      onePerItem[existingIndex] = candidate;
-    }
-  }
 
   const usesDeclaredCount = context.intent === "place_list" ||
     context.intent === "geography_list";
   const groundedLimit = context.declaredCount === null || !usesDeclaredCount
     ? limit
     : Math.min(limit, context.declaredCount);
-  const ordered = onePerItem
+  const ordered = withoutGeographyContext
     .map((candidate, stableIndex) => ({ candidate, stableIndex }))
     .sort((left, right) => {
       const leftIndex = left.candidate.itemIndex;
@@ -399,9 +476,11 @@ function textAttestsGlobalArea(
   ) return true;
   const primaryArea = globalArea.split(",", 1)[0]?.trim() ?? "";
   const primaryWords = words(primaryArea);
+  const evidenceWords = new Set(words(evidence.text));
+  const compactArea = normalizedValue(globalArea);
+  if (compactArea.length >= 6 && evidenceWords.has(compactArea)) return true;
   if (primaryWords.length < 2) return false;
   const compactPrimary = primaryWords.join("");
-  const evidenceWords = new Set(words(evidence.text));
   if (compactPrimary.length >= 6 && evidenceWords.has(compactPrimary)) {
     return true;
   }
@@ -456,13 +535,7 @@ function textContainsDeclaredCount(value: string, count: number): boolean {
     }
   }
 
-  if (count < 2) return false;
-  const numberedItems = value.split(/\r?\n/u).flatMap((line) => {
-    const match = line.match(/^\s*(\d{1,3})[.)]\s+\S/u);
-    return match ? [Number(match[1])] : [];
-  });
-  return numberedItems.length === count &&
-    numberedItems.every((item, index) => item === index + 1);
+  return false;
 }
 
 export function deterministicFallbackHints(
@@ -561,29 +634,373 @@ function textAttestedArea(
     : null;
 }
 
-function isGrounded(
+function groundedCandidateName(
   name: string,
+  sourceMention: string,
   modality: EvidenceModality,
   evidenceIDs: string[],
   textByID: Map<string, EvidenceCatalog["texts"][number]>,
   mediaByID: Map<string, EvidenceCatalog["media"][number]>,
   ingestionByID: Map<string, MediaIngestion>,
-): boolean {
+  globalArea: string | null,
+  profileAliasNames: Map<string, string>,
+  requiresCaptionVenueGrammar: boolean,
+): string | null {
   if (["caption", "tagged_location", "alt_text"].includes(modality)) {
-    return evidenceIDs.some((id) => {
+    const handle = exactHandle(sourceMention);
+    const hasExactEvidence = evidenceIDs.some((id) => {
       const evidence = textByID.get(id);
-      return evidence?.modality === modality &&
-        containsTokenSequence(evidence.text, name);
+      if (evidence?.modality !== modality) return false;
+      if (handle) {
+        return containsExactHandle(evidence.text, handle) &&
+          (modality !== "caption" ||
+            (requiresCaptionVenueGrammar
+              ? captionRecommendsHandle(evidence.text, handle)
+              : captionAllowsModelAcceptedHandle(evidence.text, handle)));
+      }
+      return containsTokenSequence(evidence.text, sourceMention);
     });
+    if (!hasExactEvidence) return null;
+    if (
+      sourceMentionSupportsName(name, sourceMention, globalArea) ||
+      profileAliasSupportsName(name, sourceMention, profileAliasNames)
+    ) return name;
+    return handle;
   }
 
   return evidenceIDs.some((id) => {
-    const media = mediaByID.get(id);
-    const ingestion = ingestionByID.get(id);
-    if (!media || ingestion?.status !== "ok") return false;
-    if (modality === "image_text") return media.kind === "image";
-    return media.kind === "video";
+      const media = mediaByID.get(id);
+      const ingestion = ingestionByID.get(id);
+      if (!media || ingestion?.status !== "ok") return false;
+      if (modality === "image_text") return media.kind === "image";
+      return media.kind === "video";
+    })
+    ? name
+    : null;
+}
+
+function promotedClassification(
+  classification: ModelCandidate["classification"],
+  sourceMention: string | null,
+  evidenceIDs: string[],
+  textByID: Map<string, EvidenceCatalog["texts"][number]>,
+): ModelCandidate["classification"] {
+  if (acceptedClassifications.has(classification) || !sourceMention) {
+    return classification;
+  }
+  const handle = exactHandle(sourceMention);
+  if (!handle) return classification;
+  const isRecommended = evidenceIDs.some((id) => {
+    const evidence = textByID.get(id);
+    return evidence?.modality === "caption" &&
+      captionRecommendsHandle(evidence.text, handle);
   });
+  return isRecommended ? "itinerary" : classification;
+}
+
+export function captionRecommendsHandle(
+  caption: string,
+  handle: string,
+): boolean {
+  const lines = caption.split(/\r?\n/u);
+  return lines.some((line, lineIndex) => {
+    return exactHandleIndexes(line, handle).some((index) => {
+      const beforeLine = line.slice(0, index).toLocaleLowerCase("en-US");
+      const boundary = captionClauseBoundary(beforeLine);
+      const clause = beforeLine.slice(boundary + 1);
+      const afterHandle = line.slice(index + handle.length + 1);
+      if (captionDigitalCallToActionAfterHandle(afterHandle)) return false;
+      const hasDirectVenueMarker = captionVenueMarkerAtEnd(clause);
+      const hasPhysicalFromMarker = captionPhysicalFromMarkerAtEnd(clause);
+      if (
+        !hasPhysicalFromMarker && captionAttributionBeforeHandle(clause)
+      ) return false;
+      if (hasDirectVenueMarker) return true;
+      if (captionLineBelongsToVenueSection(lines, lineIndex)) return true;
+      if (!/(?:,|\/|\bor\b|\band\b)\s*$/u.test(clause)) return false;
+
+      const markerMatches = captionVenueMarkerMatches(clause);
+      const marker = markerMatches.at(-1);
+      if (!marker || marker.index === undefined) return false;
+      const afterMarker = clause.slice(marker.index + marker[0].length);
+      return afterMarker.trim().length > 0 &&
+        !captionAttributionSinceVenueMarker(afterMarker);
+    });
+  });
+}
+
+function captionAllowsModelAcceptedHandle(
+  caption: string,
+  handle: string,
+): boolean {
+  return caption.split(/\r?\n/u).some((line) =>
+    exactHandleIndexes(line, handle).some((index) => {
+      const beforeLine = line.slice(0, index).toLocaleLowerCase("en-US");
+      const boundary = captionClauseBoundary(beforeLine);
+      const clause = beforeLine.slice(boundary + 1);
+      const afterHandle = line.slice(index + handle.length + 1);
+      if (captionDigitalCallToActionAfterHandle(afterHandle)) return false;
+      return captionPhysicalFromMarkerAtEnd(clause) ||
+        !captionAttributionBeforeHandle(clause);
+    })
+  );
+}
+
+function captionClauseBoundary(value: string): number {
+  const withoutHandlePeriods = value.replace(
+    /@[A-Za-z0-9_](?:[A-Za-z0-9_]|\.(?=[A-Za-z0-9_])){0,29}/gu,
+    (handle) => handle.replaceAll(".", "_"),
+  );
+  return Math.max(
+    withoutHandlePeriods.lastIndexOf("."),
+    withoutHandlePeriods.lastIndexOf("!"),
+    withoutHandlePeriods.lastIndexOf("?"),
+    withoutHandlePeriods.lastIndexOf(";"),
+  );
+}
+
+export function recommendedCaptionHandles(
+  caption: string,
+  limit = 20,
+): string[] {
+  return recommendedCaptionHandleMentions(caption, limit).map((value) =>
+    value.username
+  );
+}
+
+export function profileAliasCandidates(
+  aliases: InstagramProfileAlias[],
+  catalog: EvidenceCatalog,
+): ModelCandidate[] {
+  const caption = catalog.texts.find((item) => item.modality === "caption");
+  if (!caption) return [];
+  const aliasNames = profileAliasNameMap(aliases);
+  return recommendedCaptionHandleMentions(caption.text, 20).flatMap(
+    (mention, itemIndex) => {
+      const fullName = aliasNames.get(mention.username);
+      if (!fullName) return [];
+      return [{
+        name: fullName,
+        sourceMention: mention.sourceMention,
+        area: "",
+        entityType: "poi" as const,
+        itemIndex,
+        // Synthetic aliases must independently pass deterministic venue
+        // grammar. Model-accepted destinations use the less restrictive
+        // exact-mention grounding path above, while explicit credits and
+        // digital calls to action remain blocked in both paths.
+        classification: "attribution" as const,
+        modality: "caption" as const,
+        evidenceIds: [caption.id],
+        confidence: 0.96,
+        startMs: -1,
+        endMs: -1,
+      }];
+    },
+  );
+}
+
+function recommendedCaptionHandleMentions(
+  caption: string,
+  limit: number,
+): Array<{ username: string; sourceMention: string }> {
+  const mentions: Array<{ username: string; sourceMention: string }> = [];
+  const seen = new Set<string>();
+  const expression =
+    /(^|[^A-Za-z0-9._@])@([A-Za-z0-9_](?:[A-Za-z0-9_]|\.(?=[A-Za-z0-9_])){0,29})(?![A-Za-z0-9_]|\.[A-Za-z0-9_])/gu;
+  for (const match of caption.matchAll(expression)) {
+    const sourceMention = `@${match[2]}`;
+    const username = match[2].toLocaleLowerCase("en-US");
+    if (
+      seen.has(username) ||
+      !captionRecommendsHandle(caption, match[2])
+    ) continue;
+    seen.add(username);
+    mentions.push({ username, sourceMention });
+    if (mentions.length >= Math.max(0, Math.min(20, limit))) break;
+  }
+  return mentions;
+}
+
+function profileAliasNameMap(
+  aliases: InstagramProfileAlias[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  const duplicated = new Set<string>();
+  for (const alias of aliases.slice(0, 20)) {
+    const username = cleanString(alias.username, 64)?.toLocaleLowerCase(
+      "en-US",
+    );
+    const fullName = cleanString(alias.fullName, 160);
+    if (
+      !username ||
+      !/^[a-z0-9_](?:[a-z0-9_]|\.(?=[a-z0-9_])){0,29}$/u.test(username) ||
+      !fullName ||
+      duplicated.has(username)
+    ) continue;
+    if (names.has(username)) {
+      names.delete(username);
+      duplicated.add(username);
+      continue;
+    }
+    names.set(username, fullName);
+  }
+  return names;
+}
+
+function profileAliasSupportsName(
+  name: string,
+  sourceMention: string,
+  profileAliasNames: Map<string, string>,
+): boolean {
+  const handle = exactHandle(sourceMention)?.toLocaleLowerCase("en-US");
+  const alias = handle ? profileAliasNames.get(handle) : null;
+  return alias !== null && alias !== undefined &&
+    normalizedValue(name) === normalizedValue(alias);
+}
+
+function captionAttributionBeforeHandle(value: string): boolean {
+  return /(?:\b(?:photo|video|filmed|shot|created|posted|hosted|guided)\s+by|\bcredit\s+goes\s+to|\b(?:huge\s+)?shout[\s-]*out\s+(?:to|for)|\bthanks(?:\s+so\s+much)?\s+(?:to|for)|\b(?:credit|credits|thank\s+you|courtesy)\s+(?:to|by|of)|(?:\b(?:photo(?:\s+credit)?|video|credit|credits)\b|[📷📸🎥])\s*[:\-–—]?|\b(?:by|with|via|from|follow|guide|creator|photographer|videographer|host|sponsor(?:ed)?)\b(?:\s+(?:to|by|of|local|our|the|travel|food))*)[\s,:-]*$/u
+    .test(value);
+}
+
+function captionAttributionSinceVenueMarker(value: string): boolean {
+  return /\b(?:photo|video|filmed|shot|created|posted|hosted|guided|credit|credits|thanks|thank\s+you|courtesy|with|via|follow|guide|creator|photographer|videographer|host|sponsor(?:ed)?)\b/u
+    .test(value);
+}
+
+function captionVenueMarkerAtEnd(value: string): boolean {
+  return /\b(?:at|to|visit|explore|try|book|stay(?:\s+at)?|stop(?:\s+at)?|check\s+in(?:\s+at)?|(?:breakfast|lunch|dinner)(?:\s+at)?\s*[:\-]?|(?:breakfast|brunch|lunch|dinner|coffee|tea|food|drinks?|cocktails?|desserts?|pastries|takeout|orders?)\s+from|(?:attractions?|bars?|beaches|caf(?:e|é)s?|coffee\s+shops?|destinations?|eats|food|hikes?|hotels?|museums?|parks?|places?|restaurants?|shops?|spots?|stays?|stops?|stores?|things\s+to\s+do|trails?|venues?|where\s+to\s+(?:eat|drink|stay|shop))\s*[:\-–—]?)\s*$/u
+    .test(value);
+}
+
+function captionPhysicalFromMarkerAtEnd(value: string): boolean {
+  return /\b(?:breakfast|brunch|lunch|dinner|coffee|tea|food|drinks?|cocktails?|desserts?|pastries|takeout|orders?)\s+from\s*$/u
+    .test(value);
+}
+
+function captionVenueMarkerMatches(value: string): RegExpMatchArray[] {
+  return [
+    ...value.matchAll(
+      /\b(?:at|to|visit|explore|try|book|stay(?:\s+at)?|stop(?:\s+at)?|check\s+in(?:\s+at)?|(?:breakfast|lunch|dinner)(?:\s+at)?\s*[:\-]?|(?:breakfast|brunch|lunch|dinner|coffee|tea|food|drinks?|cocktails?|desserts?|pastries|takeout|orders?)\s+from|(?:attractions?|bars?|beaches|caf(?:e|é)s?|coffee\s+shops?|destinations?|eats|food|hikes?|hotels?|museums?|parks?|places?|restaurants?|shops?|spots?|stays?|stops?|stores?|things\s+to\s+do|trails?|venues?|where\s+to\s+(?:eat|drink|stay|shop))\s*[:\-–—]?)\s+/gu,
+    ),
+  ];
+}
+
+function captionLineBelongsToVenueSection(
+  lines: string[],
+  lineIndex: number,
+): boolean {
+  if (!captionHandleListLine(lines[lineIndex] ?? "")) return false;
+  for (let index = lineIndex - 1; index >= 0; index -= 1) {
+    const prior = lines[index]?.trim() ?? "";
+    if (!prior) continue;
+    if (captionVenueHeadingLine(prior)) return true;
+    if (captionHandleListLine(prior)) continue;
+    return false;
+  }
+  return false;
+}
+
+function captionHandleListLine(value: string): boolean {
+  if (!/@[A-Za-z0-9_]/u.test(value)) return false;
+  const withoutNumber = value.replace(/^\s*\d{1,3}[.)]\s*/u, "");
+  const withoutHandles = withoutNumber.replace(
+    /@[A-Za-z0-9_](?:[A-Za-z0-9_]|\.(?=[A-Za-z0-9_])){0,29}/gu,
+    "",
+  );
+  const withoutSeparators = withoutHandles.replace(/\b(?:or|and)\b/giu, "");
+  return !/[\p{L}\p{N}]/u.test(withoutSeparators);
+}
+
+function captionVenueHeadingLine(value: string): boolean {
+  return /^[^\p{L}\p{N}@]*(?:(?:best|favorite|favourite|my|our|top)\s+)?(?:attractions?|bars?|beaches|caf(?:e|é)s?|coffee\s+shops?|destinations?|eats|food|hikes?|hotels?|museums?|parks?|places?|restaurants?|shops?|spots?|stays?|stops?|stores?|things\s+to\s+do|trails?|venues?|where\s+to\s+(?:eat|drink|stay|shop))\s*[:\-–—]?\s*$/iu
+    .test(value);
+}
+
+function captionDigitalCallToActionAfterHandle(value: string): boolean {
+  return /^\s*(?:[,;:!\-–—]\s*)?(?:for(?:\s+more)?(?:\s+[\p{L}\p{N}&'’\-]+){0,4}\s+(?:content|details?|guides?|ideas?|info(?:rmation)?|inspiration|inspo|recommendations?|suggestions?|tips?|updates?)\b|for\s+more\s*[.!?]?(?:\s|$)|to\s+(?:browse|discover|find|get|learn|read|see|watch)(?:\s+more)?\b|(?:check|click|see|tap)\s+(?:the\s+)?(?:bio|link|page|profile)\b|(?:on|via)\s+(?:instagram|tiktok|youtube)\b|(?:['’]s\s+)?(?:account|bio|channel|page|profile)\b)/iu
+    .test(value);
+}
+
+function sourceMentionSupportsName(
+  name: string,
+  sourceMention: string,
+  globalArea: string | null,
+): boolean {
+  const handle = exactHandle(sourceMention);
+  if (!handle) return containsTokenSequence(sourceMention, name);
+  const canonical = normalizedValue(name);
+  if (!canonical) return false;
+  let core = normalizedValue(handle);
+  const suffixes = new Set(["official"]);
+  for (const word of words(globalArea ?? "")) {
+    if (word.length >= 3) suffixes.add(word);
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const suffix of suffixes) {
+      if (core.length >= suffix.length + 2 && core.endsWith(suffix)) {
+        core = core.slice(0, -suffix.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (core === canonical) return true;
+  return core.startsWith("its") && core.slice(3) === canonical;
+}
+
+function exactHandle(value: string): string | null {
+  const match = value.trim().match(
+    /^@([A-Za-z0-9_](?:[A-Za-z0-9_]|\.(?=[A-Za-z0-9_])){0,29})$/u,
+  );
+  return match?.[1] ?? null;
+}
+
+function exactHandleIndexes(value: string, handle: string): number[] {
+  const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expression = new RegExp(
+    `(^|[^A-Za-z0-9._@])@${escaped}(?![A-Za-z0-9_]|\\.[A-Za-z0-9_])`,
+    "giu",
+  );
+  const indexes: number[] = [];
+  for (const match of value.matchAll(expression)) {
+    if (match.index === undefined) continue;
+    indexes.push(match.index + match[1].length);
+  }
+  return indexes;
+}
+
+function containsExactHandle(value: string, handle: string): boolean {
+  return exactHandleIndexes(value, handle).length > 0;
+}
+
+function normalizedSourceIdentity(sourceMention: string): string | null {
+  const handle = exactHandle(sourceMention);
+  if (handle) return `handle:${handle.toLocaleLowerCase("en-US")}`;
+  const value = normalizedValue(sourceMention);
+  return value ? `text:${value}` : null;
+}
+
+function sourceAreasReferToSamePlace(
+  left: string | null,
+  right: string | null,
+): boolean {
+  if (!left || !right) return true;
+  if (normalizedValue(left) === normalizedValue(right)) return true;
+  const leftPrimary = normalizedValue(left.split(",", 1)[0] ?? "");
+  const rightPrimary = normalizedValue(right.split(",", 1)[0] ?? "");
+  return leftPrimary.length > 0 && leftPrimary === rightPrimary;
+}
+
+function sharesDirectEvidence(
+  left: PreparedHint,
+  right: PreparedHint,
+): boolean {
+  const leftEvidence = new Set(left.directEvidenceIDs);
+  return right.directEvidenceIDs.some((id) => leftEvidence.has(id));
 }
 
 function parseNameAndArea(
@@ -610,7 +1027,10 @@ function containsTokenSequence(haystack: string, needle: string): boolean {
 }
 
 function words(value: string): string[] {
-  return value.toLocaleLowerCase("en-US").match(/[\p{L}\p{N}]+/gu) ?? [];
+  return value.normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("en-US")
+    .match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
 function normalizedIdentity(name: string, area: string | null): string {

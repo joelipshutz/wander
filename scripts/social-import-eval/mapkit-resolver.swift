@@ -751,7 +751,13 @@ private enum Resolver {
             .lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
-            .map { $0 == "merc" ? "mercantile" : $0 }
+            .map { word in
+                switch word {
+                case "merc": "mercantile"
+                case "vgn": "vegan"
+                default: word
+                }
+            }
     }
 
     private static func canonicalKey(_ value: String) -> String {
@@ -1285,7 +1291,7 @@ private struct Main {
                 results.append(await Resolver.resolve(hint))
             }
             let response = BatchResponse(
-                resolver: "mapkit-production-query-ranking-and-threshold-mirror-v6",
+                resolver: "mapkit-production-query-ranking-and-threshold-mirror-v7",
                 results: results,
                 geographyProbes: request.geographyProbes?.map(Resolver.inspectGeography),
                 rankingProbes: request.rankingProbes?.map(Resolver.inspectRanking),
@@ -1296,7 +1302,7 @@ private struct Main {
             FileHandle.standardOutput.write(Data([0x0A]))
         } catch {
             let response = [
-                "resolver": "mapkit-production-query-ranking-and-threshold-mirror-v6",
+                "resolver": "mapkit-production-query-ranking-and-threshold-mirror-v7",
                 "fatalError": error.localizedDescription
             ]
             let encoded = try? JSONSerialization.data(withJSONObject: response)

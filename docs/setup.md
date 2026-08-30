@@ -367,6 +367,19 @@ evidence through Apify, sends only that evidence and bounded media to Gemini,
 and returns grounded place-name hints. MapKit remains the authoritative POI
 resolver in the app; provider output is never saved directly as a place.
 
+For Instagram captions, the function can also batch up to 20 public account
+handles through Apify's Instagram Profile Scraper while media is being
+ingested. It retains only an exact username-to-display-name alias, discards the
+rest of the profile payload, and uses that alias only when the caption's local
+grammar independently recommends the handle as a destination. This lets a
+compact handle such as `@hvojai` resolve to its public venue name without
+trusting an LLM acronym guess. The lookup has its own short deadline and charge
+cap, is skipped when the request has insufficient time remaining, and fails
+open to the ordinary Gemini path. The main social-import feature flag remains
+the operational kill switch. On Apify's free plan as of 2026-08-30, the profile
+actor is $2.60 per 1,000 profiles, so the bounded 20-handle maximum is about
+$0.052 before any plan discount.
+
 Keep both paid-provider credentials server-side. Never add either value to an
 xcconfig, the app bundle, logs, fixtures, PR text, or tracked evaluator runs:
 

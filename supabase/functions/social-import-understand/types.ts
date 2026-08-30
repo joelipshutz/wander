@@ -51,6 +51,11 @@ export type EvidenceCatalog = {
   media: AcquiredMedia[];
 };
 
+export type InstagramProfileAlias = {
+  username: string;
+  fullName: string;
+};
+
 export type MediaIngestion = {
   mediaID: string;
   kind: "image" | "video";
@@ -63,6 +68,7 @@ export type MediaIngestion = {
 
 export type ModelCandidate = {
   name: string;
+  sourceMention: string;
   area: string;
   entityType: "poi" | "locality" | "region" | "country" | "route" | "unknown";
   itemIndex: number;

@@ -3,6 +3,8 @@ import {
   evidenceCatalog,
   groundedHints,
   minimumGroundedConfidence,
+  profileAliasCandidates,
+  recommendedCaptionHandles,
 } from "./evidence.ts";
 import { parseGeminiCandidates, parseGeminiUnderstanding } from "./gemini.ts";
 import {
@@ -196,6 +198,11 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
           .candidates.items.required.includes("itemIndex"),
         true,
       );
+      assertEquals(
+        requestBody.generationConfig.responseFormat.text.schema.properties
+          .candidates.items.required.includes("sourceMention"),
+        true,
+      );
       return geminiResponse([candidate({
         name: "Carbon Beach Club",
         area: "Malibu",
@@ -252,6 +259,152 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
   });
   assertEquals(beginCount, 1);
   assertEquals(finishCount, 1);
+  assertSafeResponse(payload, caption);
+});
+
+Deno.test("handler enriches only grammar-approved handles and synthesizes an omitted venue", async () => {
+  const caption =
+    "An Ojai lunch at @hvojai. Photo by @creator. Thanks to local guide @travelpal.";
+  const profileStarts: Array<Record<string, unknown>> = [];
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "post-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "post-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/post-dataset/items")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        description: caption,
+        images: [mediaURL],
+      }]);
+    }
+    if (
+      url.includes("/v2/actors/apify~instagram-profile-scraper/runs")
+    ) {
+      profileStarts.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        data: {
+          id: "profile-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "profile-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/profile-dataset/items")) {
+      const datasetURL = new URL(url);
+      assertEquals(
+        datasetURL.searchParams.get("fields"),
+        "username,fullName",
+      );
+      return Response.json([{
+        username: "hvojai",
+        fullName: "Hip Vegan",
+        biography: "must not reach Gemini or the response",
+      }]);
+    }
+    if (url === mediaURL) {
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      const body = JSON.parse(String(init?.body));
+      const parts = body.contents[0].parts as Array<Record<string, unknown>>;
+      const task = JSON.parse(String(parts.at(-1)?.text));
+      assertEquals(task.caption_handle_identity_aliases, [{
+        source_mention: "@hvojai",
+        profile_name: "Hip Vegan",
+      }]);
+      assertEquals(JSON.stringify(task).includes("biography"), false);
+      return geminiResponse([]);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+
+  const response = await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  );
+  const payload = await response.json();
+
+  assertEquals(profileStarts, [{
+    usernames: ["hvojai"],
+    includeAboutSection: false,
+  }]);
+  assertEquals(payload.outcome, "ok");
+  assertEquals(payload.hints.map((hint: { name: string }) => hint.name), [
+    "Hip Vegan",
+  ]);
+  assertEquals(JSON.stringify(payload).includes("biography"), false);
+});
+
+Deno.test("profile enrichment failure is nonfatal to media and Gemini extraction", async () => {
+  const caption = "An Ojai lunch at @hvojai.";
+  let geminiCalls = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "post-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "post-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/post-dataset/items")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        description: caption,
+        images: [mediaURL],
+      }]);
+    }
+    if (
+      url.includes("/v2/actors/apify~instagram-profile-scraper/runs")
+    ) {
+      return Response.json({ error: "private provider detail" }, {
+        status: 503,
+      });
+    }
+    if (url === mediaURL) {
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      geminiCalls += 1;
+      return geminiResponse([candidate({
+        name: "hvojai",
+        sourceMention: "@hvojai",
+        area: "",
+        classification: "itinerary",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      })]);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+
+  const response = await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  );
+  const payload = await response.json();
+
+  assertEquals(payload.outcome, "ok");
+  assertEquals(payload.failure_category, null);
+  assertEquals(payload.hints.map((hint: { name: string }) => hint.name), [
+    "hvojai",
+  ]);
+  assertEquals(geminiCalls, 1);
   assertSafeResponse(payload, caption);
 });
 
@@ -765,7 +918,7 @@ Deno.test("grounding accepts cited source evidence and rejects distractors or un
   assertEquals(strippedAreaDedup.hints[0].area, null);
 });
 
-Deno.test("post context keeps one POI per item, demotes city context, and caps to the declared count", () => {
+Deno.test("post context demotes city context and caps to the declared count", () => {
   const evidence: AcquisitionEvidence = {
     title: null,
     caption: null,
@@ -827,6 +980,692 @@ Deno.test("post context keeps one POI per item, demotes city context, and caps t
   assertEquals(result.hints[6].area, "Westlake Village");
   assertEquals(result.rejectedCount, 0);
   assertEquals(result.excludedCount, 8);
+});
+
+Deno.test("an unknown city duplicate is collapsed into its POI area", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: [{
+      id: "media:0",
+      index: 0,
+      kind: "image",
+      url: mediaURL,
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const result = groundedHints(
+    [
+      candidate({
+        name: "The Stonehaus",
+        area: "Westlake Village",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Westlake Village",
+        area: "California",
+        entityType: "unknown",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 0,
+      }),
+    ],
+    evidenceCatalog(evidence),
+    [successfulMediaIngestion("image")],
+    150,
+    postContext({ intent: "place_list" }),
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), ["The Stonehaus"]);
+  assertEquals(result.hints[0].area, "Westlake Village");
+  assertEquals(result.excludedCount, 1);
+});
+
+Deno.test("a city mistyped as a POI cannot displace later places at the declared count", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: [{
+      id: "media:0",
+      index: 0,
+      kind: "image",
+      url: mediaURL,
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Westlake Village",
+        area: "California",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "The Stonehaus",
+        area: "Westlake Village",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 1,
+      }),
+      candidate({
+        name: "Malibu Pier",
+        area: "Malibu",
+        entityType: "poi",
+        modality: "image_text",
+        evidenceIds: ["media:0"],
+        itemIndex: 2,
+      }),
+    ],
+    evidenceCatalog(evidence),
+    [successfulMediaIngestion("image")],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["media:0"],
+    }),
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "The Stonehaus",
+    "Malibu Pier",
+  ]);
+  assertEquals(result.excludedCount, 1);
+});
+
+Deno.test("a single itinerary step keeps every explicitly offered destination", () => {
+  const evidence: AcquisitionEvidence = {
+    title: null,
+    caption:
+      "Drive straight to Rory’s Other Place or Highly Likely or Farmer and the Cook in Ojai.",
+    taggedLocations: [],
+    media: [],
+  };
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Rory’s Other Place",
+        area: "Ojai",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Highly Likely",
+        area: "Ojai",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Farmer and the Cook",
+        area: "Ojai",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Ojai",
+        area: "California",
+        entityType: "locality",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+    ],
+    evidenceCatalog(evidence),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      globalArea: "Ojai",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "Rory’s Other Place",
+    "Highly Likely",
+    "Farmer and the Cook",
+  ]);
+});
+
+Deno.test("Ojai itinerary preserves canonical venue-handle names as distinct destinations", () => {
+  const caption = [
+    "A perfect 24 hours in Ojai!",
+    "⭑ drive in in the morning straight to Rory’s Other Place or @itshighlylikely for caffeine and pastries OR breakfast at @farmerandthecookojai",
+    "⭑ walk around the main street (stop at @bartsbooksojai), grab lunch at @thedutchessojai, @ojairotie or @hvojai",
+    "⭑ check in at @caprihotel_ojai_official",
+    "⭑ explore Ventura Riverhead Trailhead/Wheeler Gorge Nature Trail, swim in a swimming hole",
+    "⭑ early dinner at @rorys_place_ojai so you can catch sunset at @meditationmount!!!",
+    "#ojai #venturacounty #ojaicalifornia",
+  ].join("\n");
+  const expected = [
+    "Rory’s Other Place",
+    "Highly Likely",
+    "Farmer and the Cook",
+    "Bart’s Books",
+    "The Dutchess",
+    "Ojai Rôtie",
+    "Hip Vegan",
+    "Capri Hotel",
+    "Ventura Riverhead Trailhead",
+    "Wheeler Gorge Nature Trail",
+    "Rory’s Place",
+    "Meditation Mount",
+  ];
+  const sourceMentions = [
+    "Rory’s Other Place",
+    "@itshighlylikely",
+    "@farmerandthecookojai",
+    "@bartsbooksojai",
+    "@thedutchessojai",
+    "@ojairotie",
+    "@hvojai",
+    "@caprihotel_ojai_official",
+    "Ventura Riverhead Trailhead",
+    "Wheeler Gorge Nature Trail",
+    "@rorys_place_ojai",
+    "@meditationmount",
+  ];
+  const modeledCandidates = expected.map((name, itemIndex) =>
+    candidate({
+      name,
+      sourceMention: sourceMentions[itemIndex],
+      area: "",
+      classification: sourceMentions[itemIndex].startsWith("@")
+        ? "attribution"
+        : "itinerary",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex,
+    })
+  );
+  modeledCandidates.push(candidate({
+    name: "Unrelated Invented Cafe",
+    sourceMention: "@bartsbooksojai",
+    area: "",
+    classification: "attribution",
+    modality: "caption",
+    evidenceIds: ["caption:0"],
+    itemIndex: 12,
+  }));
+  const profileAliases = [
+    { username: "itshighlylikely", fullName: "Highly Likely" },
+    { username: "farmerandthecookojai", fullName: "Farmer and the Cook" },
+    { username: "bartsbooksojai", fullName: "Bart’s Books" },
+    { username: "thedutchessojai", fullName: "The Dutchess" },
+    { username: "ojairotie", fullName: "Ojai Rôtie" },
+    { username: "hvojai", fullName: "Hip Vegan" },
+    { username: "caprihotel_ojai_official", fullName: "Capri Hotel" },
+    { username: "rorys_place_ojai", fullName: "Rory’s Place" },
+    { username: "meditationmount", fullName: "Meditation Mount" },
+  ];
+  const result = groundedHints(
+    modeledCandidates,
+    evidenceCatalog({
+      title: null,
+      caption,
+      taggedLocations: [],
+      media: [],
+    }),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      declaredCount: 24,
+      declaredCountEvidenceIds: ["caption:0"],
+      globalArea: "Ojai, California",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+    profileAliases,
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), expected);
+  assertEquals(
+    result.hints.map((hint) => hint.area),
+    expected.map(() => "Ojai, California"),
+  );
+  assertEquals(result.rejectedCount, 0);
+  assertEquals(result.excludedCount, 1);
+});
+
+Deno.test("caption creator handles fail venue grammar even when labeled destinations", () => {
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Travel Pal",
+        sourceMention: "@travelpal",
+        area: "",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Creator",
+        sourceMention: "@creator",
+        area: "",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+    ],
+    evidenceCatalog({
+      title: null,
+      caption:
+        "Visit Hotel Bel-Air. Thanks to our local guide @travelpal. Photo by @creator.",
+      taggedLocations: [],
+      media: [],
+    }),
+    [],
+    150,
+    postContext({ intent: "place_list" }),
+  );
+
+  assertEquals(result.hints, []);
+  assertEquals(result.rejectedCount, 2);
+});
+
+Deno.test("profile aliases canonically synthesize recommended handles but never creator credits", () => {
+  const caption =
+    "An Ojai lunch at @hvojai or @bartsbooksojai. Photo by @creator. Thanks to local guide @travelpal. #ojaicalifornia";
+  const catalog = evidenceCatalog({
+    title: null,
+    caption,
+    taggedLocations: [],
+    media: [],
+  });
+  const aliases = [
+    { username: "hvojai", fullName: "Hip Vegan" },
+    { username: "bartsbooksojai", fullName: "Bart’s Books" },
+    { username: "creator", fullName: "Caption Creator" },
+    { username: "travelpal", fullName: "Travel Pal" },
+  ];
+
+  assertEquals(recommendedCaptionHandles(caption), [
+    "hvojai",
+    "bartsbooksojai",
+  ]);
+  const synthetic = profileAliasCandidates(aliases, catalog);
+  assertEquals(synthetic.map((candidate) => candidate.name), [
+    "Hip Vegan",
+    "Bart’s Books",
+  ]);
+  const result = groundedHints(
+    [
+      candidate({
+        name: "hvojai",
+        sourceMention: "@hvojai",
+        area: "",
+        classification: "itinerary",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        confidence: 0.99,
+        itemIndex: 0,
+      }),
+      ...synthetic,
+    ],
+    catalog,
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      globalArea: "Ojai, California",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+    aliases,
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "Hip Vegan",
+    "Bart’s Books",
+  ]);
+  assertEquals(result.hints.map((hint) => hint.area), [
+    "Ojai, California",
+    "Ojai, California",
+  ]);
+});
+
+Deno.test("caption handle grammar supports meal lists and dotted alternatives without credit false positives", () => {
+  const aliases = [
+    { username: "hvojai", fullName: "Hip Vegan" },
+    { username: "bartsbooksojai", fullName: "Bart’s Books" },
+    { username: "foo.bar", fullName: "Foo Bar Cafe" },
+    { username: "baz", fullName: "Baz Bakery" },
+    { username: "creator", fullName: "Caption Creator" },
+  ];
+  const mealCaption = "Lunch: @hvojai or @bartsbooksojai";
+  assertEquals(recommendedCaptionHandles(mealCaption), [
+    "hvojai",
+    "bartsbooksojai",
+  ]);
+  assertEquals(
+    profileAliasCandidates(
+      aliases,
+      evidenceCatalog({
+        title: null,
+        caption: mealCaption,
+        taggedLocations: [],
+        media: [],
+      }),
+    ).map((candidate) => candidate.name),
+    ["Hip Vegan", "Bart’s Books"],
+  );
+
+  const dottedCaption = "Lunch at @foo.bar or @baz";
+  assertEquals(recommendedCaptionHandles(dottedCaption), ["foo.bar", "baz"]);
+
+  for (
+    const creditCaption of [
+      "Huge shoutout to @creator",
+      "Credit goes to @creator",
+      "Thanks so much to @creator",
+    ]
+  ) {
+    assertEquals(recommendedCaptionHandles(creditCaption), []);
+    assertEquals(
+      profileAliasCandidates(
+        aliases,
+        evidenceCatalog({
+          title: null,
+          caption: creditCaption,
+          taggedLocations: [],
+          media: [],
+        }),
+      ),
+      [],
+    );
+  }
+});
+
+Deno.test("caption handle grammar supports venue headings, standalone lists, and physical from phrases", () => {
+  assertEquals(
+    recommendedCaptionHandles("Restaurants: @alpha or @bravo"),
+    ["alpha", "bravo"],
+  );
+  assertEquals(
+    recommendedCaptionHandles([
+      "Restaurants:",
+      "• @alpha",
+      "• @bravo",
+    ].join("\n")),
+    ["alpha", "bravo"],
+  );
+  assertEquals(
+    recommendedCaptionHandles("Grab coffee from @cafe"),
+    ["cafe"],
+  );
+  assertEquals(recommendedCaptionHandles("Photos from @creator"), []);
+});
+
+Deno.test("a digital creator call to action cannot become a synthetic venue", () => {
+  const caption = "Visit @travelblog for more Ojai tips.";
+  const catalog = evidenceCatalog({
+    title: null,
+    caption,
+    taggedLocations: [],
+    media: [],
+  });
+  const aliases = [{ username: "travelblog", fullName: "Travel Blog" }];
+
+  assertEquals(recommendedCaptionHandles(caption), []);
+  assertEquals(profileAliasCandidates(aliases, catalog), []);
+  const result = groundedHints(
+    [candidate({
+      name: "Travel Blog",
+      sourceMention: "@travelblog",
+      area: "",
+      classification: "destination",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+      itemIndex: 0,
+    })],
+    catalog,
+    [],
+    150,
+    postContext({ intent: "place_list" }),
+    aliases,
+  );
+
+  assertEquals(result.hints, []);
+  assertEquals(result.rejectedCount, 1);
+});
+
+Deno.test("model-accepted caption handles need exact evidence but not fallback venue grammar", () => {
+  const caption = "This one blew me away: @hiddenjem. Photo by @creator.";
+  const catalog = evidenceCatalog({
+    title: null,
+    caption,
+    taggedLocations: [],
+    media: [],
+  });
+  const aliases = [
+    { username: "hiddenjem", fullName: "Hidden Jem Cafe" },
+    { username: "creator", fullName: "Caption Creator" },
+  ];
+
+  // Neither handle is safe for deterministic synthesis: the first needs the
+  // model's destination judgment and the second is an explicit credit.
+  assertEquals(recommendedCaptionHandles(caption), []);
+  assertEquals(profileAliasCandidates(aliases, catalog), []);
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Hidden Jem Cafe",
+        sourceMention: "@hiddenjem",
+        area: "",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Caption Creator",
+        sourceMention: "@creator",
+        area: "",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+    ],
+    catalog,
+    [],
+    150,
+    postContext({ intent: "place_list" }),
+    aliases,
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), ["Hidden Jem Cafe"]);
+  assertEquals(result.rejectedCount, 1);
+});
+
+Deno.test("model-accepted caption handles still reject compact creator-credit labels", () => {
+  for (
+    const caption of [
+      "Photo: @creator",
+      "Video: @creator",
+      "Credit: @creator",
+      "Photo credit — @creator",
+      "📷 @creator",
+      "📸 @creator",
+      "🎥 @creator",
+    ]
+  ) {
+    const result = groundedHints(
+      [candidate({
+        name: "Caption Creator",
+        sourceMention: "@creator",
+        area: "",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      })],
+      evidenceCatalog({
+        title: null,
+        caption,
+        taggedLocations: [],
+        media: [],
+      }),
+      [],
+      150,
+      postContext({ intent: "place_list" }),
+      [{ username: "creator", fullName: "Caption Creator" }],
+    );
+
+    assertEquals(result.hints, []);
+    assertEquals(result.rejectedCount, 1);
+  }
+});
+
+Deno.test("the same venue handle remains distinct when the caption names different areas", () => {
+  const caption =
+    "Dinner at @bluebird in Los Angeles or dinner at @bluebird in New York.";
+  const aliases = [{ username: "bluebird", fullName: "Bluebird Cafe" }];
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Bluebird Cafe",
+        sourceMention: "@bluebird",
+        area: "Los Angeles",
+        classification: "itinerary",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Bluebird Cafe",
+        sourceMention: "@bluebird",
+        area: "New York",
+        classification: "itinerary",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+    ],
+    evidenceCatalog({
+      title: null,
+      caption,
+      taggedLocations: [],
+      media: [],
+    }),
+    [],
+    150,
+    postContext({ intent: "place_list" }),
+    aliases,
+  );
+
+  assertEquals(result.hints.map((hint) => [hint.name, hint.area]), [
+    ["Bluebird Cafe", "Los Angeles"],
+    ["Bluebird Cafe", "New York"],
+  ]);
+  assertEquals(result.excludedCount, 0);
+});
+
+Deno.test("caption venue-handle promotion is exact and never applies to alt text", () => {
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Travel Pal",
+        sourceMention: "@travelpal",
+        area: "",
+        classification: "attribution",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Ojai Guide",
+        sourceMention: "@ojaiguide",
+        area: "",
+        classification: "attribution",
+        modality: "alt_text",
+        evidenceIds: ["alt_text:0"],
+        itemIndex: 1,
+      }),
+    ],
+    evidenceCatalog({
+      title: null,
+      caption: "Visit @travelpal_official.",
+      taggedLocations: [],
+      media: [{
+        id: "media:0",
+        index: 0,
+        kind: "image",
+        url: mediaURL,
+        thumbnailURL: null,
+        altText: "Visit @ojaiguide",
+      }],
+    }),
+    [],
+    150,
+    postContext({ intent: "place_list" }),
+  );
+
+  assertEquals(result.hints, []);
+  assertEquals(result.intentionalExcludedCount, 2);
+});
+
+Deno.test("unsupported handle expansions fall back to the exact provider query", () => {
+  const result = groundedHints(
+    [
+      candidate({
+        name: "Happy Valley",
+        sourceMention: "@hvojai",
+        area: "Ojai",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 0,
+      }),
+      candidate({
+        name: "Bluebird",
+        sourceMention: "@bluebird_pasadena",
+        area: "Pasadena",
+        classification: "destination",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+        itemIndex: 1,
+      }),
+    ],
+    evidenceCatalog({
+      title: null,
+      caption: "Lunch at @hvojai or @bluebird_pasadena in Ojai.",
+      taggedLocations: [],
+      media: [],
+    }),
+    [],
+    150,
+    postContext({
+      intent: "place_list",
+      globalArea: "Ojai",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  );
+
+  assertEquals(result.hints.map((hint) => hint.name), [
+    "hvojai",
+    "bluebird_pasadena",
+  ]);
+  assertEquals(
+    result.hints.some((hint) => hint.name === "Happy Valley"),
+    false,
+  );
+  assertEquals(result.hints.some((hint) => hint.name === "Bluebird"), false);
 });
 
 Deno.test("grounded global area sharpens POIs without erasing a geography list", () => {
@@ -1109,14 +1948,12 @@ Deno.test("declared count is an upper bound and never pads missing destinations"
   assertEquals(underCount.hints.map((hint) => hint.name), ["Alpha Cafe"]);
 });
 
-Deno.test("declared count requires count semantics or the complete numbered list", () => {
+Deno.test("numbered itinerary steps do not cap multiple venue options", () => {
   const evidence: AcquisitionEvidence = {
     title: null,
     caption: [
-      "1. Alpha Cafe",
-      "2. Bravo Hotel",
-      "3. Charlie Park",
-      "Bonus: Delta Museum",
+      "1. Breakfast at Alpha Cafe or Bravo Hotel",
+      "2. Dinner at Charlie Park or Delta Museum",
     ].join("\n"),
     taggedLocations: [],
     media: [],
@@ -1136,39 +1973,22 @@ Deno.test("declared count requires count semantics or the complete numbered list
     })
   );
 
-  const bareMarker = groundedHints(
+  const result = groundedHints(
     candidates,
     evidenceCatalog(evidence),
     [],
     150,
     postContext({
       intent: "place_list",
-      declaredCount: 1,
+      declaredCount: 2,
       declaredCountEvidenceIds: ["caption:0"],
     }),
   );
-  assertEquals(bareMarker.hints.map((hint) => hint.name), [
+  assertEquals(result.hints.map((hint) => hint.name), [
     "Alpha Cafe",
     "Bravo Hotel",
     "Charlie Park",
     "Delta Museum",
-  ]);
-
-  const completeNumberedList = groundedHints(
-    candidates,
-    evidenceCatalog(evidence),
-    [],
-    150,
-    postContext({
-      intent: "place_list",
-      declaredCount: 3,
-      declaredCountEvidenceIds: ["caption:0"],
-    }),
-  );
-  assertEquals(completeNumberedList.hints.map((hint) => hint.name), [
-    "Alpha Cafe",
-    "Bravo Hotel",
-    "Charlie Park",
   ]);
 });
 
@@ -1209,17 +2029,23 @@ Deno.test("Gemini parser accepts structured post context and defaults legacy tes
   assertEquals(structured.postContext.declaredCount, 8);
   assertEquals(structured.candidates[0].entityType, "poi");
   assertEquals(structured.candidates[0].itemIndex, 6);
+  assertEquals(structured.candidates[0].sourceMention, "The Stonehaus");
 
-  const legacy = parseGeminiUnderstanding(geminiPayload([{
-    ...candidate({ name: "Legacy Place" }),
-    entityType: undefined,
-    itemIndex: undefined,
-  }]));
+  const legacyCandidate = candidate({
+    name: "Legacy Place",
+  }) as unknown as Record<string, unknown>;
+  delete legacyCandidate.sourceMention;
+  legacyCandidate.entityType = undefined;
+  legacyCandidate.itemIndex = undefined;
+  const legacy = parseGeminiUnderstanding(geminiPayload([legacyCandidate]));
   assertEquals(legacy.postContext, postContext());
   assertEquals(legacy.candidates[0].entityType, "unknown");
   assertEquals(legacy.candidates[0].itemIndex, -1);
+  assertEquals(legacy.candidates[0].sourceMention, "Legacy Place");
 
-  for (const missingField of ["entityType", "itemIndex"] as const) {
+  for (
+    const missingField of ["sourceMention", "entityType", "itemIndex"] as const
+  ) {
     const missing = candidate({
       name: `Structured missing ${missingField}`,
     }) as unknown as Record<string, unknown>;
@@ -1481,8 +2307,9 @@ function requiredSource(value: string): SocialSource {
 }
 
 function candidate(overrides: Partial<ModelCandidate> = {}): ModelCandidate {
+  const name = overrides.name ?? "Carbon Beach Club";
+  const sourceMention = overrides.sourceMention ?? name;
   return {
-    name: "Carbon Beach Club",
     area: "Malibu",
     entityType: "poi",
     itemIndex: -1,
@@ -1493,6 +2320,8 @@ function candidate(overrides: Partial<ModelCandidate> = {}): ModelCandidate {
     startMs: -1,
     endMs: -1,
     ...overrides,
+    name,
+    sourceMention,
   };
 }
 

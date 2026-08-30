@@ -1,4 +1,10 @@
-import { acquireWithApify } from "./apify.ts";
+import {
+  acquireInstagramProfileAliases,
+  acquireWithApify,
+  maximumInstagramProfileAliases,
+  minimumProfileEnrichmentGlobalBudgetMilliseconds,
+  normalizeInstagramProfileAliases,
+} from "./apify.ts";
 import { parseSocialSource } from "./source.ts";
 import type { RuntimeDependencies, SocialSource } from "./types.ts";
 import { Deadline, SocialImportError } from "./types.ts";
@@ -260,6 +266,153 @@ Deno.test("terminal success never aborts, including when dataset retrieval fails
   );
 });
 
+Deno.test("profile enrichment is capped, field-limited, and returns identity aliases only", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (
+      call.url.pathname ===
+        "/v2/actors/apify~instagram-profile-scraper/runs"
+    ) {
+      return Response.json({
+        data: {
+          id: "profile_run_1",
+          status: "SUCCEEDED",
+          defaultDatasetId: "profile_dataset_1",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/profile_dataset_1/items") {
+      return Response.json([{
+        username: "hvojai",
+        fullName: "Hip Vegan",
+        biography: "must not be retained",
+        externalUrl: "https://private.example",
+      }]);
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  const result = await acquireInstagramProfileAliases(
+    ["hvojai"],
+    "private-apify-token",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result, [{ username: "hvojai", fullName: "Hip Vegan" }]);
+  const start = calls[0];
+  assertEquals(start.url.searchParams.get("waitForFinish"), "0");
+  assertEquals(start.url.searchParams.get("timeout"), "10");
+  assertEquals(
+    start.url.searchParams.get("maxItems"),
+    String(maximumInstagramProfileAliases),
+  );
+  assertEquals(start.url.searchParams.get("maxTotalChargeUsd"), "0.10");
+  assertEquals(JSON.parse(start.body), {
+    usernames: ["hvojai"],
+    includeAboutSection: false,
+  });
+  const dataset = calls[1];
+  assertEquals(dataset.url.searchParams.get("fields"), "username,fullName");
+  assertEquals(
+    dataset.url.searchParams.get("limit"),
+    String(maximumInstagramProfileAliases),
+  );
+});
+
+Deno.test("profile normalization rejects mismatches, duplicates, and empty names", () => {
+  const result = normalizeInstagramProfileAliases(
+    [
+      { username: "hvojai", fullName: "Hip Vegan" },
+      { username: "hvojai", fullName: "Conflicting Duplicate" },
+      { username: "bartsbooksojai", fullName: "" },
+      { username: "unexpected", fullName: "Unrequested Account" },
+      { username: "thedutchessojai", fullName: "The Dutchess" },
+      { username: "@farmerandthecookojai", fullName: "Farmer and the Cook" },
+    ],
+    ["hvojai", "bartsbooksojai", "thedutchessojai", "farmerandthecookojai"],
+  );
+
+  assertEquals(result, [{
+    username: "thedutchessojai",
+    fullName: "The Dutchess",
+  }]);
+});
+
+Deno.test("profile enrichment skips paid work when the global budget is low", async () => {
+  let fetchCount = 0;
+  const dependencies = runtime(() => {
+    fetchCount += 1;
+    throw new Error("low-budget enrichment must not fetch");
+  });
+
+  const result = await acquireInstagramProfileAliases(
+    ["hvojai"],
+    "private-apify-token",
+    new Deadline(
+      minimumProfileEnrichmentGlobalBudgetMilliseconds - 1,
+      dependencies.now,
+    ),
+    dependencies,
+  );
+
+  assertEquals(result, []);
+  assertEquals(fetchCount, 0);
+});
+
+Deno.test("profile child deadline aborts its exact nonterminal run", async () => {
+  const calls: ObservedCall[] = [];
+  let now = 1_000;
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (
+      call.url.pathname ===
+        "/v2/actors/apify~instagram-profile-scraper/runs"
+    ) {
+      return Response.json({
+        data: { id: "profile_run_timeout", status: "RUNNING" },
+      });
+    }
+    if (call.url.pathname === "/v2/actor-runs/profile_run_timeout") {
+      return Response.json({
+        data: { id: "profile_run_timeout", status: "RUNNING" },
+      });
+    }
+    if (
+      call.url.pathname === "/v2/actor-runs/profile_run_timeout/abort"
+    ) {
+      return Response.json({
+        data: { id: "profile_run_timeout", status: "ABORTING" },
+      });
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  }, {
+    now: () => now,
+    sleep: (milliseconds) => {
+      now += milliseconds;
+      return Promise.resolve();
+    },
+  });
+
+  await assertRejectsCode(
+    () =>
+      acquireInstagramProfileAliases(
+        ["hvojai"],
+        "private-apify-token",
+        new Deadline(100_000, dependencies.now),
+        dependencies,
+      ),
+    "deadline_exceeded",
+  );
+  assertEquals(
+    calls.filter((call) => call.url.pathname.endsWith("/abort")).length,
+    1,
+  );
+});
+
 type TestFetcher = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -269,6 +422,7 @@ type ObservedCall = {
   url: URL;
   method: string;
   authorization: string | null;
+  body: string;
 };
 
 function runtime(
@@ -291,6 +445,7 @@ function observe(input: RequestInfo | URL, init?: RequestInit): ObservedCall {
     url: new URL(String(input)),
     method: init?.method ?? "GET",
     authorization: new Headers(init?.headers).get("authorization"),
+    body: String(init?.body ?? ""),
   };
 }
 

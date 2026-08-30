@@ -8,7 +8,7 @@ import {
 } from "./subprocess.mjs";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-export const mapKitResolverID = "mapkit-production-query-ranking-and-threshold-mirror-v6";
+export const mapKitResolverID = "mapkit-production-query-ranking-and-threshold-mirror-v7";
 
 let resolverBinaryPromise;
 

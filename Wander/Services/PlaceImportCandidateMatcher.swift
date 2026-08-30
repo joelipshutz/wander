@@ -757,7 +757,8 @@ enum PlaceImportCandidateMatcher {
     }
 
     private static let nameTokenAliases = [
-        "merc": "mercantile"
+        "merc": "mercantile",
+        "vgn": "vegan"
     ]
 
     private static let streetDesignators: Set<String> = [
