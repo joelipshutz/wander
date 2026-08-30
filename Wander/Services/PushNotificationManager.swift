@@ -857,6 +857,50 @@ final class PushNotificationManager: ObservableObject {
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
+    func notifyImportMatchingFinished(
+        batchIDs: [String],
+        matchedCount: Int,
+        needsReviewCount: Int
+    ) async {
+        guard !batchIDs.isEmpty else { return }
+        await refreshAuthorizationStatus()
+        guard canRegisterForRemoteNotifications else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Your import is ready"
+        if needsReviewCount > 0 {
+            content.body = "\(matchedCount) matched. \(needsReviewCount) need a quick look."
+        } else {
+            content.body = matchedCount == 1
+                ? "1 place is ready to add to your map."
+                : "\(matchedCount) places are ready to add to your map."
+        }
+        content.sound = .default
+        let eventID = "local-import-\(UUID().uuidString.lowercased())"
+        content.userInfo = [
+            "recme": [
+                "event_id": eventID,
+                "notification_type": "import_finished",
+                "data": ["batch_ids": batchIDs]
+            ]
+        ]
+        do {
+            try await UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: eventID,
+                    content: content,
+                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                )
+            )
+        } catch {
+            #if DEBUG
+            WanderDebugLog.imports.error(
+                "import matching notification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+        }
+    }
+
     func notifyImportFinished(
         batchIDs: [String],
         savedCount: Int,

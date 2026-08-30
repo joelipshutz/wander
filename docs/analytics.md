@@ -69,6 +69,8 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
+| `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
+| `place_import_matching_completed` | Every item in that pasted import finishes local matching | aggregate `batch_count`, `matched_count`, `needs_review_count` |
 | `place_saved` | A new place save is created | `source_type`, `visibility`, `status` |
 | `check_in_created` | A visit is created | `is_repeat`, `visibility`, `date_bucket` |
 | `activity_like_changed` | Like state succeeds locally/remotely | `is_liked`, `outcome` |

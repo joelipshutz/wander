@@ -111,6 +111,9 @@ enum AddCameraPreviewLayout {
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
     static let pendingReviewRestingHeight: CGFloat = 570
+    static let importCompletionHeight: CGFloat = 710
+
+    static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
 
     static func restingDetent(hasPendingImports: Bool) -> PresentationDetent {
         .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
@@ -161,6 +164,7 @@ struct AddScreen: View {
     let launchRequest: WanderAddLaunchRequest?
     let onLaunchRequestHandled: (UUID) -> Void
     let walkthroughParkSuggestion: @MainActor () async -> PlaceCandidate?
+    let onImportStarted: ([String]) -> Void
     let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
@@ -202,6 +206,7 @@ struct AddScreen: View {
         launchRequest: WanderAddLaunchRequest? = nil,
         onLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         walkthroughParkSuggestion: @escaping @MainActor () async -> PlaceCandidate? = { nil },
+        onImportStarted: @escaping ([String]) -> Void = { _ in },
         onClose: @escaping () -> Void
     ) {
         self.importStore = importStore
@@ -211,6 +216,7 @@ struct AddScreen: View {
         self.launchRequest = launchRequest
         self.onLaunchRequestHandled = onLaunchRequestHandled
         self.walkthroughParkSuggestion = walkthroughParkSuggestion
+        self.onImportStarted = onImportStarted
         self.onClose = onClose
     }
 
@@ -253,12 +259,21 @@ struct AddScreen: View {
     }
 
     private var activeSheetDetents: Set<PresentationDetent> {
+        if showsImportReview || isLaunchingImportReview {
+            return [AddSheetLayout.importCompletionDetent, .large]
+        }
         guard addSaveFlow != nil else {
             return AddSheetLayout.detents(
                 hasPendingImports: importStore.summary.hasPendingImports
             )
         }
         return [MapPlaceSaveFlowSheet.compactDetent, .large]
+    }
+
+    private var isLaunchingImportReview: Bool {
+        guard let launchRequest else { return false }
+        if case .importReview = launchRequest.destination { return true }
+        return false
     }
 
     private var activeSheetBackground: Color {
@@ -321,9 +336,6 @@ struct AddScreen: View {
                 ) {
                     prepareWalkthroughCandidateResults()
                 }
-                if showsImportHub {
-                    expandSheet()
-                }
             }
             .onChange(of: resetToken) { _, _ in
                 reset()
@@ -373,7 +385,6 @@ struct AddScreen: View {
                     expandSheet()
                     await resolveCurrentLocationCandidates()
                 case .importHub:
-                    expandSheet()
                     showsImportHub = true
                 case .search(let query):
                     expandSheet()
@@ -423,7 +434,7 @@ struct AddScreen: View {
             .navigationDestination(isPresented: $showsImportHub) {
                 PlaceImportHubScreen(
                     importStore: importStore,
-                    reviewAction: openImportReview,
+                    completionAction: handleImportStarted,
                     inboxAction: openImportInbox
                 )
             }
@@ -1075,8 +1086,12 @@ struct AddScreen: View {
     }
 
     private func openImportHub() {
-        expandSheet()
         showsImportHub = true
+    }
+
+    private func handleImportStarted(_ batchIDs: [String]) {
+        guard !batchIDs.isEmpty else { return }
+        onImportStarted(batchIDs)
     }
 
     private func openImportInbox() {
@@ -1086,7 +1101,7 @@ struct AddScreen: View {
 
     private func openImportReview(batchIDs: [String]) {
         guard !batchIDs.isEmpty else { return }
-        expandSheet()
+        selectedDetent = AddSheetLayout.importCompletionDetent
         importReviewBatchIDs = batchIDs
         showsImportReview = true
     }

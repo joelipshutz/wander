@@ -241,6 +241,8 @@ enum WanderAnalyticsEvents {
     static let locationPermissionResult = "location_permission_result"
     static let firstPlaceStarted = "first_place_started"
     static let placeCandidateShown = "place_candidate_shown"
+    static let placeImportStarted = "place_import_started"
+    static let placeImportMatchingCompleted = "place_import_matching_completed"
     static let placeSaved = "place_saved"
     static let checkInStarted = "check_in_started"
     static let checkInCreated = "check_in_created"

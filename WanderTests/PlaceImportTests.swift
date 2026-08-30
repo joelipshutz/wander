@@ -29,6 +29,188 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
     }
 }
 
+final class PlaceImportCompletionNoticeTests: XCTestCase {
+    func testResolvedNoticeSeparatesMatchedPlacesFromPlacesNeedingReview() throws {
+        let googleBatch = PlaceImportBatch(
+            id: "google",
+            source: .googleMaps,
+            sourceName: "Weekend spots",
+            state: .ready,
+            totalCount: 3,
+            processedCount: 3
+        )
+        let socialBatch = PlaceImportBatch(
+            id: "social",
+            source: .instagram,
+            sourceName: nil,
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+        let candidate = PlaceCandidate(
+            id: "candidate",
+            name: "Maru Coffee",
+            category: "coffee shop",
+            address: "Los Angeles",
+            locality: "Los Angeles",
+            latitude: 34.1,
+            longitude: -118.2,
+            confidence: 0.98
+        )
+        let items = [
+            PlaceImportItem(
+                id: "ready",
+                batchID: googleBatch.id,
+                source: .googleMaps,
+                seed: PlaceImportSeed(
+                    rawText: "Maru",
+                    nameHint: "Maru",
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id
+            ),
+            PlaceImportItem(
+                id: "duplicate",
+                batchID: googleBatch.id,
+                source: .googleMaps,
+                seed: PlaceImportSeed(
+                    rawText: "Gjelina",
+                    nameHint: "Gjelina",
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: 2
+                ),
+                state: .duplicate,
+                duplicateUserPlaceID: "existing"
+            ),
+            PlaceImportItem(
+                id: "help",
+                batchID: googleBatch.id,
+                source: .googleMaps,
+                seed: PlaceImportSeed(
+                    rawText: "Possible place",
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: 3
+                ),
+                state: .needsHelp
+            ),
+            PlaceImportItem(
+                id: "failed",
+                batchID: socialBatch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: "Post",
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: 1
+                ),
+                state: .failed
+            ),
+            PlaceImportItem(
+                id: "dismissed",
+                batchID: socialBatch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: "Skip",
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: 2
+                ),
+                state: .dismissed
+            )
+        ]
+
+        let notice = try XCTUnwrap(
+            PlaceImportCompletionNotice.resolved(
+                batchIDs: [googleBatch.id, socialBatch.id],
+                batches: [googleBatch, socialBatch],
+                items: items
+            )
+        )
+
+        XCTAssertEqual(notice.foundCount, 4)
+        XCTAssertEqual(notice.matchedCount, 2)
+        XCTAssertEqual(notice.needsReviewCount, 2)
+        XCTAssertEqual(notice.sourceName, "Multiple sources")
+        XCTAssertEqual(notice.bannerTitle, "Your import is ready")
+        XCTAssertEqual(notice.bannerDetail, "2 matched · 2 need a look")
+    }
+
+    func testResolvedNoticeUsesSingleSourceNameAndMatchedCopy() throws {
+        let batch = PlaceImportBatch(
+            id: "google",
+            source: .googleMaps,
+            sourceName: nil,
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "saved",
+            batchID: batch.id,
+            source: .googleMaps,
+            seed: PlaceImportSeed(
+                rawText: "Saved",
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .saved
+        )
+
+        let notice = try XCTUnwrap(
+            PlaceImportCompletionNotice.resolved(
+                batchIDs: [batch.id],
+                batches: [batch],
+                items: [item]
+            )
+        )
+
+        XCTAssertEqual(notice.sourceName, "Google Maps")
+        XCTAssertEqual(notice.bannerDetail, "1 place matched")
+    }
+}
+
+final class PlaceImportAnalyticsContractTests: XCTestCase {
+    func testImportLifecycleEventsUseAggregateOnlyProperties() {
+        XCTAssertEqual(WanderAnalyticsEvents.placeImportStarted, "place_import_started")
+        XCTAssertEqual(
+            WanderAnalyticsEvents.placeImportMatchingCompleted,
+            "place_import_matching_completed"
+        )
+
+        let event = WanderAnalyticsSchema.sanitized(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.placeImportMatchingCompleted,
+                properties: [
+                    "batch_count": "2",
+                    "matched_count": "10",
+                    "needs_review_count": "2",
+                    "url": "https://maps.example/private-list"
+                ]
+            )
+        )
+
+        XCTAssertEqual(
+            event.properties,
+            [
+                "batch_count": "2",
+                "matched_count": "10",
+                "needs_review_count": "2"
+            ]
+        )
+    }
+}
+
 final class PlaceImportAutoSavePolicyTests: XCTestCase {
     func testCompletedAutomaticImportRestoresUnpresentedVerificationAfterRelaunch() {
         let pendingReceipt = PlaceImportReceipt(
