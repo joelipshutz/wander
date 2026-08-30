@@ -3219,22 +3219,24 @@ struct MapScreen: View {
         collapseSelectedPlaceProfile(completion: action)
     }
 
-    private func submitMapSearch() {
+    private func submitMapSearch(_ requestedQuery: String) {
         walkthroughs.perform(.mapSearch)
         mapSearchSelectionSession.finish()
         dismissKeyboard()
-        suppressedTypeaheadQuery = Self.normalized(mapQuery)
+        suppressedTypeaheadQuery = Self.normalized(requestedQuery)
         typeaheadTask?.cancel()
         typeaheadSuggestions = []
         isLoadingTypeahead = false
         mapSearchTask?.cancel()
+        isSearchingMapKit = false
 
-        let requestedQuery = mapQuery
         let requestRevision = beginMapSearchRequest()
+        let queryMatchingPlaces = trustedMapMatches(for: requestedQuery)
         mapSearchTask = Task { @MainActor in
             await runMapSearch(
                 requestedQuery: requestedQuery,
-                requestRevision: requestRevision
+                requestRevision: requestRevision,
+                queryMatchingPlaces: queryMatchingPlaces
             )
             if requestRevision == mapSearchRevision {
                 mapSearchTask = nil
@@ -3326,16 +3328,19 @@ struct MapScreen: View {
         suppressNextQueryAutoSelection = true
         mapQuery = query
         let requestRevision = beginMapSearchRequest()
+        let queryMatchingPlaces = trustedMapMatches(for: query)
         await runMapSearch(
             requestedQuery: query,
-            requestRevision: requestRevision
+            requestRevision: requestRevision,
+            queryMatchingPlaces: queryMatchingPlaces
         )
     }
 
     @MainActor
     private func runMapSearch(
         requestedQuery: String,
-        requestRevision: UInt64
+        requestRevision: UInt64,
+        queryMatchingPlaces: [VisiblePlace]
     ) async {
         let query = requestedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
@@ -3363,6 +3368,16 @@ struct MapScreen: View {
         ) else {
             return
         }
+
+        if let firstVisiblePlace = queryMatchingPlaces.first {
+            mapSearchCandidates = []
+            selectVisiblePlace(firstVisiblePlace)
+            selectedSearchCandidateID = nil
+            center(on: firstVisiblePlace)
+            mapSearchMessage = nil
+            return
+        }
+
         isSearchingMapKit = true
         defer {
             if requestRevision == mapSearchRevision {
@@ -3384,7 +3399,7 @@ struct MapScreen: View {
             mapSearchCandidates = candidates.filter { !isAlreadyVisible(candidate: $0) }
 
             switch MapSubmittedSearchSelectionPolicy.selection(
-                queryMatchingPlaces: searchVisiblePlaces,
+                queryMatchingPlaces: queryMatchingPlaces,
                 mapKitCandidates: mapSearchCandidates
             ) {
             case .saved(let firstVisiblePlace):
@@ -3415,10 +3430,17 @@ struct MapScreen: View {
                 return
             }
             mapSearchCandidates = []
-            mapSearchMessage = searchVisiblePlaces.isEmpty
-                ? "No places on your map match yet. Try a more specific search."
-                : nil
+            mapSearchMessage = "No places on your map match yet. Try a more specific search."
         }
+    }
+
+    private func trustedMapMatches(for requestedQuery: String) -> [VisiblePlace] {
+        let query = TrustedPlaceSearchQuery(requestedQuery)
+        guard query.hasMeaningfulTokens else { return [] }
+        return TrustedPlaceSearch.matches(
+            query: query,
+            in: baseVisiblePlaces
+        ).map(\.place)
     }
 
     private func beginMapSearchRequest() -> UInt64 {
@@ -6324,7 +6346,7 @@ private struct SearchBar: View {
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
-    let onSubmit: () -> Void
+    let onSubmit: (String) -> Void
     @Environment(\.wanderMapAppearance) private var appearance
     @State private var draftQuery: String
     @State private var queryCommitTask: Task<Void, Never>?
@@ -6334,7 +6356,7 @@ private struct SearchBar: View {
         isFocused: FocusState<Bool>.Binding,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
-        onSubmit: @escaping () -> Void
+        onSubmit: @escaping (String) -> Void
     ) {
         _query = query
         self.isFocused = isFocused
@@ -6363,8 +6385,9 @@ private struct SearchBar: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit {
-                    commitDraftQuery()
-                    onSubmit()
+                    let requestedQuery = draftQuery
+                    commitDraftQuery(requestedQuery)
+                    onSubmit(requestedQuery)
                 }
                 .task(id: focusRequestID) {
                     await focusIfRequested()
@@ -6429,10 +6452,10 @@ private struct SearchBar: View {
         }
     }
 
-    private func commitDraftQuery() {
+    private func commitDraftQuery(_ value: String) {
         queryCommitTask?.cancel()
         queryCommitTask = nil
-        query = draftQuery
+        query = value
     }
 
     @MainActor

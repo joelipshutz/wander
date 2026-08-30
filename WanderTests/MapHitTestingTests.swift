@@ -536,10 +536,31 @@ final class MapHitTestingTests: XCTestCase {
             )
         )
         let submittedSearch = map[searchStart.lowerBound..<searchEnd.lowerBound]
-        XCTAssertTrue(submittedSearch.contains("queryMatchingPlaces: searchVisiblePlaces"))
-        XCTAssertTrue(submittedSearch.contains("searchVisiblePlaces.isEmpty"))
+        XCTAssertTrue(submittedSearch.contains("queryMatchingPlaces: [VisiblePlace]"))
+        XCTAssertTrue(submittedSearch.contains("queryMatchingPlaces: queryMatchingPlaces"))
+        XCTAssertTrue(submittedSearch.contains("if let firstVisiblePlace = queryMatchingPlaces.first"))
+        XCTAssertFalse(submittedSearch.contains("searchVisiblePlaces.isEmpty"))
         XCTAssertFalse(submittedSearch.contains("visiblePlaces.first"))
         XCTAssertFalse(submittedSearch.contains("visiblePlaces.isEmpty"))
+
+        let localSelection = try XCTUnwrap(
+            submittedSearch.range(of: "if let firstVisiblePlace = queryMatchingPlaces.first")
+        )
+        let mapKitLookup = try XCTUnwrap(
+            submittedSearch.range(of: "let candidates = try await mapKitCandidates(for: query)")
+        )
+        XCTAssertLessThan(localSelection.lowerBound, mapKitLookup.lowerBound)
+
+        let trustedMatchesStart = try XCTUnwrap(map.range(of: "private func trustedMapMatches("))
+        let trustedMatchesEnd = try XCTUnwrap(
+            map.range(
+                of: "private func beginMapSearchRequest()",
+                range: trustedMatchesStart.upperBound..<map.endIndex
+            )
+        )
+        let trustedMatches = map[trustedMatchesStart.lowerBound..<trustedMatchesEnd.lowerBound]
+        XCTAssertTrue(trustedMatches.contains("TrustedPlaceSearchQuery(requestedQuery)"))
+        XCTAssertTrue(trustedMatches.contains("in: baseVisiblePlaces"))
 
         let sourceStart = try XCTUnwrap(map.range(of: "private func selectMapSource("))
         let sourceEnd = try XCTUnwrap(
@@ -547,6 +568,41 @@ final class MapHitTestingTests: XCTestCase {
         )
         let sourceSelection = map[sourceStart.lowerBound..<sourceEnd.lowerBound]
         XCTAssertTrue(sourceSelection.contains("handleFeaturedCameraChange(currentSearchRegion)"))
+    }
+
+    func testMapSearchSubmissionUsesTheLatestVisibleDraftWithoutWaitingForDebounce() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let searchBar = try XCTUnwrap(
+            map.components(separatedBy: "private struct SearchBar: View {").last?
+                .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
+        )
+        let submission = try XCTUnwrap(
+            searchBar.components(separatedBy: ".onSubmit {").last?
+                .components(separatedBy: ".task(id: focusRequestID)").first
+        )
+
+        XCTAssertTrue(searchBar.contains("let onSubmit: (String) -> Void"))
+        XCTAssertTrue(submission.contains("let requestedQuery = draftQuery"))
+        XCTAssertTrue(submission.contains("commitDraftQuery(requestedQuery)"))
+        XCTAssertTrue(submission.contains("onSubmit(requestedQuery)"))
+        XCTAssertLessThan(
+            try XCTUnwrap(submission.range(of: "commitDraftQuery(requestedQuery)")).lowerBound,
+            try XCTUnwrap(submission.range(of: "onSubmit(requestedQuery)")).lowerBound
+        )
+
+        let submitStart = try XCTUnwrap(map.range(of: "private func submitMapSearch(_ requestedQuery: String)"))
+        let submitEnd = try XCTUnwrap(
+            map.range(of: "private func cancelMapSearch()", range: submitStart.upperBound..<map.endIndex)
+        )
+        let parentSubmission = map[submitStart.lowerBound..<submitEnd.lowerBound]
+        XCTAssertTrue(parentSubmission.contains("suppressedTypeaheadQuery = Self.normalized(requestedQuery)"))
+        XCTAssertTrue(parentSubmission.contains("let queryMatchingPlaces = trustedMapMatches(for: requestedQuery)"))
+        XCTAssertFalse(parentSubmission.contains("let requestedQuery = mapQuery"))
     }
 
     @MainActor
