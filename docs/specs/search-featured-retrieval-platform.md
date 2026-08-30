@@ -1,8 +1,8 @@
 # Search and Featured Retrieval Platform
 
 Status: canonical architecture and product contract
-Last updated: 2026-08-16
-Implementation issue: REC-280
+Last updated: 2026-09-04
+Implementation issues: REC-280, REC-355, REC-384, REC-424
 
 Read this document first before changing Discover Search retrieval, Map
 Featured ranking, semantic embeddings, personalization/community blending, or
@@ -14,7 +14,8 @@ rec.me has one retrieval platform with two different product modes:
 
 - **Search** answers an explicit submitted query. It combines immediate local
   trusted-place matching, Postgres full-text candidates, and an optional
-  semantic place-candidate provider. Final ordering is deterministic.
+  semantic place-candidate provider, plus eligible Apple Maps fallback. Final
+  ordering across the three corpora is deterministic.
 - **Featured** answers the queryless question "what is worth showing in this
   map view?" It uses explicit relationship, personal-taste, community-support,
   rating, and recency signals. It does not call an LLM or vector store while the
@@ -34,17 +35,13 @@ deterministic; and the LLM parser only interprets submitted query intent.
 ```text
 submitted Search query
         |
-        +--> immediate local trusted-place results ----------------+
-        |                                                           |
-        +--> deterministic/LLM query plan                           |
-                 |                                                  |
-                 +--> Postgres full-text candidates --------+       |
-                 |                                          |       |
-                 +--> semantic place candidates ------------+       |
-                                                            |       |
-                                  canonical-id dedupe + RRF  |       |
-                                                            |       |
-                                      remote refinement +----+-------+
+        +--> local trusted-memory groups --------------------------+
+        +--> typed plan --> lexical --> immediate rec.me publish --+
+        |              +--> semantic --> rec.me RRF refinement -----+
+        +--> eligible Apple Maps fallback -------------------------+
+                                                                   |
+                           DiscoverPlaceSearchRankingPolicy <------+
+                           physical dedupe + cross-corpus ordering
 
 map viewport change
         |
@@ -67,14 +64,24 @@ map viewport change
 2. `public.search_recme_places` supplies Postgres full-text candidates.
 3. `semantic-place-search` embeds the complete submitted phrase and calls
    `public.search_recme_places_semantic` for semantic candidates.
-4. Lexical and semantic providers both use
+4. Apple Maps supplies visibly sourced external candidates for eligible queries.
+   Owner, relationship, and explicit visit-status queries exclude this corpus.
+5. Lexical and semantic providers both use
    `app.eligible_recme_place_search`, preventing privacy, block, source,
    category, area, favorite, and social-scope rules from drifting.
 
 Either remote provider may fail without taking down the other. If both fail,
 the existing local results remain honest; the client never fabricates a result.
 
-### Final ranking
+Lexical and semantic requests start together, but delivery is progressive. A
+successful lexical result is published as soon as it returns; it does not wait
+behind the semantic provider's embedding timeout. If semantic then succeeds,
+the same active submission is replaced by the deterministic fused ordering. If
+lexical fails, semantic may still recover the remote result. Submission IDs,
+cancellation, and query guards prevent a late refinement from replacing a newer
+search.
+
+### Rec.me fusion and final cross-corpus ranking
 
 `search_rrf_v1` deduplicates by canonical place id and applies weighted
 reciprocal-rank fusion:
@@ -88,6 +95,13 @@ Missing provider ranks contribute zero. Agreement between providers is
 rewarded. Lexical receives a small edge for exact names and literal intent.
 Ties resolve by lexical rank, semantic rank, then stable canonical id. Results
 are capped by the request limit, which is at most 20.
+
+Each lexical partial or fused completion replaces only the rec.me input to
+`DiscoverPlaceSearchRankingPolicy`. That policy composes trusted groups, rec.me,
+and external candidates with physical-place deduplication. Exact external names
+can beat weak trusted text matches; equally relevant trusted places win ties.
+Apple Maps runs independently and preserves its own request ID as well as the
+submission/query guards, including when parser refinement restarts external work.
 
 ### Semantic documents
 
@@ -175,11 +189,15 @@ queries, place names, coordinates, notes, or candidate payloads.
 
 ## Performance and failure policy
 
-- Xcode Debug builds run semantic Search without an account-specific flag.
-- Release builds honor the globally default-off
-  `semantic_place_search_v1` switch until activation gates pass.
+- Debug, Simulator, TestFlight, and Release all honor the same resolved
+  `semantic_place_search_v1` value. There is no Joe-specific runtime path.
+- The global semantic flag was verified enabled on 2026-08-29. Typed per-device
+  overrides from REC-355 can force On or Off in a developer Xcode build without
+  changing the global value or special-casing an account.
 - Query embedding has a four-second timeout; Search SQL has a three-second
   statement timeout.
+- Lexical delivery is independent of semantic completion; semantic may refine
+  it later under the active submission guard.
 - Searches are cancellation- and stale-response-guarded by submission state.
 - Semantic failure falls back to lexical; lexical failure may be recovered by
   semantic; local results render independently.
@@ -202,11 +220,20 @@ Track by policy version, using privacy-safe counts and buckets:
 - eligible-place embedding coverage, stale count, last successful refresh,
   worker failures, and OpenAI embedding usage/cost.
 
-The current Search implementation emits aggregate remote result counts,
-provider overlap, semantic status, latency bucket, and ranking policy. The next
-observability slice should add a random `search_request_id` plus selected rank,
-provider provenance, and downstream-save attribution without retaining the
-raw query.
+Search emits one random, opaque `search_request_id` per submitted query. It
+records numeric and bucketed latency for local, parser, request-plan, lexical,
+semantic, fusion, and total stages; provider counts/status; selected rank and
+provider provenance; downstream save/check-in conversion; and reformulation.
+Apple Maps latency remains on `trusted_place_search_remote_results` with
+provider `mapkit`, the same opaque submission ID, and bounded numeric/bucketed
+latency; it does not add a retrieval-stage enum. `total` measures the rec.me
+request including its plan, not the duration of all three corpora. Selection
+rank uses the combined displayed order; provenance is `trusted_memory`,
+`lexical`, `semantic`, `lexical_semantic`, `mapkit`, or `unknown`.
+The ID contains no user, query, or place data. The checked-in PostHog dashboard
+definition owns the Search stage latency, provider/selected-rank, and
+request-outcome views. Applying that dashboard remains a separate explicit
+hosted operation.
 
 ## Evaluation and change process
 
@@ -223,6 +250,21 @@ Every material policy change follows this loop:
 Do not optimize Featured against the current tiny user/friend-only corpus.
 Revisit it after real sparse-network and mixed-community viewports exist.
 
+The maintained offline evidence currently says:
+
+- Search blind pool: 74 judgments across 12 real-corpus queries. Lexical
+  nDCG@5 was 56.9%, explicit reranking 77.7%, and hybrid 84.1%. That historical
+  run used approved aggregate structured tags in its semantic lab document,
+  while production document version 1 is stricter. It validates the bounded
+  place-vector architecture, not the exact production document or weights; the
+  maintained lab now mirrors production and must be rerun before a policy
+  change.
+- Featured blind pool: the explicit baseline scored 82.9% nDCG@5 while the
+  semantic-taste variant scored 73.0%. Keep the explicit Featured ranker. The
+  corpus is too small and self/friend-heavy to justify a vector rollout.
+- People vectors remain deferred until there is enough multi-person behavior
+  for an honest offline evaluation.
+
 ## Implementation map
 
 | Concern | Source of truth |
@@ -231,6 +273,9 @@ Revisit it after real sparse-network and mixed-community viewports exist.
 | Search provider orchestration/fallback | `Wander/App/WanderBackend.swift` |
 | Search fusion policy | `Wander/Services/RecmePlaceSearchFusion.swift` |
 | Discover runtime and analytics | `Wander/Features/Discover/DiscoverScreen.swift` |
+| Search analytics contract | `docs/analytics.md` and `Wander/Services/AnalyticsEvent.swift` |
+| Managed Search dashboard definitions | `scripts/posthog-product-dashboard.mjs` |
+| Offline Search/Featured evaluation | `scripts/relevance-lab/` and `docs/evals/` |
 | Remote repositories/DTO boundary | `Wander/Services/Remote/SupabaseRepositories.swift` |
 | Search schema, RLS, RPCs, refresh schedule | `supabase/migrations/20260816120000_semantic_place_search.sql` |
 | Query embedding function | `supabase/functions/semantic-place-search/` |
@@ -238,19 +283,26 @@ Revisit it after real sparse-network and mixed-community viewports exist.
 | Map Featured ranker | `Wander/Features/Map/MapScreen.swift` (`MapFeaturedSelection`) |
 | Community Featured backend | `supabase/migrations/20260815210000_featured_community_places.sql` |
 | Detailed REC-280 rollout/validation | `docs/plans/2026-08-16-rec-280-semantic-search-implementation.md` |
+| Operational hardening and handoff | `docs/plans/2026-08-29-rec-384-search-platform-hardening.md` |
 
-## Activation checklist
+## Current deployed state and future change gate
 
-Release semantic Search remains off until all of the following complete:
+Verified on 2026-08-29:
 
-1. merge the reviewed implementation;
-2. deploy both Edge Functions and configure their OpenAI secret;
-3. apply and verify the migration/security metadata;
-4. backfill until no current eligible documents remain stale;
-5. run authenticated lexical/semantic privacy smoke checks;
-6. dogfood through Xcode Debug;
-7. review aggregate latency, failure, result-count, and overlap signals;
-8. deliberately enable the global Release switch.
+1. the semantic Search migration and both Edge Functions are deployed;
+2. 135 eligible place embeddings exist and the current stale/missing backfill
+   count is zero for `text-embedding-3-small`, document version 1;
+3. the global `semantic_place_search_v1` flag is enabled;
+4. the client uses the typed flag registry and supports device On/Off overrides;
+5. the current Search and Featured blind scorecards are checked into the repo.
 
-Disabling the global switch immediately restores lexical-only Release behavior.
-Featured is unaffected by the semantic Search switch.
+REC-384 changes only client delivery, analytics definitions, evaluation tooling,
+and documentation until separately reviewed and merged. It does not mutate the
+hosted flag, database, Edge Functions, or dashboard. Disabling the global switch
+still restores lexical-only behavior, and Featured remains unaffected.
+
+Before changing weights, embedding fields/model, candidate caps, or adding a
+policy registry: rerun the saved offline corpus, compare the defined slices,
+exercise the candidate in an Xcode build, and require an explicit activation
+and rollback version. A database-backed policy registry is a follow-up, not part
+of REC-384; authorization and privacy rules never become runtime tuning knobs.

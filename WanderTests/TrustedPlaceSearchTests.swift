@@ -1090,7 +1090,8 @@ final class TrustedPlaceSearchTests: XCTestCase {
             lexical: lexical,
             semantic: semantic,
             semanticStatus: .succeeded,
-            limit: 5
+            limit: 5,
+            deliveryStage: .fused
         )
 
         XCTAssertEqual(
@@ -1102,6 +1103,7 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(outcome.overlapCount, 1)
         XCTAssertEqual(outcome.matches.first?.providers, [.lexical, .semantic])
         XCTAssertEqual(outcome.semanticStatus, .succeeded)
+        XCTAssertEqual(outcome.deliveryStage, .fused)
         XCTAssertEqual(RecmePlaceSearchOutcome.rankingPolicyVersion, "search_rrf_v1")
     }
 
@@ -1112,12 +1114,163 @@ final class TrustedPlaceSearchTests: XCTestCase {
             lexical: lexical,
             semantic: [],
             semanticStatus: .failed,
-            limit: 20
+            limit: 20,
+            deliveryStage: .lexicalFinal
         )
 
         XCTAssertEqual(outcome.candidates.map(\.id), ["a", "b", "c"])
         XCTAssertEqual(outcome.matches.map(\.providers), [[.lexical], [.lexical], [.lexical]])
         XCTAssertEqual(outcome.semanticStatus, .failed)
+        XCTAssertEqual(outcome.deliveryStage, .lexicalFinal)
+    }
+
+    func testBackendPublishesLexicalResultsBeforeSlowSemanticFusion() async throws {
+        let lexical = makeCandidate("lexical-first")
+        let semantic = makeCandidate("semantic-later")
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .success([lexical]),
+            semanticResult: .success([semantic]),
+            waitsForSemanticRelease: true
+        )
+        let backend = WanderBackend(placeRepository: repository)
+        var partialOutcomes: [RecmePlaceSearchOutcome] = []
+        let lexicalPublished = expectation(description: "Lexical results publish")
+
+        let finalTask = Task { @MainActor in
+            try await backend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: "rainy coffee"),
+                includesSemanticProvider: true
+            ) {
+                partialOutcomes.append($0)
+                lexicalPublished.fulfill()
+            }
+        }
+
+        await fulfillment(of: [lexicalPublished], timeout: 1)
+        XCTAssertEqual(partialOutcomes.count, 1)
+        XCTAssertEqual(partialOutcomes.first?.candidates.map(\.id), ["lexical-first"])
+        XCTAssertEqual(partialOutcomes.first?.deliveryStage, .lexical)
+        XCTAssertEqual(partialOutcomes.first?.semanticStatus, .pending)
+
+        repository.releaseSemanticResults()
+        let final = try await finalTask.value
+        XCTAssertEqual(final.deliveryStage, .fused)
+        XCTAssertEqual(Set(final.candidates.map(\.id)), ["lexical-first", "semantic-later"])
+        XCTAssertNotNil(final.timings.lexical)
+        XCTAssertNotNil(final.timings.semantic)
+        XCTAssertNotNil(final.timings.fusion)
+        XCTAssertNotNil(final.timings.total)
+    }
+
+    func testProgressiveRecmeResultsPreserveExternalCandidatesInCombinedRanking() async throws {
+        let lexical = makeCandidate("lexical", name: "Coffee House")
+        let semantic = makeCandidate("semantic", name: "Coffee Garden")
+        let external = makeCandidate("external", name: "Coffee Corner")
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .success([lexical]),
+            semanticResult: .success([semantic]),
+            waitsForSemanticRelease: true
+        )
+        let backend = WanderBackend(placeRepository: repository)
+        let published = expectation(description: "Partial three-corpus ranking")
+        var partial: [DiscoverPlaceSearchCandidate] = []
+        let task = Task { @MainActor in
+            try await backend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: "coffee"),
+                includesSemanticProvider: true
+            ) { outcome in
+                partial = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+                    query: "coffee", filters: DiscoverFilters(query: "coffee"),
+                    trusted: [], recme: outcome.candidates, external: [external]
+                )
+                published.fulfill()
+            }
+        }
+        await fulfillment(of: [published], timeout: 1)
+        XCTAssertEqual(partial.count, 2)
+        XCTAssertTrue(partial.contains { if case .external = $0 { return true }; return false })
+        repository.releaseSemanticResults()
+        let outcome = try await task.value
+        let final = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "coffee", filters: DiscoverFilters(query: "coffee"),
+            trusted: [], recme: outcome.candidates, external: [external]
+        )
+        XCTAssertEqual(final.count, 3)
+        XCTAssertTrue(final.contains { if case .external = $0 { return true }; return false })
+    }
+
+    func testCancelledSearchCannotReturnLateSemanticRefinement() async throws {
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .success([makeCandidate("old-lexical")]),
+            semanticResult: .success([makeCandidate("old-semantic")]),
+            waitsForSemanticRelease: true
+        )
+        let backend = WanderBackend(placeRepository: repository)
+        let published = expectation(description: "Lexical published before cancellation")
+        let task = Task { @MainActor in
+            try await backend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: "old"), includesSemanticProvider: true
+            ) { _ in published.fulfill() }
+        }
+        await fulfillment(of: [published], timeout: 1)
+        task.cancel()
+        repository.releaseSemanticResults()
+        do {
+            _ = try await task.value
+            XCTFail("A cancelled request must not deliver a final result, even if its provider ignores cancellation.")
+        } catch is CancellationError {
+            // Expected: a late provider completion cannot refine a newer search.
+        }
+    }
+
+    func testBackendKeepsLexicalFinalWhenSemanticProviderReturnsNoCandidates() async throws {
+        let lexical = makeCandidate("lexical-only")
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .success([lexical]),
+            semanticResult: .success([])
+        )
+        let backend = WanderBackend(placeRepository: repository)
+
+        let outcome = try await backend.searchRecmePlaces(
+            RecmePlaceSearchRequest(query: "exact business name"),
+            includesSemanticProvider: true
+        )
+
+        XCTAssertEqual(outcome.candidates.map(\.id), ["lexical-only"])
+        XCTAssertEqual(outcome.semanticStatus, .succeeded)
+        XCTAssertEqual(outcome.deliveryStage, .lexicalFinal)
+    }
+
+    func testLexicalFailureAndEmptySemanticResponseRemainAnHonestFailure() async throws {
+        let backend = WanderBackend(placeRepository: SearchProviderPlaceRepository(
+            lexicalResult: .failure(SearchProviderTestError.expected),
+            semanticResult: .success([])
+        ))
+        do {
+            _ = try await backend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: "coffee"), includesSemanticProvider: true
+            )
+            XCTFail("An empty semantic response cannot recover a failed lexical request.")
+        } catch SearchProviderTestError.expected {
+            // Preserve the failed-source UI instead of claiming a successful empty search.
+        }
+    }
+
+    func testBackendUsesSemanticRecoveryWhenLexicalProviderReturnsNoCandidates() async throws {
+        let semantic = makeCandidate("semantic-only")
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .success([]),
+            semanticResult: .success([semantic])
+        )
+        let backend = WanderBackend(placeRepository: repository)
+
+        let outcome = try await backend.searchRecmePlaces(
+            RecmePlaceSearchRequest(query: "cozy rainy coffee"),
+            includesSemanticProvider: true
+        )
+
+        XCTAssertEqual(outcome.candidates.map(\.id), ["semantic-only"])
+        XCTAssertEqual(outcome.deliveryStage, .semanticRecovery)
     }
 
     func testBackendCanReturnSemanticResultsWhenLexicalProviderFails() async throws {
@@ -1135,6 +1288,7 @@ final class TrustedPlaceSearchTests: XCTestCase {
 
         XCTAssertEqual(outcome.candidates.map(\.id), ["semantic-only"])
         XCTAssertEqual(outcome.semanticStatus, .succeeded)
+        XCTAssertEqual(outcome.deliveryStage, .semanticRecovery)
         XCTAssertEqual(repository.lexicalRequestCount, 1)
         XCTAssertEqual(repository.semanticRequestCount, 1)
     }
@@ -1233,15 +1387,20 @@ private enum SearchProviderTestError: Error {
 private final class SearchProviderPlaceRepository: PlaceRepository {
     let lexicalResult: Result<[PlaceCandidate], Error>
     let semanticResult: Result<[PlaceCandidate], Error>
+    let waitsForSemanticRelease: Bool
     private(set) var lexicalRequestCount = 0
     private(set) var semanticRequestCount = 0
+    private var semanticReleaseContinuation: CheckedContinuation<Void, Never>?
+    private var semanticReleaseRequested = false
 
     init(
         lexicalResult: Result<[PlaceCandidate], Error>,
-        semanticResult: Result<[PlaceCandidate], Error>
+        semanticResult: Result<[PlaceCandidate], Error>,
+        waitsForSemanticRelease: Bool = false
     ) {
         self.lexicalResult = lexicalResult
         self.semanticResult = semanticResult
+        self.waitsForSemanticRelease = waitsForSemanticRelease
     }
 
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] { [] }
@@ -1253,7 +1412,22 @@ private final class SearchProviderPlaceRepository: PlaceRepository {
 
     func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         semanticRequestCount += 1
+        if waitsForSemanticRelease, !semanticReleaseRequested {
+            await withCheckedContinuation { continuation in
+                if semanticReleaseRequested {
+                    continuation.resume()
+                } else {
+                    semanticReleaseContinuation = continuation
+                }
+            }
+        }
         return try semanticResult.get()
+    }
+
+    func releaseSemanticResults() {
+        semanticReleaseRequested = true
+        semanticReleaseContinuation?.resume()
+        semanticReleaseContinuation = nil
     }
 
     func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }

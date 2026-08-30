@@ -187,6 +187,75 @@ from returns
     ], { breakdown: "surface" }),
   },
   {
+    key: "search-stage-latency",
+    name: "Search — stage latency and health",
+    description: "Request-correlated local, parser, lexical, semantic, fusion, and total Search stages. Latency is numeric milliseconds; queries and place content are never collected.",
+    query: hogql(`
+select
+  properties.stage as stage,
+  count() as stage_completions,
+  round(avg(toFloat(properties.latency_ms)), 1) as average_ms,
+  round(quantile(0.5)(toFloat(properties.latency_ms)), 1) as p50_ms,
+  round(quantile(0.95)(toFloat(properties.latency_ms)), 1) as p95_ms,
+  countIf(properties.outcome in ('failed', 'failure')) as failures
+from events
+where event = 'trusted_place_search_stage_completed'
+  and timestamp >= now() - interval 30 day
+group by stage
+order by p95_ms desc
+`.trim()),
+  },
+  {
+    key: "search-provider-selection",
+    name: "Search — selected rank and provider provenance",
+    description: "Which Search result sources and rank buckets users select. Provider labels include lexical, semantic, lexical+semantic, trusted-memory, and mapkit; no place identifiers or content are sent.",
+    query: hogql(`
+select
+  properties.provider as provider,
+  properties.rank as rank_bucket,
+  properties.stage as delivery_stage,
+  count() as selections,
+  uniqExact(distinct_id) as unique_users
+from events
+where event = 'trusted_place_search_result_selected'
+  and timestamp >= now() - interval 30 day
+group by provider, rank_bucket, delivery_stage
+order by selections desc
+limit 100
+`.trim()),
+  },
+  {
+    key: "search-request-outcomes",
+    name: "Search — request selection, conversion, and reformulation",
+    description: "Request-level Search outcomes joined by an opaque per-submission ID: submitted, selected, check-in/Wanna conversion, and reformulation. This measures the retrieval loop without raw query text.",
+    query: hogql(`
+with outcomes as (
+  select
+    uniqExactIf(properties.search_request_id, event = 'discover_search_submitted') as submitted_requests,
+    uniqExactIf(properties.search_request_id, event = 'trusted_place_search_result_selected') as selected_requests,
+    uniqExactIf(properties.search_request_id, event = 'trusted_place_search_converted') as converted_requests,
+    uniqExactIf(properties.search_request_id, event = 'trusted_place_search_reformulated') as reformulated_requests
+  from events
+  where event in (
+    'discover_search_submitted',
+    'trusted_place_search_result_selected',
+    'trusted_place_search_converted',
+    'trusted_place_search_reformulated'
+  )
+    and timestamp >= now() - interval 30 day
+)
+select
+  submitted_requests,
+  selected_requests,
+  converted_requests,
+  reformulated_requests,
+  round(100.0 * selected_requests / nullIf(submitted_requests, 0), 1) as selection_rate_percent,
+  round(100.0 * converted_requests / nullIf(selected_requests, 0), 1) as selected_to_conversion_percent,
+  round(100.0 * reformulated_requests / nullIf(submitted_requests, 0), 1) as reformulation_rate_percent
+from outcomes
+`.trim()),
+  },
+  {
     key: "notifications-accepted-volume",
     name: "Notifications — APNs-accepted volume",
     description: "Notifications with at least one APNs-accepted device delivery, split by coarse notification type. This is provider acceptance, not proof that iOS displayed the alert.",
@@ -312,6 +381,15 @@ const sections = [
     title: "Monetization",
     body: "Deliberately blank. There is no monetization model or event contract yet. Add metrics only after a product decision, then update docs/analytics.md and this managed dashboard together.",
     insightKeys: [],
+  },
+  {
+    title: "Search Retrieval",
+    body: "Search quality and speed by request: stage p50/p95, provider health, selected rank/provenance, downstream check-in/Wanna conversion, and reformulation. Opaque request IDs connect events; raw queries, place names, coordinates, and private content are excluded.",
+    insightKeys: [
+      "search-stage-latency",
+      "search-provider-selection",
+      "search-request-outcomes",
+    ],
   },
   {
     title: "Notification Operations",

@@ -430,6 +430,9 @@ final class BuildConfigurationTests: XCTestCase {
                     "place_name": "Private place",
                     "note": "Private note",
                     "phone_number": "+15551234567",
+                    "candidate_ids": "candidate-a,candidate-b",
+                    "raw_query": "coffee near my apartment",
+                    "search_request_id": "5fbf4cb4-0fba-47f9-8ad8-8fa7edee4d3d",
                     "status": String(repeating: "a", count: 140)
                 ]
             )
@@ -438,6 +441,12 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertNil(event.properties["place_name"])
         XCTAssertNil(event.properties["note"])
         XCTAssertNil(event.properties["phone_number"])
+        XCTAssertNil(event.properties["candidate_ids"])
+        XCTAssertNil(event.properties["raw_query"])
+        XCTAssertEqual(
+            event.properties["search_request_id"],
+            "5fbf4cb4-0fba-47f9-8ad8-8fa7edee4d3d"
+        )
         XCTAssertEqual(event.properties["status"]?.count, 128)
     }
 
@@ -502,7 +511,16 @@ final class BuildConfigurationTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("AGENTS.md")
         )
 
-        for section in ["Acquisition", "Activation", "Engagement", "Retention", "Referrals", "Monetization"] {
+        for section in [
+            "Acquisition",
+            "Activation",
+            "Engagement",
+            "Retention",
+            "Referrals",
+            "Monetization",
+            "Search Retrieval",
+            "Notification Operations"
+        ] {
             XCTAssertTrue(dashboard.contains("title: \"\(section)\""))
         }
         XCTAssertTrue(analyticsDocs.contains("engagement_action_performed"))
