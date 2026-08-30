@@ -2950,24 +2950,12 @@ private struct SavedPlacesListScreen: View {
         switch submission.context.mode {
         case .sharedVisit:
             return nil
-        case .add(let sourceType):
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: sourceType,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-            await persistVisitPhotoAttachments(
-                submission.photoAttachments,
-                to: targetVisit,
+        case .add:
+            guard let result = await persistNewPlaceSaveSubmission(
+                submission,
                 store: store,
                 backend: visitBackend
-            )
+            ) else { return nil }
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
