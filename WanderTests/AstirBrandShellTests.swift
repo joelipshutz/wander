@@ -15,13 +15,17 @@ final class AstirBrandShellTests: XCTestCase {
         }
     }
 
-    func testBareLaunchArgumentStartsAtIntro() {
+    func testPrototypeContainsOnlyCurrentAppSurfaces() {
+        XCTAssertEqual(AstirBrandShellPage.allCases, [.map, .feed, .lists, .add, .profile])
+    }
+
+    func testBareLaunchArgumentStartsAtMap() {
         XCTAssertEqual(
             AstirBrandShellPage.resolved(
                 from: ["Wander", "-AstirBrandShell"],
                 environment: [:]
             ),
-            .intro
+            .map
         )
     }
 
@@ -29,9 +33,9 @@ final class AstirBrandShellTests: XCTestCase {
         XCTAssertEqual(
             AstirBrandShellPage.resolved(
                 from: ["Wander"],
-                environment: ["WANDER_ASTIR_BRAND_SHELL": "memory"]
+                environment: ["WANDER_ASTIR_BRAND_SHELL": "lists"]
             ),
-            .memory
+            .lists
         )
     }
 
@@ -41,17 +45,17 @@ final class AstirBrandShellTests: XCTestCase {
         )
     }
 
-    func testUnknownPrototypePageFallsBackToIntro() {
+    func testUnknownPrototypePageFallsBackToMap() {
         XCTAssertEqual(
             AstirBrandShellPage.resolved(
                 from: ["Wander", "-AstirBrandShell", "unknown"],
                 environment: [:]
             ),
-            .intro
+            .map
         )
     }
 
-    func testPrototypeKeepsAstirSpellingAndConcreteEventLogistics() throws {
+    func testPrototypeKeepsAstirSpellingAndCurrentNavigationContract() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -63,11 +67,18 @@ final class AstirBrandShellTests: XCTestCase {
 
         XCTAssertTrue(source.contains("Text(\"ASTIR\")"))
         XCTAssertFalse(source.contains("Text(\"ASTER\")"))
-        XCTAssertTrue(source.contains("Thu, Sep 17"))
-        XCTAssertTrue(source.contains("7–10 PM"))
-        XCTAssertTrue(source.contains("Back Patio"))
-        XCTAssertTrue(source.contains("Join the table"))
-        XCTAssertTrue(source.contains("$32"))
+        XCTAssertTrue(source.contains("case .map: \"Map\""))
+        XCTAssertTrue(source.contains("case .feed: \"Feed\""))
+        XCTAssertTrue(source.contains("case .lists: \"Lists\""))
+        XCTAssertTrue(source.contains("case .profile: \"Profile\""))
+        XCTAssertTrue(source.contains("title: \"I’m here now\""))
+        XCTAssertTrue(source.contains("title: \"Paste a link\""))
+        XCTAssertTrue(source.contains("title: \"Search manually\""))
+        XCTAssertTrue(source.contains("title: \"Add from a photo\""))
+        XCTAssertFalse(source.contains("Third Thursday"))
+        XCTAssertFalse(source.contains("Join the table"))
+        XCTAssertFalse(source.contains("You’re expected"))
+        XCTAssertFalse(source.contains("The night, kept."))
     }
 }
 #endif

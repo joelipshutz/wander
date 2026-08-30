@@ -4,13 +4,10 @@ import SwiftUI
 import UIKit
 
 enum AstirBrandShellPage: String, CaseIterable {
-    case intro
-    case today
     case map
-    case event
-    case arrival
-    case present
-    case memory
+    case feed
+    case lists
+    case add
     case profile
 
     static func resolved(
@@ -18,7 +15,7 @@ enum AstirBrandShellPage: String, CaseIterable {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> AstirBrandShellPage? {
         if let environmentValue = environment["WANDER_ASTIR_BRAND_SHELL"] {
-            return AstirBrandShellPage(rawValue: environmentValue) ?? .intro
+            return AstirBrandShellPage(rawValue: environmentValue) ?? .map
         }
 
         guard let flagIndex = arguments.firstIndex(of: "-AstirBrandShell") else {
@@ -27,66 +24,51 @@ enum AstirBrandShellPage: String, CaseIterable {
 
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return .intro
+            return .map
         }
 
-        return AstirBrandShellPage(rawValue: arguments[valueIndex]) ?? .intro
+        return AstirBrandShellPage(rawValue: arguments[valueIndex]) ?? .map
     }
 
     fileprivate var initialTab: AstirShellTab {
         switch self {
-        case .map:
+        case .map, .add:
             return .map
-        case .memory:
-            return .memories
+        case .feed:
+            return .feed
+        case .lists:
+            return .lists
         case .profile:
-            return .you
-        case .intro, .today, .event, .arrival, .present:
-            return .today
+            return .profile
         }
     }
 
-    fileprivate var initialRoute: AstirShellRoute? {
-        switch self {
-        case .event:
-            return .event
-        case .arrival:
-            return .arrival
-        case .present:
-            return .present
-        case .intro, .today, .map, .memory, .profile:
-            return nil
-        }
+    fileprivate var presentsAdd: Bool {
+        self == .add
     }
-}
-
-private enum AstirShellRoute: Hashable {
-    case event
-    case arrival
-    case present
 }
 
 private enum AstirShellTab: String, CaseIterable, Hashable {
-    case today
     case map
-    case memories
-    case you
+    case feed
+    case lists
+    case profile
 
     var title: String {
         switch self {
-        case .today: "today"
-        case .map: "map"
-        case .memories: "memories"
-        case .you: "you"
+        case .map: "Map"
+        case .feed: "Feed"
+        case .lists: "Lists"
+        case .profile: "Profile"
         }
     }
 
     var symbol: String {
         switch self {
-        case .today: "sparkles"
         case .map: "map"
-        case .memories: "rectangle.stack"
-        case .you: "person.crop.circle"
+        case .feed: "newspaper"
+        case .lists: "bookmark.square"
+        case .profile: "person.crop.circle"
         }
     }
 }
@@ -94,323 +76,360 @@ private enum AstirShellTab: String, CaseIterable, Hashable {
 struct AstirBrandShellRoot: View {
     let page: AstirBrandShellPage
 
-    @State private var hasEntered: Bool
     @State private var selectedTab: AstirShellTab
-    @State private var path: [AstirShellRoute]
+    @State private var isPresentingAdd: Bool
 
     init(page: AstirBrandShellPage) {
         self.page = page
-        _hasEntered = State(initialValue: page != .intro)
         _selectedTab = State(initialValue: page.initialTab)
-        _path = State(initialValue: page.initialRoute.map { [$0] } ?? [])
-    }
-
-    private var shellColorScheme: ColorScheme {
-        switch path.last {
-        case .event, .arrival, .present:
-            return .dark
-        case nil:
-            return .light
-        }
+        _isPresentingAdd = State(initialValue: page.presentsAdd)
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            Group {
-                if hasEntered {
-                    AstirTabShell(
-                        selectedTab: $selectedTab,
-                        openEvent: { path.append(.event) }
-                    )
-                } else {
-                    AstirIntroView {
-                        withAnimation(.easeOut(duration: 0.45)) {
-                            hasEntered = true
-                        }
-                    }
-                }
+        AstirTabShell(
+            selectedTab: $selectedTab,
+            presentAdd: { isPresentingAdd = true }
+        )
+        .sheet(isPresented: $isPresentingAdd) {
+            AstirAddView {
+                isPresentingAdd = false
             }
-            .navigationDestination(for: AstirShellRoute.self) { route in
-                switch route {
-                case .event:
-                    AstirEventDetailView {
-                        path.append(.arrival)
-                    }
-                case .arrival:
-                    AstirArrivalView {
-                        path.append(.present)
-                    }
-                case .present:
-                    AstirPresenceView {
-                        path.removeAll()
-                        selectedTab = .memories
-                    }
-                }
-            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(24)
+            .presentationBackground(AstirPalette.paper)
         }
-        .preferredColorScheme(shellColorScheme)
+        .preferredColorScheme(.light)
         .tint(AstirPalette.clay)
         .accessibilityIdentifier("astir.brand.shell")
     }
 }
 
-private struct AstirIntroView: View {
-    let enter: () -> Void
-
-    var body: some View {
-        ZStack {
-            AstirCroppedAssetImage(
-                assetName: "AstirWestsideBoard",
-                normalizedRect: CGRect(x: 0.667, y: 0, width: 0.333, height: 0.333)
-            )
-            .ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    AstirPalette.ink.opacity(0.18),
-                    AstirPalette.ink.opacity(0.72),
-                    AstirPalette.ink.opacity(0.98),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    AstirWordmark(color: AstirPalette.paper)
-                    Spacer()
-                    AstirFrameMark(color: AstirPalette.paper.opacity(0.82))
-                        .frame(width: 36, height: 36)
-                }
-
-                Spacer()
-
-                Text("OCEAN PARK · CHAPTER 01")
-                    .font(AstirType.meta(13))
-                    .tracking(1.9)
-                    .foregroundStyle(AstirPalette.signal)
-
-                Text("A story\nyou’re in.")
-                    .font(AstirType.display(54))
-                    .foregroundStyle(AstirPalette.paper)
-                    .lineSpacing(-4)
-                    .padding(.top, 12)
-
-                Text("Places you trust. Nights worth leaving home for. People you’ll see again.")
-                    .font(AstirType.body(18, weight: .medium))
-                    .foregroundStyle(AstirPalette.paper.opacity(0.82))
-                    .lineSpacing(5)
-                    .padding(.top, 20)
-                    .frame(maxWidth: 320, alignment: .leading)
-
-                Button(action: enter) {
-                    HStack {
-                        Text("Enter Ocean Park")
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(AstirType.ui(16, weight: .bold))
-                    .foregroundStyle(AstirPalette.ink)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(AstirPalette.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("astir.enter")
-                .padding(.top, 32)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
-        }
-    }
-}
-
 private struct AstirTabShell: View {
     @Binding var selectedTab: AstirShellTab
-    let openEvent: () -> Void
+    let presentAdd: () -> Void
 
     var body: some View {
         Group {
             switch selectedTab {
-            case .today:
-                AstirTodayView(openEvent: openEvent)
             case .map:
-                AstirMapView(openEvent: openEvent)
-            case .memories:
-                AstirMemoryView()
-            case .you:
+                AstirMapView(presentAdd: presentAdd)
+            case .feed:
+                AstirFeedView(presentAdd: presentAdd)
+            case .lists:
+                AstirListsView()
+            case .profile:
                 AstirProfileView()
             }
         }
         .background(AstirPalette.paper.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AstirTabBar(selectedTab: $selectedTab)
         }
     }
 }
 
-private struct AstirTodayView: View {
-    let openEvent: () -> Void
+private struct AstirMapView: View {
+    let presentAdd: () -> Void
+
+    @State private var position = MapCameraPosition.region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.0038, longitude: -118.4861),
+            span: MKCoordinateSpan(latitudeDelta: 0.021, longitudeDelta: 0.026)
+        )
+    )
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Map(position: $position) {
+                Annotation(
+                    "Bar Monette",
+                    coordinate: CLLocationCoordinate2D(latitude: 34.0033, longitude: -118.4817)
+                ) {
+                    AstirMapPin(symbol: "fork.knife", color: AstirPalette.clay, isSelected: true)
+                }
+
+                Annotation(
+                    "Gjusta",
+                    coordinate: CLLocationCoordinate2D(latitude: 33.9958, longitude: -118.4748)
+                ) {
+                    AstirMapPin(symbol: "cup.and.saucer.fill", color: AstirPalette.pool)
+                }
+
+                Annotation(
+                    "Heavy Handed",
+                    coordinate: CLLocationCoordinate2D(latitude: 34.0105, longitude: -118.4934)
+                ) {
+                    AstirMapPin(symbol: "takeoutbag.and.cup.and.straw.fill", color: AstirPalette.gold)
+                }
+
+                Annotation(
+                    "The Rose",
+                    coordinate: CLLocationCoordinate2D(latitude: 34.0004, longitude: -118.4761)
+                ) {
+                    AstirMapPin(symbol: "wineglass.fill", color: AstirPalette.pool)
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .ignoresSafeArea(edges: .top)
+
+            VStack(spacing: 10) {
+                HStack(alignment: .center) {
+                    AstirWordmark(color: AstirPalette.ink)
+                    Spacer()
+                    AstirRoundActionButton(
+                        systemName: "plus",
+                        accessibilityLabel: "Add a place",
+                        action: presentAdd
+                    )
+                }
+
+                AstirSearchField(placeholder: "Search places, people, or a vibe")
+
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        AstirFilterChip(title: "You", isSelected: true)
+                        AstirFilterChip(title: "Following")
+                        AstirFilterChip(title: "Friends")
+                        AstirFilterChip(title: "Been")
+                        AstirFilterChip(title: "Wanna go")
+                    }
+                    .padding(.horizontal, 1)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+
+            VStack {
+                Spacer()
+                AstirSelectedPlaceCard()
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
+        }
+        .accessibilityIdentifier("astir.map.screen")
+    }
+}
+
+private struct AstirMapPin: View {
+    let symbol: String
+    let color: Color
+    var isSelected = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(AstirPalette.paper)
+            .frame(width: isSelected ? 44 : 38, height: isSelected ? 44 : 38)
+            .background(color)
+            .clipShape(Circle())
+            .overlay {
+                Circle().stroke(AstirPalette.paper, lineWidth: isSelected ? 4 : 2)
+            }
+            .shadow(color: AstirPalette.ink.opacity(0.18), radius: 7, y: 4)
+    }
+}
+
+private struct AstirSelectedPlaceCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .top, spacing: 14) {
+                AstirCroppedAssetImage(
+                    assetName: "PlaceCarouselPhotos",
+                    normalizedRect: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5)
+                )
+                .frame(width: 84, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Bar Monette")
+                            .font(AstirType.display(25))
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    Text("PIZZA · OCEAN PARK")
+                        .font(AstirType.meta(11))
+                        .tracking(1)
+                        .foregroundStyle(AstirPalette.clay)
+                    Text("Maya, Jonah, and 3 people you follow saved this.")
+                        .font(AstirType.ui(12, weight: .medium))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                        .lineLimit(2)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Label("Been", systemImage: "checkmark")
+                    .font(AstirType.ui(12, weight: .bold))
+                    .foregroundStyle(AstirPalette.paper)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 38)
+                    .background(AstirPalette.ink)
+                    .clipShape(Capsule())
+
+                Label("Wanna go", systemImage: "bookmark")
+                    .font(AstirType.ui(12, weight: .bold))
+                    .foregroundStyle(AstirPalette.ink)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 38)
+                    .overlay { Capsule().stroke(AstirPalette.lineStrong, lineWidth: 1) }
+
+                Spacer()
+                AstirAvatarStack(initials: ["MC", "JL", "AR"], size: 28)
+            }
+        }
+        .padding(16)
+        .background(AstirPalette.paper.opacity(0.98))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AstirPalette.line, lineWidth: 1)
+        }
+        .shadow(color: AstirPalette.ink.opacity(0.12), radius: 14, y: 6)
+    }
+}
+
+private struct AstirFeedView: View {
+    let presentAdd: () -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
-                AstirAppHeader(kicker: "THURSDAY · 6:12 PM")
+                AstirScreenHeader(
+                    kicker: "YOUR PEOPLE",
+                    actionSystemName: "plus",
+                    actionAccessibilityLabel: "Add a place",
+                    action: presentAdd
+                )
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Close enough\nto become a night.")
-                        .font(AstirType.display(38))
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Where your people\nhave been.")
+                        .font(AstirType.display(39))
                         .foregroundStyle(AstirPalette.ink)
-                    Text("Ocean Park, within 12 minutes")
-                        .font(AstirType.ui(14, weight: .semibold))
+                        .lineSpacing(-2)
+                    Text("Real places, from people whose taste you trust.")
+                        .font(AstirType.ui(15, weight: .semibold))
                         .foregroundStyle(AstirPalette.inkMuted)
                 }
 
-                AstirEventCard(openEvent: openEvent)
+                AstirPeopleRow()
+                AstirSectionHeader(number: "01", title: "Recent from friends")
 
-                VStack(alignment: .leading, spacing: 12) {
-                    AstirSectionHeader(number: "02", title: "Before the night")
+                AstirActivityCard(
+                    crop: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5),
+                    actor: "Maya",
+                    action: "saved a place",
+                    initials: "MC",
+                    avatarColor: AstirPalette.clay,
+                    place: "Bar Monette",
+                    metadata: "PIZZA · OCEAN PARK",
+                    note: "Tiny room, perfect crust, go early enough to get the counter."
+                )
 
-                    AstirPlaceCard(
-                        crop: CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
-                        name: "Back Patio",
-                        detail: "Dinner · courtyard · 6 min bike",
-                        note: "Maya says: take the side table at golden hour."
-                    )
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    AstirSectionHeader(number: "03", title: "A little farther out")
-                    HStack(spacing: 12) {
-                        AstirCompactSignal(
-                            time: "SAT · 9 AM",
-                            title: "Tower 26\nmorning swim",
-                            color: AstirPalette.pool
-                        )
-                        AstirCompactSignal(
-                            time: "SUN · 4 PM",
-                            title: "Open studio\nat Sunset Ceramics",
-                            color: AstirPalette.clay
-                        )
-                    }
-                }
+                AstirActivityCard(
+                    crop: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+                    actor: "Alex",
+                    action: "checked in",
+                    initials: "AR",
+                    avatarColor: AstirPalette.gold,
+                    place: "Gjusta",
+                    metadata: "BAKERY · VENICE",
+                    note: "The patio is calm before nine. Coffee, sesame croissant, no notes."
+                )
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 28)
         }
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("astir.feed.screen")
     }
 }
 
-private struct AstirAppHeader: View {
-    let kicker: String
+private struct AstirPeopleRow: View {
+    private let people: [(String, String, Color)] = [
+        ("Maya", "MC", AstirPalette.clay),
+        ("Jonah", "JL", AstirPalette.pool),
+        ("Alex", "AR", AstirPalette.gold),
+        ("Tessa", "TS", AstirPalette.deepOcean),
+    ]
 
     var body: some View {
-        HStack(alignment: .top) {
-            AstirWordmark(color: AstirPalette.ink)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(kicker)
-                Text("OCEAN PARK")
-                    .foregroundStyle(AstirPalette.clay)
-            }
-            .font(AstirType.meta(11))
-            .tracking(1.15)
-            .foregroundStyle(AstirPalette.inkMuted)
-        }
-    }
-}
-
-private struct AstirEventCard: View {
-    let openEvent: () -> Void
-
-    var body: some View {
-        Button(action: openEvent) {
-            ZStack(alignment: .bottomLeading) {
-                AstirCroppedAssetImage(
-                    assetName: "PlaceCarouselPhotos",
-                    normalizedRect: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)
-                )
-
-                LinearGradient(
-                    colors: [.clear, AstirPalette.ink.opacity(0.22), AstirPalette.ink.opacity(0.96)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Label("TONIGHT", systemImage: "circle.fill")
-                            .font(AstirType.meta(12))
-                            .foregroundStyle(AstirPalette.signal)
-                        Spacer()
-                        Text("CHAPTER 03")
-                            .font(AstirType.meta(11))
-                            .foregroundStyle(AstirPalette.paper.opacity(0.68))
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Third Thursday")
-                            .font(AstirType.display(34))
-                        Text("Dinner + Listening")
-                            .font(AstirType.ui(17, weight: .semibold))
-                    }
-                    .foregroundStyle(AstirPalette.paper)
-
-                    HStack(alignment: .center, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("SEP 17 · 7–10 PM")
-                            Text("BACK PATIO · $32")
-                        }
-                        .font(AstirType.meta(12))
-                        .foregroundStyle(AstirPalette.paper.opacity(0.78))
-
-                        Spacer()
-
-                        AstirAvatarStack(initials: ["MC", "JL", "AR"], size: 29)
-                    }
+        HStack(spacing: 18) {
+            ForEach(Array(people.enumerated()), id: \.offset) { _, person in
+                VStack(spacing: 7) {
+                    AstirAvatar(initials: person.1, size: 52, color: person.2)
+                    Text(person.0)
+                        .font(AstirType.ui(11, weight: .bold))
+                        .foregroundStyle(AstirPalette.ink)
                 }
-                .padding(20)
             }
-            .frame(height: 340)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(AstirPalette.paper.opacity(0.22), lineWidth: 1)
-            }
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("astir.event.card")
-        .accessibilityLabel("Third Thursday, Dinner and Listening, tonight from 7 to 10 PM at Back Patio")
+        .padding(16)
+        .background(AstirPalette.paperRaised)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AstirPalette.line, lineWidth: 1)
+        }
     }
 }
 
-private struct AstirPlaceCard: View {
+private struct AstirActivityCard: View {
     let crop: CGRect
-    let name: String
-    let detail: String
+    let actor: String
+    let action: String
+    let initials: String
+    let avatarColor: Color
+    let place: String
+    let metadata: String
     let note: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: crop)
-                .frame(height: 190)
+            HStack(spacing: 10) {
+                AstirAvatar(initials: initials, size: 38, color: avatarColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(actor)
+                        .font(AstirType.ui(14, weight: .bold))
+                    Text(action)
+                        .font(AstirType.ui(12, weight: .medium))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                }
+                Spacer()
+                Text("2H")
+                    .font(AstirType.meta(10))
+                    .foregroundStyle(AstirPalette.inkMuted)
+            }
+            .padding(15)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(name)
-                    .font(AstirType.display(25))
-                Text(detail.uppercased())
+            AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: crop)
+                .frame(height: 220)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(place)
+                    .font(AstirType.display(27))
+                Text(metadata)
                     .font(AstirType.meta(11))
+                    .tracking(1)
                     .foregroundStyle(AstirPalette.clay)
-                Text(note)
+                Text("“\(note)”")
                     .font(AstirType.body(15, weight: .medium))
                     .foregroundStyle(AstirPalette.inkMuted)
                     .lineSpacing(3)
+                HStack(spacing: 18) {
+                    Label("12", systemImage: "heart")
+                    Label("3", systemImage: "bubble.left")
+                    Spacer()
+                    Image(systemName: "bookmark")
+                }
+                .font(AstirType.ui(12, weight: .bold))
+                .foregroundStyle(AstirPalette.ink)
+                .padding(.top, 5)
             }
             .padding(16)
         }
@@ -423,26 +442,127 @@ private struct AstirPlaceCard: View {
     }
 }
 
-private struct AstirCompactSignal: View {
-    let time: String
+private struct AstirListsView: View {
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                AstirScreenHeader(
+                    kicker: "PLACES WITH A PLAN",
+                    actionSystemName: "plus",
+                    actionAccessibilityLabel: "New list"
+                ) {}
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Places, held\nfor later.")
+                        .font(AstirType.display(39))
+                        .foregroundStyle(AstirPalette.ink)
+                        .lineSpacing(-2)
+                    Text("Save places into a plan you can actually use.")
+                        .font(AstirType.ui(15, weight: .semibold))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                }
+
+                AstirListCard(
+                    crop: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5),
+                    title: "Tonight",
+                    subtitle: "Easy tables close to home",
+                    count: "8 PLACES",
+                    initials: ["JL", "MC"]
+                )
+
+                AstirSectionHeader(number: "02", title: "Your lists")
+
+                HStack(alignment: .top, spacing: 12) {
+                    AstirCompactListCard(
+                        crop: CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
+                        title: "Date night",
+                        detail: "12 places"
+                    )
+                    AstirCompactListCard(
+                        crop: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+                        title: "Saturday coffee",
+                        detail: "6 places"
+                    )
+                }
+
+                AstirListRow(
+                    title: "Parents in town",
+                    detail: "9 places · shared with Maya",
+                    color: AstirPalette.pool
+                )
+                AstirListRow(
+                    title: "Wanna go",
+                    detail: "38 places · private",
+                    color: AstirPalette.clay
+                )
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityIdentifier("astir.lists.screen")
+    }
+}
+
+private struct AstirListCard: View {
+    let crop: CGRect
     let title: String
-    let color: Color
+    let subtitle: String
+    let count: String
+    let initials: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(time)
-                .font(AstirType.meta(11))
-                .foregroundStyle(color)
-            Text(title)
-                .font(AstirType.ui(16, weight: .bold))
-                .foregroundStyle(AstirPalette.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 0)
-            Image(systemName: "arrow.up.right")
-                .foregroundStyle(AstirPalette.inkMuted)
+        ZStack(alignment: .bottomLeading) {
+            AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: crop)
+            LinearGradient(
+                colors: [.clear, AstirPalette.ink.opacity(0.2), AstirPalette.ink.opacity(0.94)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(count)
+                        .font(AstirType.meta(11))
+                        .foregroundStyle(AstirPalette.signal)
+                    Spacer()
+                    AstirAvatarStack(initials: initials, size: 28)
+                }
+                Text(title)
+                    .font(AstirType.display(34))
+                    .foregroundStyle(AstirPalette.paper)
+                Text(subtitle)
+                    .font(AstirType.ui(14, weight: .semibold))
+                    .foregroundStyle(AstirPalette.paper.opacity(0.78))
+            }
+            .padding(18)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
+        .frame(height: 300)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct AstirCompactListCard: View {
+    let crop: CGRect
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: crop)
+                .frame(height: 132)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(AstirType.ui(15, weight: .bold))
+                    .foregroundStyle(AstirPalette.ink)
+                Text(detail.uppercased())
+                    .font(AstirType.meta(9))
+                    .foregroundStyle(AstirPalette.inkMuted)
+            }
+            .padding(13)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AstirPalette.paperRaised)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
@@ -452,565 +572,19 @@ private struct AstirCompactSignal: View {
     }
 }
 
-private struct AstirMapView: View {
-    let openEvent: () -> Void
-
-    @State private var position = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 34.0037, longitude: -118.4865),
-            span: MKCoordinateSpan(latitudeDelta: 0.023, longitudeDelta: 0.027)
-        )
-    )
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Map(position: $position) {
-                Annotation("Third Thursday", coordinate: CLLocationCoordinate2D(latitude: 34.0022, longitude: -118.4827)) {
-                    Button(action: openEvent) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 15, weight: .bold))
-                                .frame(width: 38, height: 38)
-                                .background(AstirPalette.signal)
-                                .foregroundStyle(AstirPalette.paper)
-                                .clipShape(Circle())
-                            Text("TONIGHT")
-                                .font(AstirType.meta(9))
-                                .foregroundStyle(AstirPalette.ink)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Marker("Record Room", systemImage: "music.note", coordinate: CLLocationCoordinate2D(latitude: 34.0053, longitude: -118.4814))
-                    .tint(AstirPalette.pool)
-                Marker("Sunset Ceramics", systemImage: "paintpalette.fill", coordinate: CLLocationCoordinate2D(latitude: 34.0092, longitude: -118.4782))
-                    .tint(AstirPalette.clay)
-                Marker("Tower 26", systemImage: "figure.open.water.swim", coordinate: CLLocationCoordinate2D(latitude: 34.0024, longitude: -118.5002))
-                    .tint(AstirPalette.gold)
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .ignoresSafeArea(edges: .top)
-
-            VStack(spacing: 12) {
-                AstirAppHeader(kicker: "12 MINUTE RADIUS")
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .background(AstirPalette.paper.opacity(0.95))
-
-                HStack(spacing: 8) {
-                    AstirMapFilter(title: "for you", isSelected: true)
-                    AstirMapFilter(title: "tonight", isSelected: false)
-                    AstirMapFilter(title: "your people", isSelected: false)
-                }
-                .padding(.horizontal, 16)
-            }
-
-            VStack {
-                Spacer()
-                Button(action: openEvent) {
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(AstirPalette.signal)
-                            .frame(width: 9, height: 9)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Third Thursday")
-                                .font(AstirType.ui(16, weight: .bold))
-                            Text("7 PM · Back Patio · 2 friends going")
-                                .font(AstirType.ui(12, weight: .semibold))
-                                .foregroundStyle(AstirPalette.inkMuted)
-                        }
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
-                    .foregroundStyle(AstirPalette.ink)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 64)
-                    .background(AstirPalette.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .stroke(AstirPalette.line, lineWidth: 1)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-private struct AstirMapFilter: View {
-    let title: String
-    let isSelected: Bool
-
-    var body: some View {
-        Text(title)
-            .font(AstirType.ui(12, weight: .bold))
-            .foregroundStyle(isSelected ? AstirPalette.paper : AstirPalette.ink)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 40)
-            .background(isSelected ? AstirPalette.ink : AstirPalette.paper.opacity(0.94))
-            .clipShape(Capsule())
-            .overlay {
-                Capsule().stroke(isSelected ? .clear : AstirPalette.line, lineWidth: 1)
-            }
-    }
-}
-
-private struct AstirEventDetailView: View {
-    let join: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .bottomLeading) {
-                    AstirCroppedAssetImage(
-                        assetName: "PlaceCarouselPhotos",
-                        normalizedRect: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)
-                    )
-                    LinearGradient(
-                        colors: [.clear, AstirPalette.ink.opacity(0.92)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("ASTIR PRESENTS · CHAPTER 03")
-                            .font(AstirType.meta(11))
-                            .tracking(1.5)
-                            .foregroundStyle(AstirPalette.signal)
-                        Text("Third Thursday")
-                            .font(AstirType.display(43))
-                        Text("Dinner + Listening")
-                            .font(AstirType.ui(18, weight: .semibold))
-                    }
-                    .foregroundStyle(AstirPalette.paper)
-                    .padding(22)
-                }
-                .frame(height: 360)
-
-                VStack(alignment: .leading, spacing: 28) {
-                    Text("A shared table, a short vinyl set, and a room designed so arriving alone doesn’t feel like arriving alone.")
-                        .font(AstirType.display(26))
-                        .foregroundStyle(AstirPalette.paper)
-                        .lineSpacing(5)
-
-                    AstirLogisticsGrid()
-
-                    Divider().overlay(AstirPalette.paper.opacity(0.18))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        AstirDarkSectionHeader(number: "01", title: "The room")
-                        Text("The side courtyard at Back Patio. Seventy-two seats, candlelight, one long listening set, and enough structure to make conversation easy.")
-                            .font(AstirType.body(16, weight: .medium))
-                            .foregroundStyle(AstirPalette.paper.opacity(0.72))
-                            .lineSpacing(5)
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        AstirDarkSectionHeader(number: "02", title: "Familiar faces")
-                        HStack(spacing: 14) {
-                            AstirAvatarStack(initials: ["MC", "JL", "AR", "TS"], size: 42)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Maya and Jonah are going")
-                                    .font(AstirType.ui(15, weight: .bold))
-                                Text("Plus one person you met at Record Room")
-                                    .font(AstirType.ui(13, weight: .medium))
-                                    .foregroundStyle(AstirPalette.paper.opacity(0.6))
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        AstirDarkSectionHeader(number: "03", title: "Hosted by")
-                        Text("Lena Ortiz · Back Patio\nTheo March · Ocean Park Record Room")
-                            .font(AstirType.body(16, weight: .semibold))
-                            .foregroundStyle(AstirPalette.paper.opacity(0.82))
-                            .lineSpacing(7)
-                    }
-                }
-                .padding(22)
-                .padding(.bottom, 96)
-            }
-        }
-        .scrollIndicators(.hidden)
-        .background(AstirPalette.ink.ignoresSafeArea())
-        .toolbarBackground(AstirPalette.ink, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: join) {
-                HStack {
-                    Text("Join the table")
-                    Spacer()
-                    Text("$32")
-                    Image(systemName: "arrow.right")
-                }
-                .font(AstirType.ui(16, weight: .bold))
-                .foregroundStyle(AstirPalette.ink)
-                .padding(.horizontal, 20)
-                .frame(maxWidth: .infinity, minHeight: 58)
-                .background(AstirPalette.paper)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(AstirPalette.ink.opacity(0.97))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("astir.join")
-        }
-    }
-}
-
-private struct AstirLogisticsGrid: View {
-    private let columns = [GridItem(.flexible()), GridItem(.flexible())]
-
-    var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
-            AstirLogistic(label: "WHEN", value: "Thu, Sep 17\n7–10 PM")
-            AstirLogistic(label: "WHERE", value: "Back Patio\nOcean Park")
-            AstirLogistic(label: "ARRIVAL", value: "Side courtyard\n6 min bike")
-            AstirLogistic(label: "GUEST", value: "One welcome\nUntil full")
-        }
-    }
-}
-
-private struct AstirLogistic: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(AstirType.meta(10))
-                .foregroundStyle(AstirPalette.signal)
-            Text(value)
-                .font(AstirType.ui(15, weight: .semibold))
-                .foregroundStyle(AstirPalette.paper)
-                .lineSpacing(3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct AstirArrivalView: View {
-    let checkIn: () -> Void
-
-    var body: some View {
-        ZStack {
-            AstirPalette.deepOcean.ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    AstirWordmark(color: AstirPalette.paper)
-                    Spacer()
-                    Text("ARRIVAL 03")
-                        .font(AstirType.meta(11))
-                        .tracking(1.3)
-                        .foregroundStyle(AstirPalette.signal)
-                }
-
-                Spacer()
-
-                Text("6:45")
-                    .font(AstirType.meta(94))
-                    .foregroundStyle(AstirPalette.paper)
-                    .minimumScaleFactor(0.8)
-                Text("PM · THURSDAY, SEPTEMBER 17")
-                    .font(AstirType.meta(12))
-                    .tracking(1.3)
-                    .foregroundStyle(AstirPalette.paper.opacity(0.56))
-
-                Text("You’re\nexpected.")
-                    .font(AstirType.display(47))
-                    .foregroundStyle(AstirPalette.paper)
-                    .lineSpacing(-3)
-                    .padding(.top, 34)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    AstirArrivalRow(symbol: "arrow.turn.down.right", title: "Enter through the side courtyard")
-                    AstirArrivalRow(symbol: "bicycle", title: "Bike rack is inside the gate")
-                    AstirArrivalRow(symbol: "person.crop.circle.badge.checkmark", title: "Maya and Jonah have arrived")
-                }
-                .padding(.top, 28)
-
-                Button(action: checkIn) {
-                    HStack {
-                        Text("I’m here")
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(AstirType.ui(16, weight: .bold))
-                    .foregroundStyle(AstirPalette.deepOcean)
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity, minHeight: 58)
-                    .background(AstirPalette.paper)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("astir.arrive")
-                .padding(.top, 34)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-        }
-        .toolbarBackground(AstirPalette.deepOcean, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
-    }
-}
-
-private struct AstirArrivalRow: View {
-    let symbol: String
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(AstirPalette.signal)
-                .frame(width: 24)
-            Text(title)
-                .font(AstirType.ui(15, weight: .semibold))
-                .foregroundStyle(AstirPalette.paper.opacity(0.82))
-        }
-    }
-}
-
-private struct AstirPresenceView: View {
-    let finishNight: () -> Void
-
-    var body: some View {
-        ZStack {
-            AstirPalette.ink.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                AstirFrameMark(color: AstirPalette.signal)
-                    .frame(width: 56, height: 56)
-
-                Text("You’re here.")
-                    .font(AstirType.display(48))
-                    .foregroundStyle(AstirPalette.paper)
-                    .padding(.top, 24)
-
-                Text("The table is through the courtyard.\nEverything else can wait.")
-                    .font(AstirType.body(17, weight: .medium))
-                    .foregroundStyle(AstirPalette.paper.opacity(0.62))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(5)
-                    .padding(.top, 14)
-
-                HStack(spacing: 9) {
-                    Image(systemName: "camera.aperture")
-                    Text("Selected moments will appear tomorrow")
-                }
-                .font(AstirType.ui(12, weight: .semibold))
-                .foregroundStyle(AstirPalette.paper.opacity(0.45))
-                .padding(.top, 34)
-
-                Spacer()
-
-                Button(action: finishNight) {
-                    Text("See the morning after")
-                        .font(AstirType.ui(13, weight: .bold))
-                        .foregroundStyle(AstirPalette.paper.opacity(0.66))
-                        .frame(minHeight: 48)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("astir.finish.night")
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
-        }
-        .toolbarBackground(AstirPalette.ink, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
-    }
-}
-
-private struct AstirMemoryView: View {
-    private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                AstirAppHeader(kicker: "FRIDAY · 9:14 AM")
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MEMORY 03 · SEPTEMBER 17")
-                        .font(AstirType.meta(11))
-                        .tracking(1.2)
-                        .foregroundStyle(AstirPalette.clay)
-                    Text("The night, kept.")
-                        .font(AstirType.display(40))
-                    Text("Third Thursday · Back Patio")
-                        .font(AstirType.ui(15, weight: .semibold))
-                        .foregroundStyle(AstirPalette.inkMuted)
-                }
-
-                LazyVGrid(columns: columns, spacing: 8) {
-                    AstirMemoryPhoto(rect: CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
-                    AstirMemoryPhoto(rect: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
-                    AstirMemoryPhoto(rect: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5))
-                    AstirMemoryPhoto(rect: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5))
-                }
-                .accessibilityIdentifier("astir.memory.photos")
-
-                VStack(alignment: .leading, spacing: 10) {
-                    AstirSectionHeader(number: "01", title: "A note from Lena")
-                    Text("Thank you for making a long table feel easy. We’ll keep the lamps on for the next one.")
-                        .font(AstirType.display(24))
-                        .foregroundStyle(AstirPalette.ink)
-                        .lineSpacing(4)
-                    Text("LENA · BACK PATIO")
-                        .font(AstirType.meta(10))
-                        .tracking(1.1)
-                        .foregroundStyle(AstirPalette.clay)
-                }
-                .padding(18)
-                .background(AstirPalette.paperRaised)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AstirPalette.line, lineWidth: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    AstirSectionHeader(number: "02", title: "People from the night")
-                    AstirPersonRow(initials: "TS", name: "Tessa", context: "You talked by the record shelf")
-                    AstirPersonRow(initials: "AO", name: "Alex", context: "Maya introduced you")
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    AstirSectionHeader(number: "03", title: "Now part of your Astir")
-                    HStack(spacing: 18) {
-                        AstirHistoryStat(value: "19", label: "places")
-                        AstirHistoryStat(value: "4", label: "events")
-                        AstirHistoryStat(value: "12", label: "people")
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
-        }
-        .scrollIndicators(.hidden)
-        .background(AstirPalette.paper)
-    }
-}
-
-private struct AstirMemoryPhoto: View {
-    let rect: CGRect
-
-    var body: some View {
-        AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: rect)
-            .frame(height: 164)
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
-}
-
-private struct AstirPersonRow: View {
-    let initials: String
-    let name: String
-    let context: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            AstirAvatar(initials: initials, size: 46, color: AstirPalette.pool)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name)
-                    .font(AstirType.ui(15, weight: .bold))
-                Text(context)
-                    .font(AstirType.ui(12, weight: .medium))
-                    .foregroundStyle(AstirPalette.inkMuted)
-            }
-            Spacer()
-            Button("Say hi") {}
-                .font(AstirType.ui(12, weight: .bold))
-                .foregroundStyle(AstirPalette.ink)
-                .padding(.horizontal, 13)
-                .frame(minHeight: 38)
-                .overlay {
-                    Capsule().stroke(AstirPalette.lineStrong, lineWidth: 1)
-                }
-        }
-    }
-}
-
-private struct AstirProfileView: View {
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                AstirAppHeader(kicker: "YOUR ASTIR")
-
-                HStack(alignment: .center, spacing: 16) {
-                    AstirAvatar(initials: "JL", size: 76, color: AstirPalette.clay)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Joe")
-                            .font(AstirType.display(34))
-                        Text("Ocean Park · since chapter 01")
-                            .font(AstirType.ui(13, weight: .semibold))
-                            .foregroundStyle(AstirPalette.inkMuted)
-                    }
-                }
-
-                HStack(spacing: 18) {
-                    AstirHistoryStat(value: "19", label: "places")
-                    AstirHistoryStat(value: "4", label: "events")
-                    AstirHistoryStat(value: "12", label: "people")
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    AstirSectionHeader(number: "01", title: "Your chapters")
-                    AstirTimelineRow(number: "04", title: "Third Thursday", detail: "Back Patio · Sep 17", color: AstirPalette.clay)
-                    AstirTimelineRow(number: "03", title: "Morning swim", detail: "Tower 26 · Aug 29", color: AstirPalette.pool)
-                    AstirTimelineRow(number: "02", title: "Open studio", detail: "Sunset Ceramics · Aug 13", color: AstirPalette.gold)
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    AstirSectionHeader(number: "02", title: "A pattern forming")
-                    Text("You keep returning to small rooms, long tables, and places within biking distance.")
-                        .font(AstirType.display(26))
-                        .lineSpacing(5)
-                    Text("Astir uses this quietly. You control what other people can see.")
-                        .font(AstirType.ui(13, weight: .medium))
-                        .foregroundStyle(AstirPalette.inkMuted)
-                }
-                .padding(18)
-                .background(AstirPalette.paperRaised)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AstirPalette.line, lineWidth: 1)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
-        }
-        .scrollIndicators(.hidden)
-    }
-}
-
-private struct AstirTimelineRow: View {
-    let number: String
+private struct AstirListRow: View {
     let title: String
     let detail: String
     let color: Color
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(number)
-                .font(AstirType.meta(14))
-                .foregroundStyle(color)
-                .frame(width: 28, alignment: .leading)
+            Image(systemName: "bookmark.fill")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AstirPalette.paper)
+                .frame(width: 42, height: 42)
+                .background(color)
+                .clipShape(Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(AstirType.ui(16, weight: .bold))
@@ -1023,23 +597,389 @@ private struct AstirTimelineRow: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(AstirPalette.inkMuted)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 4)
     }
 }
 
-private struct AstirHistoryStat: View {
+private struct AstirProfileView: View {
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                AstirScreenHeader(
+                    kicker: "YOUR PROFILE",
+                    actionSystemName: "gearshape",
+                    actionAccessibilityLabel: "Settings"
+                ) {}
+
+                HStack(alignment: .center, spacing: 16) {
+                    AstirAvatar(initials: "JL", size: 78, color: AstirPalette.clay)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Joe")
+                            .font(AstirType.display(35))
+                            .foregroundStyle(AstirPalette.ink)
+                        Text("@joe · Ocean Park")
+                            .font(AstirType.ui(13, weight: .semibold))
+                            .foregroundStyle(AstirPalette.inkMuted)
+                        Text("Always looking for the table outside.")
+                            .font(AstirType.ui(13, weight: .medium))
+                            .foregroundStyle(AstirPalette.ink)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    AstirProfileStat(value: "84", label: "Been")
+                    AstirProfileStat(value: "38", label: "Wanna")
+                    AstirProfileStat(value: "26", label: "Friends")
+                }
+
+                AstirSectionHeader(number: "01", title: "This month")
+                AstirMonthCard()
+
+                AstirSectionHeader(number: "02", title: "Recent activity")
+                VStack(spacing: 16) {
+                    AstirRecentPlaceRow(
+                        crop: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5),
+                        title: "Bar Monette",
+                        detail: "Saved · today"
+                    )
+                    AstirRecentPlaceRow(
+                        crop: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+                        title: "Gjusta",
+                        detail: "Checked in · Saturday"
+                    )
+                    AstirRecentPlaceRow(
+                        crop: CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
+                        title: "The Rose",
+                        detail: "Recommended · Aug 22"
+                    )
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityIdentifier("astir.profile.screen")
+    }
+}
+
+private struct AstirProfileStat: View {
     let value: String
     let label: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(AstirType.display(30))
+                .font(AstirType.display(29))
+                .foregroundStyle(AstirPalette.ink)
             Text(label.uppercased())
                 .font(AstirType.meta(10))
                 .foregroundStyle(AstirPalette.inkMuted)
         }
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AstirPalette.paperRaised)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(AstirPalette.line, lineWidth: 1)
+        }
+    }
+}
+
+private struct AstirMonthCard: View {
+    private let days = ["M", "T", "W", "T", "F", "S", "S"]
+    private let activeDays: Set<Int> = [0, 2, 3, 5]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("AUGUST")
+                    .font(AstirType.meta(12))
+                    .tracking(1.2)
+                    .foregroundStyle(AstirPalette.clay)
+                Spacer()
+                Text("12 places · 4 check-ins")
+                    .font(AstirType.ui(11, weight: .semibold))
+                    .foregroundStyle(AstirPalette.inkMuted)
+            }
+
+            HStack(spacing: 0) {
+                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                    VStack(spacing: 8) {
+                        Text(day)
+                            .font(AstirType.meta(10))
+                            .foregroundStyle(AstirPalette.inkMuted)
+                        Circle()
+                            .fill(activeDays.contains(index) ? AstirPalette.clay : AstirPalette.line)
+                            .frame(
+                                width: activeDays.contains(index) ? 18 : 8,
+                                height: activeDays.contains(index) ? 18 : 8
+                            )
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+
+            Text("You kept close to home and found four places worth returning to.")
+                .font(AstirType.display(24))
+                .foregroundStyle(AstirPalette.ink)
+                .lineSpacing(3)
+        }
+        .padding(18)
+        .background(AstirPalette.paperRaised)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AstirPalette.line, lineWidth: 1)
+        }
+    }
+}
+
+private struct AstirRecentPlaceRow: View {
+    let crop: CGRect
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            AstirCroppedAssetImage(assetName: "PlaceCarouselPhotos", normalizedRect: crop)
+                .frame(width: 62, height: 62)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(AstirType.ui(16, weight: .bold))
+                    .foregroundStyle(AstirPalette.ink)
+                Text(detail)
+                    .font(AstirType.ui(12, weight: .medium))
+                    .foregroundStyle(AstirPalette.inkMuted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AstirPalette.inkMuted)
+        }
+    }
+}
+
+private struct AstirAddView: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(alignment: .center) {
+                    Capsule()
+                        .fill(AstirPalette.lineStrong.opacity(0.7))
+                        .frame(width: 38, height: 5)
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .trailing) {
+                            Button(action: dismiss) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(AstirPalette.ink)
+                                    .frame(width: 40, height: 40)
+                                    .background(AstirPalette.paperRaised)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Close")
+                        }
+                }
+
+                AstirWordmark(color: AstirPalette.ink)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Add to your map.")
+                        .font(AstirType.display(40))
+                        .foregroundStyle(AstirPalette.ink)
+                    Text("Start with whatever you have. Organize it later.")
+                        .font(AstirType.ui(15, weight: .semibold))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                }
+
+                VStack(spacing: 10) {
+                    AstirAddSourceRow(
+                        number: "01",
+                        symbol: "location.fill",
+                        title: "I’m here now",
+                        detail: "Find the place around you",
+                        color: AstirPalette.clay
+                    )
+                    AstirAddSourceRow(
+                        number: "02",
+                        symbol: "link",
+                        title: "Paste a link",
+                        detail: "Instagram, TikTok, Maps, or a website",
+                        color: AstirPalette.pool
+                    )
+                    AstirAddSourceRow(
+                        number: "03",
+                        symbol: "magnifyingglass",
+                        title: "Search manually",
+                        detail: "Look up any place",
+                        color: AstirPalette.deepOcean
+                    )
+                    AstirAddSourceRow(
+                        number: "04",
+                        symbol: "photo",
+                        title: "Add from a photo",
+                        detail: "Use a screenshot or camera roll",
+                        color: AstirPalette.gold
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    AstirSectionHeader(number: "05", title: "Finish later")
+                    Text("Unresolved places stay as drafts. Nothing gets lost because you didn’t have every detail.")
+                        .font(AstirType.body(14, weight: .medium))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                        .lineSpacing(3)
+                }
+                .padding(16)
+                .background(AstirPalette.paperRaised)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AstirPalette.line, lineWidth: 1)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityIdentifier("astir.add.screen")
+    }
+}
+
+private struct AstirAddSourceRow: View {
+    let number: String
+    let symbol: String
+    let title: String
+    let detail: String
+    let color: Color
+
+    var body: some View {
+        Button {} label: {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(AstirPalette.paper)
+                    .frame(width: 46, height: 46)
+                    .background(color)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(AstirType.ui(16, weight: .bold))
+                        .foregroundStyle(AstirPalette.ink)
+                    Text(detail)
+                        .font(AstirType.ui(12, weight: .medium))
+                        .foregroundStyle(AstirPalette.inkMuted)
+                }
+                Spacer()
+                Text(number)
+                    .font(AstirType.meta(11))
+                    .foregroundStyle(color)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AstirPalette.inkMuted)
+            }
+            .padding(14)
+            .background(AstirPalette.paperRaised)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(AstirPalette.line, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct AstirScreenHeader: View {
+    let kicker: String
+    let actionSystemName: String
+    let actionAccessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center) {
+            AstirWordmark(color: AstirPalette.ink)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(kicker)
+                    .font(AstirType.meta(10))
+                    .tracking(1.25)
+                    .foregroundStyle(AstirPalette.clay)
+                AstirRoundActionButton(
+                    systemName: actionSystemName,
+                    accessibilityLabel: actionAccessibilityLabel,
+                    action: action
+                )
+            }
+        }
+    }
+}
+
+private struct AstirRoundActionButton: View {
+    let systemName: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(AstirPalette.paper)
+                .frame(width: 42, height: 42)
+                .background(AstirPalette.ink)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct AstirSearchField: View {
+    let placeholder: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+            Text(placeholder)
+                .font(AstirType.ui(13, weight: .semibold))
+            Spacer()
+        }
+        .foregroundStyle(AstirPalette.inkMuted)
+        .padding(.horizontal, 15)
+        .frame(minHeight: 46)
+        .background(AstirPalette.paper.opacity(0.97))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AstirPalette.line, lineWidth: 1)
+        }
+        .shadow(color: AstirPalette.ink.opacity(0.08), radius: 8, y: 3)
+    }
+}
+
+private struct AstirFilterChip: View {
+    let title: String
+    var isSelected = false
+
+    var body: some View {
+        Text(title)
+            .font(AstirType.ui(12, weight: .bold))
+            .foregroundStyle(isSelected ? AstirPalette.paper : AstirPalette.ink)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 38)
+            .background(isSelected ? AstirPalette.ink : AstirPalette.paper.opacity(0.97))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(isSelected ? .clear : AstirPalette.line, lineWidth: 1)
+            }
     }
 }
 
@@ -1054,7 +994,7 @@ private struct AstirTabBar: View {
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: selectedTab == tab ? "\(tab.symbol).fill" : tab.symbol)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
                         Text(tab.title)
                             .font(AstirType.ui(10, weight: .bold))
                     }
@@ -1067,7 +1007,7 @@ private struct AstirTabBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 4)
-        .background(AstirPalette.paper.opacity(0.97))
+        .background(AstirPalette.paper.opacity(0.98))
         .overlay(alignment: .top) {
             Rectangle().fill(AstirPalette.line).frame(height: 1)
         }
@@ -1091,23 +1031,6 @@ private struct AstirSectionHeader: View {
     }
 }
 
-private struct AstirDarkSectionHeader: View {
-    let number: String
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(number)
-                .foregroundStyle(AstirPalette.signal)
-            Text(title.uppercased())
-                .foregroundStyle(AstirPalette.paper)
-            Spacer()
-        }
-        .font(AstirType.meta(11))
-        .tracking(1.15)
-    }
-}
-
 private struct AstirWordmark: View {
     let color: Color
 
@@ -1121,31 +1044,6 @@ private struct AstirWordmark: View {
                 .tracking(2.5)
         }
         .foregroundStyle(color)
-    }
-}
-
-private struct AstirFrameMark: View {
-    let color: Color
-
-    var body: some View {
-        Canvas { context, size in
-            let length = min(size.width, size.height) * 0.35
-            let width: CGFloat = 1.5
-            var path = Path()
-            path.move(to: CGPoint(x: 0, y: length))
-            path.addLine(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: length, y: 0))
-            path.move(to: CGPoint(x: size.width - length, y: 0))
-            path.addLine(to: CGPoint(x: size.width, y: 0))
-            path.addLine(to: CGPoint(x: size.width, y: length))
-            path.move(to: CGPoint(x: size.width, y: size.height - length))
-            path.addLine(to: CGPoint(x: size.width, y: size.height))
-            path.addLine(to: CGPoint(x: size.width - length, y: size.height))
-            path.move(to: CGPoint(x: length, y: size.height))
-            path.addLine(to: CGPoint(x: 0, y: size.height))
-            path.addLine(to: CGPoint(x: 0, y: size.height - length))
-            context.stroke(path, with: .color(color), lineWidth: width)
-        }
     }
 }
 
