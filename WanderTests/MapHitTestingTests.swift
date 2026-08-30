@@ -5,6 +5,80 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),
+            0.35,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.minimumVisibleInterval(
+                arguments: [
+                    "Wander",
+                    MapInitialLoadingPolicy.testDelayArgument,
+                    "1750"
+                ]
+            ),
+            1.75,
+            accuracy: 0.001
+        )
+        for invalidArguments in [
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument],
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument, "invalid"],
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument, "nan"],
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument, "inf"],
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument, "-1"],
+            ["Wander", MapInitialLoadingPolicy.testDelayArgument, "0"]
+        ] {
+            XCTAssertEqual(
+                MapInitialLoadingPolicy.minimumVisibleInterval(arguments: invalidArguments),
+                0.35,
+                accuracy: 0.001
+            )
+        }
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.remainingVisibleInterval(
+                elapsed: 0.2,
+                minimumVisibleInterval: 0.35
+            ),
+            0.15,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.remainingVisibleInterval(
+                elapsed: 1,
+                minimumVisibleInterval: 0.35
+            ),
+            0,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.remainingVisibleInterval(
+                elapsed: -1,
+                minimumVisibleInterval: 0.35
+            ),
+            0.35,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(MapInitialLoadingPolicy.postRevealHydrationDelay, 0.25, accuracy: 0.001)
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.refreshStallInterval(arguments: []),
+            0,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            MapInitialLoadingPolicy.refreshStallInterval(
+                arguments: [
+                    "Wander",
+                    MapInitialLoadingPolicy.testRefreshStallArgument,
+                    "30000"
+                ]
+            ),
+            30,
+            accuracy: 0.001
+        )
+    }
+
     func testMapChromeContentWidthPreservesInsetsAcrossPhoneSizesAndSafeAreas() {
         XCTAssertEqual(
             MapChromeLayout.contentWidth(

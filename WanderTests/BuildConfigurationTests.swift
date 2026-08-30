@@ -163,6 +163,24 @@ final class BuildConfigurationTests: XCTestCase {
         )
     }
 
+    func testClerkDependencyIncludesAcceptedAuthCompletionOrdering() throws {
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let resolvedData = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+            )
+        )
+        let resolved = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: resolvedData) as? [String: Any]
+        )
+        let pins = try XCTUnwrap(resolved["pins"] as? [[String: Any]])
+        let clerk = try XCTUnwrap(pins.first { $0["identity"] as? String == "clerk-ios" })
+        let state = try XCTUnwrap(clerk["state"] as? [String: Any])
+
+        XCTAssertTrue(project.contains("from: 1.5.0"))
+        XCTAssertEqual(state["version"] as? String, "1.5.0")
+    }
+
     func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(

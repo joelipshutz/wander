@@ -2,6 +2,91 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testPerformanceFixtureCoversMapKitDuringInitialAccountLoading() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapInitialLoadingDelayMilliseconds",
+            "30000"
+        ]
+        app.launch()
+
+        let loading = app.descendants(matching: .any)
+            .matching(identifier: "map.initialLoading")
+            .firstMatch
+        XCTAssertTrue(loading.waitForExistence(timeout: 3))
+        XCTAssertEqual(loading.label, "Loading your map…")
+        XCTAssertFalse(app.maps.firstMatch.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-381 graceful large-account Map loading"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testPerformanceFixtureRevealsUsableMapAfterInitialLoading() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapInitialLoadingDelayMilliseconds",
+            "1000"
+        ]
+        app.launch()
+
+        let loading = app.descendants(matching: .any)
+            .matching(identifier: "map.initialLoading")
+            .firstMatch
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 5))
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 3))
+        XCTAssertTrue(map.isHittable)
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 3))
+    }
+
+    func testPerformanceFixtureRevealsMapBeforeStalledInitialRefreshFinishes() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapInitialLoadingDelayMilliseconds",
+            "12000",
+            "-WanderMapInitialLoadingRefreshStallMilliseconds",
+            "30000"
+        ]
+        app.launch()
+
+        let loading = app.descendants(matching: .any)
+            .matching(identifier: "map.initialLoading")
+            .firstMatch
+        XCTAssertTrue(loading.waitForExistence(timeout: 3))
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 15))
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            XCTWaiter.wait(
+                for: [
+                    XCTNSPredicateExpectation(
+                        predicate: NSPredicate(format: "hittable == true"),
+                        object: map
+                    )
+                ],
+                timeout: 3
+            ),
+            .completed
+        )
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 3))
+    }
+
     func testPerformanceFixtureKeepsWarmSourceSwitchesResponsive() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -116,7 +201,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                     ),
                     .completed
                 )
-                XCTAssertFalse(activePin.waitForExistence(timeout: 1))
+                XCTAssertTrue(activePin.waitForNonExistence(timeout: 1))
                 XCTAssertEqual(
                     XCTWaiter.wait(
                         for: [
@@ -135,7 +220,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
             XCTAssertTrue(card.waitForExistence(timeout: 3))
             map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
-            XCTAssertFalse(card.waitForExistence(timeout: 3))
+            XCTAssertTrue(card.waitForNonExistence(timeout: 3))
             didMeasureInteraction = true
         }
 

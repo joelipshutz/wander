@@ -75,7 +75,8 @@ final class ClerkAuthService: AuthSessionProviding {
                 for await event in events {
                     guard !Task.isCancelled else { break }
                     switch event {
-                    case .signInCompleted, .signUpCompleted:
+                    case .signInCompleted, .signUpCompleted,
+                         .signInNeedsContinuation, .signUpNeedsContinuation:
                         // A completed auth response does not always include the
                         // refreshed Clerk client. The initiating auth method
                         // resolves that authoritative client before succeeding.
