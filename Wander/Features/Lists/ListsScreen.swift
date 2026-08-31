@@ -3484,7 +3484,10 @@ private struct ListMapFullScreen: View {
                     list: list,
                     focusedPlaceID: focusedPlaceIDBinding,
                     walkthroughPlaceID: walkthroughPlaceID,
-                    bottomInset: bottomInset
+                    bottomInset: bottomInset,
+                    onFocus: { place in
+                        focusFromRail(place)
+                    }
                 ) { place in
                     open(place)
                 }
@@ -3539,6 +3542,27 @@ private struct ListMapFullScreen: View {
             fitting: coordinates,
             minimumSpan: minimumSpan,
             paddingMultiplier: 1.75
+        ) else { return }
+        let adjustedRegion = viewportAdjustedRegion(
+            region,
+            viewportHeight: mapViewportHeight,
+            headerHeight: headerOverlayHeight,
+            bottomHeight: 0
+        )
+
+        if reduceMotion {
+            position = .region(adjustedRegion)
+        } else {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                position = .region(adjustedRegion)
+            }
+        }
+    }
+
+    private func focusFromRail(_ place: ListPlaceMock) {
+        guard let region = ListMapPlaceFocusCamera.region(
+            around: place.coordinate,
+            preserving: visibleRegion
         ) else { return }
         let adjustedRegion = viewportAdjustedRegion(
             region,
@@ -3667,6 +3691,7 @@ private struct ListMapPlaceRail: View {
     @Binding var focusedPlaceID: String?
     let walkthroughPlaceID: String?
     let bottomInset: CGFloat
+    let onFocus: (ListPlaceMock) -> Void
     let onSelect: (ListPlaceMock) -> Void
 
     var body: some View {
@@ -3702,7 +3727,7 @@ private struct ListMapPlaceRail: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $focusedPlaceID, anchor: .center)
+            .scrollPosition(id: railScrollPositionBinding, anchor: .center)
             .frame(height: max(102, railViewportHeight))
         }
         .padding(.top, WanderTheme.spacing3)
@@ -3719,6 +3744,20 @@ private struct ListMapPlaceRail: View {
                 focusedPlaceID = walkthroughPlaceID ?? list.places.first?.id
             }
         }
+    }
+
+    private var railScrollPositionBinding: Binding<String?> {
+        Binding(
+            get: { focusedPlaceID },
+            set: { placeID in
+                guard focusedPlaceID != placeID else { return }
+                focusedPlaceID = placeID
+                guard let placeID,
+                      let place = list.places.first(where: { $0.id == placeID })
+                else { return }
+                onFocus(place)
+            }
+        )
     }
 }
 

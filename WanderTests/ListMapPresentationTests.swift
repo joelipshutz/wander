@@ -75,6 +75,55 @@ final class ListMapPresentationTests: XCTestCase {
         XCTAssertNil(state.openPlaceID)
     }
 
+    func testPlaceFocusCameraCentersOnPlaceAndCapsAnOverviewAtNeighborhoodScale() throws {
+        let place = CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437)
+
+        let focusedRegion = try XCTUnwrap(
+            ListMapPlaceFocusCamera.region(
+                around: place,
+                preserving: region(
+                    center: CLLocationCoordinate2D(latitude: 34.08, longitude: -118.28),
+                    latitudeDelta: 0.15,
+                    longitudeDelta: 0.24
+                )
+            )
+        )
+
+        XCTAssertEqual(focusedRegion.center.latitude, place.latitude, accuracy: 0.000_001)
+        XCTAssertEqual(focusedRegion.center.longitude, place.longitude, accuracy: 0.000_001)
+        XCTAssertEqual(focusedRegion.span.latitudeDelta, 0.012, accuracy: 0.000_001)
+        XCTAssertEqual(focusedRegion.span.longitudeDelta, 0.012, accuracy: 0.000_001)
+    }
+
+    func testPlaceFocusCameraPreservesACloserManualZoom() throws {
+        let focusedRegion = try XCTUnwrap(
+            ListMapPlaceFocusCamera.region(
+                around: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
+                preserving: region(
+                    center: CLLocationCoordinate2D(latitude: 40.713, longitude: -74.005),
+                    latitudeDelta: 0.004,
+                    longitudeDelta: 0.006
+                )
+            )
+        )
+
+        XCTAssertEqual(focusedRegion.span.latitudeDelta, 0.004, accuracy: 0.000_001)
+        XCTAssertEqual(focusedRegion.span.longitudeDelta, 0.006, accuracy: 0.000_001)
+    }
+
+    func testPlaceFocusCameraRejectsAnUnmappableCoordinate() {
+        XCTAssertNil(
+            ListMapPlaceFocusCamera.region(
+                around: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                preserving: region(
+                    center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+                    latitudeDelta: 0.08,
+                    longitudeDelta: 0.08
+                )
+            )
+        )
+    }
+
     func testClustererGroupsNearbyPlacesAndKeepsDispersedPlacesSeparate() {
         let coordinates = [
             coordinate("near-a", latitude: 34.05220, longitude: -118.24370),
