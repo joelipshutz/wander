@@ -82,6 +82,18 @@ enum MapSearchPerformancePolicy {
     }
 }
 
+/// Explicit search is broader than the currently rendered map source. The
+/// store has already applied visibility/block policy; only the user's active
+/// More refinements are allowed to narrow this corpus.
+enum MapSearchCorpusPolicy {
+    static func savedPlaces(
+        from authorizedVisiblePlaces: [VisiblePlace],
+        refinements: MapMoreFilterSelection
+    ) -> [VisiblePlace] {
+        MapFilterSelection.applying(refinements, to: authorizedVisiblePlaces)
+    }
+}
+
 enum MapInitialLoadingPolicy {
     static let defaultMinimumVisibleInterval: TimeInterval = 0.35
     static let postRevealHydrationDelay: TimeInterval = 0.25
@@ -750,6 +762,7 @@ struct MapScreen: View {
     @State private var isMoreFiltersPresented: Bool
     @State private var mapTabBecameInactiveAt: Date?
     @State private var routedVisiblePlace: VisiblePlace?
+    @State private var routedVisiblePlaceGroup: VisiblePlaceGroup?
     @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
@@ -942,21 +955,26 @@ struct MapScreen: View {
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
         _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
+        _routedVisiblePlaceGroup = State(initialValue: nil)
         _renderedAnnotationViewport = State(initialValue: Self.initialRemoteViewport)
     }
 
     private var visiblePlaces: [VisiblePlace] {
         MapActivePinRetention.places(
             from: renderProjection.visiblePlaces,
-            retaining: routedVisiblePlace
+            retaining: routedVisiblePlace,
+            retainingGroup: routedVisiblePlaceGroup
         )
     }
 
-    /// Search must use only the query-filtered projection. A routed place is
-    /// retained below strictly for map/card continuity and is not a match for
-    /// an unrelated query merely because it was selected before searching.
-    private var searchVisiblePlaces: [VisiblePlace] {
-        renderProjection.visiblePlaces
+    /// Search spans every save the viewer is authorized to see, independent of
+    /// Featured/Friends/You, viewport, Featured's Been-only rule, and its
+    /// presentation caps. Active More refinements remain intentional filters.
+    private var mapSearchSavedCorpus: [VisiblePlace] {
+        MapSearchCorpusPolicy.savedPlaces(
+            from: store.visiblePlaces(),
+            refinements: mapFilterState.more
+        )
     }
 
     private var mapSearchDockClearance: CGFloat {
@@ -976,12 +994,9 @@ struct MapScreen: View {
         MapActivePinRetention.groups(
             from: renderProjection.visiblePlaceGroups,
             retaining: routedVisiblePlace,
+            retainingGroup: routedVisiblePlaceGroup,
             currentUserID: store.currentUser.id
         )
-    }
-
-    private var searchVisiblePlaceGroups: [VisiblePlaceGroup] {
-        renderProjection.visiblePlaceGroups
     }
 
     private func projectedGroupKey(for visiblePlace: VisiblePlace) -> String? {
@@ -1966,6 +1981,7 @@ struct MapScreen: View {
             mapQuery = ""
             mapSearchCandidates = [candidate]
             routedVisiblePlace = nil
+            routedVisiblePlaceGroup = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
@@ -2654,9 +2670,14 @@ struct MapScreen: View {
         renderProjection.tasteSummaries
     }
 
-    private func selectVisiblePlace(_ visiblePlace: VisiblePlace) {
+    private func selectVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        retainingGroup: VisiblePlaceGroup? = nil
+    ) {
         routedVisiblePlace = visiblePlace
-        selectedPlaceGroupKey = projectedGroupKey(for: visiblePlace)
+        routedVisiblePlaceGroup = retainingGroup
+        selectedPlaceGroupKey = retainingGroup?.key
+            ?? projectedGroupKey(for: visiblePlace)
             ?? VisiblePlaceGrouping.key(for: visiblePlace)
     }
 
@@ -3231,12 +3252,12 @@ struct MapScreen: View {
         isSearchingMapKit = false
 
         let requestRevision = beginMapSearchRequest()
-        let queryMatchingPlaces = trustedMapMatches(for: requestedQuery)
+        let savedCandidates = savedMapSearchCandidates(for: requestedQuery)
         mapSearchTask = Task { @MainActor in
             await runMapSearch(
                 requestedQuery: requestedQuery,
                 requestRevision: requestRevision,
-                queryMatchingPlaces: queryMatchingPlaces
+                savedCandidates: savedCandidates
             )
             if requestRevision == mapSearchRevision {
                 mapSearchTask = nil
@@ -3328,11 +3349,11 @@ struct MapScreen: View {
         suppressNextQueryAutoSelection = true
         mapQuery = query
         let requestRevision = beginMapSearchRequest()
-        let queryMatchingPlaces = trustedMapMatches(for: query)
+        let savedCandidates = savedMapSearchCandidates(for: query)
         await runMapSearch(
             requestedQuery: query,
             requestRevision: requestRevision,
-            queryMatchingPlaces: queryMatchingPlaces
+            savedCandidates: savedCandidates
         )
     }
 
@@ -3340,7 +3361,7 @@ struct MapScreen: View {
     private func runMapSearch(
         requestedQuery: String,
         requestRevision: UInt64,
-        queryMatchingPlaces: [VisiblePlace]
+        savedCandidates: [MapSearchSavedCandidate]
     ) async {
         let query = requestedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
@@ -3369,11 +3390,16 @@ struct MapScreen: View {
             return
         }
 
-        if let firstVisiblePlace = queryMatchingPlaces.first {
+        if let firstSavedCandidate = savedCandidates.first(where: {
+            MapSearchCandidatePolicy.strength(of: $0) == .strong
+        }) {
             mapSearchCandidates = []
-            selectVisiblePlace(firstVisiblePlace)
+            selectVisiblePlace(
+                firstSavedCandidate.place,
+                retainingGroup: firstSavedCandidate.group
+            )
             selectedSearchCandidateID = nil
-            center(on: firstVisiblePlace)
+            center(on: firstSavedCandidate.place)
             mapSearchMessage = nil
             return
         }
@@ -3396,25 +3422,33 @@ struct MapScreen: View {
             ) else {
                 return
             }
-            mapSearchCandidates = candidates.filter { !isAlreadyVisible(candidate: $0) }
+            mapSearchCandidates = candidates.filter {
+                !isAlreadyInMapSearchCorpus(candidate: $0)
+            }
 
-            switch MapSubmittedSearchSelectionPolicy.selection(
-                queryMatchingPlaces: queryMatchingPlaces,
-                mapKitCandidates: mapSearchCandidates
-            ) {
-            case .saved(let firstVisiblePlace):
-                selectVisiblePlace(firstVisiblePlace)
+            switch MapSearchCandidatePolicy.orderedCandidates(
+                query: query,
+                saved: savedCandidates,
+                mapKit: mapSearchCandidates
+            ).first {
+            case .saved(let firstSavedCandidate):
+                selectVisiblePlace(
+                    firstSavedCandidate.place,
+                    retainingGroup: firstSavedCandidate.group
+                )
                 selectedSearchCandidateID = nil
-                center(on: firstVisiblePlace)
+                center(on: firstSavedCandidate.place)
                 mapSearchMessage = nil
-            case .candidate(let firstCandidate):
+            case .mapKit(let firstCandidate):
                 routedVisiblePlace = nil
+                routedVisiblePlaceGroup = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
                 mapSearchMessage = nil
-            case .none:
+            case nil:
                 routedVisiblePlace = nil
+                routedVisiblePlaceGroup = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
                 mapSearchMessage = "No places on your map or map results found."
@@ -3430,17 +3464,35 @@ struct MapScreen: View {
                 return
             }
             mapSearchCandidates = []
-            mapSearchMessage = "No places on your map match yet. Try a more specific search."
+            let fallbackCandidate = MapSearchCandidatePolicy.orderedCandidates(
+                query: query,
+                saved: savedCandidates,
+                mapKit: []
+            ).first
+            if case .saved(let firstSavedCandidate) = fallbackCandidate {
+                selectVisiblePlace(
+                    firstSavedCandidate.place,
+                    retainingGroup: firstSavedCandidate.group
+                )
+                selectedSearchCandidateID = nil
+                center(on: firstSavedCandidate.place)
+                mapSearchMessage = nil
+            } else {
+                mapSearchMessage = "No places on your map match yet. Try a more specific search."
+            }
         }
     }
 
-    private func trustedMapMatches(for requestedQuery: String) -> [VisiblePlace] {
+    private func savedMapSearchCandidates(
+        for requestedQuery: String
+    ) -> [MapSearchSavedCandidate] {
         let query = TrustedPlaceSearchQuery(requestedQuery)
         guard query.hasMeaningfulTokens else { return [] }
-        return TrustedPlaceSearch.matches(
+        return MapSearchCandidatePolicy.savedCandidates(
             query: query,
-            in: baseVisiblePlaces
-        ).map(\.place)
+            in: mapSearchSavedCorpus,
+            currentUserID: store.currentUser.id
+        )
     }
 
     private func beginMapSearchRequest() -> UInt64 {
@@ -3534,6 +3586,7 @@ struct MapScreen: View {
         replaceCompactSelectionIfNeeded {
             mapSearchCandidates = [candidate]
             routedVisiblePlace = nil
+            routedVisiblePlaceGroup = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
@@ -3551,6 +3604,12 @@ struct MapScreen: View {
     }
 
     private func mapKitCandidates(for query: String, limit: Int = 8) async throws -> [PlaceCandidate] {
+        #if DEBUG
+        if Self.usesREC352MapSearchFixtures() {
+            return Array(Self.rec352MapKitCandidates(for: query).prefix(limit))
+        }
+        #endif
+
         let searchRegion = currentSearchRegion
         let primaryItems = try await mapKitItems(for: query, region: searchRegion)
         var items = primaryItems
@@ -3631,6 +3690,56 @@ struct MapScreen: View {
         )
         return mapKitCandidates(from: items, query: query, origin: origin, limit: limit)
     }
+
+    #if DEBUG
+    private static func usesREC352MapSearchFixtures(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        guard let index = arguments.firstIndex(of: "-WanderMapSearchFixtures"),
+              arguments.indices.contains(index + 1)
+        else { return false }
+        return normalized(arguments[index + 1]) == "rec352"
+    }
+
+    private static func rec352MapKitCandidates(for query: String) -> [PlaceCandidate] {
+        switch normalized(query) {
+        case "larchmont noodles":
+            return [
+                PlaceCandidate(
+                    id: "rec352_mapkit_larchmont_noodles_ramen",
+                    name: "Larchmont Noodles & Ramen",
+                    category: "restaurant",
+                    address: "512 N Larchmont Blvd",
+                    locality: "Los Angeles",
+                    region: "CA",
+                    latitude: 34.0804,
+                    longitude: -118.3237,
+                    sourceProvider: "mapkit",
+                    sourceProviderPlaceID: "rec352_mapkit_larchmont_noodles_ramen",
+                    confidence: 1
+                )
+            ]
+        case "long tables":
+            return [
+                PlaceCandidate(
+                    id: "rec352_mapkit_long_tables_cafe",
+                    name: "Long Tables Cafe",
+                    category: "coffee",
+                    address: "1200 Sunset Blvd",
+                    locality: "Los Angeles",
+                    region: "CA",
+                    latitude: 34.0775,
+                    longitude: -118.2608,
+                    sourceProvider: "mapkit",
+                    sourceProviderPlaceID: "rec352_mapkit_long_tables_cafe",
+                    confidence: 1
+                )
+            ]
+        default:
+            return []
+        }
+    }
+    #endif
 
     private func mapKitItems(
         for query: String,
@@ -4319,12 +4428,14 @@ struct MapScreen: View {
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
             routedVisiblePlace = nil
+            routedVisiblePlaceGroup = nil
             if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
                 for: visiblePlace,
                 in: visiblePlaces,
                 currentUserID: store.currentUser.id
             ) {
                 routedVisiblePlace = remainingGroup.primary
+                routedVisiblePlaceGroup = remainingGroup
                 selectedPlaceGroupKey = remainingGroup.key
             } else {
                 selectedPlaceGroupKey = nil
@@ -4360,8 +4471,11 @@ struct MapScreen: View {
         }
     }
 
-    private func isAlreadyVisible(candidate: PlaceCandidate) -> Bool {
-        visiblePlace(matching: candidate) != nil
+    private func isAlreadyInMapSearchCorpus(candidate: PlaceCandidate) -> Bool {
+        Self.matchingVisiblePlace(
+            for: candidate,
+            in: mapSearchSavedCorpus
+        ) != nil
     }
 
     private func visiblePlace(matching candidate: PlaceCandidate) -> VisiblePlace? {
@@ -4434,44 +4548,37 @@ struct MapScreen: View {
             return
         }
 
-        let immediateSavedSuggestions = savedTypeaheadSuggestions(
-            from: searchVisiblePlaceGroups
+        let savedCandidates = savedMapSearchCandidates(for: query)
+        let immediateSavedSuggestions = MapSearchCandidatePolicy.orderedCandidates(
+            query: query,
+            saved: savedCandidates,
+            mapKit: []
         )
+        .prefix(3)
+        .map(MapSearchSuggestion.searchCandidate)
         typeaheadSuggestions = immediateSavedSuggestions
         isLoadingTypeahead = true
 
-        typeaheadTask = Task { @MainActor [immediateSavedSuggestions] in
+        typeaheadTask = Task { @MainActor [savedCandidates] in
             try? await Task.sleep(nanoseconds: 280_000_000)
             guard !Task.isCancelled else { return }
 
             let candidates = (try? await mapKitCandidates(for: query, limit: 6)) ?? []
             guard !Task.isCancelled, Self.normalized(mapQuery) == normalized else { return }
 
-            let mapSuggestions = candidates
-                .filter { !isAlreadyVisible(candidate: $0) }
-                .prefix(max(0, 6 - immediateSavedSuggestions.count))
-                .map(MapSearchSuggestion.mapKit)
-
-            typeaheadSuggestions = Array((immediateSavedSuggestions + mapSuggestions).prefix(6))
+            let deduplicatedMapKit = candidates.filter {
+                !isAlreadyInMapSearchCorpus(candidate: $0)
+            }
+            let orderedCandidates = MapSearchCandidatePolicy.orderedCandidates(
+                query: query,
+                saved: savedCandidates,
+                mapKit: deduplicatedMapKit
+            )
+            typeaheadSuggestions = Array(
+                orderedCandidates.prefix(6).map(MapSearchSuggestion.searchCandidate)
+            )
             isLoadingTypeahead = false
         }
-    }
-
-    private func savedTypeaheadSuggestions(
-        from groups: [VisiblePlaceGroup]
-    ) -> [MapSearchSuggestion] {
-        groups
-            .map { group in
-                let saveStates = group.places.map { visiblePlace in
-                    MapPinSaveState(
-                        ownership: visiblePlace.owner.id == store.currentUser.id ? .currentUser : .social,
-                        status: visiblePlace.userPlace.status
-                    )
-                }
-                return MapSearchSuggestion.saved(group.primary, saveCount: group.saveCount, saveStates: saveStates)
-            }
-            .prefix(3)
-            .map { $0 }
     }
 
     private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
@@ -4487,16 +4594,20 @@ struct MapScreen: View {
         mapSearchMessage = nil
 
         switch suggestion.source {
-        case .saved(let visiblePlace, _):
-            selectVisiblePlace(visiblePlace)
+        case .saved(let savedCandidate, _):
+            selectVisiblePlace(
+                savedCandidate.place,
+                retainingGroup: savedCandidate.group
+            )
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
-            center(on: visiblePlace)
+            center(on: savedCandidate.place)
         case .mapKit(let candidate):
             routedVisiblePlace = nil
+            routedVisiblePlaceGroup = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
-            mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
+            mapSearchCandidates = isAlreadyInMapSearchCorpus(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
         }
     }
@@ -4514,17 +4625,21 @@ struct MapScreen: View {
         mapSearchMessage = nil
 
         switch suggestion.source {
-        case .saved(let visiblePlace, _):
-            selectVisiblePlace(visiblePlace)
+        case .saved(let savedCandidate, _):
+            selectVisiblePlace(
+                savedCandidate.place,
+                retainingGroup: savedCandidate.group
+            )
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
-            center(on: visiblePlace)
-            performAction(for: visiblePlace)
+            center(on: savedCandidate.place)
+            performAction(for: savedCandidate.place)
         case .mapKit(let candidate):
             routedVisiblePlace = nil
+            routedVisiblePlaceGroup = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
-            mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
+            mapSearchCandidates = isAlreadyInMapSearchCorpus(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
             mapSaveFlow = addCandidateContext(
                 candidate,
@@ -6172,7 +6287,7 @@ enum MapFilterSelection {
 
 private struct MapSearchSuggestion: Identifiable {
     enum Source {
-        case saved(VisiblePlace, saveStates: [MapPinSaveState])
+        case saved(MapSearchSavedCandidate, saveStates: [MapPinSaveState])
         case mapKit(PlaceCandidate)
     }
 
@@ -6184,21 +6299,21 @@ private struct MapSearchSuggestion: Identifiable {
 
     var emoji: String {
         switch source {
-        case .saved(let visiblePlace, _):
-            return visiblePlace.categoryEmoji
+        case .saved(let savedCandidate, _):
+            return savedCandidate.place.categoryEmoji
         case .mapKit(let candidate):
             return candidate.categoryEmoji
         }
     }
 
     static func saved(
-        _ visiblePlace: VisiblePlace,
-        saveCount: Int = 1,
+        _ candidate: MapSearchSavedCandidate,
         saveStates: [MapPinSaveState]
     ) -> MapSearchSuggestion {
+        let visiblePlace = candidate.place
         let statusLabel = statusLabel(
             ownerName: visiblePlace.owner.displayName,
-            placeCount: saveCount,
+            placeCount: candidate.group.saveCount,
             saveStates: saveStates
         )
 
@@ -6218,8 +6333,25 @@ private struct MapSearchSuggestion: Identifiable {
             title: visiblePlace.place.canonicalName,
             subtitle: subtitle.isEmpty ? "On \(AppBrand.displayName)" : subtitle,
             category: visiblePlace.effectiveCategory,
-            source: .saved(visiblePlace, saveStates: saveStates)
+            source: .saved(candidate, saveStates: saveStates)
         )
+    }
+
+    static func searchCandidate(_ candidate: MapSearchCandidate) -> MapSearchSuggestion {
+        switch candidate {
+        case .saved(let savedCandidate):
+            let saveStates = savedCandidate.group.places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == savedCandidate.group.currentUserID
+                        ? .currentUser
+                        : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
+            return saved(savedCandidate, saveStates: saveStates)
+        case .mapKit(let candidate):
+            return mapKit(candidate)
+        }
     }
 
     static func mapKit(_ candidate: PlaceCandidate) -> MapSearchSuggestion {
@@ -7527,42 +7659,68 @@ enum MapPinSelectionMotionStyle {
 enum MapActivePinRetention {
     static func places(
         from places: [VisiblePlace],
-        retaining activePlace: VisiblePlace?
+        retaining activePlace: VisiblePlace?,
+        retainingGroup: VisiblePlaceGroup? = nil
     ) -> [VisiblePlace] {
-        guard let activePlace,
-              !places.contains(where: { $0.id == activePlace.id })
-        else { return places }
+        guard let activePlace else { return places }
 
-        return places + [activePlace]
+        let validRetainingGroup = retainingGroup.flatMap { group in
+            group.places.contains(where: {
+                $0.userPlace.id == activePlace.userPlace.id
+            }) ? group : nil
+        }
+        let retainedPlaces = validRetainingGroup?.places ?? [activePlace]
+        var result = places
+        var existingUserPlaceIDs = Set(places.map(\.userPlace.id))
+        for place in retainedPlaces where existingUserPlaceIDs.insert(place.userPlace.id).inserted {
+            result.append(place)
+        }
+
+        return result
     }
 
     static func groups(
         from groups: [VisiblePlaceGroup],
         retaining activePlace: VisiblePlace?,
+        retainingGroup: VisiblePlaceGroup? = nil,
         currentUserID: String
     ) -> [VisiblePlaceGroup] {
-        guard let activePlace,
-              !groups.contains(where: { group in
-                  group.places.contains {
-                      $0.userPlace.id == activePlace.userPlace.id
-                  }
-              })
-        else { return groups }
+        guard let activePlace else { return groups }
 
-        let activeAliases = VisiblePlaceGrouping.groupingAliases(for: activePlace.place)
+        let validRetainingGroup = retainingGroup.flatMap { group in
+            group.places.contains(where: {
+                $0.userPlace.id == activePlace.userPlace.id
+            }) ? group : nil
+        }
+        let retainedPlaces = validRetainingGroup?.places ?? [activePlace]
+        let retainedUserPlaceIDs = Set(retainedPlaces.map(\.userPlace.id))
+        if let existingGroup = groups.first(where: { group in
+            !retainedUserPlaceIDs.isDisjoint(with: Set(group.places.map(\.userPlace.id)))
+        }), Set(existingGroup.places.map(\.userPlace.id)).isSuperset(of: retainedUserPlaceIDs) {
+            return groups
+        }
+
+        let activeAliases = retainedPlaces.reduce(into: Set<String>()) { aliases, place in
+            aliases.formUnion(VisiblePlaceGrouping.groupingAliases(for: place.place))
+        }
         guard let matchingIndex = groups.firstIndex(where: {
             !$0.aliases.isDisjoint(with: activeAliases)
         }) else {
-            guard let singleton = VisiblePlaceGrouping.groups(
-                from: [activePlace],
+            guard let retainedGroup = VisiblePlaceGrouping.groups(
+                from: retainedPlaces,
                 currentUserID: currentUserID
             ).first else { return groups }
-            return groups + [singleton]
+            return groups + [retainedGroup]
         }
 
         let matchingGroup = groups[matchingIndex]
+        var mergedPlaces = matchingGroup.places
+        var mergedUserPlaceIDs = Set(mergedPlaces.map(\.userPlace.id))
+        for place in retainedPlaces where mergedUserPlaceIDs.insert(place.userPlace.id).inserted {
+            mergedPlaces.append(place)
+        }
         let mergedGroup = VisiblePlaceGrouping.groups(
-            from: matchingGroup.places + [activePlace],
+            from: mergedPlaces,
             currentUserID: currentUserID
         ).first { group in
             group.places.contains {
@@ -7573,7 +7731,7 @@ enum MapActivePinRetention {
 
         var retainedGroups = groups
         retainedGroups[matchingIndex] = VisiblePlaceGroup(
-            key: matchingGroup.key,
+            key: validRetainingGroup?.key ?? matchingGroup.key,
             aliases: matchingGroup.aliases.union(mergedGroup.aliases),
             places: mergedGroup.places,
             currentUserID: currentUserID

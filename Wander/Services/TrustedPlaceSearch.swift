@@ -67,17 +67,20 @@ struct TrustedPlaceSearchMatch {
     let place: VisiblePlace
     let score: Int
     let evidence: [TrustedPlaceSearchEvidence]
+    let supportingFields: Set<TrustedPlaceSearchField>
     fileprivate let savedAt: Date
     fileprivate let stableID: String
 
     init(
         place: VisiblePlace,
         score: Int,
-        evidence: [TrustedPlaceSearchEvidence]
+        evidence: [TrustedPlaceSearchEvidence],
+        supportingFields: Set<TrustedPlaceSearchField>? = nil
     ) {
         self.place = place
         self.score = score
         self.evidence = evidence
+        self.supportingFields = supportingFields ?? Set(evidence.map(\.field))
         savedAt = place.userPlace.savedAt
         stableID = place.userPlace.id
     }
@@ -149,7 +152,12 @@ enum TrustedPlaceSearch {
             }
         }
 
-        return TrustedPlaceSearchMatch(place: place, score: score, evidence: evidence)
+        return TrustedPlaceSearchMatch(
+            place: place,
+            score: score,
+            evidence: evidence,
+            supportingFields: document.supportingFields(for: query.scoringTokens)
+        )
     }
 
     private static func isOrderedBefore(
@@ -161,6 +169,154 @@ enum TrustedPlaceSearch {
             return lhs.savedAt > rhs.savedAt
         }
         return lhs.stableID < rhs.stableID
+    }
+}
+
+struct MapSearchSavedCandidate {
+    let group: VisiblePlaceGroup
+    let match: TrustedPlaceSearchMatch
+
+    var place: VisiblePlace {
+        group.primary
+    }
+}
+
+enum MapSearchCandidate {
+    case saved(MapSearchSavedCandidate)
+    case mapKit(PlaceCandidate)
+}
+
+enum MapSearchCandidatePolicy {
+    enum SavedStrength: Equatable {
+        case strong
+        case contextual
+    }
+
+    static let strongFields: Set<TrustedPlaceSearchField> = [
+        .name,
+        .category,
+        .area
+    ]
+
+    static let contextualFields: Set<TrustedPlaceSearchField> = [
+        .owner,
+        .note,
+        .attribute,
+        .status
+    ]
+
+    static func savedCandidates(
+        query text: String,
+        in places: [VisiblePlace],
+        currentUserID: String
+    ) -> [MapSearchSavedCandidate] {
+        savedCandidates(
+            query: TrustedPlaceSearchQuery(text),
+            in: places,
+            currentUserID: currentUserID
+        )
+    }
+
+    static func savedCandidates(
+        query: TrustedPlaceSearchQuery,
+        in places: [VisiblePlace],
+        currentUserID: String
+    ) -> [MapSearchSavedCandidate] {
+        let matches = TrustedPlaceSearch.matches(query: query, in: places)
+        guard !matches.isEmpty else { return [] }
+
+        let groups = VisiblePlaceGrouping.groups(
+            from: places,
+            currentUserID: currentUserID
+        )
+        var groupByUserPlaceID: [String: VisiblePlaceGroup] = [:]
+        groupByUserPlaceID.reserveCapacity(places.count)
+        var groupByKey: [String: VisiblePlaceGroup] = [:]
+        groupByKey.reserveCapacity(groups.count)
+        for group in groups {
+            groupByKey[group.key] = group
+            for place in group.places {
+                groupByUserPlaceID[place.userPlace.id] = group
+            }
+        }
+
+        var orderedGroupKeys: [String] = []
+        var firstMatchByGroupKey: [String: TrustedPlaceSearchMatch] = [:]
+        var supportingFieldsByGroupKey: [String: Set<TrustedPlaceSearchField>] = [:]
+        for match in matches {
+            guard let group = groupByUserPlaceID[match.place.userPlace.id] else { continue }
+            if firstMatchByGroupKey[group.key] == nil {
+                orderedGroupKeys.append(group.key)
+                firstMatchByGroupKey[group.key] = match
+            }
+            supportingFieldsByGroupKey[group.key, default: []]
+                .formUnion(match.supportingFields)
+        }
+
+        return orderedGroupKeys.compactMap { groupKey in
+            guard let group = groupByKey[groupKey],
+                  let firstMatch = firstMatchByGroupKey[groupKey]
+            else { return nil }
+
+            let groupedMatch = TrustedPlaceSearchMatch(
+                place: firstMatch.place,
+                score: firstMatch.score,
+                evidence: firstMatch.evidence,
+                supportingFields: supportingFieldsByGroupKey[groupKey, default: []]
+            )
+            return MapSearchSavedCandidate(group: group, match: groupedMatch)
+        }
+    }
+
+    static func candidates(
+        query: String,
+        in places: [VisiblePlace],
+        mapKit: [PlaceCandidate],
+        currentUserID: String
+    ) -> [MapSearchCandidate] {
+        orderedCandidates(
+            query: query,
+            saved: savedCandidates(
+                query: query,
+                in: places,
+                currentUserID: currentUserID
+            ),
+            mapKit: mapKit
+        )
+    }
+
+    static func orderedCandidates(
+        query: String,
+        saved: [MapSearchSavedCandidate],
+        mapKit: [PlaceCandidate]
+    ) -> [MapSearchCandidate] {
+        let strongSaved = saved
+            .filter { strength(of: $0) == .strong }
+            .map(MapSearchCandidate.saved)
+        let contextualSaved = saved
+            .filter { strength(of: $0) == .contextual }
+            .map(MapSearchCandidate.saved)
+
+        let credibleMapKit = mapKit
+            .filter {
+                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) > 0
+            }
+            .map(MapSearchCandidate.mapKit)
+        let unrelatedMapKit = mapKit
+            .filter {
+                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) == 0
+            }
+            .map(MapSearchCandidate.mapKit)
+
+        return strongSaved + credibleMapKit + contextualSaved + unrelatedMapKit
+    }
+
+    static func strength(of candidate: MapSearchSavedCandidate) -> SavedStrength {
+        strength(of: candidate.match)
+    }
+
+    static func strength(of match: TrustedPlaceSearchMatch) -> SavedStrength {
+        match.supportingFields.isDisjoint(with: strongFields) ? .contextual : .strong
     }
 }
 
@@ -389,10 +545,12 @@ private struct TrustedPlaceSearchDocument {
         let normalizedTokens: [String]
         let normalizedPhrase: String
         let weight: Int
+
     }
 
     private let fields: [FieldValue]
     private let exactMatches: [String: TokenMatch]
+    private let exactSupportingFields: [String: Set<TrustedPlaceSearchField>]
 
     init(place: VisiblePlace) {
         var values: [FieldValue] = []
@@ -455,8 +613,10 @@ private struct TrustedPlaceSearchDocument {
 
         fields = values
         var matches: [String: TokenMatch] = [:]
+        var supportingFields: [String: Set<TrustedPlaceSearchField>] = [:]
         for field in values {
             for token in field.normalizedTokens {
+                supportingFields[token, default: []].insert(field.field)
                 let candidate = TokenMatch(
                     token: token,
                     field: field.field,
@@ -473,6 +633,7 @@ private struct TrustedPlaceSearchDocument {
             }
         }
         exactMatches = matches
+        exactSupportingFields = supportingFields
     }
 
     func bestMatch(for queryToken: String) -> TokenMatch? {
@@ -499,6 +660,21 @@ private struct TrustedPlaceSearchDocument {
             }
         }
         return best
+    }
+
+    func supportingFields(for queryTokens: [String]) -> Set<TrustedPlaceSearchField> {
+        var result = Set<TrustedPlaceSearchField>()
+        for queryToken in queryTokens {
+            if let exactFields = exactSupportingFields[queryToken] {
+                result.formUnion(exactFields)
+                continue
+            }
+            guard queryToken.count >= 3 else { continue }
+            for field in fields where field.normalizedTokens.contains(where: { $0.hasPrefix(queryToken) }) {
+                result.insert(field.field)
+            }
+        }
+        return result
     }
 
     private static func isBetter(_ candidate: TokenMatch, than current: TokenMatch) -> Bool {

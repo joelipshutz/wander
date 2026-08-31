@@ -2,6 +2,58 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testREC352LarchmontCorpusEvidence() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("larchmont noodles")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        let savedResult = typeaheadPanel.staticTexts["Larchmont Noodles"].firstMatch
+        let externalResult = typeaheadPanel.staticTexts["Larchmont Noodles & Ramen"].firstMatch
+        XCTAssertTrue(savedResult.waitForExistence(timeout: 5))
+        XCTAssertTrue(externalResult.waitForExistence(timeout: 5))
+        XCTAssertLessThan(savedResult.frame.minY, externalResult.frame.minY)
+        capture("REC-352 Larchmont typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Larchmont Noodles"))
+        XCTAssertFalse(card.label.contains("Larchmont Noodles & Ramen"))
+        capture("REC-352 Larchmont submitted")
+    }
+
+    func testREC352ContextualRankingEvidence() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        let externalResult = typeaheadPanel.staticTexts["Long Tables Cafe"].firstMatch
+        let contextualSavedResult = typeaheadPanel.staticTexts["Fern Desk Coffee"].firstMatch
+        XCTAssertTrue(externalResult.waitForExistence(timeout: 5))
+        XCTAssertTrue(contextualSavedResult.waitForExistence(timeout: 5))
+        XCTAssertLessThan(externalResult.frame.minY, contextualSavedResult.frame.minY)
+        capture("REC-352 contextual typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+        XCTAssertFalse(card.label.contains("Fern Desk Coffee"))
+        capture("REC-352 contextual submitted")
+    }
+
     func testSubmittingMapSearchSelectsTheHighestRankedTrustedPlaceImmediately() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -143,6 +195,19 @@ final class MapPlaceCardUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func launchREC352SearchFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapSearchFixtures", "rec352",
+        ]
+        app.launch()
+        return app
     }
 
     private func assertSharedContainerInsets(
