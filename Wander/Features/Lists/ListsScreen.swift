@@ -3753,7 +3753,7 @@ private struct ListMapPlaceRail: View {
                 guard focusedPlaceID != placeID else { return }
                 focusedPlaceID = placeID
                 guard let placeID,
-                      let place = list.places.first(where: { $0.id == placeID })
+                      let place = list.placesByID[placeID]
                 else { return }
                 onFocus(place)
             }
