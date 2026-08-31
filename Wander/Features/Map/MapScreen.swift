@@ -14037,6 +14037,13 @@ struct PlaceActivitySection: View {
             guard auth.isSignedIn else { return }
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
+        .task(id: remoteActivityUserPlaceIDs) {
+            guard auth.isSignedIn else { return }
+            await store.refreshRemotePlaceActivity(
+                userPlaceIDs: remoteActivityUserPlaceIDs,
+                backend: backend
+            )
+        }
         .task(id: engagementUserPlaceIDs) {
             guard auth.isSignedIn else { return }
             await store.refreshPlaceActivityEngagement(
@@ -14116,6 +14123,20 @@ struct PlaceActivitySection: View {
                 saves.compactMap { summary in
                     let serverID = summary.visiblePlace.userPlace.serverID
                     return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                }
+            )
+        )
+        .sorted()
+    }
+
+    private var remoteActivityUserPlaceIDs: [String] {
+        Array(
+            Set(
+                saves.compactMap { summary in
+                    guard summary.visiblePlace.owner.id != currentUserID else { return nil }
+                    let userPlaceID = summary.visiblePlace.userPlace.serverID
+                        ?? summary.visiblePlace.userPlace.id
+                    return UUID(uuidString: userPlaceID) == nil ? nil : userPlaceID.lowercased()
                 }
             )
         )
@@ -14509,6 +14530,8 @@ private struct PlaceActivityCard: View {
                             VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Open check-in photo by \(entry.owner.displayName)")
+                        .accessibilityIdentifier("place-activity.photo.\(entry.id).\(photo.id)")
                     }
                 }
             }

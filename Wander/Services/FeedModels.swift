@@ -41,7 +41,7 @@ enum FeedTicketKind: Equatable {
     case saved
 }
 
-struct FeedMediaPreview: Identifiable, Equatable {
+struct FeedMediaPreview: Identifiable, Equatable, Sendable {
     let id: String
     let urlString: String?
     let accessibilityLabel: String

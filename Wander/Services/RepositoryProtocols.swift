@@ -877,7 +877,7 @@ struct PlaceVisitDraft: Equatable {
     let backfilledFromUserPlace: Bool
 }
 
-struct PlaceVisitResult: Equatable {
+struct PlaceVisitResult: Equatable, Sendable {
     let visitID: String
     let userPlaceID: String
     let visitedAt: Date
@@ -932,7 +932,7 @@ struct VisitPhotoDraft: Equatable {
     let uploadState: VisitPhotoUploadState
 }
 
-struct VisitPhotoResult: Equatable {
+struct VisitPhotoResult: Equatable, Sendable {
     let photoID: String
     let visitID: String
     let storageBucket: String
@@ -1932,7 +1932,7 @@ protocol PlacePhotoRepository {
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage
@@ -1988,7 +1988,7 @@ extension PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
@@ -2002,9 +2002,16 @@ protocol VisitRepository {
     func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult
     func deleteVisit(visitID: String) async throws
     func photos(for visitID: String) async throws -> [VisitPhotoResult]
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult]
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL
     func deletePhoto(photoID: String, bucket: String, path: String) async throws
+}
+
+extension VisitRepository {
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        try await photos(for: visitID).filter { $0.uploadState == .uploaded }
+    }
 }
 
 @MainActor
