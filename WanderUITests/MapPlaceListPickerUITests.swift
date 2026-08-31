@@ -59,6 +59,112 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["add to lists"].exists)
     }
 
+    func testPerformanceFixtureCoversListsLifecycleWithoutStaleProjections() {
+        let app = performanceListsApp()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["lists.headerAdd"].waitForExistence(timeout: 12))
+
+        let firstList = app.buttons["Open Realistic list 000, collaborative list"]
+        XCTAssertTrue(firstList.waitForExistence(timeout: 5))
+        firstList.tap()
+
+        let mapButton = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "View map for Realistic list 000")
+        ).firstMatch
+        XCTAssertTrue(mapButton.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["28 places"].exists)
+
+        app.buttons["Add places to list"].tap()
+        XCTAssertTrue(app.staticTexts["add places"].waitForExistence(timeout: 5))
+
+        let addSuggestion = app.buttons.matching(
+            NSPredicate(
+                format: "label BEGINSWITH %@ AND label ENDSWITH %@ AND label != %@",
+                "Add ",
+                " to list",
+                "Add places to list"
+            )
+        ).firstMatch
+        XCTAssertTrue(addSuggestion.waitForExistence(timeout: 8))
+        addSuggestion.tap()
+
+        app.navigationBars.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["29 places"].waitForExistence(timeout: 8))
+
+        let refreshedMapButton = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "View map for Realistic list 000")
+        ).firstMatch
+        XCTAssertTrue(refreshedMapButton.waitForExistence(timeout: 5))
+        refreshedMapButton.tap()
+        XCTAssertTrue(app.buttons["Close list map"].waitForExistence(timeout: 8))
+        app.buttons["Close list map"].tap()
+        XCTAssertTrue(app.staticTexts["29 places"].waitForExistence(timeout: 5))
+
+        let laterPlace = app.buttons["Open Museum 0085"]
+        reveal(laterPlace, in: app)
+        XCTAssertTrue(laterPlace.waitForExistence(timeout: 5))
+
+        let removeLaterPlace = app.buttons["Remove Museum 0085"]
+        XCTAssertTrue(removeLaterPlace.exists)
+        removeLaterPlace.tap()
+        XCTAssertTrue(waitUntil(timeout: 8) {
+            !removeLaterPlace.exists && app.staticTexts["28 places"].exists
+        })
+
+        let backButton = app.navigationBars.buttons["Back"].firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
+        backButton.tap()
+        XCTAssertTrue(firstList.waitForExistence(timeout: 8))
+
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["lists.headerAdd"].waitForExistence(timeout: 12))
+        let relaunchedList = app.buttons["Open Realistic list 000, collaborative list"]
+        XCTAssertTrue(relaunchedList.waitForExistence(timeout: 5))
+        relaunchedList.tap()
+        XCTAssertTrue(
+            app.buttons.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "View map for Realistic list 000")
+            ).firstMatch.waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(app.staticTexts["28 places"].exists)
+    }
+
+    private func performanceListsApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab", "lists",
+        ]
+        return app
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 3))
+        for _ in 0..<8 where !element.exists || !element.isHittable {
+            scrollView.swipeUp(velocity: .fast)
+        }
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval,
+        pollInterval: TimeInterval = 0.1,
+        condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+        }
+        return condition()
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
