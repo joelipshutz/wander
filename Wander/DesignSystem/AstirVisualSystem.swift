@@ -278,7 +278,7 @@ private struct AstirGlassSurface: ViewModifier {
         if #available(iOS 26.0, *) {
             let glass = selected
                 ? Glass.regular.tint(brandMode.accent.opacity(0.24))
-                : Glass.clear.tint(brandMode.background.opacity(0.05))
+                : Glass.regular.tint(brandMode.background.opacity(0.035))
 
             content
                 .glassEffect(
@@ -342,7 +342,8 @@ extension View {
 }
 
 /// Positions independently floating controls without placing another glass
-/// slab behind the group.
+/// slab behind the group. A frameless material field lightly softens moving
+/// content beneath the controls, then fades away without reading as a card.
 struct AstirFloatingHeaderSurface<Content: View>: View {
     private let content: Content
 
@@ -354,6 +355,44 @@ struct AstirFloatingHeaderSurface<Content: View>: View {
         content
             .padding(.horizontal, WanderTheme.spacing2)
             .padding(.top, WanderTheme.spacing1)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background {
+                AstirHeaderBlurBackdrop()
+                    .padding(.horizontal, -WanderTheme.spacing2)
+                    .padding(.top, -72)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+private struct AstirHeaderBlurBackdrop: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        Group {
+            if reduceTransparency {
+                brandMode.background.opacity(0.94)
+            } else {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(brandMode.prefersDarkInterface ? 0.56 : 0.66)
+                    .overlay(brandMode.background.opacity(brandMode.prefersDarkInterface ? 0.10 : 0.06))
+            }
+        }
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black.opacity(0.94), location: 0.76),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 }
 
