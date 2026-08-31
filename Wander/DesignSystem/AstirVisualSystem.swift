@@ -5,14 +5,14 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
     case editorialLight
     case cinemaGold
 
-    static func resolved(
+    static func launchOverride(
         from arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> AstirBrandMode {
+    ) -> AstirBrandMode? {
         guard let flagIndex = arguments.firstIndex(of: "-AstirBrandMode") else {
-            return .editorial
+            return nil
         }
         let valueIndex = arguments.index(after: flagIndex)
-        guard arguments.indices.contains(valueIndex) else { return .editorial }
+        guard arguments.indices.contains(valueIndex) else { return nil }
 
         switch arguments[valueIndex].lowercased() {
         case "editoriallight", "editorial-light", "light", "paper":
@@ -20,8 +20,14 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         case "cinema", "cinemagold", "cinema-gold", "gold":
             return .cinemaGold
         default:
-            return AstirBrandMode(rawValue: arguments[valueIndex]) ?? .editorial
+            return AstirBrandMode(rawValue: arguments[valueIndex])
         }
+    }
+
+    static func resolved(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> AstirBrandMode {
+        launchOverride(from: arguments) ?? .editorial
     }
 
     var background: Color {

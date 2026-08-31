@@ -288,7 +288,7 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @Environment(\.astirBrandMode) private var astirBrandMode
+    @Environment(\.colorScheme) private var systemColorScheme
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -352,6 +352,7 @@ struct WanderRootView: View {
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
+    private let astirBrandModeOverride: AstirBrandMode?
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
     private let walkthroughDebugPreferenceSnapshot: FirstVisitWalkthroughDebugPreferenceSnapshot
     private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
@@ -378,6 +379,7 @@ struct WanderRootView: View {
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         self.analytics = analytics
+        self.astirBrandModeOverride = AstirBrandMode.launchOverride(from: launchArguments)
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
         self.walkthroughDebugPreferenceSnapshot = walkthroughDebugPreferences.launchSnapshot()
@@ -451,10 +453,18 @@ struct WanderRootView: View {
 
     var body: some View {
         stateObservedRoot
+            .environment(\.astirBrandMode, astirBrandMode)
             .environment(
                 \.placeProfileFloatingActionVariant,
                 placeProfileFloatingActionVariant
             )
+    }
+
+    private var astirBrandMode: AstirBrandMode {
+        if let astirBrandModeOverride {
+            return astirBrandModeOverride
+        }
+        return systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
     private var mapAppearanceColorScheme: ColorScheme {
@@ -502,7 +512,9 @@ struct WanderRootView: View {
                 .tag(WanderTab.profile)
         }
         .tint(astirBrandMode.accent)
-        .preferredColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light)
+        .preferredColorScheme(
+            astirBrandModeOverride.map { $0.prefersDarkInterface ? .dark : .light }
+        )
         .toolbarBackground(astirBrandMode.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
