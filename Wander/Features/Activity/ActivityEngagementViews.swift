@@ -343,7 +343,8 @@ struct ActivityPostcardView: View {
                         .background(noteBackground)
                         .clipShape(
                             RoundedRectangle(
-                                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusMedium
+                                cornerRadius: visualStyle == .astir ? 14 : WanderTheme.radiusMedium,
+                                style: .continuous
                             )
                         )
                         .fixedSize(horizontal: false, vertical: true)
@@ -368,15 +369,22 @@ struct ActivityPostcardView: View {
         .background(cardBackground)
         .clipShape(
             RoundedRectangle(
-                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge
+                cornerRadius: visualStyle == .astir ? 22 : WanderTheme.radiusLarge,
+                style: .continuous
             )
         )
         .overlay {
             RoundedRectangle(
-                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge
+                cornerRadius: visualStyle == .astir ? 22 : WanderTheme.radiusLarge,
+                style: .continuous
             )
             .stroke(borderColor, lineWidth: 1)
         }
+        .shadow(
+            color: visualStyle == .astir ? Color.black.opacity(0.18) : .clear,
+            radius: visualStyle == .astir ? 16 : 0,
+            y: visualStyle == .astir ? 8 : 0
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(postcardAccessibilityIdentifier)
     }
@@ -422,7 +430,8 @@ struct ActivityPostcardView: View {
             )
             .clipShape(
                 RoundedRectangle(
-                    cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusPill
+                    cornerRadius: visualStyle == .astir ? 12 : WanderTheme.radiusPill,
+                    style: .continuous
                 )
             )
             .accessibilityLabel(context.ticketEyebrow.localizedCapitalized)
@@ -604,7 +613,9 @@ struct ActivityPostcardView: View {
     }
 
     private var cardBackground: Color {
-        visualStyle == .astir ? astirBrandMode.background : WanderTheme.surfaceBone.color
+        visualStyle == .astir
+            ? astirBrandMode.raisedBackground.opacity(0.78)
+            : WanderTheme.surfaceBone.color
     }
 
     private var noteBackground: Color {
@@ -614,7 +625,9 @@ struct ActivityPostcardView: View {
     }
 
     private var borderColor: Color {
-        visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderHairline.color
+        visualStyle == .astir
+            ? astirBrandMode.border.opacity(0.72)
+            : WanderTheme.borderHairline.color
     }
 }
 

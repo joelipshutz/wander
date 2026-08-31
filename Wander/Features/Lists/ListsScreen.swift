@@ -864,11 +864,11 @@ private struct ListPreviewMosaic: View {
         mosaicContent
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(astirBrandMode.raisedBackground)
-        .clipShape(Rectangle())
+        .background(astirBrandMode.raisedBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            Rectangle()
-                .stroke(astirBrandMode.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(astirBrandMode.border.opacity(0.72), lineWidth: 0.8)
         )
     }
 

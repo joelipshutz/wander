@@ -1593,8 +1593,7 @@ private struct PlaceProfileFullView: View {
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .foregroundStyle(astirBrandMode == .cinemaGold ? astirBrandMode.accent : astirBrandMode.primaryText)
             .contentShape(Circle())
-            .background(astirBrandMode.raisedBackground.opacity(0.56), in: Circle())
-            .overlay(Circle().stroke(astirBrandMode.border, lineWidth: 1))
+            .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
     }
 
     private var usesFloatingActions: Bool {
@@ -1904,7 +1903,11 @@ private struct PlaceProfileFullView: View {
                 .padding(.horizontal, WanderTheme.spacing3)
                 .background(astirBrandMode.accent)
                 .foregroundStyle(astirBrandMode == .editorial ? AstirTheme.ink.color : AstirTheme.cinemaBlack.color)
-                .overlay(Rectangle().stroke(astirBrandMode.accent, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(primaryActionTitle)
@@ -2230,12 +2233,7 @@ struct PlaceProfileFloatingActions: View {
             clusteredActionLayout
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing3)
-                .background(visualStyle == .astir ? astirBrandMode.raisedBackground : Color.clear)
-                .overlay {
-                    if visualStyle == .astir {
-                        Rectangle().stroke(astirBrandMode.border, lineWidth: 1)
-                    }
-                }
+                .modifier(PlaceProfileActionClusterSurface(isAstir: visualStyle == .astir))
         } else {
             clusteredActionLayout
         }
@@ -2270,7 +2268,7 @@ struct PlaceProfileFloatingActions: View {
                     actionLabel(for: action)
                         .contentShape(
                             RoundedRectangle(
-                                cornerRadius: visualStyle == .astir ? 0 : Self.compactCornerRadius,
+                                cornerRadius: visualStyle == .astir ? 16 : Self.compactCornerRadius,
                                 style: .continuous
                             )
                         )
@@ -2396,6 +2394,19 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
+}
+
+private struct PlaceProfileActionClusterSurface: ViewModifier {
+    let isAstir: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isAstir {
+            content.astirGlassSurface(cornerRadius: 22, castsShadow: true)
+        } else {
+            content
+        }
+    }
 }
 
 private struct PlaceProfileFloatingActionSurface: ViewModifier {
@@ -3358,9 +3369,9 @@ private struct PlaceProfileSaveCard: View {
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(cardBorder, lineWidth: 1)
         )
     }
@@ -3464,9 +3475,9 @@ private struct PlaceProfileSubtleCard: View {
             .padding(WanderTheme.spacing3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(visualStyle == .astir ? astirBrandMode.raisedBackground : WanderTheme.surfaceSand.color.opacity(0.64))
-            .clipShape(RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderStrong.color.opacity(0.72), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             )
     }

@@ -17,10 +17,10 @@ private struct CheckInTicketSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         if placeProfileVisualStyle == .astir {
             content
-                .background(surface)
+                .astirGlassSurface(cornerRadius: 18, castsShadow: castsShadow)
                 .overlay {
-                    Rectangle()
-                        .strokeBorder(accent.opacity(0.72), lineWidth: borderWidth)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(accent.opacity(0.42), lineWidth: borderWidth)
                 }
         } else {
             let ticketShape = CheckInTicketShape(notchEdges: notchEdges)

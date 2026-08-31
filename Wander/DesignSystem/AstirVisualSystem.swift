@@ -226,36 +226,96 @@ struct AstirMastheadLockup: View {
     }
 }
 
-/// Square-edged glass ribbon used as a true overlay so content can scroll
-/// beneath it while the Astir mark stays visually anchored.
-struct AstirFloatingHeaderSurface<Content: View>: View {
+private struct AstirGlassSurface: ViewModifier {
     @Environment(\.astirBrandMode) private var brandMode
+    let cornerRadius: CGFloat
+    let selected: Bool
+    let castsShadow: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    .regular.tint(
+                        selected
+                            ? brandMode.accent.opacity(0.24)
+                            : brandMode.raisedBackground.opacity(0.16)
+                    ),
+                    in: shape
+                )
+                .overlay {
+                    shape.stroke(edgeHighlight, lineWidth: selected ? 1.15 : 0.75)
+                }
+                .shadow(
+                    color: castsShadow ? Color.black.opacity(0.20) : .clear,
+                    radius: castsShadow ? 18 : 0,
+                    y: castsShadow ? 8 : 0
+                )
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(
+                    (selected ? brandMode.accent : brandMode.background)
+                        .opacity(selected ? 0.16 : 0.48),
+                    in: shape
+                )
+                .overlay {
+                    shape.stroke(edgeHighlight, lineWidth: selected ? 1.15 : 0.75)
+                }
+                .shadow(
+                    color: castsShadow ? Color.black.opacity(0.18) : .clear,
+                    radius: castsShadow ? 16 : 0,
+                    y: castsShadow ? 7 : 0
+                )
+        }
+    }
+
+    private var edgeHighlight: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.34),
+                brandMode.accent.opacity(selected ? 0.54 : 0.16),
+                Color.white.opacity(0.08)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+extension View {
+    func astirGlassSurface(
+        cornerRadius: CGFloat,
+        selected: Bool = false,
+        castsShadow: Bool = false
+    ) -> some View {
+        modifier(
+            AstirGlassSurface(
+                cornerRadius: cornerRadius,
+                selected: selected,
+                castsShadow: castsShadow
+            )
+        )
+    }
+}
+
+/// A true floating overlay. On iOS 26 this uses Apple's liquid-glass renderer;
+/// older systems receive a translucent material fallback with the same shape.
+struct AstirFloatingHeaderSurface<Content: View>: View {
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
-    @ViewBuilder
     var body: some View {
-        if #available(iOS 26.0, *) {
-            content
-                .background(brandMode.background.opacity(0.44))
-                .glassEffect(
-                    .regular.tint(brandMode.background.opacity(0.72)),
-                    in: Rectangle()
-                )
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(brandMode.border).frame(height: 1)
-                }
-        } else {
-            content
-                .background(.ultraThinMaterial)
-                .background(brandMode.background.opacity(0.86))
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(brandMode.border).frame(height: 1)
-                }
-        }
+        content
+            .astirGlassSurface(cornerRadius: 30, castsShadow: true)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .padding(.top, WanderTheme.spacing1)
     }
 }
 
@@ -272,11 +332,7 @@ struct AstirIconActionButton: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(brandMode == .cinemaGold ? brandMode.accent : brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .background(brandMode.raisedBackground.opacity(0.64))
-                .clipShape(Circle())
-                .overlay {
-                    Circle().stroke(brandMode.border, lineWidth: 1)
-                }
+                .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -285,9 +341,8 @@ struct AstirIconActionButton: View {
     }
 }
 
-/// Segmented behavior without pill or chip styling. Direction A uses the
-/// paper-block selection from the approved mock; Cinema Gold uses a lit gold
-/// rule so the accent stays rare.
+/// Segmented behavior without chip styling. Selection is carried by type and a
+/// fine illuminated rule rather than a hard filled rectangle.
 struct AstirEditorialSegmentedSwitch: View {
     @Environment(\.astirBrandMode) private var brandMode
     let options: [WanderSegmentOption]
@@ -308,22 +363,14 @@ struct AstirEditorialSegmentedSwitch: View {
                             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                             .foregroundStyle(
                                 isSelected
-                                    ? brandMode.selectedForeground
+                                    ? brandMode.accent
                                     : brandMode.secondaryText
-                            )
-                            .background(
-                                isSelected && brandMode == .editorial
-                                    ? brandMode.selectedFill
-                                    : Color.clear
                             )
 
                         Rectangle()
-                            .fill(
-                                isSelected && brandMode == .cinemaGold
-                                    ? brandMode.accent
-                                    : Color.clear
-                            )
-                            .frame(height: 2)
+                            .fill(isSelected ? brandMode.accent : Color.clear)
+                            .frame(height: 1.5)
+                            .padding(.horizontal, WanderTheme.spacing3)
                     }
                     .contentShape(Rectangle())
                 }
@@ -332,9 +379,8 @@ struct AstirEditorialSegmentedSwitch: View {
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .overlay {
-            Rectangle().stroke(brandMode.border, lineWidth: 1)
-        }
+        .padding(4)
+        .astirGlassSurface(cornerRadius: 17)
     }
 }
 
@@ -344,21 +390,67 @@ struct AstirOutlinedSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(
-                selected
-                    ? brandMode.selectedFill
-                    : brandMode.raisedBackground.opacity(0.76)
-            )
-            .overlay {
-                Rectangle()
-                    .stroke(selected ? brandMode.accent : brandMode.border, lineWidth: selected ? 1.5 : 1)
-            }
+            .astirGlassSurface(cornerRadius: 16, selected: selected)
     }
 }
 
 extension View {
     func astirOutlinedSurface(selected: Bool = false) -> some View {
         modifier(AstirOutlinedSurface(selected: selected))
+    }
+}
+
+/// Deterministic local fallback composed from the real place photography
+/// already bundled in the app. Network/provider photos replace it when ready.
+struct AstirPlacePhotoAsset: View {
+    let stableKey: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let image = AstirPlacePhotoCropper.image(for: stableKey) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            } else {
+                AstirTheme.inkRaised.color
+            }
+        }
+    }
+}
+
+private enum AstirPlacePhotoCropper {
+    private static let crops = [
+        CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
+        CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+        CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5),
+        CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)
+    ]
+
+    static func image(for stableKey: String) -> UIImage? {
+        let stableValue = stableKey.unicodeScalars.reduce(0) { partial, scalar in
+            (partial &* 31) &+ Int(scalar.value)
+        }
+        let crop = crops[abs(stableValue) % crops.count]
+
+        guard let source = UIImage(named: "PlaceCarouselPhotos"),
+              let sourceCGImage = source.cgImage
+        else { return nil }
+
+        let pixelRect = CGRect(
+            x: crop.origin.x * CGFloat(sourceCGImage.width),
+            y: crop.origin.y * CGFloat(sourceCGImage.height),
+            width: crop.width * CGFloat(sourceCGImage.width),
+            height: crop.height * CGFloat(sourceCGImage.height)
+        ).integral
+
+        guard let croppedImage = sourceCGImage.cropping(to: pixelRect) else { return nil }
+        return UIImage(
+            cgImage: croppedImage,
+            scale: source.scale,
+            orientation: source.imageOrientation
+        )
     }
 }
 
