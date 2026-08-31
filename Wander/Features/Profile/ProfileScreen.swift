@@ -650,6 +650,7 @@ struct ProfileDetailView: View {
     @State private var activityListFilter: ProfileActivityFilter?
     @State private var selectedActivityItemID: String?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
+    @State private var showsYourMapPrototype = false
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
     @State private var reportSubject: CommunityReportSubject?
@@ -726,7 +727,9 @@ struct ProfileDetailView: View {
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
                             },
-                            yourMapAction: nil,
+                            yourMapAction: {
+                                showsYourMapPrototype = true
+                            },
                             calendarScrollRequestID: nil,
                             onCalendarScrollRequestHandled: { _ in }
                         )
@@ -781,6 +784,14 @@ struct ProfileDetailView: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+            .navigationDestination(isPresented: $showsYourMapPrototype) {
+                YourMapPrototypeScreen(
+                    dataset: yourMapPrototypeDataset,
+                    viewerID: store.currentUser.id,
+                    mapTitle: profileMapTitle,
+                    pinOwnership: .social
+                )
+            }
             .sheet(item: $socialGraphTab) { tab in
                 ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
                     .environmentObject(store)
@@ -825,6 +836,7 @@ struct ProfileDetailView: View {
             || activityListFilter != nil
             || selectedActivityItem != nil
             || placeCollectionRoute != nil
+            || showsYourMapPrototype
     }
 
     private func interactiveBackSwipeGesture(containerWidth: CGFloat) -> some Gesture {
@@ -871,6 +883,23 @@ struct ProfileDetailView: View {
 
     private var profileVisiblePlaces: [VisiblePlace] {
         store.visiblePlaces(for: profileID)
+    }
+
+    private var yourMapPrototypeDataset: YourMapPrototypeDataset {
+        YourMapPrototypeDataset.make(
+            ownerID: profileID,
+            userPlaces: profileVisiblePlaces.map(\.userPlace),
+            visits: store.placeVisits,
+            places: profileVisiblePlaces.map(\.place),
+            visiblePlaces: profileVisiblePlaces
+        )
+    }
+
+    private var profileMapTitle: String {
+        guard let displayName = profile?.displayName.split(separator: " ").first else {
+            return "Their Map"
+        }
+        return "\(displayName)'s Map"
     }
 
     private var inCommonPlaces: [VisiblePlace] {
