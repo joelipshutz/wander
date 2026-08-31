@@ -672,9 +672,11 @@ private struct PublicSharedPlacePreview: Decodable {
 
 struct SupabaseFeedRepository: FeedRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
         self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
@@ -682,7 +684,28 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try await response.followedFeedPage()
+        let activityIDs = Array(
+            Set(response.activity.compactMap { item in
+                UUID(uuidString: item.id)?.uuidString.lowercased()
+            })
+        ).sorted()
+        let mediaRows: [RemoteActivityMediaDTO]
+        if activityIDs.isEmpty {
+            mediaRows = []
+        } else {
+            mediaRows = (try? await rpc.call(
+                "activity_media",
+                params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+            )) ?? []
+        }
+        let mediaByActivityID = Dictionary(
+            mediaRows.map { ($0.activityID.lowercased(), $0.media) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        return try await response.followedFeedPage(
+            storage: storage,
+            mediaByActivityID: mediaByActivityID
+        )
     }
 }
 
@@ -941,6 +964,39 @@ struct SupabaseVisitRepository: VisitRepository {
                 expiresIn: 3600
             )
             results.append(row.result(remoteURLString: remoteURL.absoluteString))
+        }
+        return results
+    }
+
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        let rows: [VisitPhotoRow] = try await table.select(
+            table: "visit_photos",
+            queryItems: [
+                URLQueryItem(name: "select", value: VisitPhotoRow.selectColumns),
+                URLQueryItem(name: "visit_id", value: "eq.\(visitID)"),
+                URLQueryItem(name: "deleted_at", value: "is.null"),
+                URLQueryItem(name: "upload_state", value: "eq.uploaded"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ]
+        )
+        var results: [VisitPhotoResult] = []
+        results.reserveCapacity(rows.count)
+        for row in rows {
+            do {
+                let remoteURL = try await storage.signedObjectURL(
+                    bucket: row.storageBucket,
+                    path: row.storagePath,
+                    expiresIn: 3600
+                )
+                results.append(row.result(remoteURLString: remoteURL.absoluteString))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // One missing object must not suppress the visit's other
+                // uploaded photos. The store preserves a cached URL when a
+                // fresh signature is temporarily unavailable.
+                results.append(row.result(remoteURLString: nil))
+            }
         }
         return results
     }
@@ -2042,6 +2098,7 @@ enum PlacePhotoNetworkSession {
 }
 
 struct SupabasePlacePhotoRepository: PlacePhotoRepository {
+    private static let maximumGalleryPlaceCount = 64
     private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
     private let storage: (any RemoteStorageCalling)?
@@ -2223,19 +2280,28 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        guard let rpc, UUID(uuidString: placeID) != nil else {
+        guard let rpc else {
+            throw WanderRemoteError.notConfigured
+        }
+        let canonicalPlaceIDs = Array(
+            Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
+        )
+            .sorted()
+            .prefix(Self.maximumGalleryPlaceCount)
+            .map { $0 }
+        guard !canonicalPlaceIDs.isEmpty else {
             throw WanderRemoteError.invalidResponse("Place photo gallery requires a canonical place id")
         }
 
         let pageSize = min(max(limit, 1), 100)
         let rows: [VisiblePlacePhotoGalleryRow] = try await rpc.call(
-            "visible_place_photos",
+            "visible_place_photos_for_places",
             params: VisiblePlacePhotoGalleryParams(
-                inputPlaceID: placeID,
+                inputPlaceIDs: canonicalPlaceIDs,
                 inputAfterCreatedAt: cursor?.createdAt,
                 inputAfterSortOrder: cursor?.sortOrder,
                 inputAfterPhotoID: cursor?.photoID,
@@ -2426,14 +2492,14 @@ private struct FirstVisiblePlacePhotoByUsersParams: Encodable {
 }
 
 private struct VisiblePlacePhotoGalleryParams: Encodable {
-    let inputPlaceID: String
+    let inputPlaceIDs: [String]
     let inputAfterCreatedAt: Date?
     let inputAfterSortOrder: Int?
     let inputAfterPhotoID: String?
     let inputLimit: Int
 
     enum CodingKeys: String, CodingKey {
-        case inputPlaceID = "input_place_id"
+        case inputPlaceIDs = "input_place_ids"
         case inputAfterCreatedAt = "input_after_created_at"
         case inputAfterSortOrder = "input_after_sort_order"
         case inputAfterPhotoID = "input_after_photo_id"

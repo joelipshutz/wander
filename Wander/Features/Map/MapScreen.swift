@@ -4177,7 +4177,6 @@ struct MapScreen: View {
                 store: store,
                 backend: visitBackend
             ) else { return nil }
-            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
             clearNativeMapFeatureSelection()
             if !isAttachedSubmission {
                 selectedSearchCandidateID = nil
@@ -4195,10 +4194,6 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await createSharedVisitInvitesIfNeeded(
-                inviteeUserIDs: submission.inviteeUserIDs,
-                sourceVisit: targetVisit
-            )
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
             return result
         case .sharedVisit(let invitation):
@@ -4216,14 +4211,6 @@ struct MapScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            if submission.reconcilesSharedVisitInvitees {
-                await reconcileSharedVisitInvitees(submission, sourceVisit: targetVisit)
-            } else {
-                await createSharedVisitInvitesIfNeeded(
-                    inviteeUserIDs: submission.inviteeUserIDs,
-                    sourceVisit: targetVisit
-                )
-            }
             selectedSearchCandidateID = nil
             mapSaveFlowSelection.saveDidSucceed(result)
             showMapSaveFeedback(
@@ -4253,27 +4240,6 @@ struct MapScreen: View {
         case .editWant:
             "Want updated."
         }
-    }
-
-    private func createSharedVisitInvitesIfNeeded(
-        inviteeUserIDs: [String],
-        sourceVisit: LocalPlaceVisit?
-    ) async {
-        guard !inviteeUserIDs.isEmpty, auth.isSignedIn, let sourceVisit else { return }
-        store.queueSharedVisitInvites(sourceVisitID: sourceVisit.id, inviteeUserIDs: inviteeUserIDs)
-        await retryPendingSharedVisitOperations()
-    }
-
-    private func reconcileSharedVisitInvitees(
-        _ submission: MapPlaceSaveSubmission,
-        sourceVisit: LocalPlaceVisit?
-    ) async {
-        guard auth.isSignedIn, let sourceVisit else { return }
-        store.queueSharedVisitInviteeReconciliation(
-            sourceVisitID: sourceVisit.id,
-            inviteeUserIDs: submission.inviteeUserIDs
-        )
-        await retryPendingSharedVisitOperations()
     }
 
     @MainActor
@@ -8977,6 +8943,12 @@ func persistNewPlaceSaveSubmission(
         backend: backend
     )
     let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+    await queueSharedVisitInvitees(
+        for: submission,
+        sourceVisit: targetVisit,
+        store: store,
+        backend: backend
+    )
     await persistVisitPhotoAttachments(
         submission.photoAttachments,
         to: targetVisit,
@@ -9011,6 +8983,12 @@ func persistScopedVisitOrWantSubmission(
         if let backend {
             _ = await store.syncVisit(visitID: visit.id, backend: backend)
         }
+        await queueSharedVisitInvitees(
+            for: submission,
+            sourceVisit: visit,
+            store: store,
+            backend: backend
+        )
         return (SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), visit)
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
@@ -9038,6 +9016,12 @@ func persistScopedVisitOrWantSubmission(
         if let backend {
             _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
         }
+        await queueSharedVisitInvitees(
+            for: submission,
+            sourceVisit: updatedVisit,
+            store: store,
+            backend: backend
+        )
         return (SaveResult(userPlaceID: updatedVisit.userPlaceID, syncState: updatedVisit.syncState), updatedVisit)
     case .editWant(let visiblePlace):
         let result = await store.saveCandidate(
@@ -9054,6 +9038,35 @@ func persistScopedVisitOrWantSubmission(
         )
         return (result, nil)
     }
+}
+
+@MainActor
+private func queueSharedVisitInvitees(
+    for submission: MapPlaceSaveSubmission,
+    sourceVisit: LocalPlaceVisit?,
+    store: WanderStore,
+    backend: WanderBackend?
+) async {
+    guard let backend,
+          submission.status == .been,
+          let sourceVisit
+    else { return }
+
+    if submission.reconcilesSharedVisitInvitees {
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: sourceVisit.id,
+            inviteeUserIDs: submission.inviteeUserIDs
+        )
+    } else if !submission.inviteeUserIDs.isEmpty {
+        store.queueSharedVisitInvites(
+            sourceVisitID: sourceVisit.id,
+            inviteeUserIDs: submission.inviteeUserIDs
+        )
+    } else {
+        return
+    }
+
+    _ = await store.retryPendingSharedVisitInvites(backend: backend)
 }
 
 @MainActor
@@ -14205,6 +14218,13 @@ struct PlaceActivitySection: View {
             guard auth.isSignedIn else { return }
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
+        .task(id: remoteActivityUserPlaceIDs) {
+            guard auth.isSignedIn else { return }
+            await store.refreshRemotePlaceActivity(
+                userPlaceIDs: remoteActivityUserPlaceIDs,
+                backend: backend
+            )
+        }
         .task(id: engagementUserPlaceIDs) {
             guard auth.isSignedIn else { return }
             await store.refreshPlaceActivityEngagement(
@@ -14290,6 +14310,20 @@ struct PlaceActivitySection: View {
         .sorted()
     }
 
+    private var remoteActivityUserPlaceIDs: [String] {
+        Array(
+            Set(
+                saves.compactMap { summary in
+                    guard summary.visiblePlace.owner.id != currentUserID else { return nil }
+                    let userPlaceID = summary.visiblePlace.userPlace.serverID
+                        ?? summary.visiblePlace.userPlace.id
+                    return UUID(uuidString: userPlaceID) == nil ? nil : userPlaceID.lowercased()
+                }
+            )
+        )
+        .sorted()
+    }
+
     private func companions(for entry: PlaceActivityEntry) -> [SharedVisitCompanion] {
         guard let visit = entry.visit else { return [] }
         return store.sharedVisitCompanions(for: visit.id)
@@ -14337,13 +14371,6 @@ struct PlaceActivitySection: View {
             store: store,
             backend: auth.isSignedIn ? backend : nil
         )
-        if submission.reconcilesSharedVisitInvitees, let targetVisit, auth.isSignedIn {
-            store.queueSharedVisitInviteeReconciliation(
-                sourceVisitID: targetVisit.id,
-                inviteeUserIDs: submission.inviteeUserIDs
-            )
-            _ = await store.retryPendingSharedVisitInvites(backend: backend)
-        }
         if result != nil, !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
         }
@@ -14684,6 +14711,8 @@ private struct PlaceActivityCard: View {
                             VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Open check-in photo by \(entry.owner.displayName)")
+                        .accessibilityIdentifier("place-activity.photo.\(entry.id).\(photo.id)")
                     }
                 }
             }

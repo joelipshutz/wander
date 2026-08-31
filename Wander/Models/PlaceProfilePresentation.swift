@@ -72,7 +72,7 @@ struct PlaceFitRating: Equatable {
     let reasons: [String]
 
     var displayScore: String {
-        let rounded = (score * 10).rounded() / 10
+        let rounded = (score / 2 * 10).rounded() / 10
         if rounded == rounded.rounded() {
             return String(Int(rounded))
         }
