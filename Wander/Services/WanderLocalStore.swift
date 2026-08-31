@@ -7759,26 +7759,106 @@ final class WanderStore: ObservableObject {
         var hydratedPhotos: [VisitPhotoResult] = []
         var refreshedUserPlaceIDs = Set<String>()
         var refreshedPhotoVisitIDs = Set<String>()
-        var firstError: Error?
+        var firstErrorMessage: String?
+        var wasCancelled = false
 
-        for userPlaceID in requestedUserPlaceIDs {
-            do {
-                let results = try await backend.visits(for: userPlaceID)
-                refreshedUserPlaceIDs.insert(userPlaceID)
-                hydratedVisits.append(contentsOf: results)
-
-                for result in results {
+        for batchStart in stride(from: 0, to: requestedUserPlaceIDs.count, by: 6) {
+            guard !Task.isCancelled else { return false }
+            let batchEnd = min(batchStart + 6, requestedUserPlaceIDs.count)
+            let batch = Array(requestedUserPlaceIDs[batchStart..<batchEnd])
+            let tasks = batch.map { userPlaceID in
+                Task { @MainActor in
                     do {
-                        let photos = try await backend.photos(for: result.visitID)
-                        refreshedPhotoVisitIDs.insert(result.visitID)
-                        hydratedPhotos.append(contentsOf: photos)
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: try await backend.visits(for: userPlaceID),
+                            errorMessage: nil,
+                            wasCancelled: false
+                        )
+                    } catch is CancellationError {
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: [],
+                            errorMessage: nil,
+                            wasCancelled: true
+                        )
                     } catch {
-                        firstError = firstError ?? error
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: [],
+                            errorMessage: self.remoteErrorMessage(error),
+                            wasCancelled: false
+                        )
                     }
                 }
-            } catch {
-                firstError = firstError ?? error
             }
+            for task in tasks {
+                guard !Task.isCancelled else {
+                    tasks.forEach { $0.cancel() }
+                    return false
+                }
+                let outcome = await task.value
+                if outcome.wasCancelled {
+                    wasCancelled = true
+                    tasks.forEach { $0.cancel() }
+                } else if outcome.errorMessage == nil {
+                    refreshedUserPlaceIDs.insert(outcome.userPlaceID)
+                    hydratedVisits.append(contentsOf: outcome.visits)
+                } else {
+                    firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
+                }
+            }
+            guard !wasCancelled else { return false }
+        }
+
+        let requestedVisitIDs = Array(Set(hydratedVisits.map(\.visitID))).sorted()
+        for batchStart in stride(from: 0, to: requestedVisitIDs.count, by: 6) {
+            guard !Task.isCancelled else { return false }
+            let batchEnd = min(batchStart + 6, requestedVisitIDs.count)
+            let batch = Array(requestedVisitIDs[batchStart..<batchEnd])
+            let tasks = batch.map { visitID in
+                Task { @MainActor in
+                    do {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: try await backend.visibleUploadedPhotos(for: visitID),
+                            errorMessage: nil,
+                            wasCancelled: false
+                        )
+                    } catch is CancellationError {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: [],
+                            errorMessage: nil,
+                            wasCancelled: true
+                        )
+                    } catch {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: [],
+                            errorMessage: self.remoteErrorMessage(error),
+                            wasCancelled: false
+                        )
+                    }
+                }
+            }
+            for task in tasks {
+                guard !Task.isCancelled else {
+                    tasks.forEach { $0.cancel() }
+                    return false
+                }
+                let outcome = await task.value
+                if outcome.wasCancelled {
+                    wasCancelled = true
+                    tasks.forEach { $0.cancel() }
+                } else if outcome.errorMessage == nil {
+                    refreshedPhotoVisitIDs.insert(outcome.visitID)
+                    hydratedPhotos.append(contentsOf: outcome.photos)
+                } else {
+                    firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
+                }
+            }
+            guard !wasCancelled else { return false }
         }
 
         let hydratedVisitIDs = Set(hydratedVisits.map(\.visitID))
@@ -7860,12 +7940,26 @@ final class WanderStore: ObservableObject {
 
         objectWillChange.send()
         persist()
-        if let firstError {
-            lastRemoteError = remoteErrorMessage(firstError)
+        if let firstErrorMessage {
+            lastRemoteError = firstErrorMessage
             return false
         }
         lastRemoteError = nil
         return true
+    }
+
+    private struct RemoteVisitFetchOutcome: Sendable {
+        let userPlaceID: String
+        let visits: [PlaceVisitResult]
+        let errorMessage: String?
+        let wasCancelled: Bool
+    }
+
+    private struct RemotePhotoFetchOutcome: Sendable {
+        let visitID: String
+        let photos: [VisitPhotoResult]
+        let errorMessage: String?
+        let wasCancelled: Bool
     }
 
     private func applyRemotePhotoResult(_ result: VisitPhotoResult, to photo: LocalVisitPhoto) {
@@ -7874,7 +7968,9 @@ final class WanderStore: ObservableObject {
         photo.visitID = result.visitID
         photo.storageBucket = result.storageBucket
         photo.storagePath = result.storagePath
-        photo.remoteURLString = result.remoteURLString
+        if let remoteURLString = result.remoteURLString {
+            photo.remoteURLString = remoteURLString
+        }
         photo.contentType = result.contentType
         photo.byteSize = result.byteSize
         photo.width = result.width

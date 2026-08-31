@@ -14530,6 +14530,8 @@ private struct PlaceActivityCard: View {
                             VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Open check-in photo by \(entry.owner.displayName)")
+                        .accessibilityIdentifier("place-activity.photo.\(entry.id).\(photo.id)")
                     }
                 }
             }

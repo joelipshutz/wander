@@ -27,6 +27,10 @@ final class MapPlaceCardUITests: XCTestCase {
         ).firstMatch
         scrollUp(in: app, until: ryanNote)
         XCTAssertTrue(ryanNote.isHittable)
+        let ryanCheckInPhoto = app.buttons["Open check-in photo by Ryan"]
+        XCTAssertTrue(ryanCheckInPhoto.waitForExistence(timeout: 3))
+        scrollUp(in: app, until: ryanCheckInPhoto)
+        XCTAssertTrue(ryanCheckInPhoto.isHittable)
         capture("REC-386 member photo visible in check-in")
 
         let disposableNote = app.staticTexts.matching(

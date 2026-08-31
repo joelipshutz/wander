@@ -1387,6 +1387,53 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(table.calls[0].queryItems, [URLQueryItem(name: "id", value: "eq.photo_123")])
     }
 
+    func testVisitRepositoryLoadsOnlyVisibleUploadedPhotosAndIsolatesSigningFailures() async throws {
+        let table = RecordingTable()
+        let storage = RecordingStorage()
+        storage.signedURLFailurePaths = ["user_ryan/visit_386/missing.jpg"]
+        table.responses["GET:visit_photos"] = """
+        [
+          {
+            "id": "photo_visible",
+            "visit_id": "visit_386",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_386/visible.jpg",
+            "content_type": "image/jpeg",
+            "byte_size": 1024,
+            "width": 1200,
+            "height": 900,
+            "captured_at": "2026-08-30T20:00:00Z",
+            "sort_order": 0,
+            "upload_state": "uploaded"
+          },
+          {
+            "id": "photo_missing",
+            "visit_id": "visit_386",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_386/missing.jpg",
+            "content_type": "image/jpeg",
+            "byte_size": 1024,
+            "width": 1200,
+            "height": 900,
+            "captured_at": "2026-08-30T20:01:00Z",
+            "sort_order": 1,
+            "upload_state": "uploaded"
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: storage)
+
+        let photos = try await repository.visibleUploadedPhotos(for: "visit_386")
+
+        XCTAssertEqual(photos.map(\.photoID), ["photo_visible", "photo_missing"])
+        XCTAssertNotNil(photos[0].remoteURLString)
+        XCTAssertNil(photos[1].remoteURLString)
+        XCTAssertEqual(
+            table.calls[0].queryItems.first { $0.name == "upload_state" }?.value,
+            "eq.uploaded"
+        )
+    }
+
     func testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows() async throws {
         let rpc = RecordingRPC()
         rpc.responses["visible_places_in_view"] = """
@@ -3001,6 +3048,31 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNotNil(rpc.rawBodies[0]["input_after_created_at"] as? String)
     }
 
+    func testPlacePhotoRepositoryCapsGroupedGalleryPlaceIDsDeterministically() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["visible_place_photos_for_places"] = "[]".data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: RecordingStorage()
+        )
+        let placeIDs = (0..<70).map {
+            String(format: "50000000-0000-0000-0000-%012d", $0)
+        }.reversed()
+
+        _ = try await repository.visiblePhotoGalleryPage(
+            placeIDs: Array(placeIDs),
+            after: nil,
+            limit: 40
+        )
+
+        let sentPlaceIDs = try XCTUnwrap(rpc.rawBodies[0]["input_place_ids"] as? [String])
+        XCTAssertEqual(sentPlaceIDs.count, 64)
+        XCTAssertEqual(sentPlaceIDs, sentPlaceIDs.sorted())
+        XCTAssertEqual(sentPlaceIDs.first, "50000000-0000-0000-0000-000000000000")
+        XCTAssertEqual(sentPlaceIDs.last, "50000000-0000-0000-0000-000000000063")
+    }
+
     func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
         let rpc = RecordingRPC()
         rpc.responses["first_visible_place_photo"] = """
@@ -4246,6 +4318,7 @@ private final class RecordingStorage: RemoteStorageCalling {
     private(set) var downloads: [Delete] = []
     private(set) var signedURLs: [Delete] = []
     var downloadData = Data()
+    var signedURLFailurePaths = Set<String>()
 
     func uploadObject(
         bucket: String,
@@ -4276,6 +4349,9 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
         signedURLs.append(Delete(bucket: bucket, path: path))
+        if signedURLFailurePaths.contains(path) {
+            throw TestStorageError.unavailable
+        }
         return URL(string: "https://example.supabase.co/storage/v1/object/sign/\(bucket)/\(path)?token=test")!
     }
 

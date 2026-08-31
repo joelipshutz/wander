@@ -968,6 +968,39 @@ struct SupabaseVisitRepository: VisitRepository {
         return results
     }
 
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        let rows: [VisitPhotoRow] = try await table.select(
+            table: "visit_photos",
+            queryItems: [
+                URLQueryItem(name: "select", value: VisitPhotoRow.selectColumns),
+                URLQueryItem(name: "visit_id", value: "eq.\(visitID)"),
+                URLQueryItem(name: "deleted_at", value: "is.null"),
+                URLQueryItem(name: "upload_state", value: "eq.uploaded"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ]
+        )
+        var results: [VisitPhotoResult] = []
+        results.reserveCapacity(rows.count)
+        for row in rows {
+            do {
+                let remoteURL = try await storage.signedObjectURL(
+                    bucket: row.storageBucket,
+                    path: row.storagePath,
+                    expiresIn: 3600
+                )
+                results.append(row.result(remoteURLString: remoteURL.absoluteString))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // One missing object must not suppress the visit's other
+                // uploaded photos. The store preserves a cached URL when a
+                // fresh signature is temporarily unavailable.
+                results.append(row.result(remoteURLString: nil))
+            }
+        }
+        return results
+    }
+
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
         let body = VisitPhotoUpsertBody(draft: draft)
         let rows: [VisitPhotoRow] = try await table.upsert(
@@ -2065,6 +2098,7 @@ enum PlacePhotoNetworkSession {
 }
 
 struct SupabasePlacePhotoRepository: PlacePhotoRepository {
+    private static let maximumGalleryPlaceCount = 64
     private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
     private let storage: (any RemoteStorageCalling)?
@@ -2255,7 +2289,10 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         }
         let canonicalPlaceIDs = Array(
             Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
-        ).sorted()
+        )
+            .sorted()
+            .prefix(Self.maximumGalleryPlaceCount)
+            .map { $0 }
         guard !canonicalPlaceIDs.isEmpty else {
             throw WanderRemoteError.invalidResponse("Place photo gallery requires a canonical place id")
         }

@@ -905,6 +905,14 @@ final class WanderBackend: ObservableObject {
         return try await visitRepository.photos(for: visitID)
     }
 
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.visibleUploadedPhotos(for: visitID)
+    }
+
     func upsertVisitPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
         guard let visitRepository else {
             throw WanderRemoteError.notConfigured

@@ -36,6 +36,9 @@ as $$
   requested_places as materialized (
     select distinct requested.place_id
     from unnest(coalesce(input_place_ids, array[]::uuid[])) as requested(place_id)
+    where requested.place_id is not null
+    order by requested.place_id
+    limit 64
   ),
   eligible_photos as materialized (
     select
@@ -130,7 +133,7 @@ as $$
 $$;
 
 comment on function public.visible_place_photos_for_places(uuid[], timestamptz, integer, uuid, integer) is
-  'Returns one RLS-authoritative, cursor-paginated gallery across equivalent visible place rows.';
+  'Returns one RLS-authoritative, cursor-paginated gallery across up to 64 equivalent visible place rows.';
 
 revoke all on function public.visible_place_photos_for_places(uuid[], timestamptz, integer, uuid, integer)
   from public, anon;
