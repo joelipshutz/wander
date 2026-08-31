@@ -102,6 +102,7 @@
 		540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */; };
 		54234A3E3176B76CF9CDFC4B /* rec-380-apple-signin-adoption-race-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */; };
 		544468DBCE5DC0461C1F52D4 /* rec-259-native-login-linking-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = AB2DCB79E225061F89953A56 /* rec-259-native-login-linking-pre.json */; };
+		56F03137107EE30E0A42B4F8 /* rec-381-large-account-map-loading-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A263B28EB66953BBA9F4A35 /* rec-381-large-account-map-loading-pre.json */; };
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		58986486438F908962A1B26E /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
 		5A218AC15023FD9DA8220E3C /* PlacePhotoDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FFAD48FC4FBF130BF07DBA /* PlacePhotoDeliveryTests.swift */; };
@@ -169,6 +170,7 @@
 		940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */; };
 		951634B967546BAA6394E0A8 /* rec-253-community-personalized-featured-post.json in Resources */ = {isa = PBXBuildFile; fileRef = 5D8CC526097B987E95522A42 /* rec-253-community-personalized-featured-post.json */; };
 		9565F34F79FCEEC7883DFF23 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
+		95E8C5A077108A9A3EFD24DC /* AstirVisualSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA0880B16173B7E854FA11E /* AstirVisualSystem.swift */; };
 		9783D57D5D22581B19B01C05 /* MapKitPlaceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */; };
 		97DA8BB449DC58D55A4DD2ED /* FirstVisitWalkthrough.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A3B59E94C99CDA86C1B466 /* FirstVisitWalkthrough.swift */; };
 		9800E02122FDAD2796619FC8 /* WanderLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */; };
@@ -199,6 +201,7 @@
 		AF5D0849C43DDC7D8AA7A9BF /* LocalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED7D1302D938DD4775E8816 /* LocalModels.swift */; };
 		B2D3D8AE71BC35FB52F0AE0C /* FeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEB8B354BBD2C2CB9AFABCA /* FeedModels.swift */; };
 		B7BE03F65228CEE99B5D4FD9 /* WanderCheckInControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0513E538B756870944C1F6 /* WanderCheckInControlIntent.swift */; };
+		B80EF30F001BDDB5522662E9 /* rec-381-large-account-map-loading-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 526A2543FC6ACCCA31926BFB /* rec-381-large-account-map-loading-post.png */; };
 		B84BABB0A3FC62E816F68710 /* PostHogAnalyticsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A3B6E88CE5E045D8FA3403 /* PostHogAnalyticsClient.swift */; };
 		B9316725D9B7600BBCA51692 /* PlacePhotoCarouselMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC2B6B7EBCC7219D1EDB524 /* PlacePhotoCarouselMockups.swift */; };
 		B93A6A9228FB03C85F8DC2F0 /* SaveStreakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7550C652E50A85ADBBDDCFC /* SaveStreakTests.swift */; };
@@ -412,6 +415,7 @@
 		4F8BE1B23A944FEF54533C0A /* PlaceBusinessMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBusinessMetadata.swift; sourceTree = "<group>"; };
 		50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateSheet.swift; sourceTree = "<group>"; };
 		5158D1D9D07312701C4E026B /* rec-270-map-search-shadow-followup-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-map-search-shadow-followup-pre.json"; sourceTree = "<group>"; };
+		526A2543FC6ACCCA31926BFB /* rec-381-large-account-map-loading-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-381-large-account-map-loading-post.png"; sourceTree = "<group>"; };
 		53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-268-comment-delete-photo-back-pre.json"; sourceTree = "<group>"; };
 		53417FBB5A9CA2C1F21DA629 /* rec-284-confetti-cta-polish-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-284-confetti-cta-polish-pre.json"; sourceTree = "<group>"; };
 		53548C2519893CBBD00EF1E2 /* PlaceBusinessMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBusinessMetadataTests.swift; sourceTree = "<group>"; };
@@ -421,6 +425,7 @@
 		58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoGalleryTests.swift; sourceTree = "<group>"; };
 		58EF753986682D036EC50061 /* ZoomablePhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomablePhoto.swift; sourceTree = "<group>"; };
 		597AB7F38611328F02D9409C /* PlacePhotoGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoGallery.swift; sourceTree = "<group>"; };
+		5A263B28EB66953BBA9F4A35 /* rec-381-large-account-map-loading-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-381-large-account-map-loading-pre.json"; sourceTree = "<group>"; };
 		5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		5AA6C4154C1F05E4C6C96185 /* MapPlaceListPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceListPickerSheet.swift; sourceTree = "<group>"; };
 		5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParserTests.swift; sourceTree = "<group>"; };
@@ -451,6 +456,7 @@
 		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
 		7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureDateSaveMockups.swift; sourceTree = "<group>"; };
 		7A02BE0AE86E482916C8F103 /* Wander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wander.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7AA0880B16173B7E854FA11E /* AstirVisualSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirVisualSystem.swift; sourceTree = "<group>"; };
 		7B4A6B29FC1235EFF60DA19D /* SyncStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateMachineTests.swift; sourceTree = "<group>"; };
 		7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenterTests.swift; sourceTree = "<group>"; };
 		7BA187646A3EFB882E7D3689 /* PlaceProfileSaveActionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfileSaveActionPolicy.swift; sourceTree = "<group>"; };
@@ -723,6 +729,8 @@
 				139BCA88A502517AA4BD9F9F /* rec-360-active-pin-layering-and-tap-pre.json */,
 				8249999898241DFF75C992C3 /* rec-360-active-pin-layering-and-tap-pre.png */,
 				F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */,
+				526A2543FC6ACCCA31926BFB /* rec-381-large-account-map-loading-post.png */,
+				5A263B28EB66953BBA9F4A35 /* rec-381-large-account-map-loading-pre.json */,
 				61FB898ADE26A77B273B1639 /* simulator-test-session-relaunch-post.png */,
 				4017467979764DBA4C407626 /* simulator-test-session-relaunch-pre.json */,
 			);
@@ -923,6 +931,7 @@
 		74079079D5E95AD2E796B1E8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				7AA0880B16173B7E854FA11E /* AstirVisualSystem.swift */,
 				81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
@@ -1422,6 +1431,8 @@
 				84316327A030DB7D1B0CD590 /* rec-360-active-pin-layering-and-tap-pre.json in Resources */,
 				DE5F78BF05179155567775F1 /* rec-360-active-pin-layering-and-tap-pre.png in Resources */,
 				54234A3E3176B76CF9CDFC4B /* rec-380-apple-signin-adoption-race-pre.json in Resources */,
+				B80EF30F001BDDB5522662E9 /* rec-381-large-account-map-loading-post.png in Resources */,
+				56F03137107EE30E0A42B4F8 /* rec-381-large-account-map-loading-pre.json in Resources */,
 				9C82EFA4EF3FC64621785DDB /* simulator-test-session-relaunch-post.png in Resources */,
 				2EAB478075A4392BD131BCAF /* simulator-test-session-relaunch-pre.json in Resources */,
 			);
@@ -1443,6 +1454,7 @@
 				001422F87FC100BC18C54CAA /* AppBrand.swift in Sources */,
 				E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */,
 				A29F9C684AFE8EA7FC8F456A /* AstirBrandShell.swift in Sources */,
+				95E8C5A077108A9A3EFD24DC /* AstirVisualSystem.swift in Sources */,
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,

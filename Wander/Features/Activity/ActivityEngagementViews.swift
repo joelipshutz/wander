@@ -1,6 +1,24 @@
 import SwiftUI
 
+enum ActivityPostcardVisualStyle: Equatable {
+    case standard
+    case astir
+}
+
+private struct ActivityPostcardVisualStyleKey: EnvironmentKey {
+    static let defaultValue = ActivityPostcardVisualStyle.standard
+}
+
+extension EnvironmentValues {
+    var activityPostcardVisualStyle: ActivityPostcardVisualStyle {
+        get { self[ActivityPostcardVisualStyleKey.self] }
+        set { self[ActivityPostcardVisualStyleKey.self] = newValue }
+    }
+}
+
 struct ActivityEngagementActionRow: View {
+    @Environment(\.activityPostcardVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -85,14 +103,14 @@ struct ActivityEngagementActionRow: View {
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(
                         engagement.viewerHasLiked
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.textInk.color
+                            ? accentColor
+                            : primaryColor
                     )
 
                 Text(engagement.likeCount.formatted())
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(primaryColor)
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -116,12 +134,12 @@ struct ActivityEngagementActionRow: View {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.right")
                     .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(primaryColor)
 
                 Text(engagement.commentCount.formatted())
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(primaryColor)
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -145,7 +163,7 @@ struct ActivityEngagementActionRow: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(primaryColor)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -206,7 +224,7 @@ struct ActivityEngagementActionRow: View {
     private var shareLabel: some View {
         Image(systemName: "paperplane")
             .font(.system(size: 21, weight: .semibold))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .foregroundStyle(primaryColor)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .accessibilityLabel("Share activity")
@@ -240,7 +258,7 @@ struct ActivityEngagementActionRow: View {
                 } label: {
                     Image(systemName: resolvedBookmarkState == .notSaved ? "bookmark" : "bookmark.fill")
                         .font(.system(size: 21, weight: .semibold))
-                        .foregroundStyle(resolvedBookmarkState == .wanna ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                        .foregroundStyle(resolvedBookmarkState == .wanna ? accentColor : primaryColor)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -250,6 +268,14 @@ struct ActivityEngagementActionRow: View {
                 .accessibilityHint(resolvedBookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
             }
         }
+    }
+
+    private var primaryColor: Color {
+        visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textInk.color
+    }
+
+    private var accentColor: Color {
+        visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracotta.color
     }
 }
 
@@ -268,6 +294,8 @@ enum ActivityPostcardTypographyPolicy {
 }
 
 struct ActivityPostcardView: View {
+    @Environment(\.activityPostcardVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
     let metadataIcon: String
@@ -308,19 +336,23 @@ struct ActivityPostcardView: View {
                 if let note = context.note {
                     Text("“\(note)”")
                         .font(.system(.subheadline, design: .serif, weight: .medium))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(primaryText)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(WanderTheme.terracottaTint.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        .background(noteBackground)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusMedium
+                            )
+                        )
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Note: \(note)")
                 }
 
                 if showsEngagementActions {
                     Divider()
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(borderColor)
 
                     ActivityEngagementActionRow(
                         context: context,
@@ -333,11 +365,17 @@ struct ActivityPostcardView: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, ActivityPostcardLayout.contentVerticalPadding)
         }
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(cardBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge
+            )
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(
+                cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge
+            )
+            .stroke(borderColor, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(postcardAccessibilityIdentifier)
@@ -374,11 +412,19 @@ struct ActivityPostcardView: View {
         Label(context.ticketEyebrow, systemImage: ticketIcon)
             .font(.system(size: ticketBadgeFontSize, weight: .black, design: .rounded))
             .tracking(0.7)
-            .foregroundStyle(WanderTheme.textInk.color)
+            .foregroundStyle(visualStyle == .astir ? astirBrandMode.background : WanderTheme.textInk.color)
             .padding(.horizontal, 10)
             .frame(minHeight: 30)
-            .background(WanderTheme.surfaceBone.color.opacity(0.94))
-            .clipShape(Capsule())
+            .background(
+                visualStyle == .astir
+                    ? astirBrandMode.primaryText.opacity(0.96)
+                    : WanderTheme.surfaceBone.color.opacity(0.94)
+            )
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusPill
+                )
+            )
             .accessibilityLabel(context.ticketEyebrow.localizedCapitalized)
             .accessibilityIdentifier("\(postcardAccessibilityIdentifier).badge")
     }
@@ -429,8 +475,8 @@ struct ActivityPostcardView: View {
 
     private var destinationTitle: some View {
         Text(context.placeName)
-            .font(WanderTypography.editorialTitle)
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(visualStyle == .astir ? AstirTheme.display(27) : WanderTypography.editorialTitle)
+            .foregroundStyle(primaryText)
             .lineLimit(2)
             .minimumScaleFactor(0.82)
             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
@@ -442,11 +488,15 @@ struct ActivityPostcardView: View {
         if let rating = context.rating {
             Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
                 .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color)
                 .padding(.horizontal, 9)
                 .frame(minHeight: 30)
-                .background(WanderTheme.terracottaTint.color)
-                .clipShape(Capsule())
+                .background(visualStyle == .astir ? Color.clear : WanderTheme.terracottaTint.color)
+                .overlay(alignment: .bottom) {
+                    if visualStyle == .astir {
+                        Rectangle().fill(astirBrandMode.accent).frame(height: 1)
+                    }
+                }
                 .fixedSize(horizontal: true, vertical: false)
                 .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
         }
@@ -474,7 +524,7 @@ struct ActivityPostcardView: View {
             }
         }
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(WanderTheme.textMuted.color)
+        .foregroundStyle(secondaryText)
     }
 
     @ViewBuilder
@@ -525,12 +575,12 @@ struct ActivityPostcardView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(context.actor.displayName) \(context.attributionAction)")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(primaryText)
                     .lineLimit(2)
 
                 Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · someone you follow")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(secondaryText)
                     .lineLimit(2)
             }
 
@@ -543,6 +593,28 @@ struct ActivityPostcardView: View {
     private var actorAccessibilityLabel: String {
         "\(context.actor.displayName) \(context.attributionAction), "
             + "\(FeedPresentation.timestampText(for: context.occurredAt)), someone you follow"
+    }
+
+    private var primaryText: Color {
+        visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textInk.color
+    }
+
+    private var secondaryText: Color {
+        visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color
+    }
+
+    private var cardBackground: Color {
+        visualStyle == .astir ? astirBrandMode.background : WanderTheme.surfaceBone.color
+    }
+
+    private var noteBackground: Color {
+        visualStyle == .astir
+            ? astirBrandMode.primaryText.opacity(0.07)
+            : WanderTheme.terracottaTint.color
+    }
+
+    private var borderColor: Color {
+        visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderHairline.color
     }
 }
 

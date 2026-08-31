@@ -1135,6 +1135,7 @@ private struct PlaceProfileFullView: View {
     let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.placeProfileFloatingActionVariant) private var floatingActionVariant
@@ -1185,21 +1186,21 @@ private struct PlaceProfileFullView: View {
         GeometryReader { proxy in
             let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
 
-            VStack(spacing: 0) {
-                PlaceProfileMapHeader(
-                    place: place,
-                    photos: galleryItems,
-                    selectedPhotoID: $selectedHeaderPhotoID,
-                    topInset: headerTopInset,
-                    onOpenPhoto: { photoID in
-                        viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
-                    },
-                    onNearEnd: loadMoreIfNeeded,
-                    onPhotoLoadFailure: handlePhotoLoadFailure
-                )
+            ScrollViewReader { scrollProxy in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        PlaceProfileMapHeader(
+                            place: place,
+                            photos: galleryItems,
+                            selectedPhotoID: $selectedHeaderPhotoID,
+                            topInset: headerTopInset,
+                            onOpenPhoto: { photoID in
+                                viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
+                            },
+                            onNearEnd: loadMoreIfNeeded,
+                            onPhotoLoadFailure: handlePhotoLoadFailure
+                        )
 
-                ScrollViewReader { scrollProxy in
-                    ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                             heading
 
@@ -1230,33 +1231,35 @@ private struct PlaceProfileFullView: View {
                         .padding(.horizontal, WanderTheme.spacing4)
                         .padding(.top, WanderTheme.spacing4)
                         .padding(.bottom, PlaceProfileFullScreen.fullViewBottomContentInset)
-                    }
-                    .task(id: place.id) {
-                        guard initialSection == .activity else { return }
-                        await Task.yield()
-                        guard !Task.isCancelled else { return }
-                        scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
-                    }
-                    .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
-                        scrollToWalkthroughTarget(target, using: scrollProxy)
-                    }
-                    .onChange(of: floatingActivityScrollRequest) { _, _ in
-                        withAnimation(.easeInOut(duration: 0.24)) {
-                            scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(astirBrandMode.background)
                     }
                 }
-                .background(WanderTheme.surfaceBone.color)
+                .task(id: place.id) {
+                    guard initialSection == .activity else { return }
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                }
+                .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                    scrollToWalkthroughTarget(target, using: scrollProxy)
+                }
+                .onChange(of: floatingActivityScrollRequest) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.24)) {
+                        scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                    }
+                }
             }
             .overlay(alignment: .top) {
                 headerNavigationControls(topInset: headerTopInset)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .background(WanderTheme.surfaceBone.color)
+            .background(astirBrandMode.background)
             .ignoresSafeArea(.container, edges: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(WanderTheme.surfaceBone.color)
+        .background(astirBrandMode.background)
+        .environment(\.placeProfileVisualStyle, .astir)
         .ignoresSafeArea(.container, edges: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty {
@@ -1318,49 +1321,60 @@ private struct PlaceProfileFullView: View {
     }
 
     private func headerNavigationControls(topInset: CGFloat) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            if walkthroughs.activeSurface != .placeDetail {
-                Button(action: onBack) {
-                    headerNavigationLabel(systemImage: "chevron.left")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-                .accessibilityIdentifier("place-profile.back")
-            }
+        AstirFloatingHeaderSurface {
+            ZStack {
+                AstirMastheadLockup(isCompact: true)
 
-            Spacer(minLength: 0)
+                HStack(spacing: WanderTheme.spacing2) {
+                    if walkthroughs.activeSurface != .placeDetail {
+                        Button(action: onBack) {
+                            headerNavigationLabel(systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Back")
+                        .accessibilityIdentifier("place-profile.back")
+                    } else {
+                        Color.clear
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    }
 
-            if let onAddToList {
-                Button(action: onAddToList) {
-                    headerNavigationLabel(systemImage: MapPlaceListActionSymbol.systemImage)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add place to lists")
-                .accessibilityIdentifier("place-profile.add-to-list")
-            }
+                    Spacer(minLength: 0)
 
-            if let shareURL {
-                WanderShareButton(
-                    content: .place(item: shareURL, name: place.name, message: shareText)
-                ) {
-                    headerNavigationLabel(systemImage: "square.and.arrow.up")
+                    if let onAddToList {
+                        Button(action: onAddToList) {
+                            headerNavigationLabel(systemImage: MapPlaceListActionSymbol.systemImage)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add place to lists")
+                        .accessibilityIdentifier("place-profile.add-to-list")
+                    }
+
+                    if let shareURL {
+                        WanderShareButton(
+                            content: .place(item: shareURL, name: place.name, message: shareText)
+                        ) {
+                            headerNavigationLabel(systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Share place")
+                        .accessibilityIdentifier("place-profile.share")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Share place")
-                .accessibilityIdentifier("place-profile.share")
             }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.top, topInset)
+            .padding(.bottom, WanderTheme.spacing2)
         }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.top, topInset)
     }
 
     private func headerNavigationLabel(systemImage: String) -> some View {
         Image(systemName: systemImage)
             .font(.system(size: 18, weight: .bold))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            .foregroundStyle(WanderTheme.terracotta.color)
+            .foregroundStyle(astirBrandMode == .cinemaGold ? astirBrandMode.accent : astirBrandMode.primaryText)
             .contentShape(Circle())
-            .wanderGlassCapsule(tone: .lightAction, interactive: true)
+            .background(astirBrandMode.raisedBackground.opacity(0.56), in: Circle())
+            .overlay(Circle().stroke(astirBrandMode.border, lineWidth: 1))
     }
 
     private var usesFloatingActions: Bool {
@@ -1555,15 +1569,17 @@ private struct PlaceProfileFullView: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(place.name)
-                    .font(WanderTypography.editorialDisplay)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTheme.display(39))
+                    .foregroundStyle(astirBrandMode.primaryText)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
 
                 if let heroMetadata {
                     Text(heroMetadata)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTheme.metadata(12))
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                 }
             }
 
@@ -1589,21 +1605,17 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var actionRow: some View {
         if walkthroughs.activeSurface == .placeDetail {
-            WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(actionItems) { item in
-                        walkthroughActionButton(item)
-                    }
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(actionItems) { item in
+                    walkthroughActionButton(item)
                 }
             }
             .padding(.vertical, 1)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(actionItems) { item in
-                            standardActionButton(item)
-                        }
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(actionItems) { item in
+                        standardActionButton(item)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -1625,9 +1637,9 @@ private struct PlaceProfileFullView: View {
                     .lineLimit(1)
             }
             .frame(width: 136, height: 48)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .contentShape(Capsule())
-            .wanderGlassCapsule()
+            .foregroundStyle(astirBrandMode.primaryText)
+            .contentShape(Rectangle())
+            .astirOutlinedSurface()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
@@ -1646,9 +1658,9 @@ private struct PlaceProfileFullView: View {
                     .minimumScaleFactor(0.68)
             }
             .frame(maxWidth: .infinity, minHeight: 56)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .contentShape(Capsule())
-            .wanderGlassCapsule()
+            .foregroundStyle(astirBrandMode.primaryText)
+            .contentShape(Rectangle())
+            .astirOutlinedSurface()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.title)
@@ -1660,9 +1672,9 @@ private struct PlaceProfileFullView: View {
                 .font(.system(size: 15, weight: .black))
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.terracotta.color)
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .clipShape(Capsule())
+                .background(astirBrandMode.accent)
+                .foregroundStyle(astirBrandMode == .editorial ? AstirTheme.ink.color : AstirTheme.cinemaBlack.color)
+                .overlay(Rectangle().stroke(astirBrandMode.accent, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(primaryActionTitle)
@@ -1869,9 +1881,10 @@ private struct PlaceProfileFullView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .black))
+            .font(AstirTheme.metadata(11))
             .textCase(.uppercase)
-            .foregroundStyle(WanderTheme.textMuted.color)
+            .tracking(1.2)
+            .foregroundStyle(astirBrandMode.accent)
     }
 }
 
@@ -1960,6 +1973,8 @@ struct PlaceProfileFloatingActions: View {
     let variant: PlaceProfileFloatingActionVariant
     let onAction: (PlaceProfileSaveAction) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     init(
         actions: [PlaceProfileSaveAction],
@@ -1985,12 +2000,12 @@ struct PlaceProfileFloatingActions: View {
             clusteredActionLayout
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing3)
-                .wanderGlassRoundedRectangle(
-                    tone: .darkOverlay,
-                    cornerRadius: Self.charcoalRailCornerRadius,
-                    interactive: false,
-                    showsBorder: true
-                )
+                .background(visualStyle == .astir ? astirBrandMode.raisedBackground : Color.clear)
+                .overlay {
+                    if visualStyle == .astir {
+                        Rectangle().stroke(astirBrandMode.border, lineWidth: 1)
+                    }
+                }
         } else {
             clusteredActionLayout
         }
@@ -2025,24 +2040,26 @@ struct PlaceProfileFloatingActions: View {
                     actionLabel(for: action)
                         .contentShape(
                             RoundedRectangle(
-                                cornerRadius: Self.compactCornerRadius,
+                                cornerRadius: visualStyle == .astir ? 0 : Self.compactCornerRadius,
                                 style: .continuous
                             )
                         )
-                        .wanderGlassRoundedRectangle(
-                            tone: Self.glassTone(for: action, variant: variant),
-                            cornerRadius: Self.compactCornerRadius,
-                            material: variant == .option4 ? .clear : .regular,
-                            interactive: false,
-                            showsBorder: true
+                        .modifier(
+                            PlaceProfileFloatingActionSurface(
+                                isAstir: visualStyle == .astir,
+                                isSelected: action.isSelected,
+                                tone: Self.glassTone(for: action, variant: variant)
+                            )
                         )
                 } else {
                     actionLabel(for: action)
-                        .contentShape(Capsule())
-                        .wanderGlassCapsule(
-                            tone: Self.glassTone(for: action, variant: variant),
-                            interactive: false,
-                            showsBorder: true
+                        .contentShape(Rectangle())
+                        .modifier(
+                            PlaceProfileFloatingActionSurface(
+                                isAstir: visualStyle == .astir,
+                                isSelected: action.isSelected,
+                                tone: Self.glassTone(for: action, variant: variant)
+                            )
                         )
                 }
             }
@@ -2076,7 +2093,11 @@ struct PlaceProfileFloatingActions: View {
                 maxWidth: compactActionWidth,
                 minHeight: Self.compactActionHeight
             )
-            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+            .foregroundStyle(
+                visualStyle == .astir
+                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
+                    : Self.glassTone(for: action, variant: variant).foregroundStyle
+            )
         } else {
             HStack(spacing: WanderTheme.spacing1) {
                 Image(systemName: systemImage(for: action))
@@ -2092,7 +2113,11 @@ struct PlaceProfileFloatingActions: View {
             .font(.system(size: 15, weight: .bold))
             .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
             .padding(.horizontal, WanderTheme.spacing2)
-            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+            .foregroundStyle(
+                visualStyle == .astir
+                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
+                    : Self.glassTone(for: action, variant: variant).foregroundStyle
+            )
         }
     }
 
@@ -2141,6 +2166,27 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
+}
+
+private struct PlaceProfileFloatingActionSurface: ViewModifier {
+    @Environment(\.astirBrandMode) private var brandMode
+    let isAstir: Bool
+    let isSelected: Bool
+    let tone: WanderGlassTone
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isAstir {
+            content.astirOutlinedSurface(selected: isSelected)
+        } else {
+            content.wanderGlassRoundedRectangle(
+                tone: tone,
+                cornerRadius: PlaceProfileFloatingActions.compactCornerRadius,
+                interactive: false,
+                showsBorder: true
+            )
+        }
+    }
 }
 
 private struct PlacePhotoGalleryViewerRoute: Identifiable {
@@ -2501,6 +2547,7 @@ private struct PlaceProfileMapHeader: View {
     let onOpenPhoto: (String) -> Void
     let onNearEnd: (String) -> Void
     let onPhotoLoadFailure: (PlacePhoto) -> Void
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         ZStack {
@@ -2536,7 +2583,7 @@ private struct PlaceProfileMapHeader: View {
                                 .padding(.horizontal, 10)
                                 .frame(minHeight: 44)
                                 .background(Color.black.opacity(0.68))
-                                .clipShape(Capsule())
+                                .overlay(Rectangle().stroke(astirBrandMode.accent.opacity(0.72), lineWidth: 1))
                                 .accessibilityLabel("Photo \(positionLabel)")
                         }
                     }
@@ -2603,7 +2650,7 @@ private struct PlaceProfileMapHeader: View {
             .frame(minHeight: 44)
             .background(Color.black.opacity(0.68))
             .foregroundStyle(.white)
-            .clipShape(Capsule())
+            .overlay(Rectangle().stroke(astirBrandMode.accent.opacity(0.72), lineWidth: 1))
             .accessibilityLabel("Photo by \(contributor.displayName)")
         }
     }
@@ -2855,21 +2902,39 @@ private struct PlaceProfileCategoryThumb: View {
 private struct PlaceProfileTagRail: View {
     let tags: [String]
     var compact: Bool
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         if !tags.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: compact ? WanderTheme.spacing1 : WanderTheme.spacing2) {
                     ForEach(tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: compact ? 12 : 13, weight: .black))
-                            .lineLimit(1)
-                            .padding(.horizontal, compact ? WanderTheme.spacing2 : WanderTheme.spacing3)
+                        if visualStyle == .astir {
+                            HStack(spacing: 7) {
+                                Rectangle()
+                                    .fill(astirBrandMode.accent)
+                                    .frame(width: 5, height: 5)
+                                Text(tag)
+                                    .font(AstirTheme.ui(compact ? 11 : 12, weight: .bold))
+                                    .lineLimit(1)
+                            }
+                            .textCase(.uppercase)
+                            .tracking(0.7)
+                            .foregroundStyle(astirBrandMode.primaryText)
+                            .padding(.trailing, compact ? WanderTheme.spacing2 : WanderTheme.spacing3)
                             .frame(height: compact ? 28 : 34)
-                            .background(WanderTheme.surfaceSand.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color.opacity(compact ? 0 : 1), lineWidth: 1))
+                        } else {
+                            Text(tag)
+                                .font(.system(size: compact ? 12 : 13, weight: .black))
+                                .lineLimit(1)
+                                .padding(.horizontal, compact ? WanderTheme.spacing2 : WanderTheme.spacing3)
+                                .frame(height: compact ? 28 : 34)
+                                .background(WanderTheme.surfaceSand.color)
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(WanderTheme.borderHairline.color.opacity(compact ? 0 : 1), lineWidth: 1))
+                        }
                     }
                 }
             }
@@ -2891,18 +2956,37 @@ private struct PlaceProfileTagRail: View {
 
 private struct PlaceProfileWrappingTags: View {
     let tags: [String]
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         FlowLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
             ForEach(tags, id: \.self) { tag in
-                Text(tag)
-                    .font(.system(size: 13, weight: .black))
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(height: 34)
-                    .background(WanderTheme.surfaceSand.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                if visualStyle == .astir {
+                    Text(tag)
+                        .font(AstirTheme.ui(12, weight: .bold))
+                        .textCase(.uppercase)
+                        .tracking(0.7)
+                        .padding(.leading, WanderTheme.spacing2)
+                        .padding(.trailing, WanderTheme.spacing3)
+                        .frame(height: 34)
+                        .foregroundStyle(astirBrandMode.primaryText)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(astirBrandMode.accent).frame(width: 2)
+                        }
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(astirBrandMode.border).frame(height: 1)
+                        }
+                } else {
+                    Text(tag)
+                        .font(.system(size: 13, weight: .black))
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(height: 34)
+                        .background(WanderTheme.surfaceSand.color)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
             }
         }
     }
@@ -2993,6 +3077,8 @@ private struct PlaceProfileSaveCard: View {
     let summary: PlaceSaveSummary
     let currentUserID: String
     let emphasis: Bool
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
@@ -3006,21 +3092,21 @@ private struct PlaceProfileSaveCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(owner.id == currentUserID ? "You" : owner.displayName)
                         .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(primaryText)
                     Text(noteSubtitle)
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(secondaryText)
                 }
                 Spacer()
                 if let ratingScore = displayedRatingScore {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(PlaceRating.display(ratingScore)) / 5")
                             .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .foregroundStyle(accent)
                         Text("rating")
                             .font(.system(size: 10, weight: .black))
                             .textCase(.uppercase)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(secondaryText)
                     }
                 } else {
                     PlaceProfileStatusPill(status: userPlace.status)
@@ -3030,7 +3116,7 @@ private struct PlaceProfileSaveCard: View {
             if let note {
                 Text("\"\(note)\"")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(primaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -3041,12 +3127,34 @@ private struct PlaceProfileSaveCard: View {
         }
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(emphasis ? WanderTheme.surfaceSand.color : WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18))
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(emphasis ? WanderTheme.borderStrong.color.opacity(0.58) : WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18)
+                .stroke(cardBorder, lineWidth: 1)
         )
+    }
+
+    private var primaryText: Color {
+        visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textInk.color
+    }
+
+    private var secondaryText: Color {
+        visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color
+    }
+
+    private var accent: Color {
+        visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color
+    }
+
+    private var cardBackground: Color {
+        if visualStyle == .astir { return astirBrandMode.raisedBackground }
+        return emphasis ? WanderTheme.surfaceSand.color : WanderTheme.surfaceRaised.color
+    }
+
+    private var cardBorder: Color {
+        if visualStyle == .astir { return astirBrandMode.border }
+        return emphasis ? WanderTheme.borderStrong.color.opacity(0.58) : WanderTheme.borderHairline.color
     }
 
     private var owner: LocalProfile {
@@ -3092,33 +3200,44 @@ private struct PlaceProfileSaveCard: View {
 
 private struct PlaceProfileStatusPill: View {
     let status: PlaceStatus
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         Text(status == .been ? CheckInCopy.noun : "wanna")
             .font(.system(size: 12, weight: .black))
+            .textCase(visualStyle == .astir ? .uppercase : nil)
+            .tracking(visualStyle == .astir ? 0.8 : 0)
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(height: 30)
-            .background(status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color)
-            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
-            .clipShape(Capsule())
+            .background(visualStyle == .astir ? astirBrandMode.raisedBackground : (status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color))
+            .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : (status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color))
+            .overlay {
+                if visualStyle == .astir {
+                    Rectangle().stroke(astirBrandMode.border, lineWidth: 1)
+                }
+            }
+            .clipShape(visualStyle == .astir ? AnyShape(Rectangle()) : AnyShape(Capsule()))
     }
 }
 
 private struct PlaceProfileSubtleCard: View {
     let text: String
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         Text(text)
             .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(WanderTheme.textMuted.color)
+            .foregroundStyle(visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color)
             .fixedSize(horizontal: false, vertical: true)
             .padding(WanderTheme.spacing3)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceSand.color.opacity(0.64))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .background(visualStyle == .astir ? astirBrandMode.raisedBackground : WanderTheme.surfaceSand.color.opacity(0.64))
+            .clipShape(RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18))
             .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(WanderTheme.borderStrong.color.opacity(0.72), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : 18)
+                    .stroke(visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderStrong.color.opacity(0.72), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
             )
     }
 }
