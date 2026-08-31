@@ -6,6 +6,7 @@ struct YourMapPrototypeScreen: View {
     let dataset: YourMapPrototypeDataset
     let viewerID: String?
     let mapTitle: String
+    let pinOwnership: MapPinSaveOwnership
 
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
@@ -20,12 +21,14 @@ struct YourMapPrototypeScreen: View {
         dataset: YourMapPrototypeDataset,
         viewerID: String? = nil,
         mapTitle: String = "Your Map",
+        pinOwnership: MapPinSaveOwnership = .currentUser,
         initialMode: YourMapPrototypeMode = .map,
         initialShowsSharePreview: Bool = false
     ) {
         self.dataset = dataset
         self.viewerID = viewerID
         self.mapTitle = mapTitle
+        self.pinOwnership = pinOwnership
         _mode = State(initialValue: initialMode)
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
@@ -71,6 +74,7 @@ struct YourMapPrototypeScreen: View {
                 places: filteredPlaces,
                 lens: lens,
                 now: dataset.now,
+                pinOwnership: pinOwnership,
                 dismiss: { showsSharePreview = false }
             )
         }
@@ -127,7 +131,8 @@ struct YourMapPrototypeScreen: View {
                     Annotation(place.name, coordinate: place.coordinate) {
                         YourMapPrototypeSelectablePin(
                             place: place,
-                            isSelected: selectedPlaceID == place.id
+                            isSelected: selectedPlaceID == place.id,
+                            pinOwnership: pinOwnership
                         ) {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 selectedPlaceID = place.id
@@ -850,6 +855,7 @@ private struct YourMapPrototypeSharePreview: View {
     let places: [YourMapPrototypePlace]
     let lens: YourMapPrototypeLens
     let now: Date
+    let pinOwnership: MapPinSaveOwnership
     let dismiss: () -> Void
 
     @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
@@ -942,7 +948,7 @@ private struct YourMapPrototypeSharePreview: View {
             Text(lensTitle)
                 .font(WanderTypography.editorialDisplay)
                 .fixedSize(horizontal: false, vertical: true)
-            YourMapPrototypeMiniMap(places: places)
+            YourMapPrototypeMiniMap(places: places, pinOwnership: pinOwnership)
                 .frame(height: 210)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             HStack(spacing: WanderTheme.spacing3) {
@@ -1063,12 +1069,13 @@ private struct YourMapPrototypeSharePreview: View {
 
 private struct YourMapPrototypeMiniMap: View {
     let places: [YourMapPrototypePlace]
+    let pinOwnership: MapPinSaveOwnership
 
     var body: some View {
         Map(position: .constant(.region(region)), interactionModes: []) {
             ForEach(Array(places.prefix(28))) { place in
                 Annotation(place.name, coordinate: place.coordinate) {
-                    YourMapPrototypePin(place: place)
+                    YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
                         .scaleEffect(0.58)
                 }
                 .annotationTitles(.hidden)
@@ -1096,6 +1103,7 @@ private struct YourMapPrototypeMiniMap: View {
 
 private struct YourMapPrototypePin: View {
     let place: YourMapPrototypePlace
+    let pinOwnership: MapPinSaveOwnership
 
     var body: some View {
         WanderCategoryEmoji(
@@ -1109,7 +1117,7 @@ private struct YourMapPrototypePin: View {
         .overlay(
             MapPinOutlineStroke(
                 outline: MapPinOutline(
-                    ownership: .currentUser,
+                    ownership: pinOwnership,
                     status: place.status == .been ? .been : .wannaGo
                 ),
                 lineWidth: MapPinVisualMetrics.outlineWidth
@@ -1123,12 +1131,13 @@ private struct YourMapPrototypePin: View {
 private struct YourMapPrototypeSelectablePin: View {
     let place: YourMapPrototypePlace
     let isSelected: Bool
+    let pinOwnership: MapPinSaveOwnership
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                YourMapPrototypePin(place: place)
+                YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
 
                 if isSelected {
                     Text(place.name)

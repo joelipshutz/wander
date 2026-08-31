@@ -397,10 +397,14 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(memberProfile.contains("places: profileVisiblePlaces.map(\\.place)"))
         XCTAssertTrue(memberProfile.contains("visiblePlaces: profileVisiblePlaces"))
         XCTAssertTrue(memberProfile.contains("viewerID: store.currentUser.id"))
+        XCTAssertTrue(memberProfile.contains("pinOwnership: .social"))
         let yourMapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeScreen.swift")
         )
         XCTAssertTrue(yourMapScreen.contains("currentUserID: viewerID ?? selectedVisiblePlace.owner.id"))
+        XCTAssertTrue(yourMapScreen.contains("pinOwnership: MapPinSaveOwnership = .currentUser"))
+        XCTAssertTrue(yourMapScreen.contains("ownership: pinOwnership"))
+        XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeMiniMap(places: places, pinOwnership: pinOwnership)"))
     }
 
     func testYourMapIsCompiledIntoReleaseBuilds() throws {

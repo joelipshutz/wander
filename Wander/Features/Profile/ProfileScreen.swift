@@ -788,7 +788,8 @@ struct ProfileDetailView: View {
                 YourMapPrototypeScreen(
                     dataset: yourMapPrototypeDataset,
                     viewerID: store.currentUser.id,
-                    mapTitle: profileMapTitle
+                    mapTitle: profileMapTitle,
+                    pinOwnership: .social
                 )
             }
             .sheet(item: $socialGraphTab) { tab in
