@@ -2,6 +2,119 @@ import Foundation
 import MapKit
 import SwiftUI
 
+struct ProfilePresentation {
+    let visiblePlaces: [VisiblePlace]
+    let visits: [LocalPlaceVisit]
+    let stats: ProfileStats
+    let activityItems: [ProfileActivityItem]
+    let followerCount: Int
+    let followingCount: Int
+    let inCommonCount: Int
+    let relationship: ViewerRelationship
+    let isMuted: Bool
+}
+
+@MainActor
+final class ProfilePresentationCache {
+    private var cached: (
+        revision: UInt64,
+        profileID: String,
+        currentUserID: String,
+        presentation: ProfilePresentation
+    )?
+    #if DEBUG
+    private(set) var buildCount = 0
+    #endif
+
+    func present(store: WanderStore, profileID: String) -> ProfilePresentation {
+        if let cached,
+           cached.revision == store.presentationRevision,
+           cached.profileID == profileID,
+           cached.currentUserID == store.currentUser.id {
+            return cached.presentation
+        }
+
+        #if DEBUG
+        buildCount += 1
+        #endif
+
+        let isOwner = profileID == store.currentUser.id
+        let visiblePlaces: [VisiblePlace]
+        let visits: [LocalPlaceVisit]
+        if isOwner {
+            let projection = store.currentUserCalendarProjection
+            visiblePlaces = projection.visiblePlaces
+            visits = projection.visits
+        } else {
+            visiblePlaces = store.visiblePlaces(for: profileID)
+            visits = store.placeVisits
+        }
+
+        let friends = store.friends(of: profileID).count
+        let stats: ProfileStats
+        if isOwner {
+            stats = store.currentUserCalendarProjection.profileStats(
+                currentUserID: profileID,
+                friends: friends
+            )
+        } else {
+            stats = Self.profileStats(
+                visiblePlaces: visiblePlaces,
+                visits: visits,
+                currentUserID: store.currentUser.id,
+                friends: friends
+            )
+        }
+
+        let presentation = ProfilePresentation(
+            visiblePlaces: visiblePlaces,
+            visits: visits,
+            stats: stats,
+            activityItems: ProfileActivityPresenter.items(
+                visiblePlaces: visiblePlaces,
+                visits: visits,
+                currentUserID: profileID
+            ),
+            followerCount: store.followers(of: profileID).count,
+            followingCount: store.following(of: profileID).count,
+            inCommonCount: isOwner ? 0 : store.placesInCommon(with: profileID).count,
+            relationship: store.relationship(to: profileID),
+            isMuted: !isOwner && store.isMuted(userID: profileID)
+        )
+        cached = (store.presentationRevision, profileID, store.currentUser.id, presentation)
+        return presentation
+    }
+
+    func activityItems(store: WanderStore, currentUserID: String) -> [ProfileActivityItem] {
+        present(store: store, profileID: currentUserID).activityItems
+    }
+
+    private static func profileStats(
+        visiblePlaces: [VisiblePlace],
+        visits: [LocalPlaceVisit],
+        currentUserID: String,
+        friends: Int
+    ) -> ProfileStats {
+        let places = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let uniqueCheckedInPlaces = places.filter { $0.userPlace.status == .been }.count
+        let activeIDs = Set(places.flatMap {
+            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
+        })
+        let checkInCount = visits.filter {
+            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
+        }.count
+        return ProfileStats(
+            been: uniqueCheckedInPlaces,
+            checkIns: max(checkInCount, uniqueCheckedInPlaces),
+            wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
+            friends: friends
+        )
+    }
+}
+
 struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -21,6 +134,7 @@ struct ProfileScreen: View {
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var profilePresentationCache = ProfilePresentationCache()
     @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
@@ -56,15 +170,16 @@ struct ProfileScreen: View {
     }
 
     var body: some View {
+        let presentation = profilePresentation
         NavigationStack {
             ProfileOwnerHome(
                 profile: store.currentUser,
                 viewerProfile: store.currentUser,
                 mode: .owner,
-                stats: profileStats,
+                stats: presentation.stats,
                 saveStreak: store.saveStreakSummary,
-                followerCount: store.followers(of: store.currentUser.id).count,
-                followingCount: store.following(of: store.currentUser.id).count,
+                followerCount: presentation.followerCount,
+                followingCount: presentation.followingCount,
                 sharedVisitInvitationCount: store.sharedVisitInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
@@ -167,8 +282,8 @@ struct ProfileScreen: View {
                     ProfileActivityHistoryScreen(
                         items: profileActivityItems,
                         initialFilter: filter,
-                        checkInCount: profileStats.checkIns,
-                        wannaCount: profileStats.wanna,
+                        checkInCount: presentation.stats.checkIns,
+                        wannaCount: presentation.stats.wanna,
                         itemAction: { item in
                             selectedActivityItemID = item.id
                         }
@@ -321,12 +436,12 @@ struct ProfileScreen: View {
     }
 
     private var profileInsights: ProfileInsights {
-        let projection = store.currentUserCalendarProjection
+        let presentation = profilePresentation
         return profileInsightsCache.present(
             ownerID: store.currentUser.id,
-            userPlaces: projection.userPlaces,
-            visits: projection.visits,
-            places: projection.places,
+            userPlaces: presentation.visiblePlaces.map(\.userPlace),
+            visits: presentation.visits,
+            places: presentation.visiblePlaces.map(\.place),
             month: selectedMonth,
             dataRevision: store.presentationRevision
         )
@@ -343,25 +458,20 @@ struct ProfileScreen: View {
         )
     }
 
-    private var profileStats: ProfileStats {
-        store.currentUserCalendarProjection.profileStats(
-            currentUserID: store.currentUser.id,
-            friends: store.friends(of: store.currentUser.id).count
-        )
+    private var profilePresentation: ProfilePresentation {
+        profilePresentationCache.present(store: store, profileID: store.currentUser.id)
     }
 
     private var profileActivityItems: [ProfileActivityItem] {
-        let projection = store.currentUserCalendarProjection
-        return ProfileActivityPresenter.items(
-            visiblePlaces: projection.visiblePlaces,
-            visits: projection.visits,
+        profilePresentationCache.activityItems(
+            store: store,
             currentUserID: store.currentUser.id
         )
     }
 
     private var selectedActivityItem: ProfileActivityItem? {
         guard let selectedActivityItemID else { return nil }
-        return profileActivityItems.first { $0.id == selectedActivityItemID }
+        return profilePresentation.activityItems.first { $0.id == selectedActivityItemID }
     }
 
     private var activityPlaceDestinationBinding: Binding<Bool> {
@@ -656,6 +766,7 @@ struct ProfileDetailView: View {
     @State private var reportSubject: CommunityReportSubject?
     @State private var isLoading = true
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var profilePresentationCache = ProfilePresentationCache()
     @State private var backSwipeOffset: CGFloat = 0
     @State private var isCompletingBackSwipe = false
 
@@ -679,7 +790,8 @@ struct ProfileDetailView: View {
     }
 
     private var profileNavigationStack: some View {
-        NavigationStack {
+        let presentation = profilePresentation
+        return NavigationStack {
             ZStack(alignment: .topLeading) {
                 Group {
                     if let profile {
@@ -687,13 +799,13 @@ struct ProfileDetailView: View {
                             profile: profile,
                             viewerProfile: store.currentUser,
                             mode: .member(
-                                relationship: store.relationship(to: profileID),
-                                inCommonCount: inCommonPlaces.count
+                                relationship: presentation.relationship,
+                                inCommonCount: presentation.inCommonCount
                             ),
-                            stats: profileStats,
+                            stats: presentation.stats,
                             saveStreak: nil,
-                            followerCount: store.followers(of: profileID).count,
-                            followingCount: store.following(of: profileID).count,
+                            followerCount: presentation.followerCount,
+                            followingCount: presentation.followingCount,
                             sharedVisitInvitationCount: 0,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
@@ -704,8 +816,8 @@ struct ProfileDetailView: View {
                             relationshipAction: handleRelationshipAction,
                             backAction: { dismiss() },
                             memberActions: ProfileMemberActions(
-                                canUnfollow: store.relationship(to: profileID) == .follower || store.relationship(to: profileID) == .mutual,
-                                isMuted: store.isMuted(userID: profileID),
+                                canUnfollow: presentation.relationship == .follower || presentation.relationship == .mutual,
+                                isMuted: presentation.isMuted,
                                 unfollowAction: { showUnfollowConfirm = true },
                                 toggleMuteAction: toggleMute,
                                 reportAction: presentProfileReport,
@@ -768,8 +880,8 @@ struct ProfileDetailView: View {
                 ProfileActivityHistoryScreen(
                     items: profileActivityItems,
                     initialFilter: filter,
-                    checkInCount: profileStats.checkIns,
-                    wannaCount: profileStats.wanna,
+                    checkInCount: presentation.stats.checkIns,
+                    wannaCount: presentation.stats.wanna,
                     itemAction: { item in
                         selectedActivityItemID = item.id
                     }
@@ -881,15 +993,20 @@ struct ProfileDetailView: View {
             }
     }
 
+    private var profilePresentation: ProfilePresentation {
+        profilePresentationCache.present(store: store, profileID: profileID)
+    }
+
     private var profileVisiblePlaces: [VisiblePlace] {
-        store.visiblePlaces(for: profileID)
+        profilePresentation.visiblePlaces
     }
 
     private var yourMapPrototypeDataset: YourMapPrototypeDataset {
-        YourMapPrototypeDataset.make(
+        let presentation = profilePresentation
+        return YourMapPrototypeDataset.make(
             ownerID: profileID,
             userPlaces: profileVisiblePlaces.map(\.userPlace),
-            visits: store.placeVisits,
+            visits: presentation.visits,
             places: profileVisiblePlaces.map(\.place),
             visiblePlaces: profileVisiblePlaces
         )
@@ -902,52 +1019,25 @@ struct ProfileDetailView: View {
         return "\(displayName)'s Map"
     }
 
-    private var inCommonPlaces: [VisiblePlace] {
-        store.placesInCommon(with: profileID)
-    }
-
-    private var profileStats: ProfileStats {
-        let places = VisiblePlaceGrouping.representativePlaces(
-            from: profileVisiblePlaces,
-            currentUserID: store.currentUser.id
-        )
-        let uniqueCheckedInPlaces = places.filter { $0.userPlace.status == .been }.count
-        let activeIDs = Set(places.flatMap {
-            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
-        })
-        let checkInCount = store.placeVisits.filter {
-            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
-            friends: store.friends(of: profileID).count
-        )
-    }
-
     private var profileInsights: ProfileInsights {
-        profileInsightsCache.present(
+        let presentation = profilePresentation
+        return profileInsightsCache.present(
             ownerID: profileID,
-            userPlaces: profileVisiblePlaces.map(\.userPlace),
-            visits: store.placeVisits,
-            places: profileVisiblePlaces.map(\.place),
+            userPlaces: presentation.visiblePlaces.map(\.userPlace),
+            visits: presentation.visits,
+            places: presentation.visiblePlaces.map(\.place),
             month: selectedMonth,
             dataRevision: store.presentationRevision
         )
     }
 
     private var profileActivityItems: [ProfileActivityItem] {
-        ProfileActivityPresenter.items(
-            visiblePlaces: profileVisiblePlaces,
-            visits: store.placeVisits,
-            currentUserID: profileID
-        )
+        profilePresentationCache.activityItems(store: store, currentUserID: profileID)
     }
 
     private var selectedActivityItem: ProfileActivityItem? {
         guard let selectedActivityItemID else { return nil }
-        return profileActivityItems.first { $0.id == selectedActivityItemID }
+        return profilePresentation.activityItems.first { $0.id == selectedActivityItemID }
     }
 
     private var activityPlaceDestinationBinding: Binding<Bool> {
@@ -2394,7 +2484,7 @@ private struct SavedPlacesListScreen: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     if isInCommonRoot {
                         inCommonPrivacyNotice
                         InCommonReleaseHero(
@@ -2510,14 +2600,8 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var inCommonOverlapScore: Int {
-        let viewerPlaces = VisiblePlaceGrouping.representativePlaces(
-            from: store.currentUserVisiblePlaces,
-            currentUserID: store.currentUser.id
-        )
-        let profilePlaces = VisiblePlaceGrouping.representativePlaces(
-            from: store.visiblePlaces(for: profileID),
-            currentUserID: store.currentUser.id
-        )
+        let viewerPlaces = store.representativeVisiblePlaces(for: store.currentUser.id)
+        let profilePlaces = store.representativeVisiblePlaces(for: profileID)
         return InCommonReleaseProjection.overlapScore(
             sharedCount: allModePlaces.count,
             viewerCount: viewerPlaces.count,
@@ -2920,7 +3004,7 @@ private struct SavedPlacesListScreen: View {
     }
 
     private func metadataTags(for visiblePlace: VisiblePlace) -> [String] {
-        store.attributes(for: visiblePlace.userPlace.id)
+        visiblePlace.attributes
             .flatMap { ProfileMetadataTagParser.tags(from: $0.valueJSON) }
     }
 

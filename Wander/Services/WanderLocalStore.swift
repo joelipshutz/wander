@@ -357,6 +357,13 @@ final class WanderStore: ObservableObject {
     private var persistenceRequestedWhileDeferred = false
     private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
     private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
+    private var visiblePlacesByOwnerIDCache: [String: [VisiblePlace]]?
+    private var representativeVisiblePlacesByOwnerIDCache: [String: [VisiblePlace]] = [:]
+    private var placesInCommonByProfileIDCache: [String: [VisiblePlace]] = [:]
+    private var currentUserCalendarProjectionCache: (
+        userID: String,
+        projection: CurrentUserCalendarProjection
+    )?
     private var visiblePlacesByListIDCache: (listIDs: [String], placesByListID: [String: [VisiblePlace]])?
     private var firstVisitPhotosByPlaceIDCache: (
         revision: UInt64,
@@ -482,6 +489,9 @@ final class WanderStore: ObservableObject {
     #if DEBUG
     private(set) var visiblePlaceProjectionBuildCount = 0
     private(set) var visiblePlaceOwnerCountBuildCount = 0
+    private(set) var currentUserCalendarProjectionBuildCount = 0
+    private(set) var visiblePlacesByOwnerProjectionBuildCount = 0
+    private(set) var placesInCommonProjectionBuildCount = 0
     #endif
     private struct CachedDiscoverParse {
         let filters: DiscoverFilters
@@ -688,6 +698,10 @@ final class WanderStore: ObservableObject {
     private func invalidatePresentationCaches() {
         visiblePlacesCache.removeAll(keepingCapacity: true)
         visiblePlaceCountsByOwnerIDCache = nil
+        visiblePlacesByOwnerIDCache = nil
+        representativeVisiblePlacesByOwnerIDCache.removeAll(keepingCapacity: true)
+        placesInCommonByProfileIDCache.removeAll(keepingCapacity: true)
+        currentUserCalendarProjectionCache = nil
         visiblePlacesByListIDCache = nil
         firstVisitPhotosByPlaceIDCache = nil
         activityBookmarkStateByPlaceAliasCache = nil
@@ -1446,6 +1460,14 @@ final class WanderStore: ObservableObject {
     }
 
     var currentUserCalendarProjection: CurrentUserCalendarProjection {
+        if let cached = currentUserCalendarProjectionCache,
+           cached.userID == currentUser.id {
+            return cached.projection
+        }
+
+        #if DEBUG
+        currentUserCalendarProjectionBuildCount += 1
+        #endif
         let localOwnerPlaces = localVisiblePlaces(
             filters: PlaceFilters(ownerScopes: ["you"])
         ).places
@@ -1503,11 +1525,13 @@ final class WanderStore: ObservableObject {
             isAuthoritative: isAuthoritative
         )
 
-        return CurrentUserCalendarProjection(
+        let projection = CurrentUserCalendarProjection(
             visiblePlaces: projectedPlaces,
             visits: projectedVisits,
             isAuthoritative: isAuthoritative
         )
+        currentUserCalendarProjectionCache = (currentUser.id, projection)
+        return projection
     }
 
     private func hasUnsyncedCalendarChildren(for userPlace: LocalUserPlace) -> Bool {
@@ -4075,7 +4099,16 @@ final class WanderStore: ObservableObject {
     }
 
     func visiblePlaces(for profileID: String) -> [VisiblePlace] {
-        visiblePlaces().filter { $0.owner.id == profileID }
+        if let cached = visiblePlacesByOwnerIDCache {
+            return cached[profileID, default: []]
+        }
+
+        #if DEBUG
+        visiblePlacesByOwnerProjectionBuildCount += 1
+        #endif
+        let placesByOwnerID = Dictionary(grouping: visiblePlaces(), by: \.owner.id)
+        visiblePlacesByOwnerIDCache = placesByOwnerID
+        return placesByOwnerID[profileID, default: []]
     }
 
     func visiblePlaceCountsByOwnerID() -> [String: Int] {
@@ -4099,19 +4132,38 @@ final class WanderStore: ObservableObject {
 
     func placesInCommon(with profileID: String) -> [VisiblePlace] {
         guard profileID != currentUser.id else { return [] }
-        let mine = VisiblePlaceGrouping.representativePlaces(
-            from: currentUserVisiblePlaces,
-            currentUserID: currentUser.id
-        )
-        let theirs = VisiblePlaceGrouping.representativePlaces(
-            from: visiblePlaces(for: profileID),
-            currentUserID: currentUser.id
-        )
-        return theirs.filter { theirPlace in
-            mine.contains { myPlace in
-                VisiblePlaceGrouping.matches(myPlace, theirPlace)
-            }
+        if let cached = placesInCommonByProfileIDCache[profileID] {
+            return cached
         }
+
+        #if DEBUG
+        placesInCommonProjectionBuildCount += 1
+        #endif
+        let mine = representativeVisiblePlaces(for: currentUser.id)
+        let theirs = representativeVisiblePlaces(for: profileID)
+        let myAliases = mine.reduce(into: Set<String>()) { result, visiblePlace in
+            result.formUnion(VisiblePlaceGrouping.matchingAliases(for: visiblePlace))
+        }
+        let result = theirs.filter { theirPlace in
+            !VisiblePlaceGrouping.matchingAliases(for: theirPlace).isDisjoint(with: myAliases)
+        }
+        placesInCommonByProfileIDCache[profileID] = result
+        return result
+    }
+
+    func representativeVisiblePlaces(for profileID: String) -> [VisiblePlace] {
+        if let cached = representativeVisiblePlacesByOwnerIDCache[profileID] {
+            return cached
+        }
+        let source = profileID == currentUser.id
+            ? currentUserVisiblePlaces
+            : visiblePlaces(for: profileID)
+        let result = VisiblePlaceGrouping.representativePlaces(
+            from: source,
+            currentUserID: currentUser.id
+        )
+        representativeVisiblePlacesByOwnerIDCache[profileID] = result
+        return result
     }
 
     func attributes(for userPlaceID: String) -> [LocalPlaceAttribute] {
