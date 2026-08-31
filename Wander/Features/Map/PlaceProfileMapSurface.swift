@@ -1591,7 +1591,7 @@ private struct PlaceProfileFullView: View {
         Image(systemName: systemImage)
             .font(.system(size: 18, weight: .bold))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            .foregroundStyle(astirBrandMode == .cinemaGold ? astirBrandMode.accent : astirBrandMode.primaryText)
+            .foregroundStyle(astirBrandMode.usesCinemaGoldTexture ? astirBrandMode.accent : astirBrandMode.primaryText)
             .contentShape(Circle())
             .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
     }
@@ -1902,7 +1902,7 @@ private struct PlaceProfileFullView: View {
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .background(astirBrandMode.accent)
-                .foregroundStyle(astirBrandMode == .editorial ? AstirTheme.ink.color : AstirTheme.cinemaBlack.color)
+                .foregroundStyle(astirBrandMode.accentForeground)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)

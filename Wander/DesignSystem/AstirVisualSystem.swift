@@ -2,6 +2,7 @@ import SwiftUI
 
 enum AstirBrandMode: String, CaseIterable, Equatable {
     case editorial
+    case editorialLight
     case cinemaGold
 
     static func resolved(
@@ -14,6 +15,8 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         guard arguments.indices.contains(valueIndex) else { return .editorial }
 
         switch arguments[valueIndex].lowercased() {
+        case "editoriallight", "editorial-light", "light", "paper":
+            return .editorialLight
         case "cinema", "cinemagold", "cinema-gold", "gold":
             return .cinemaGold
         default:
@@ -24,6 +27,7 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
     var background: Color {
         switch self {
         case .editorial: AstirTheme.ink.color
+        case .editorialLight: AstirTheme.paper.color
         case .cinemaGold: AstirTheme.cinemaBlack.color
         }
     }
@@ -31,6 +35,7 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
     var raisedBackground: Color {
         switch self {
         case .editorial: AstirTheme.inkRaised.color
+        case .editorialLight: AstirTheme.paperRaised.color
         case .cinemaGold: AstirTheme.cinemaRaisedBlack.color
         }
     }
@@ -38,43 +43,61 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
     var primaryText: Color {
         switch self {
         case .editorial: AstirTheme.paper.color
-        case .cinemaGold: AstirTheme.cinemaGoldLight.color
+        case .editorialLight: AstirTheme.ink.color
+        case .cinemaGold: AstirTheme.cinemaIvory.color
         }
     }
 
     var secondaryText: Color {
         switch self {
         case .editorial: AstirTheme.mutedOnInk.color
-        case .cinemaGold: AstirTheme.cinemaGoldMuted.color
+        case .editorialLight: AstirTheme.mutedOnPaper.color
+        case .cinemaGold: AstirTheme.cinemaBrassMuted.color
         }
     }
 
     var accent: Color {
         switch self {
         case .editorial: AstirTheme.signal.color
-        case .cinemaGold: AstirTheme.cinemaGold.color
+        case .editorialLight: AstirTheme.signal.color
+        case .cinemaGold: AstirTheme.cinemaBrass.color
         }
     }
 
     var border: Color {
         switch self {
         case .editorial: AstirTheme.lineOnInk.color
-        case .cinemaGold: AstirTheme.cinemaGoldDark.color.opacity(0.68)
+        case .editorialLight: AstirTheme.lineOnPaper.color
+        case .cinemaGold: AstirTheme.cinemaBrassDark.color.opacity(0.72)
         }
     }
 
     var selectedFill: Color {
         switch self {
         case .editorial: AstirTheme.paper.color
-        case .cinemaGold: AstirTheme.cinemaGoldDark.color.opacity(0.18)
+        case .editorialLight: AstirTheme.ink.color
+        case .cinemaGold: AstirTheme.cinemaBrassDark.color.opacity(0.20)
         }
     }
 
     var selectedForeground: Color {
         switch self {
         case .editorial: AstirTheme.ink.color
-        case .cinemaGold: AstirTheme.cinemaGoldLight.color
+        case .editorialLight: AstirTheme.paper.color
+        case .cinemaGold: AstirTheme.cinemaIvory.color
         }
+    }
+
+    var prefersDarkInterface: Bool {
+        self != .editorialLight
+    }
+
+    var usesCinemaGoldTexture: Bool {
+        self == .cinemaGold
+    }
+
+    var accentForeground: Color {
+        usesCinemaGoldTexture ? AstirTheme.cinemaBlack.color : AstirTheme.ink.color
     }
 }
 
@@ -91,18 +114,25 @@ extension EnvironmentValues {
 
 enum AstirTheme {
     static let paper = WanderColorToken(name: "astir.color.paper", hex: "#F2E9DB")
+    static let paperRaised = WanderColorToken(name: "astir.color.paperRaised", hex: "#FBF6ED")
     static let ink = WanderColorToken(name: "astir.color.ink", hex: "#141714")
     static let inkRaised = WanderColorToken(name: "astir.color.inkRaised", hex: "#1B1F1B")
     static let signal = WanderColorToken(name: "astir.color.signal", hex: "#F05A3C")
     static let mutedOnInk = WanderColorToken(name: "astir.color.mutedOnInk", hex: "#98958D")
+    static let mutedOnPaper = WanderColorToken(name: "astir.color.mutedOnPaper", hex: "#6F6A62")
     static let lineOnInk = WanderColorToken(name: "astir.color.lineOnInk", hex: "#464943")
+    static let lineOnPaper = WanderColorToken(name: "astir.color.lineOnPaper", hex: "#C9BFB0")
 
     static let cinemaBlack = WanderColorToken(name: "astir.color.cinemaBlack", hex: "#070706")
     static let cinemaRaisedBlack = WanderColorToken(name: "astir.color.cinemaRaisedBlack", hex: "#11100D")
+    // Retained as the original exploration reference. The live cinema mode
+    // uses the less-yellow brass system below.
     static let cinemaGold = WanderColorToken(name: "astir.color.cinemaGold", hex: "#C7A45D")
-    static let cinemaGoldLight = WanderColorToken(name: "astir.color.cinemaGoldLight", hex: "#E5CC91")
-    static let cinemaGoldMuted = WanderColorToken(name: "astir.color.cinemaGoldMuted", hex: "#8F7A50")
-    static let cinemaGoldDark = WanderColorToken(name: "astir.color.cinemaGoldDark", hex: "#765927")
+    static let cinemaIvory = WanderColorToken(name: "astir.color.cinemaIvory", hex: "#E9E1D5")
+    static let cinemaBrass = WanderColorToken(name: "astir.color.cinemaBrass", hex: "#A77A46")
+    static let cinemaBrassLight = WanderColorToken(name: "astir.color.cinemaBrassLight", hex: "#C4A276")
+    static let cinemaBrassMuted = WanderColorToken(name: "astir.color.cinemaBrassMuted", hex: "#7D7468")
+    static let cinemaBrassDark = WanderColorToken(name: "astir.color.cinemaBrassDark", hex: "#563D26")
 
     static func wordmark(_ size: CGFloat) -> Font {
         .system(size: size, weight: .medium, design: .serif)
@@ -125,11 +155,11 @@ private struct AstirCinemaGoldTexture: View {
     var body: some View {
         LinearGradient(
             colors: [
-                AstirTheme.cinemaGoldDark.color,
-                AstirTheme.cinemaGoldLight.color,
-                AstirTheme.cinemaGold.color,
-                AstirTheme.cinemaGoldLight.color.opacity(0.88),
-                AstirTheme.cinemaGoldDark.color
+                AstirTheme.cinemaBrassDark.color,
+                AstirTheme.cinemaBrassLight.color,
+                AstirTheme.cinemaBrass.color,
+                AstirTheme.cinemaBrassLight.color.opacity(0.82),
+                AstirTheme.cinemaBrassDark.color
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -179,7 +209,7 @@ struct AstirTexturedAccent<Content: View>: View {
 
     @ViewBuilder
     var body: some View {
-        if brandMode == .cinemaGold {
+        if brandMode.usesCinemaGoldTexture {
             content
                 .foregroundStyle(Color.clear)
                 .overlay {
@@ -200,7 +230,7 @@ struct AstirMastheadLockup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            if brandMode == .cinemaGold {
+            if brandMode.usesCinemaGoldTexture {
                 AstirTexturedAccent {
                     Text("ASTIR")
                         .font(AstirTheme.wordmark(isCompact ? 18 : 22))
@@ -332,7 +362,7 @@ struct AstirIconActionButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(brandMode == .cinemaGold ? brandMode.accent : brandMode.primaryText)
+                .foregroundStyle(brandMode.usesCinemaGoldTexture ? brandMode.accent : brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2, castsShadow: true)
                 .contentShape(Circle())
