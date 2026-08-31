@@ -20,6 +20,9 @@ struct FeedScreen: View {
     @State private var hasMountedPeopleSurface: Bool
     @State private var peopleQuery = ""
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
+    @State private var isFloatingHeaderHidden = false
+    @State private var lastFeedScrollOffset: CGFloat?
+    @State private var accumulatedFeedScrollTravel: CGFloat = 0
     @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
@@ -55,6 +58,12 @@ struct FeedScreen: View {
                             memberQuery: $peopleQuery,
                             contentTopInset: feedContentTopInset,
                             dismissSearchFocus: { peopleSearchFieldFocused = false },
+                            onScrollOffsetChange: { offset in
+                                updateFloatingHeaderVisibility(
+                                    scrollOffset: offset,
+                                    surface: .people
+                                )
+                            },
                             openProfile: openProfile
                         )
                         .opacity(selectedSurface == .people ? 1 : 0)
@@ -72,7 +81,18 @@ struct FeedScreen: View {
                                 )
                             }
                         }
-                        .zIndex(1)
+                        .offset(
+                            y: isFloatingHeaderHidden
+                                ? -(floatingHeaderHeight + WanderTheme.spacing4)
+                                : 0
+                        )
+                        .opacity(isFloatingHeaderHidden ? 0 : 1)
+                        .allowsHitTesting(!isFloatingHeaderHidden)
+                        .animation(
+                            FeedFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
+                            value: isFloatingHeaderHidden
+                        )
+                        .zIndex(3)
                 }
                 .opacity(isShowingSearch ? 0 : 1)
                 .allowsHitTesting(!isShowingSearch)
@@ -151,6 +171,7 @@ struct FeedScreen: View {
                     peopleQuery = ""
                 }
                 walkthroughs.perform(.feedSurfaceSwitch)
+                resetFloatingHeaderScrollTracking(revealHeader: true)
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .feedDiscoverSearch || target == .feedActivity {
@@ -164,6 +185,7 @@ struct FeedScreen: View {
             }
             .onChange(of: peopleSearchFieldFocused) { _, isFocused in
                 if isFocused {
+                    setFloatingHeaderHidden(false)
                     walkthroughs.perform(.feedPeopleSearch)
                 }
             }
@@ -234,12 +256,23 @@ struct FeedScreen: View {
     private var placesSurface: some View {
         ScrollViewReader { proxy in
             ScrollView {
+                FeedScrollOffsetReader(
+                    coordinateSpaceName: FeedScrollCoordinateSpace.places
+                )
+
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     content
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
+            }
+            .coordinateSpace(name: FeedScrollCoordinateSpace.places)
+            .onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
+                updateFloatingHeaderVisibility(
+                    scrollOffset: offset,
+                    surface: .places
+                )
             }
             .accessibilityIdentifier("feed.places.scroll")
             .scrollDismissesKeyboard(.interactively)
@@ -257,6 +290,71 @@ struct FeedScreen: View {
 
     private var feedContentTopInset: CGFloat {
         floatingHeaderHeight + WanderTheme.spacing3
+    }
+
+    private func updateFloatingHeaderVisibility(
+        scrollOffset: CGFloat,
+        surface: FeedSurface
+    ) {
+        guard selectedSurface == surface, !isShowingSearch else { return }
+
+        if scrollOffset <= FeedFloatingHeaderBehavior.topRevealOffset {
+            lastFeedScrollOffset = scrollOffset
+            accumulatedFeedScrollTravel = 0
+            setFloatingHeaderHidden(false)
+            return
+        }
+
+        guard let previousOffset = lastFeedScrollOffset else {
+            lastFeedScrollOffset = scrollOffset
+            return
+        }
+
+        let delta = scrollOffset - previousOffset
+        lastFeedScrollOffset = scrollOffset
+        guard abs(delta) >= FeedFloatingHeaderBehavior.minimumMeaningfulDelta else { return }
+
+        if delta > 0 {
+            if accumulatedFeedScrollTravel < 0 {
+                accumulatedFeedScrollTravel = 0
+            }
+            accumulatedFeedScrollTravel += delta
+
+            if scrollOffset >= FeedFloatingHeaderBehavior.minimumHideOffset,
+               accumulatedFeedScrollTravel >= FeedFloatingHeaderBehavior.hideTravelThreshold {
+                accumulatedFeedScrollTravel = 0
+                setFloatingHeaderHidden(true)
+            }
+        } else {
+            if accumulatedFeedScrollTravel > 0 {
+                accumulatedFeedScrollTravel = 0
+            }
+            accumulatedFeedScrollTravel += delta
+
+            if accumulatedFeedScrollTravel <= -FeedFloatingHeaderBehavior.revealTravelThreshold {
+                accumulatedFeedScrollTravel = 0
+                setFloatingHeaderHidden(false)
+            }
+        }
+    }
+
+    private func resetFloatingHeaderScrollTracking(revealHeader: Bool) {
+        lastFeedScrollOffset = nil
+        accumulatedFeedScrollTravel = 0
+        if revealHeader {
+            setFloatingHeaderHidden(false)
+        }
+    }
+
+    private func setFloatingHeaderHidden(_ isHidden: Bool) {
+        guard isFloatingHeaderHidden != isHidden else { return }
+        if reduceMotion {
+            isFloatingHeaderHidden = isHidden
+        } else {
+            withAnimation(FeedFloatingHeaderBehavior.animation(reduceMotion: false)) {
+                isFloatingHeaderHidden = isHidden
+            }
+        }
     }
 
     private func openDiscoverSearch() {
@@ -688,6 +786,7 @@ private struct FeedPeopleSurface: View {
     @Binding var memberQuery: String
     let contentTopInset: CGFloat
     let dismissSearchFocus: () -> Void
+    let onScrollOffsetChange: (CGFloat) -> Void
     let openProfile: (ProfileShell) -> Void
 
     @State private var memberResults: [ProfileShell] = []
@@ -706,6 +805,10 @@ private struct FeedPeopleSurface: View {
 
     var body: some View {
         ScrollView {
+            FeedScrollOffsetReader(
+                coordinateSpaceName: FeedScrollCoordinateSpace.people
+            )
+
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 InviteEntryPointButton(surface: .feedPeople) {
                     dismissSearchFocus()
@@ -724,6 +827,10 @@ private struct FeedPeopleSurface: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
+        }
+        .coordinateSpace(name: FeedScrollCoordinateSpace.people)
+        .onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
+            onScrollOffsetChange(offset)
         }
         .scrollDismissesKeyboard(.interactively)
         .refreshable {
@@ -1128,6 +1235,50 @@ private enum FeedFloatingHeaderMetrics {
         + WanderTheme.tapMinimum
         + WanderTheme.spacing2
         + WanderTheme.tapMinimum
+}
+
+private enum FeedFloatingHeaderBehavior {
+    static let topRevealOffset: CGFloat = 8
+    static let minimumHideOffset: CGFloat = 28
+    static let minimumMeaningfulDelta: CGFloat = 0.7
+    static let hideTravelThreshold: CGFloat = 24
+    static let revealTravelThreshold: CGFloat = 9
+
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.30, extraBounce: 0)
+    }
+}
+
+private enum FeedScrollCoordinateSpace {
+    static let places = "feed.places.scroll-space"
+    static let people = "feed.people.scroll-space"
+}
+
+private struct FeedScrollOffsetReader: View {
+    let coordinateSpaceName: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: FeedScrollOffsetPreferenceKey.self,
+                value: max(
+                    0,
+                    -proxy.frame(in: .named(coordinateSpaceName)).minY
+                )
+            )
+        }
+        .frame(height: 1)
+        .padding(.bottom, -1)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct FeedScrollOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 enum FeedSearchTransitionPolicy {
