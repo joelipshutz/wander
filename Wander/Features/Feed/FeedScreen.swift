@@ -268,7 +268,9 @@ struct FeedScreen: View {
                 .padding(.bottom, WanderTheme.spacing16)
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
-            .onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
+            .feedScrollTracking(
+                coordinateSpaceName: FeedScrollCoordinateSpace.places
+            ) { offset in
                 updateFloatingHeaderVisibility(
                     scrollOffset: offset,
                     surface: .places
@@ -829,9 +831,10 @@ private struct FeedPeopleSurface: View {
             .padding(.bottom, WanderTheme.spacing16)
         }
         .coordinateSpace(name: FeedScrollCoordinateSpace.people)
-        .onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
-            onScrollOffsetChange(offset)
-        }
+        .feedScrollTracking(
+            coordinateSpaceName: FeedScrollCoordinateSpace.people,
+            onOffsetChange: onScrollOffsetChange
+        )
         .scrollDismissesKeyboard(.interactively)
         .refreshable {
             await refreshRecommendations()
@@ -1278,6 +1281,40 @@ private struct FeedScrollOffsetPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+private struct FeedScrollTrackingModifier: ViewModifier {
+    let coordinateSpaceName: String
+    let onOffsetChange: (CGFloat) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                max(0, geometry.contentOffset.y + geometry.contentInsets.top)
+            } action: { _, offset in
+                onOffsetChange(offset)
+            }
+        } else {
+            content.onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
+                onOffsetChange(offset)
+            }
+        }
+    }
+}
+
+private extension View {
+    func feedScrollTracking(
+        coordinateSpaceName: String,
+        onOffsetChange: @escaping (CGFloat) -> Void
+    ) -> some View {
+        modifier(
+            FeedScrollTrackingModifier(
+                coordinateSpaceName: coordinateSpaceName,
+                onOffsetChange: onOffsetChange
+            )
+        )
     }
 }
 
