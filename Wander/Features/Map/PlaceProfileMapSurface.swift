@@ -1286,7 +1286,7 @@ private struct PlaceProfileFullView: View {
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
         }
-        .task(id: place.id) {
+        .task(id: photoPlaceIDs) {
             await reloadVisibleUserPhotos()
         }
         .task(id: businessActionLookupKey) {
@@ -1405,6 +1405,16 @@ private struct PlaceProfileFullView: View {
         )
     }
 
+    private var photoPlaceIDs: [String] {
+        Array(
+            Set(
+                ([place.id] + saves.map { $0.visiblePlace.place.id })
+                    .compactMap { UUID(uuidString: $0)?.uuidString.lowercased() }
+            )
+        )
+        .sorted()
+    }
+
     private func reloadProviderPhoto() async {
         if place.id.hasPrefix("walkthrough_place_") {
             providerPhoto = nil
@@ -1473,10 +1483,10 @@ private struct PlaceProfileFullView: View {
     private func resolvedUserPhotoPage(
         after cursor: PlacePhotoGalleryCursor?
     ) async -> PlacePhotoGalleryPage? {
-        guard UUID(uuidString: place.id) != nil else { return nil }
+        guard !photoPlaceIDs.isEmpty else { return nil }
         do {
             return try await backend.visiblePlacePhotoGalleryPage(
-                placeID: place.id,
+                placeIDs: photoPlaceIDs,
                 after: cursor
             )
         } catch is CancellationError {

@@ -502,7 +502,7 @@ final class WanderBackend: ObservableObject {
     }
 
     func visiblePlacePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int = 40
     ) async throws -> PlacePhotoGalleryPage {
@@ -510,7 +510,7 @@ final class WanderBackend: ObservableObject {
             throw WanderRemoteError.notConfigured
         }
         return try await placePhotoRepository.visiblePhotoGalleryPage(
-            placeID: placeID,
+            placeIDs: placeIDs,
             after: cursor,
             limit: limit
         )
@@ -1001,6 +1001,14 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await visitRepository.photos(for: visitID)
+    }
+
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.visibleUploadedPhotos(for: visitID)
     }
 
     func upsertVisitPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {

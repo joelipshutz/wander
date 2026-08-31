@@ -328,6 +328,24 @@ final class WanderStoreTests: XCTestCase {
                         backfilledFromUserPlace: false
                     )
                 ]
+            ],
+            photosByVisitID: [
+                "visit_friend": [
+                    VisitPhotoResult(
+                        photoID: "photo_friend",
+                        visitID: "visit_friend",
+                        storageBucket: "visit-photos",
+                        storagePath: "user_friend/visit_friend/photo_friend.jpg",
+                        remoteURLString: "https://example.com/signed/photo_friend.jpg",
+                        contentType: "image/jpeg",
+                        byteSize: 1_024,
+                        width: 1_200,
+                        height: 1_600,
+                        capturedAt: visitedAt,
+                        sortOrder: 0,
+                        uploadState: .uploaded
+                    )
+                ]
             ]
         )
         let backend = WanderBackend(
@@ -351,7 +369,11 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(followRepository.followersUserIDs, [shell.id])
         XCTAssertEqual(followRepository.followingUserIDs, [shell.id])
         XCTAssertEqual(visitRepository.visitRequests, [userPlace.id])
+        XCTAssertEqual(visitRepository.photoRequests, ["visit_friend"])
         XCTAssertEqual(store.placeVisits.first { $0.id == "visit_friend" }?.visitedAt, visitedAt)
+        let hydratedPhoto = try XCTUnwrap(store.photos(for: "visit_friend").first)
+        XCTAssertEqual(hydratedPhoto.id, "photo_friend")
+        XCTAssertEqual(hydratedPhoto.remoteURLString, "https://example.com/signed/photo_friend.jpg")
     }
 
     func testCurrentUserCalendarRefreshHydratesOwnPlacesAndVisitsBeforePublishing() async throws {
@@ -11275,6 +11297,7 @@ private final class FakeVisitRepository: VisitRepository {
     }
 
     private let visitsByUserPlaceID: [String: [PlaceVisitResult]]
+    private let photosByVisitID: [String: [VisitPhotoResult]]
     private let error: Error?
     private let failingUserPlaceIDs: Set<String>
     private var suspendedUserPlaceIDs: Set<String>
@@ -11291,6 +11314,7 @@ private final class FakeVisitRepository: VisitRepository {
 
     init(
         visitsByUserPlaceID: [String: [PlaceVisitResult]] = [:],
+        photosByVisitID: [String: [VisitPhotoResult]] = [:],
         error: Error? = nil,
         failingUserPlaceIDs: Set<String> = [],
         suspendedUserPlaceIDs: Set<String> = [],
@@ -11298,6 +11322,7 @@ private final class FakeVisitRepository: VisitRepository {
         isPhotoMetadataSuspended: Bool = false
     ) {
         self.visitsByUserPlaceID = visitsByUserPlaceID
+        self.photosByVisitID = photosByVisitID
         self.error = error
         self.failingUserPlaceIDs = failingUserPlaceIDs
         self.suspendedUserPlaceIDs = suspendedUserPlaceIDs
@@ -11351,7 +11376,7 @@ private final class FakeVisitRepository: VisitRepository {
         if let error {
             throw error
         }
-        return []
+        return photosByVisitID[visitID] ?? []
     }
 
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
