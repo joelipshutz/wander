@@ -14198,14 +14198,14 @@ private struct PlaceActivityFilterControl: View {
                         )
                         .background(
                             visualStyle == .astir
-                                ? (selection == filter && astirBrandMode == .editorial ? astirBrandMode.selectedFill : Color.clear)
+                                ? (selection == filter && !astirBrandMode.usesCinemaGoldTexture ? astirBrandMode.selectedFill : Color.clear)
                                 : (selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
                         )
                         .clipShape(visualStyle == .astir ? AnyShape(Rectangle()) : AnyShape(Capsule()))
                         .overlay(
                             visualStyle == .astir
                                 ? AnyShape(Rectangle()).stroke(
-                                    selection == filter && astirBrandMode == .cinemaGold ? astirBrandMode.accent : Color.clear,
+                                    selection == filter && astirBrandMode.usesCinemaGoldTexture ? astirBrandMode.accent : Color.clear,
                                     lineWidth: 2
                                 )
                                 : AnyShape(Capsule()).stroke(

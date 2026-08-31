@@ -482,10 +482,10 @@ struct WanderRootView: View {
                 .tag(WanderTab.profile)
         }
         .tint(astirBrandMode.accent)
-        .preferredColorScheme(astirBrandMode == .cinemaGold ? .dark : .light)
+        .preferredColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light)
         .toolbarBackground(astirBrandMode.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
-        .toolbarColorScheme(.dark, for: .tabBar)
+        .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
