@@ -3153,6 +3153,21 @@ final class NavigationContractTests: XCTestCase {
             after: "init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore)",
             before: "@MainActor\nprivate struct ListPlaceProjectionContext"
         )
+        let addPlacesScreen = try sourceSection(
+            source,
+            after: "private struct ListAddPlacesScreen: View",
+            before: "private struct ListAddPlacesUnavailableScreen: View"
+        )
+        let collaboratorSearch = try sourceSection(
+            source,
+            after: "private struct FriendCollaboratorSearchContent: View",
+            before: "private struct ExistingCollaboratorsSummary: View"
+        )
+        let listEditor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
         XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
@@ -3168,9 +3183,47 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(detailProjection.contains("itemCountOverride: list.cachedItemCount"))
         XCTAssertTrue(source.contains("@State private var homeProjectionCache"))
         XCTAssertTrue(source.contains("@State private var projectionCache"))
-        XCTAssertTrue(richProjection.contains("VisiblePlaceGrouping.groups("))
+        XCTAssertTrue(detailScreen.contains("LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3)"))
+        XCTAssertEqual(addPlacesScreen.components(separatedBy: "LazyVStack(spacing: WanderTheme.spacing2)").count - 1, 2)
+        XCTAssertGreaterThanOrEqual(
+            collaboratorSearch.components(separatedBy: "LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2)").count - 1,
+            2
+        )
+        XCTAssertTrue(listEditor.contains("LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(richProjection.contains("store.visiblePlaceGroups()"))
+        XCTAssertFalse(richProjection.contains("VisiblePlaceGrouping.groups("))
         XCTAssertTrue(richProjection.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
+    }
+
+    func testMapListPickerCachesPresentationAndLazyLoadsRows() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/MapPlaceListPickerSheet.swift")
+        )
+        let listSection = try sourceSection(
+            source,
+            after: "private func listSection(title: String, lists: [LocalPlaceList]) -> some View",
+            before: "private func listRow(_ list: LocalPlaceList) -> some View"
+        )
+        let listRow = try sourceSection(
+            source,
+            after: "private func listRow(_ list: LocalPlaceList) -> some View",
+            before: "private func listDetail(_ list: LocalPlaceList) -> String"
+        )
+        let presentationRefresh = try sourceSection(
+            source,
+            after: "private func refreshPresentation()",
+            before: "@MainActor\n    private func applyPendingLists() async"
+        )
+
+        XCTAssertTrue(source.contains("@State private var presentation = MapPlaceListPickerPresentation.empty"))
+        XCTAssertTrue(listSection.contains("LazyVStack(spacing: 0)"))
+        XCTAssertTrue(listRow.contains("selection.existingListIDs.contains(list.id)"))
+        XCTAssertFalse(listRow.contains("target.isAlreadyInList"))
+        XCTAssertTrue(presentationRefresh.contains("for list in eligibleLists"))
+        XCTAssertTrue(presentationRefresh.contains("target.isAlreadyInList(list, store: store)"))
+        XCTAssertTrue(presentationRefresh.contains("detailByListID[list.id] = makeListDetail(list)"))
+        XCTAssertTrue(source.contains("if presentation.needsCompanionWanna"))
     }
 
     func testCollaboratorsLeaveListsFromNativeOverflowConfirmation() throws {

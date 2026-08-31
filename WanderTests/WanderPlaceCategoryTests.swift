@@ -708,6 +708,16 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let collaboratorProjectionElapsed = CFAbsoluteTimeGetCurrent() - collaboratorProjectionStart
         XCTAssertEqual(store.collaboratorIndexBuildCount, 1)
 
+        let groupProjectionStart = CFAbsoluteTimeGetCurrent()
+        checksum += store.visiblePlaceGroups().count
+        let groupProjectionElapsed = CFAbsoluteTimeGetCurrent() - groupProjectionStart
+        let warmGroupProjectionStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += store.visiblePlaceGroups().count
+        }
+        let warmGroupProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmGroupProjectionStart
+        XCTAssertEqual(store.visiblePlaceGroupBuildCount, 1)
+
         let insightsCache = ProfileInsightsCache()
         let insightsStart = CFAbsoluteTimeGetCurrent()
         let insights = insightsCache.present(
@@ -748,6 +758,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertLessThan(listProjectionElapsed, 0.12, "High-data list projection took \(listProjectionElapsed)s")
         XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")
         XCTAssertLessThan(collaboratorProjectionElapsed, 0.1, "List collaborator projection took \(collaboratorProjectionElapsed)s")
+        XCTAssertLessThan(groupProjectionElapsed, 0.15, "Visible-place grouping took \(groupProjectionElapsed)s")
+        XCTAssertLessThan(warmGroupProjectionElapsed, 0.02, "Warm visible-place grouping took \(warmGroupProjectionElapsed)s")
         XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
         XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
         XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")

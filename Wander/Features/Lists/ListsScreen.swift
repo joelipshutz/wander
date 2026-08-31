@@ -1277,7 +1277,7 @@ private struct ListDetailScreen: View {
         let outlineCatalog = savedPlaceOutlineCatalog
         let visiblePlaces = visiblePlaces(in: renderedList)
 
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("places")
                 .font(.system(size: 18, weight: .black))
 
@@ -1337,7 +1337,8 @@ private struct ListDetailScreen: View {
     }
 
     private func visiblePlaces(in renderedList: PlaceListMock) -> [ListPlaceMock] {
-        renderedList.places.filter { !removedPlaceIDs.contains($0.id) }
+        guard !removedPlaceIDs.isEmpty else { return renderedList.places }
+        return renderedList.places.filter { !removedPlaceIDs.contains($0.id) }
     }
 
     private var sourceList: LocalPlaceList? {
@@ -1723,7 +1724,7 @@ private struct ListAddPlacesScreen: View {
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
-                VStack(spacing: WanderTheme.spacing2) {
+                LazyVStack(spacing: WanderTheme.spacing2) {
                     ForEach(suggestionBatch.suggestions) { suggestion in
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
@@ -1770,7 +1771,7 @@ private struct ListAddPlacesScreen: View {
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
-                VStack(spacing: WanderTheme.spacing2) {
+                LazyVStack(spacing: WanderTheme.spacing2) {
                     ForEach(addableSearchCandidates) { candidate in
                         ListPlaceCandidateAddRow(
                             candidate: candidate,
@@ -1800,7 +1801,7 @@ private struct ListAddPlacesScreen: View {
             )
         ) {
             listSavedPlaceOutlineCatalog(
-                for: store.visiblePlaces(),
+                for: store.visiblePlaceGroups(),
                 currentUserID: store.currentUser.id
             )
         }
@@ -2944,7 +2945,7 @@ private struct FriendCollaboratorSearchContent: View {
                 selectedCollaboratorsSection
             }
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("friends")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -2991,7 +2992,7 @@ private struct FriendCollaboratorSearchContent: View {
     }
 
     private var selectedCollaboratorsSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing2) {
                 FacePileView(collaborators: selectedCollaborators, size: 28)
                 Text("\(selectedCollaborators.count) selected")
@@ -4487,31 +4488,33 @@ private struct ListEditorSheet: View {
             } else if store.isPrivateProfile && canEditCollaborators {
                 ExistingCollaboratorsSummary(collaborators: stagedCollaborators, showsContainer: false)
             } else {
-                ForEach(stagedCollaborators) { collaborator in
-                    HStack(spacing: WanderTheme.spacing2) {
-                        WanderAvatar(
-                            initials: collaborator.initials,
-                            avatarURL: avatarURL(for: collaborator),
-                            size: 32,
-                            color: collaborator.color
-                        )
-                        Text("@\(collaborator.handle)")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text(isEditing ? "can view" : "draft invite")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                        Spacer()
-                        if canEditCollaborators {
-                            Button {
-                                stagedCollaborators.removeAll { $0.id == collaborator.id }
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .font(.system(size: 22, weight: .black))
-                                    .foregroundStyle(WanderTheme.stateError.color)
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    ForEach(stagedCollaborators) { collaborator in
+                        HStack(spacing: WanderTheme.spacing2) {
+                            WanderAvatar(
+                                initials: collaborator.initials,
+                                avatarURL: avatarURL(for: collaborator),
+                                size: 32,
+                                color: collaborator.color
+                            )
+                            Text("@\(collaborator.handle)")
+                                .font(.system(size: 13, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                            Text(isEditing ? "can view" : "draft invite")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                            Spacer()
+                            if canEditCollaborators {
+                                Button {
+                                    stagedCollaborators.removeAll { $0.id == collaborator.id }
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 22, weight: .black))
+                                        .foregroundStyle(WanderTheme.stateError.color)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove @\(collaborator.handle)")
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Remove @\(collaborator.handle)")
                         }
                     }
                 }
@@ -4891,10 +4894,7 @@ private struct ListPlaceProjectionContext {
         }
         firstVisitPhotoByPlaceID = store.firstVisitPhotosByPlaceID()
 
-        let groups = VisiblePlaceGrouping.groups(
-            from: store.visiblePlaces(),
-            currentUserID: resolvedCurrentUserID
-        )
+        let groups = store.visiblePlaceGroups()
         var summariesByVisiblePlaceID: [String: [PlaceSaveSummary]] = [:]
         summariesByVisiblePlaceID.reserveCapacity(groups.reduce(0) { $0 + $1.places.count })
         var outlinesByReferenceID: [String: [MapPinOutline]] = [:]
@@ -5238,11 +5238,11 @@ private func savedPlaceOutlines(
 }
 
 private func listSavedPlaceOutlineCatalog(
-    for visiblePlaces: [VisiblePlace],
+    for groups: [VisiblePlaceGroup],
     currentUserID: String
 ) -> [String: [MapPinOutline]] {
     var catalog: [String: [MapPinOutline]] = [:]
-    for group in VisiblePlaceGrouping.groups(from: visiblePlaces, currentUserID: currentUserID) {
+    for group in groups {
         let outlines = MapPinOutlineBuilder.outlines(
             for: group.places.map { visiblePlace in
                 MapPinSaveState(

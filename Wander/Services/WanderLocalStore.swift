@@ -388,11 +388,17 @@ final class WanderStore: ObservableObject {
         revision: UInt64,
         keys: [String: String]
     )?
+    private var visiblePlaceGroupsCache: (
+        revision: UInt64,
+        userID: String,
+        groups: [VisiblePlaceGroup]
+    )?
     private(set) var presentationRevision: UInt64 = 0
     private(set) var firstVisitPhotoIndexBuildCount = 0
     private(set) var activityBookmarkIndexBuildCount = 0
     private(set) var listPhotoAuthorizationScopeKeyBuildCount = 0
     private(set) var placeGroupingIndexBuildCount = 0
+    private(set) var visiblePlaceGroupBuildCount = 0
     private(set) var visiblePlaceListsBuildCount = 0
     private(set) var collaboratorIndexBuildCount = 0
 
@@ -720,6 +726,7 @@ final class WanderStore: ObservableObject {
         activityBookmarkStateByPlaceAliasCache = nil
         listPhotoAuthorizationScopeKeyCache = nil
         placeGroupingKeyByReferenceIDCache = nil
+        visiblePlaceGroupsCache = nil
         visiblePlaceListLookupCache = nil
         presentationRevision &+= 1
     }
@@ -3987,6 +3994,25 @@ final class WanderStore: ObservableObject {
         }
         visiblePlacesCache.append((filters: filters, places: projected))
         return projected
+    }
+
+    func visiblePlaceGroups() -> [VisiblePlaceGroup] {
+        if let cached = visiblePlaceGroupsCache,
+           cached.revision == presentationRevision,
+           cached.userID == currentUser.id {
+            return cached.groups
+        }
+        visiblePlaceGroupBuildCount += 1
+        let groups = VisiblePlaceGrouping.groups(
+            from: visiblePlaces(),
+            currentUserID: currentUser.id
+        )
+        visiblePlaceGroupsCache = (
+            revision: presentationRevision,
+            userID: currentUser.id,
+            groups: groups
+        )
+        return groups
     }
 
     private func localVisiblePlaces(filters: PlaceFilters = PlaceFilters()) -> LocalVisiblePlaceProjection {

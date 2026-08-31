@@ -10170,6 +10170,19 @@ final class WanderStoreTests: XCTestCase {
         _ = store.visiblePlaces(in: try XCTUnwrap(lists.first))
         XCTAssertEqual(store.placeGroupingIndexBuildCount, 1)
 
+        let expectedGroups = VisiblePlaceGrouping.groups(
+            from: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
+        let cachedGroups = store.visiblePlaceGroups()
+        XCTAssertEqual(cachedGroups.map(\.key), expectedGroups.map(\.key))
+        XCTAssertEqual(
+            cachedGroups.map { $0.places.map(\.id) },
+            expectedGroups.map { $0.places.map(\.id) }
+        )
+        _ = store.visiblePlaceGroups()
+        XCTAssertEqual(store.visiblePlaceGroupBuildCount, 1)
+
         store.block(userID: "user_maya")
 
         XCTAssertNotEqual(store.listPhotoAuthorizationScopeKey(), authorizationKey)
@@ -10180,6 +10193,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.collaboratorIndexBuildCount, 2)
         _ = store.visiblePlacesByListID(in: store.visiblePlaceLists)
         XCTAssertEqual(store.placeGroupingIndexBuildCount, 2)
+        _ = store.visiblePlaceGroups()
+        XCTAssertEqual(store.visiblePlaceGroupBuildCount, 2)
     }
 
     func testListProjectionPrefersExactSocialSourceSaveOverEarlierCurrentUserSave() throws {
