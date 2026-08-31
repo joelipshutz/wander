@@ -10142,6 +10142,46 @@ final class WanderStoreTests: XCTestCase {
         }
     }
 
+    func testListPresentationIndexesAreReusedUntilStoreMutation() throws {
+        let store = makeStore()
+        let lists = store.visiblePlaceLists
+        let authorizationKey = store.listPhotoAuthorizationScopeKey()
+
+        XCTAssertEqual(store.visiblePlaceListsBuildCount, 1)
+        XCTAssertEqual(store.listPhotoAuthorizationScopeKeyBuildCount, 1)
+        XCTAssertEqual(store.visiblePlaceLists.map(\.id), lists.map(\.id))
+        XCTAssertEqual(store.listPhotoAuthorizationScopeKey(), authorizationKey)
+        XCTAssertEqual(store.visiblePlaceListsBuildCount, 1)
+        XCTAssertEqual(store.listPhotoAuthorizationScopeKeyBuildCount, 1)
+
+        let mine = store.visiblePlaceLists(scope: .mine)
+        XCTAssertEqual(store.visiblePlaceLists(scope: .mine).map(\.id), mine.map(\.id))
+        XCTAssertEqual(store.visiblePlaceListsBuildCount, 1)
+
+        for list in lists {
+            _ = store.collaborators(for: list)
+        }
+        for list in lists.reversed() {
+            _ = store.collaborators(for: list)
+        }
+        XCTAssertEqual(store.collaboratorIndexBuildCount, 1)
+
+        _ = store.visiblePlacesByListID(in: lists)
+        _ = store.visiblePlaces(in: try XCTUnwrap(lists.first))
+        XCTAssertEqual(store.placeGroupingIndexBuildCount, 1)
+
+        store.block(userID: "user_maya")
+
+        XCTAssertNotEqual(store.listPhotoAuthorizationScopeKey(), authorizationKey)
+        XCTAssertEqual(store.listPhotoAuthorizationScopeKeyBuildCount, 2)
+        _ = store.visiblePlaceLists
+        XCTAssertEqual(store.visiblePlaceListsBuildCount, 2)
+        _ = store.collaborators(for: try XCTUnwrap(store.placeLists.first))
+        XCTAssertEqual(store.collaboratorIndexBuildCount, 2)
+        _ = store.visiblePlacesByListID(in: store.visiblePlaceLists)
+        XCTAssertEqual(store.placeGroupingIndexBuildCount, 2)
+    }
+
     func testListProjectionPrefersExactSocialSourceSaveOverEarlierCurrentUserSave() throws {
         let store = makeStore()
         let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_demo_laptop" })

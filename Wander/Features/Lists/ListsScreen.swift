@@ -2,6 +2,39 @@
 import SwiftUI
 import UIKit
 
+final class ListsProjectionCache<Key: Equatable, Value> {
+    private var cached: (key: Key, value: Value)?
+    private(set) var buildCount = 0
+
+    func value(for key: Key, build: () -> Value) -> Value {
+        if let cached, cached.key == key {
+            return cached.value
+        }
+        let value = build()
+        cached = (key, value)
+        buildCount += 1
+        return value
+    }
+}
+
+private struct ListPhotoAuthorizationScopeKey: EnvironmentKey {
+    static let defaultValue = "unauthorized-list-photo-scope"
+}
+
+private extension EnvironmentValues {
+    var listPhotoAuthorizationScopeKey: String {
+        get { self[ListPhotoAuthorizationScopeKey.self] }
+        set { self[ListPhotoAuthorizationScopeKey.self] = newValue }
+    }
+}
+
+private struct ListsHomeProjectionKey: Equatable {
+    let revision: UInt64
+    let scopeID: String
+    let deletedListIDs: Set<String>
+    let scenario: ListsScreenScenario
+}
+
 struct ListsScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
@@ -22,6 +55,10 @@ struct ListsScreen: View {
     @State private var pendingListInvite: PlaceListInvitePrompt?
     @State private var listInviteErrorMessage: String?
     @State private var deletedListIDs = Set<String>()
+    @State private var homeProjectionCache = ListsProjectionCache<
+        ListsHomeProjectionKey,
+        [PlaceListMock]
+    >()
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
@@ -134,6 +171,10 @@ struct ListsScreen: View {
         } message: {
             Text(listInviteErrorMessage ?? "This invitation is no longer available.")
         }
+        .environment(
+            \.listPhotoAuthorizationScopeKey,
+            store.listPhotoAuthorizationScopeKey()
+        )
     }
 
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
@@ -584,6 +625,18 @@ struct ListsScreen: View {
     }
 
     private var activeLists: [PlaceListMock] {
+        homeProjectionCache.value(
+            for: ListsHomeProjectionKey(
+                revision: store.presentationRevision,
+                scopeID: selectedScopeID,
+                deletedListIDs: deletedListIDs,
+                scenario: scenario
+            ),
+            build: buildActiveLists
+        )
+    }
+
+    private func buildActiveLists() -> [PlaceListMock] {
         guard scenario != .empty else { return [] }
 
         let sourceLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
@@ -865,6 +918,18 @@ private struct ListPreviewMosaic: View {
     }
 }
 
+private struct ListDetailProjectionKey: Equatable {
+    let revision: UInt64
+    let sourceListID: String?
+    let fallbackListID: String
+}
+
+private struct ListDetailProjection {
+    let sourceList: LocalPlaceList?
+    let displayList: PlaceListMock
+    let outlineCatalog: [String: [MapPinOutline]]
+}
+
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -890,6 +955,10 @@ private struct ListDetailScreen: View {
     @State private var isLeavingList = false
     @State private var isShowingLeaveError = false
     @State private var reportSubject: CommunityReportSubject?
+    @State private var projectionCache = ListsProjectionCache<
+        ListDetailProjectionKey,
+        ListDetailProjection
+    >()
 
     init(
         list: PlaceListMock,
@@ -1272,20 +1341,49 @@ private struct ListDetailScreen: View {
     }
 
     private var sourceList: LocalPlaceList? {
-        guard let sourceListID = list.sourceListID else { return nil }
-        return store.visiblePlaceLists.first {
-            $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
-        }
+        detailProjection.sourceList
     }
 
     private var displayList: PlaceListMock {
-        sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
+        detailProjection.displayList
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        listSavedPlaceOutlineCatalog(
-            for: store.visiblePlaces(),
-            currentUserID: store.currentUser.id
+        detailProjection.outlineCatalog
+    }
+
+    private var detailProjection: ListDetailProjection {
+        projectionCache.value(
+            for: ListDetailProjectionKey(
+                revision: store.presentationRevision,
+                sourceListID: list.sourceListID,
+                fallbackListID: list.id
+            ),
+            build: buildDetailProjection
+        )
+    }
+
+    private func buildDetailProjection() -> ListDetailProjection {
+        let sourceList = list.sourceListID.flatMap { sourceListID in
+            store.visiblePlaceLists.first {
+                $0.id == sourceListID
+                    || $0.localID == sourceListID
+                    || $0.serverID == sourceListID
+            }
+        }
+        let context = ListPlaceProjectionContext(store: store)
+        let displayList = sourceList.map {
+            PlaceListMock(
+                list: $0,
+                visiblePlaces: store.visiblePlaces(in: $0),
+                context: context,
+                store: store
+            )
+        } ?? list
+        return ListDetailProjection(
+            sourceList: sourceList,
+            displayList: displayList,
+            outlineCatalog: context.outlineCatalog
         )
     }
 
@@ -1519,6 +1617,10 @@ private struct ListAddPlacesScreen: View {
     @State private var saveToast: ListSaveToastPresentation?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
+    @State private var outlineCatalogCache = ListsProjectionCache<
+        ListsStoreProjectionKey,
+        [String: [MapPinOutline]]
+    >()
 
     var body: some View {
         ScrollView {
@@ -1691,10 +1793,22 @@ private struct ListAddPlacesScreen: View {
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
-        listSavedPlaceOutlineCatalog(
-            for: store.visiblePlaces(),
-            currentUserID: store.currentUser.id
-        )
+        outlineCatalogCache.value(
+            for: ListsStoreProjectionKey(
+                revision: store.presentationRevision,
+                userID: store.currentUser.id
+            )
+        ) {
+            listSavedPlaceOutlineCatalog(
+                for: store.visiblePlaces(),
+                currentUserID: store.currentUser.id
+            )
+        }
+    }
+
+    private struct ListsStoreProjectionKey: Equatable {
+        let revision: UInt64
+        let userID: String
     }
 
     private var addableSearchCandidates: [PlaceCandidate] {
@@ -2203,7 +2317,7 @@ private struct ListMapPreview: View {
                             } else if let place = place(for: cluster) {
                                 ListMapMarker(
                                     place: place,
-                                    outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                                    outlines: place.outlines,
                                     isSelected: false,
                                     compact: true
                                 )
@@ -2293,9 +2407,7 @@ private struct ListMapPreview: View {
 
     private var previewClusters: [ListMapCluster] {
         ListMapClusterer.clusters(
-            for: list.mappedPlaces.map {
-                ListMapCoordinate(id: $0.id, coordinate: $0.coordinate)
-            },
+            for: list.mappedCoordinates,
             in: list.mapRegion,
             viewportSize: CGSize(width: 340, height: height),
             minimumScreenDistance: 40
@@ -2304,14 +2416,13 @@ private struct ListMapPreview: View {
 
     private func place(for cluster: ListMapCluster) -> ListPlaceMock? {
         guard let placeID = cluster.memberIDs.first else { return nil }
-        return list.places.first { $0.id == placeID }
+        return list.placesByID[placeID]
     }
 
     private func outlines(for cluster: ListMapCluster) -> [MapPinOutline] {
-        let memberIDs = Set(cluster.memberIDs)
         return MapPinOutlineBuilder.outlines(
-            for: list.places
-                .filter { memberIDs.contains($0.id) }
+            for: cluster.memberIDs
+                .compactMap { list.placesByID[$0] }
                 .flatMap(\.saveStates)
         )
     }
@@ -3096,7 +3207,7 @@ private struct ListMapFullScreen: View {
         _interactionState = State(
             initialValue: ListMapInteractionState(
                 focusedPlaceID: initialSelectedPlaceID.flatMap { selectedID in
-                    list.places.first { $0.id == selectedID }?.id
+                    list.placesByID[selectedID]?.id
                 }
             )
         )
@@ -3136,7 +3247,7 @@ private struct ListMapFullScreen: View {
                                     } label: {
                                         ListMapMarker(
                                             place: place,
-                                            outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                                            outlines: place.outlines,
                                             isSelected: interactionState.focusedPlaceID == place.id
                                         )
                                     }
@@ -3295,7 +3406,7 @@ private struct ListMapFullScreen: View {
             set: { placeID in
                 interactionState.handle(
                     .focus(placeID),
-                    validPlaceIDs: Set(list.places.map(\.id))
+                    validPlaceIDs: list.validPlaceIDs
                 )
             }
         )
@@ -3303,9 +3414,7 @@ private struct ListMapFullScreen: View {
 
     private func clusters(in viewportSize: CGSize) -> [ListMapCluster] {
         ListMapClusterer.clusters(
-            for: list.mappedPlaces.map {
-                ListMapCoordinate(id: $0.id, coordinate: $0.coordinate)
-            },
+            for: list.mappedCoordinates,
             in: visibleRegion,
             viewportSize: viewportSize
         )
@@ -3313,14 +3422,13 @@ private struct ListMapFullScreen: View {
 
     private func place(for cluster: ListMapCluster) -> ListPlaceMock? {
         guard let placeID = cluster.memberIDs.first else { return nil }
-        return list.places.first { $0.id == placeID }
+        return list.placesByID[placeID]
     }
 
     private func outlines(for cluster: ListMapCluster) -> [MapPinOutline] {
-        let memberIDs = Set(cluster.memberIDs)
         return MapPinOutlineBuilder.outlines(
-            for: list.places
-                .filter { memberIDs.contains($0.id) }
+            for: cluster.memberIDs
+                .compactMap { list.placesByID[$0] }
                 .flatMap(\.saveStates)
         )
     }
@@ -3343,7 +3451,7 @@ private struct ListMapFullScreen: View {
     }
 
     private var validPlaceIDs: Set<String> {
-        Set(list.places.map(\.id))
+        list.validPlaceIDs
     }
 
     @ViewBuilder
@@ -3420,9 +3528,8 @@ private struct ListMapFullScreen: View {
     }
 
     private func zoom(to cluster: ListMapCluster) {
-        let memberIDs = Set(cluster.memberIDs)
-        let coordinates = list.mappedPlaces
-            .filter { memberIDs.contains($0.id) }
+        let coordinates = cluster.memberIDs
+            .compactMap { list.placesByID[$0] }
             .map(\.coordinate)
         let minimumSpan = max(
             min(visibleRegion.span.latitudeDelta, visibleRegion.span.longitudeDelta) * 0.32,
@@ -3582,7 +3689,7 @@ private struct ListMapPlaceRail: View {
                     ForEach(list.places) { place in
                         ListMapPlaceTile(
                             place: place,
-                            outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                            outlines: place.outlines,
                             isFocused: focusedPlaceID == place.id
                         ) {
                             onSelect(place)
@@ -3713,9 +3820,9 @@ private struct ListMapCompactMedia: View {
 }
 
 private struct ListPlacePhotoMedia: View {
-    @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.listPhotoAuthorizationScopeKey) private var photoAuthorizationScopeKey
     let place: ListPlaceMock
     let cornerRadius: CGFloat
     let fallbackEmojiSize: CGFloat
@@ -3795,21 +3902,6 @@ private struct ListPlacePhotoMedia: View {
             .joined(separator: "|")
     }
 
-    private var photoAuthorizationScopeKey: String {
-        let followsKey = store.follows
-            .map {
-                "\($0.followerUserID)>\($0.followedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
-            }
-            .sorted()
-            .joined(separator: ",")
-        let blocksKey = store.blocks
-            .map {
-                "\($0.blockerUserID)>\($0.blockedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
-            }
-            .sorted()
-            .joined(separator: ",")
-        return "user:\(store.currentUser.id)|follows:\(followsKey)|blocks:\(blocksKey)"
-    }
 }
 
 private struct ListMapAvailabilityNotice: View {
@@ -4533,30 +4625,64 @@ private struct PlaceListMock: Identifiable, Hashable {
     var canAddPlaces: Bool = true
     var canLeave: Bool = false
     var mapAvailability: ListMapAvailability = .ready
+    let mappedPlaces: [ListPlaceMock]
+    let mappedCoordinates: [ListMapCoordinate]
+    let placesByID: [String: ListPlaceMock]
+    let validPlaceIDs: Set<String>
+    let mapContentState: ListMapContentState
+    let photoContributorUserIDs: [String]
+    let mapRegion: MKCoordinateRegion
 
-    var previewPlaces: [ListPlaceMock] { places }
-    var itemCount: Int { itemCountOverride ?? places.count }
-    var totalItemCount: Int { max(itemCount, places.count) }
-    var resolvedPlaceCount: Int { places.count }
-    var mappedPlaces: [ListPlaceMock] { places.filter(\.isMappable) }
-    var mappedPlaceCount: Int { mappedPlaces.count }
-    var mapContentState: ListMapContentState {
-        ListMapContentState(
-            totalItemCount: totalItemCount,
-            resolvedPlaceCount: resolvedPlaceCount,
-            mappedPlaceCount: mappedPlaceCount
+    init(
+        id: String,
+        name: String,
+        description: String,
+        ownerName: String,
+        isStealth: Bool,
+        collaborators: [ListCollaboratorMock],
+        places: [ListPlaceMock],
+        itemCountOverride: Int? = nil,
+        sourceListID: String? = nil,
+        ownerUserID: String = "you",
+        canManage: Bool = true,
+        canAddPlaces: Bool = true,
+        canLeave: Bool = false,
+        mapAvailability: ListMapAvailability = .ready
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.ownerName = ownerName
+        self.isStealth = isStealth
+        self.collaborators = collaborators
+        self.places = places
+        self.itemCountOverride = itemCountOverride
+        self.sourceListID = sourceListID
+        self.ownerUserID = ownerUserID
+        self.canManage = canManage
+        self.canAddPlaces = canAddPlaces
+        self.canLeave = canLeave
+        self.mapAvailability = mapAvailability
+
+        let mappedPlaces = places.filter(\.isMappable)
+        self.mappedPlaces = mappedPlaces
+        self.mappedCoordinates = mappedPlaces.map {
+            ListMapCoordinate(id: $0.id, coordinate: $0.coordinate)
+        }
+        self.placesByID = places.reduce(into: [:]) { result, place in
+            result[place.id] = place
+        }
+        self.validPlaceIDs = Set(places.map(\.id))
+        let itemCount = itemCountOverride ?? places.count
+        self.mapContentState = ListMapContentState(
+            totalItemCount: max(itemCount, places.count),
+            resolvedPlaceCount: places.count,
+            mappedPlaceCount: mappedPlaces.count
         )
-    }
-    var isOwnedByCurrentUser: Bool { ownerName == "You" }
-    var isCollaborative: Bool { !collaborators.isEmpty }
-    var photoContributorUserIDs: [String] {
-        Array(Set([ownerUserID] + collaborators.map(\.id)))
+        self.photoContributorUserIDs = Array(Set([ownerUserID] + collaborators.map(\.id)))
             .filter { !$0.isEmpty }
             .sorted()
-    }
-
-    var mapRegion: MKCoordinateRegion {
-        MapRegionFitter.region(
+        self.mapRegion = MapRegionFitter.region(
             fitting: mappedPlaces.map(\.coordinate),
             minimumSpan: 0.012,
             paddingMultiplier: 1.65
@@ -4565,6 +4691,14 @@ private struct PlaceListMock: Identifiable, Hashable {
             span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
         )
     }
+
+    var previewPlaces: [ListPlaceMock] { places }
+    var itemCount: Int { itemCountOverride ?? places.count }
+    var totalItemCount: Int { max(itemCount, places.count) }
+    var resolvedPlaceCount: Int { places.count }
+    var mappedPlaceCount: Int { mappedPlaces.count }
+    var isOwnedByCurrentUser: Bool { ownerName == "You" }
+    var isCollaborative: Bool { !collaborators.isEmpty }
 
     var subtitle: String {
         if ownerName == "You" {
@@ -4602,15 +4736,9 @@ private extension PlaceListMock {
         store: WanderStore
     ) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
-        self.id = list.id
-        self.name = list.name
-        self.description = list.description
-        self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
-        self.isStealth = list.isStealth
         let listCollaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.collaborators = listCollaborators
         let photoContributorUserIDs = Set([list.ownerUserID] + listCollaborators.map(\.id))
-        self.places = visiblePlaces.map { visiblePlace in
+        let places = visiblePlaces.map { visiblePlace in
             ListPlaceMock(
                 cover: visiblePlace,
                 currentUserID: store.currentUser.id,
@@ -4620,16 +4748,26 @@ private extension PlaceListMock {
                     : nil
             )
         }
-        self.itemCountOverride = PlaceListDisplayCount.resolve(
-            cachedCount: list.cachedItemCount,
-            visibleCount: visiblePlaces.count
+        self.init(
+            id: list.id,
+            name: list.name,
+            description: list.description,
+            ownerName: list.ownerUserID == store.currentUser.id
+                ? "You"
+                : owner?.displayName ?? "Friend",
+            isStealth: list.isStealth,
+            collaborators: listCollaborators,
+            places: places,
+            itemCountOverride: PlaceListDisplayCount.resolve(
+                cachedCount: list.cachedItemCount,
+                visibleCount: visiblePlaces.count
+            ),
+            sourceListID: list.id,
+            ownerUserID: list.ownerUserID,
+            canManage: store.canManage(list),
+            canAddPlaces: store.canAddPlaces(to: list),
+            canLeave: store.canLeave(list)
         )
-        self.sourceListID = list.id
-        self.ownerUserID = list.ownerUserID
-        self.canManage = store.canManage(list)
-        self.canAddPlaces = store.canAddPlaces(to: list)
-        self.canLeave = store.canLeave(list)
-        self.mapAvailability = .ready
     }
 
     init(list: LocalPlaceList, store: WanderStore) {
@@ -4637,15 +4775,23 @@ private extension PlaceListMock {
     }
 
     init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
+        self.init(
+            list: list,
+            visiblePlaces: visiblePlaces,
+            context: ListPlaceProjectionContext(store: store),
+            store: store
+        )
+    }
+
+    init(
+        list: LocalPlaceList,
+        visiblePlaces: [VisiblePlace],
+        context: ListPlaceProjectionContext,
+        store: WanderStore
+    ) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
-        let context = ListPlaceProjectionContext(store: store)
-        self.id = list.id
-        self.name = list.name
-        self.description = list.description
-        self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
-        self.isStealth = list.isStealth
-        self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = visiblePlaces.map { visiblePlace in
+        let listCollaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
+        let places = visiblePlaces.map { visiblePlace in
             let saves = context.savesByVisiblePlaceID[visiblePlace.id] ?? [
                 PlaceSaveSummary(
                     visiblePlace: visiblePlace,
@@ -4664,15 +4810,25 @@ private extension PlaceListMock {
                 preferredUserPhoto: preferredUserPhoto
             )
         }
-        self.itemCountOverride = visiblePlaces.count
-        self.sourceListID = list.id
-        self.ownerUserID = list.ownerUserID
-        self.canManage = store.canManage(list)
-        self.canAddPlaces = store.canAddPlaces(to: list)
-        self.canLeave = store.canLeave(list)
         // Detail counts must describe the rows the viewer can actually see.
         // Cached server membership counts may include unresolved legacy items.
-        self.mapAvailability = .ready
+        self.init(
+            id: list.id,
+            name: list.name,
+            description: list.description,
+            ownerName: list.ownerUserID == store.currentUser.id
+                ? "You"
+                : owner?.displayName ?? "Friend",
+            isStealth: list.isStealth,
+            collaborators: listCollaborators,
+            places: places,
+            itemCountOverride: visiblePlaces.count,
+            sourceListID: list.id,
+            ownerUserID: list.ownerUserID,
+            canManage: store.canManage(list),
+            canAddPlaces: store.canAddPlaces(to: list),
+            canLeave: store.canLeave(list)
+        )
     }
 }
 
@@ -4682,9 +4838,11 @@ private struct ListPlaceProjectionContext {
     let tasteSaves: [PlaceSaveSummary]
     let savesByVisiblePlaceID: [String: [PlaceSaveSummary]]
     let firstVisitPhotoByPlaceID: [String: LocalVisitPhoto]
+    let outlineCatalog: [String: [MapPinOutline]]
 
     init(store: WanderStore) {
-        currentUserID = store.currentUser.id
+        let resolvedCurrentUserID = store.currentUser.id
+        currentUserID = resolvedCurrentUserID
         tasteSaves = store.currentUserVisiblePlaces.map {
             PlaceSaveSummary(
                 visiblePlace: $0,
@@ -4696,10 +4854,12 @@ private struct ListPlaceProjectionContext {
 
         let groups = VisiblePlaceGrouping.groups(
             from: store.visiblePlaces(),
-            currentUserID: currentUserID
+            currentUserID: resolvedCurrentUserID
         )
         var summariesByVisiblePlaceID: [String: [PlaceSaveSummary]] = [:]
         summariesByVisiblePlaceID.reserveCapacity(groups.reduce(0) { $0 + $1.places.count })
+        var outlinesByReferenceID: [String: [MapPinOutline]] = [:]
+        outlinesByReferenceID.reserveCapacity(groups.count * 4)
         for group in groups {
             let summaries = group.places.map {
                 PlaceSaveSummary(
@@ -4711,8 +4871,32 @@ private struct ListPlaceProjectionContext {
             for visiblePlace in group.places {
                 summariesByVisiblePlaceID[visiblePlace.id] = summaries
             }
+
+            let outlines = MapPinOutlineBuilder.outlines(
+                for: group.places.map { visiblePlace in
+                    MapPinSaveState(
+                        ownership: visiblePlace.owner.id == resolvedCurrentUserID ? .currentUser : .social,
+                        status: visiblePlace.userPlace.status
+                    )
+                }
+            )
+            let lookupKeys = group.aliases.union([group.key]).union(
+                group.places.flatMap { visiblePlace in
+                    [
+                        visiblePlace.id,
+                        visiblePlace.userPlace.localID,
+                        visiblePlace.userPlace.serverID,
+                        visiblePlace.place.localID,
+                        visiblePlace.place.serverID
+                    ].compactMap { $0 }
+                }
+            )
+            for key in lookupKeys {
+                outlinesByReferenceID[key] = outlines
+            }
         }
         savesByVisiblePlaceID = summariesByVisiblePlaceID
+        outlineCatalog = outlinesByReferenceID
     }
 }
 
@@ -4739,6 +4923,14 @@ private struct ListPlaceMock: Identifiable {
     let currentUserID: String
     let preferredUserPhoto: PlacePhoto?
     let saveStates: [MapPinSaveState]
+    let coordinate: CLLocationCoordinate2D
+    let isMappable: Bool
+    let canonicalProfilePlace: PlaceSheetPlace
+    let detailsLine: String
+    let contextLine: String
+    let accessibilitySummary: String
+    let dedupeKey: String
+    let outlines: [MapPinOutline]
 
     init(
         id: String,
@@ -4764,57 +4956,24 @@ private struct ListPlaceMock: Identifiable {
         preferredUserPhoto: PlacePhoto? = nil,
         saveStates: [MapPinSaveState]? = nil
     ) {
-        self.id = id
-        self.name = name
-        self.category = category
-        self.emoji = emoji ?? WanderPlaceCategory.emoji(for: category, name: name)
-        self.metadata = metadata
-        self.tint = tint
-        self.pinPosition = pinPosition
-        self.latitude = latitude ?? 34.075 + (84 - pinPosition.y) * 0.00042
-        self.longitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
-        self.status = status
-        self.saveOwnership = saveOwnership
-        self.note = note
-        self.placeID = placeID
-        self.visiblePlaceID = visiblePlaceID
-        self.locality = locality
-        self.ownerName = ownerName
-        self.profilePlace = profilePlace
-        self.saves = saves
-        self.tasteSaves = tasteSaves
-        self.currentUserID = currentUserID
-        self.preferredUserPhoto = preferredUserPhoto
-        self.saveStates = saveStates ?? [
+        let resolvedLatitude = latitude ?? 34.075 + (84 - pinPosition.y) * 0.00042
+        let resolvedLongitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
+        let resolvedCoordinate = CLLocationCoordinate2D(
+            latitude: resolvedLatitude,
+            longitude: resolvedLongitude
+        )
+        let resolvedSaveStates = saveStates ?? [
             MapPinSaveState(ownership: saveOwnership, status: status)
         ]
-    }
-
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }
-
-    var isMappable: Bool {
-        ListMapCoordinate(id: id, coordinate: coordinate).isMappable
-    }
-
-    var canonicalProfilePlace: PlaceSheetPlace {
-        profilePlace ?? PlaceSheetPlace(listPlace: self)
-    }
-
-    var detailsLine: String {
         let categoryTitle = profilePlace?.compactPlaceType
             ?? WanderPlaceCategory.display(
                 for: WanderPlaceCategory.assignment(forRawCategory: category)
             ).compactType()
-        let parts = [categoryTitle, locality]
+        let detailParts = [categoryTitle, locality]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let detailsLine = detailParts.isEmpty ? metadata : detailParts.joined(separator: " · ")
 
-        return parts.isEmpty ? metadata : parts.joined(separator: " · ")
-    }
-
-    var contextLine: String {
         let visibleSaves = saves.map(\.visiblePlace)
         let hasOwnSave = visibleSaves.contains { $0.owner.id == currentUserID }
         let socialOwners = visibleSaves
@@ -4825,7 +4984,6 @@ private struct ListPlaceMock: Identifiable {
                 result.append(name)
             }
         }
-
         let ownershipSummary: String
         if visibleSaves.isEmpty {
             ownershipSummary = ownerName
@@ -4838,25 +4996,58 @@ private struct ListPlaceMock: Identifiable {
         } else {
             ownershipSummary = uniqueSocialOwners.first ?? ownerName
         }
-
         let statuses = visibleSaves.isEmpty ? [status] : visibleSaves.map(\.userPlace.status)
         let hasBeen = statuses.contains(.been)
         let hasWanna = statuses.contains(.wannaGo)
         let statusSummary = hasBeen && hasWanna
             ? "Checked in + Wanna go"
             : (hasBeen ? PlaceStatus.been.displayTitle : PlaceStatus.wannaGo.displayTitle)
+        let contextLine = "\(ownershipSummary) · \(statusSummary)"
 
-        return "\(ownershipSummary) · \(statusSummary)"
-    }
-
-    var accessibilitySummary: String {
-        [name, detailsLine, contextLine]
+        self.id = id
+        self.name = name
+        self.category = category
+        self.emoji = emoji ?? WanderPlaceCategory.emoji(for: category, name: name)
+        self.metadata = metadata
+        self.tint = tint
+        self.pinPosition = pinPosition
+        self.latitude = resolvedLatitude
+        self.longitude = resolvedLongitude
+        self.status = status
+        self.saveOwnership = saveOwnership
+        self.note = note
+        self.placeID = placeID
+        self.visiblePlaceID = visiblePlaceID
+        self.locality = locality
+        self.ownerName = ownerName
+        self.profilePlace = profilePlace
+        self.saves = saves
+        self.tasteSaves = tasteSaves
+        self.currentUserID = currentUserID
+        self.preferredUserPhoto = preferredUserPhoto
+        self.saveStates = resolvedSaveStates
+        self.coordinate = resolvedCoordinate
+        self.isMappable = ListMapCoordinate(id: id, coordinate: resolvedCoordinate).isMappable
+        self.canonicalProfilePlace = profilePlace ?? PlaceSheetPlace(
+            listPlaceID: placeID ?? id,
+            name: name,
+            category: category,
+            metadata: metadata,
+            locality: locality,
+            latitude: resolvedLatitude,
+            longitude: resolvedLongitude,
+            status: status,
+            note: note,
+            currentUserID: currentUserID,
+            ownerName: ownerName
+        )
+        self.detailsLine = detailsLine
+        self.contextLine = contextLine
+        self.accessibilitySummary = [name, detailsLine, contextLine]
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
-    }
-
-    var dedupeKey: String {
-        "\(name.normalizedListLookupKey)|\(category.normalizedListLookupKey)"
+        self.dedupeKey = "\(name.normalizedListLookupKey)|\(category.normalizedListLookupKey)"
+        self.outlines = MapPinOutlineBuilder.outlines(for: resolvedSaveStates)
     }
 
     init(
@@ -5004,7 +5195,7 @@ private func savedPlaceOutlines(
         }
     }
 
-    return MapPinOutlineBuilder.outlines(for: place.saveStates)
+    return place.outlines
 }
 
 private func listSavedPlaceOutlineCatalog(
@@ -5382,10 +5573,22 @@ private extension PlaceListMock {
 }
 
 private extension PlaceSheetPlace {
-    init(listPlace: ListPlaceMock) {
-        let assignment = WanderPlaceCategory.assignment(forRawCategory: listPlace.category)
-        self.id = listPlace.placeID ?? listPlace.id
-        self.name = listPlace.name
+    init(
+        listPlaceID: String,
+        name: String,
+        category: String,
+        metadata: String,
+        locality: String?,
+        latitude: Double,
+        longitude: Double,
+        status: PlaceStatus,
+        note: String?,
+        currentUserID: String,
+        ownerName: String
+    ) {
+        let assignment = WanderPlaceCategory.assignment(forRawCategory: category)
+        self.id = listPlaceID
+        self.name = name
         self.category = assignment.legacyCategory
         self.primaryCategory = assignment.primaryCategory
         self.subcategory = assignment.subcategory
@@ -5394,21 +5597,21 @@ private extension PlaceSheetPlace {
         self.rawProviderType = assignment.rawProviderType
         self.cuisine = nil
         self.address = nil
-        self.locality = listPlace.locality
+        self.locality = locality
         self.region = nil
-        self.latitude = listPlace.latitude
-        self.longitude = listPlace.longitude
+        self.latitude = latitude
+        self.longitude = longitude
         self.websiteURLString = nil
         self.phoneNumber = nil
         self.actionLinksJSON = nil
         self.sourceProvider = nil
         self.sourceProviderPlaceID = nil
-        self.compactSubtitleOverride = listPlace.metadata
-        self.status = listPlace.status
+        self.compactSubtitleOverride = metadata
+        self.status = status
         self.visibility = nil
-        self.note = listPlace.note
-        self.noteOwnerID = listPlace.currentUserID
-        self.noteOwnerName = listPlace.ownerName
+        self.note = note
+        self.noteOwnerID = currentUserID
+        self.noteOwnerName = ownerName
     }
 }
 

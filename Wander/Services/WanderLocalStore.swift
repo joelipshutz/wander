@@ -358,6 +358,17 @@ final class WanderStore: ObservableObject {
     private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
     private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
     private var visiblePlacesByListIDCache: (listIDs: [String], placesByListID: [String: [VisiblePlace]])?
+    private var visiblePlaceListsCache: (revision: UInt64, lists: [LocalPlaceList])?
+    private var visiblePlaceListsByScopeCache: (
+        revision: UInt64,
+        mine: [LocalPlaceList],
+        friends: [LocalPlaceList],
+        collabs: [LocalPlaceList]
+    )?
+    private var collaboratorsByListIDCache: (
+        revision: UInt64,
+        profilesByListID: [String: [LocalProfile]]
+    )?
     private var firstVisitPhotosByPlaceIDCache: (
         revision: UInt64,
         userID: String,
@@ -368,9 +379,22 @@ final class WanderStore: ObservableObject {
         userID: String,
         states: [String: ActivityBookmarkState]
     )?
+    private var listPhotoAuthorizationScopeKeyCache: (
+        revision: UInt64,
+        userID: String,
+        key: String
+    )?
+    private var placeGroupingKeyByReferenceIDCache: (
+        revision: UInt64,
+        keys: [String: String]
+    )?
     private(set) var presentationRevision: UInt64 = 0
     private(set) var firstVisitPhotoIndexBuildCount = 0
     private(set) var activityBookmarkIndexBuildCount = 0
+    private(set) var listPhotoAuthorizationScopeKeyBuildCount = 0
+    private(set) var placeGroupingIndexBuildCount = 0
+    private(set) var visiblePlaceListsBuildCount = 0
+    private(set) var collaboratorIndexBuildCount = 0
 
     private struct RankedVisiblePlace {
         let index: Int
@@ -689,8 +713,13 @@ final class WanderStore: ObservableObject {
         visiblePlacesCache.removeAll(keepingCapacity: true)
         visiblePlaceCountsByOwnerIDCache = nil
         visiblePlacesByListIDCache = nil
+        visiblePlaceListsCache = nil
+        visiblePlaceListsByScopeCache = nil
+        collaboratorsByListIDCache = nil
         firstVisitPhotosByPlaceIDCache = nil
         activityBookmarkStateByPlaceAliasCache = nil
+        listPhotoAuthorizationScopeKeyCache = nil
+        placeGroupingKeyByReferenceIDCache = nil
         visiblePlaceListLookupCache = nil
         presentationRevision &+= 1
     }
@@ -2223,7 +2252,12 @@ final class WanderStore: ObservableObject {
     }
 
     var visiblePlaceLists: [LocalPlaceList] {
-        placeLists
+        if let cached = visiblePlaceListsCache,
+           cached.revision == presentationRevision {
+            return cached.lists
+        }
+        visiblePlaceListsBuildCount += 1
+        let lists = placeLists
             .filter { list in
                 guard list.deletedAt == nil else { return false }
                 return canRead(list)
@@ -2233,19 +2267,48 @@ final class WanderStore: ObservableObject {
                 if rhs.ownerUserID == currentUser.id && lhs.ownerUserID != currentUser.id { return false }
                 return lhs.updatedAt > rhs.updatedAt
             }
+        visiblePlaceListsCache = (presentationRevision, lists)
+        return lists
     }
 
     func visiblePlaceLists(scope: PlaceListScope) -> [LocalPlaceList] {
-        visiblePlaceLists.filter { list in
-            switch scope {
-            case .mine:
-                return list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id)
-            case .friends:
-                return list.ownerUserID != currentUser.id && !isMember(of: list, userID: currentUser.id)
-            case .collabs:
-                return isCollaborative(list)
-                    && (list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id))
+        if let cached = visiblePlaceListsByScopeCache,
+           cached.revision == presentationRevision {
+            return switch scope {
+            case .mine: cached.mine
+            case .friends: cached.friends
+            case .collabs: cached.collabs
             }
+        }
+
+        let activeMembers = placeListMembers.filter { $0.deletedAt == nil }
+        let currentUserMemberListIDs = Set(
+            activeMembers
+                .filter { $0.userID == currentUser.id }
+                .map(\.listID)
+        )
+        let collaborativeListIDs = Set(activeMembers.map(\.listID))
+        var mine: [LocalPlaceList] = []
+        var friends: [LocalPlaceList] = []
+        var collabs: [LocalPlaceList] = []
+        for list in visiblePlaceLists {
+            let isCurrentUserMember = !listReferenceIDs(for: list)
+                .isDisjoint(with: currentUserMemberListIDs)
+            let isMine = list.ownerUserID == currentUser.id || isCurrentUserMember
+            if isMine {
+                mine.append(list)
+            } else {
+                friends.append(list)
+            }
+            if collaborativeListIDs.contains(list.id), isMine {
+                collabs.append(list)
+            }
+        }
+        visiblePlaceListsByScopeCache = (presentationRevision, mine, friends, collabs)
+        return switch scope {
+        case .mine: mine
+        case .friends: friends
+        case .collabs: collabs
         }
     }
 
@@ -2268,11 +2331,29 @@ final class WanderStore: ObservableObject {
     }
 
     func collaborators(for list: LocalPlaceList) -> [LocalProfile] {
-        placeListMembers
-            .filter { $0.listID == list.id && $0.deletedAt == nil }
-            .compactMap { member in profiles.first { $0.id == member.userID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
-            .sorted { $0.handle < $1.handle }
+        if let cached = collaboratorsByListIDCache,
+           cached.revision == presentationRevision {
+            return cached.profilesByListID[list.id, default: []]
+        }
+        collaboratorIndexBuildCount += 1
+
+        var profileByID: [String: LocalProfile] = [:]
+        profileByID.reserveCapacity(profiles.count)
+        for profile in profiles where profileByID[profile.id] == nil {
+            profileByID[profile.id] = profile
+        }
+        var profilesByListID: [String: [LocalProfile]] = [:]
+        for member in placeListMembers where member.deletedAt == nil {
+            guard let profile = profileByID[member.userID],
+                  !isBlockedBetweenCurrentUser(and: profile.id)
+            else { continue }
+            profilesByListID[member.listID, default: []].append(profile)
+        }
+        for listID in profilesByListID.keys {
+            profilesByListID[listID]?.sort { $0.handle < $1.handle }
+        }
+        collaboratorsByListIDCache = (presentationRevision, profilesByListID)
+        return profilesByListID[list.id, default: []]
     }
 
     func visiblePlaces(in list: LocalPlaceList) -> [VisiblePlace] {
@@ -3293,45 +3374,30 @@ final class WanderStore: ObservableObject {
             .filter { listIDs.contains($0.listID) }
         return collapsedVisibleListItems(
             allItems,
-            placeAliasesByReferenceID: placeGroupingAliasesByReferenceID()
+            placeGroupingKeyByReferenceID: placeGroupingKeyByReferenceID()
         )
     }
 
     private func collapsedVisibleListItems(
         _ items: [LocalPlaceListItem],
-        placeAliasesByReferenceID: [String: Set<String>]
+        placeGroupingKeyByReferenceID: [String: String]
     ) -> [LocalPlaceListItem] {
-        var groups: [[LocalPlaceListItem]] = []
-
+        var latestItemByPlaceGroup: [String: LocalPlaceListItem] = [:]
+        latestItemByPlaceGroup.reserveCapacity(items.count)
         for item in items.sorted(by: { $0.createdAt < $1.createdAt }) {
-            let matchingGroupIndices = groups.indices.filter { groupIndex in
-                groups[groupIndex].contains { existingItem in
-                    if existingItem.placeID == item.placeID {
-                        return true
-                    }
-                    guard let existingAliases = placeAliasesByReferenceID[existingItem.placeID],
-                          let itemAliases = placeAliasesByReferenceID[item.placeID]
-                    else { return false }
-                    return !existingAliases.isDisjoint(with: itemAliases)
+            let groupKey = placeGroupingKeyByReferenceID[item.placeID]
+                ?? "unresolved:\(item.placeID)"
+            if let existing = latestItemByPlaceGroup[groupKey] {
+                if listMembershipItemIsOlder(existing, item) {
+                    latestItemByPlaceGroup[groupKey] = item
                 }
-            }
-            guard let destinationIndex = matchingGroupIndices.first else {
-                groups.append([item])
-                continue
-            }
-
-            groups[destinationIndex].append(item)
-            for sourceIndex in matchingGroupIndices.dropFirst().reversed() {
-                groups[destinationIndex].append(contentsOf: groups[sourceIndex])
-                groups.remove(at: sourceIndex)
+            } else {
+                latestItemByPlaceGroup[groupKey] = item
             }
         }
 
-        return groups.compactMap { group in
-            group.max(by: listMembershipItemIsOlder).flatMap { latest in
-                latest.deletedAt == nil ? latest : nil
-            }
-        }
+        return latestItemByPlaceGroup.values
+            .filter { $0.deletedAt == nil }
         .sorted { $0.createdAt < $1.createdAt }
     }
 
@@ -3435,27 +3501,70 @@ final class WanderStore: ObservableObject {
             itemsByListID[canonicalListID, default: []].append(item)
         }
 
-        let placeAliasesByReferenceID = placeGroupingAliasesByReferenceID()
+        let placeGroupingKeyByReferenceID = placeGroupingKeyByReferenceID()
         return Dictionary(uniqueKeysWithValues: lists.map { list in
             (
                 list.id,
                 collapsedVisibleListItems(
                     itemsByListID[list.id, default: []],
-                    placeAliasesByReferenceID: placeAliasesByReferenceID
+                    placeGroupingKeyByReferenceID: placeGroupingKeyByReferenceID
                 )
             )
         })
     }
 
-    private func placeGroupingAliasesByReferenceID() -> [String: Set<String>] {
-        var result: [String: Set<String>] = [:]
-        result.reserveCapacity(places.count * 3)
+    private func placeGroupingKeyByReferenceID() -> [String: String] {
+        if let cached = placeGroupingKeyByReferenceIDCache,
+           cached.revision == presentationRevision {
+            return cached.keys
+        }
+        placeGroupingIndexBuildCount += 1
+
+        var aliasesByGroupKey: [String: Set<String>] = [:]
+        var referenceIDsByGroupKey: [String: [String]] = [:]
+        var groupKeyByAlias: [String: String] = [:]
+        aliasesByGroupKey.reserveCapacity(places.count)
+        referenceIDsByGroupKey.reserveCapacity(places.count)
+        groupKeyByAlias.reserveCapacity(places.count * 3)
+
         for place in places {
             let aliases = VisiblePlaceGrouping.groupingAliases(for: place)
-            for referenceID in [place.id, place.localID] + [place.serverID].compactMap({ $0 }) {
-                result[referenceID] = aliases
+            var matchingGroupKeys: [String] = []
+            matchingGroupKeys.reserveCapacity(2)
+            for alias in aliases {
+                guard let groupKey = groupKeyByAlias[alias],
+                      !matchingGroupKeys.contains(groupKey)
+                else { continue }
+                matchingGroupKeys.append(groupKey)
+            }
+
+            let groupKey = matchingGroupKeys.first ?? "place-group:\(place.id)"
+            if aliasesByGroupKey[groupKey] == nil {
+                aliasesByGroupKey[groupKey] = []
+                referenceIDsByGroupKey[groupKey] = []
+            }
+            for mergedGroupKey in matchingGroupKeys.dropFirst() {
+                aliasesByGroupKey[groupKey, default: []]
+                    .formUnion(aliasesByGroupKey.removeValue(forKey: mergedGroupKey) ?? [])
+                referenceIDsByGroupKey[groupKey, default: []]
+                    .append(contentsOf: referenceIDsByGroupKey.removeValue(forKey: mergedGroupKey) ?? [])
+            }
+            aliasesByGroupKey[groupKey, default: []].formUnion(aliases)
+            referenceIDsByGroupKey[groupKey, default: []]
+                .append(contentsOf: [place.id, place.localID] + [place.serverID].compactMap({ $0 }))
+            for alias in aliasesByGroupKey[groupKey, default: []] {
+                groupKeyByAlias[alias] = groupKey
             }
         }
+
+        var result: [String: String] = [:]
+        result.reserveCapacity(places.count * 3)
+        for (groupKey, referenceIDs) in referenceIDsByGroupKey {
+            for referenceID in referenceIDs {
+                result[referenceID] = groupKey
+            }
+        }
+        placeGroupingKeyByReferenceIDCache = (presentationRevision, result)
         return result
     }
 
@@ -4351,6 +4460,35 @@ final class WanderStore: ObservableObject {
 
     func firstVisitPhoto(forPlaceID placeID: String) -> LocalVisitPhoto? {
         firstVisitPhotosByPlaceID()[placeID]
+    }
+
+    func listPhotoAuthorizationScopeKey() -> String {
+        if let cached = listPhotoAuthorizationScopeKeyCache,
+           cached.revision == presentationRevision,
+           cached.userID == currentUser.id {
+            return cached.key
+        }
+        listPhotoAuthorizationScopeKeyBuildCount += 1
+
+        let followsKey = follows
+            .map {
+                "\($0.followerUserID)>\($0.followedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        let blocksKey = blocks
+            .map {
+                "\($0.blockerUserID)>\($0.blockedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        let key = "user:\(currentUser.id)|follows:\(followsKey)|blocks:\(blocksKey)"
+        listPhotoAuthorizationScopeKeyCache = (
+            revision: presentationRevision,
+            userID: currentUser.id,
+            key: key
+        )
+        return key
     }
 
     func firstVisitPhotosByPlaceID() -> [String: LocalVisitPhoto] {
