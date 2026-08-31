@@ -2789,10 +2789,16 @@ private struct PlaceProfileMapHeader: View {
     let onNearEnd: (String) -> Void
     let onPhotoLoadFailure: (PlacePhoto) -> Void
     @Environment(\.astirBrandMode) private var astirBrandMode
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
 
     var body: some View {
         ZStack {
-            mapFallback
+            if visualStyle == .astir {
+                AstirPlacePhotoAsset(stableKey: place.id)
+                    .accessibilityLabel("Photo of \(place.name)")
+            } else {
+                mapFallback
+            }
 
             if !photos.isEmpty {
                 photoPager

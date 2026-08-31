@@ -3927,7 +3927,8 @@ private struct ListPlacePhotoMedia: View {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(place.tint)
 
-                WanderCategoryEmoji(emoji: place.emoji, size: fallbackEmojiSize)
+                AstirPlacePhotoAsset(stableKey: place.id)
+                    .accessibilityHidden(true)
 
                 if let displayedPhoto {
                     Image(uiImage: displayedPhoto.image)
