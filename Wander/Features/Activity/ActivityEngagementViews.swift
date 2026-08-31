@@ -412,7 +412,8 @@ struct ActivityPostcardView: View {
         ActivityPostcardArtwork(
             visiblePlace: visiblePlace,
             media: context.media,
-            fallbackIcon: metadataIcon
+            fallbackIcon: metadataIcon,
+            usesAstirPhotoFallback: visualStyle == .astir
         )
     }
 
@@ -635,6 +636,7 @@ private struct ActivityPostcardArtwork: View {
     let visiblePlace: VisiblePlace?
     let media: [ActivityEngagementMedia]
     let fallbackIcon: String
+    let usesAstirPhotoFallback: Bool
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -649,6 +651,13 @@ private struct ActivityPostcardArtwork: View {
                     .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
             }
             .accessibilityHidden(true)
+
+            if usesAstirPhotoFallback {
+                AstirPlacePhotoAsset(
+                    stableKey: visiblePlace?.place.id ?? fallbackIcon
+                )
+                .accessibilityHidden(true)
+            }
 
             if let visiblePlace {
                 FeedResolvedPlacePhoto(place: visiblePlace)
