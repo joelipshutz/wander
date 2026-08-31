@@ -952,7 +952,7 @@ private struct FeedPeopleSearchField: View {
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
         .contentShape(Rectangle())
-        .astirOutlinedSurface()
+        .astirOutlinedSurface(castsShadow: true)
         .accessibilityLabel("Search people")
     }
 }
@@ -1211,7 +1211,7 @@ private struct FeedSearchLauncher: View {
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
             .contentShape(Rectangle())
-            .astirOutlinedSurface()
+            .astirOutlinedSurface(castsShadow: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search trusted places")
