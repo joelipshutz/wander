@@ -1368,11 +1368,13 @@ private struct FeedFeaturedCard: View {
         }
         .padding(FeedFeaturedLayout.cardContentInset)
         .frame(width: FeedFeaturedLayout.cardWidth, alignment: .topLeading)
-        .background(astirBrandMode.background)
+        .background(astirBrandMode.raisedBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            Rectangle()
-                .stroke(astirBrandMode.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(astirBrandMode.border.opacity(0.72), lineWidth: 0.8)
         }
+        .shadow(color: Color.black.opacity(0.16), radius: 14, y: 7)
     }
 
     private var featuredActivity: String {
@@ -1585,9 +1587,9 @@ private struct FeedPlaceArtwork: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: categorySymbol(for: place.effectiveCategory))
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(astirBrandMode.secondaryText.opacity(0.62))
+
+            AstirPlacePhotoAsset(stableKey: place.place.id)
+                .accessibilityHidden(true)
 
             FeedResolvedPlacePhoto(place: place)
         }
