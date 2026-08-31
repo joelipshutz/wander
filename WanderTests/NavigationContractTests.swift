@@ -831,7 +831,8 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
-        XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(app.contains("placePhotoRepository: disablesPhotos ? nil : MapCapturePlacePhotoRepository()"))
+        XCTAssertTrue(app.contains("-WanderMapCaptureNoPhotos"))
         XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
         XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
         XCTAssertTrue(app.contains("provider: \"google_places\""))
@@ -3656,30 +3657,90 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
-        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented && hasSelectedProfile"))
+        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains("if isPlaceProfileMounted && hasSelectedProfile {"))
+        XCTAssertTrue(mapScreen.contains("hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)"))
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
+        XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
-        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .bottom))"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.presentationAnimation"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.dismissalAnimation"))
+        XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
+        XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
+        XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
+        XCTAssertTrue(mapScreen.contains("await Task.yield()"))
+        XCTAssertTrue(mapScreen.contains("isPlaceProfileMounted = false"))
+        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
+        XCTAssertTrue(mapScreen.contains("transaction.disablesAnimations = true"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
         XCTAssertTrue(mapScreen.contains("usesInteractiveHorizontalDismissal: true"))
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable"))
+        XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
+        XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
+        XCTAssertTrue(placeProfile.contains("if controller.isPresented == isPresented"))
+        XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: true)"))
+        XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
+        XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.transform = targetTransform(isPresented: isPresented)"))
+        XCTAssertTrue(placeProfile.contains("animator.finishAnimation(at: .current)"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.layer.shouldRasterize = isEnabled"))
+        XCTAssertTrue(placeProfile.contains("configureRasterization(isEnabled: !isPresented)"))
+        XCTAssertTrue(placeProfile.contains("view.accessibilityElementsHidden = !isPresented"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.accessibilityElementsHidden = !isPresented"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.isHidden = !isPresented"))
+        XCTAssertTrue(placeProfile.contains("attachHostingViewIfNeeded()"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.removeFromSuperview()"))
+        XCTAssertTrue(placeProfile.contains("view.backgroundColor = .clear"))
+        XCTAssertTrue(placeProfile.contains("pendingRootView = rootView"))
+        XCTAssertTrue(placeProfile.contains("hostingController.rootView = pendingRootView"))
+        XCTAssertFalse(placeProfile.contains(".offset(y: isPresented ? 0 : proxy.size.height)"))
         XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
         XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
         XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
+    }
+
+    func testPlaceProfileDefersBelowFoldHistoryConstructionUntilScrolled() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+
+        XCTAssertTrue(fullView.contains("LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4)"))
+        XCTAssertTrue(fullView.contains("PlaceActivitySection(saves: saves, currentUserID: currentUserID)"))
+    }
+
+    func testPlaceProfilePrewarmsAStaticMapHeaderBeforePresentation() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let header = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileMapHeader: View {",
+            before: "private struct PlacePhotoAttribution: View {"
+        )
+
+        XCTAssertTrue(placeProfile.contains("private final class PlaceProfileMapSnapshotCache"))
+        XCTAssertTrue(placeProfile.contains("MKMapSnapshotter(options: options).start().image"))
+        XCTAssertTrue(placeProfile.contains(".task(id: mapSnapshotRequest?.cacheKey)"))
+        XCTAssertTrue(placeProfile.contains("_ = await PlaceProfileMapSnapshotCache.shared.image(for: mapSnapshotRequest)"))
+        XCTAssertTrue(header.contains("PlaceProfileMapSnapshotView(place: place)"))
+        XCTAssertFalse(header.contains("\n            Map("))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {

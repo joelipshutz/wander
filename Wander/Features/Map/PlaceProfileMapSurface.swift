@@ -273,21 +273,191 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
-struct PlaceProfileVerticalContainer<Content: View>: View {
+struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
+    let isPresented: Bool
+    let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
+        isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
+        self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
 
-    var body: some View {
-        GeometryReader { proxy in
-            content
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .background(WanderTheme.surfaceBone.color)
+    func makeUIViewController(context: Context) -> PlaceProfileSlidingHostingController<Content> {
+        PlaceProfileSlidingHostingController(
+            rootView: content,
+            isPresented: isPresented,
+            onTransitionCompleted: onTransitionCompleted
+        )
+    }
+
+    func updateUIViewController(
+        _ controller: PlaceProfileSlidingHostingController<Content>,
+        context: Context
+    ) {
+        controller.onTransitionCompleted = onTransitionCompleted
+        if controller.isPresented == isPresented {
+            controller.updateRootView(content)
+        } else {
+            controller.setPresented(isPresented, animated: true)
         }
+    }
+}
+
+@MainActor
+final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
+    private let hostingController: UIHostingController<Content>
+    private var hostingConstraints: [NSLayoutConstraint] = []
+    private var animator: UIViewPropertyAnimator?
+    private var pendingRootView: Content?
+    private var appliesInitialPosition = true
+    private(set) var isPresented: Bool
+    var onTransitionCompleted: @MainActor (Bool) -> Void
+
+    init(
+        rootView: Content,
+        isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void
+    ) {
+        hostingController = UIHostingController(rootView: rootView)
+        self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        updateAccessibilityVisibility(isPresented: isPresented)
+        hostingController.view.backgroundColor = UIColor(WanderTheme.surfaceBone.color)
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hostingController)
+        attachHostingViewIfNeeded()
+        hostingController.didMove(toParent: self)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard view.bounds.height > 0 else { return }
+        if appliesInitialPosition {
+            appliesInitialPosition = false
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
+        } else if !isPresented, animator == nil {
+            hostingController.view.transform = targetTransform(isPresented: false)
+        }
+    }
+
+    func updateRootView(_ rootView: Content) {
+        if animator != nil {
+            pendingRootView = rootView
+        } else {
+            hostingController.rootView = rootView
+        }
+    }
+
+    func setPresented(_ isPresented: Bool, animated: Bool) {
+        guard self.isPresented != isPresented else { return }
+        self.isPresented = isPresented
+        if isPresented {
+            attachHostingViewIfNeeded()
+            hostingController.view.isHidden = false
+        }
+        updateAccessibilityVisibility(isPresented: isPresented)
+        view.layoutIfNeeded()
+        configureRasterization(isEnabled: true)
+        if let animator {
+            self.animator = nil
+            animator.stopAnimation(false)
+            animator.finishAnimation(at: .current)
+        }
+
+        guard animated, view.bounds.height > 0 else {
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
+            onTransitionCompleted(isPresented)
+            return
+        }
+
+        let timing = isPresented
+            ? UICubicTimingParameters(controlPoint1: CGPoint(x: 0.22, y: 1), controlPoint2: CGPoint(x: 0.36, y: 1))
+            : UICubicTimingParameters(controlPoint1: CGPoint(x: 0.4, y: 0), controlPoint2: CGPoint(x: 0.6, y: 1))
+        let animator = UIViewPropertyAnimator(
+            duration: PlaceProfileVerticalMotionStyle.duration,
+            timingParameters: timing
+        )
+        animator.addAnimations { [weak self] in
+            guard let self else { return }
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+        }
+        animator.addCompletion { [weak self, weak animator] _ in
+            guard let self, self.animator === animator else { return }
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            self.animator = nil
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
+            if let pendingRootView {
+                self.pendingRootView = nil
+                hostingController.rootView = pendingRootView
+            }
+            onTransitionCompleted(isPresented)
+        }
+        self.animator = animator
+        animator.startAnimation()
+    }
+
+    private func targetTransform(isPresented: Bool) -> CGAffineTransform {
+        isPresented
+            ? .identity
+            : CGAffineTransform(translationX: 0, y: view.bounds.height)
+    }
+
+    private func configureRasterization(isEnabled: Bool) {
+        let displayScale = view.window?.screen.scale ?? view.traitCollection.displayScale
+        hostingController.view.layer.rasterizationScale = max(displayScale, 1)
+        hostingController.view.layer.shouldRasterize = isEnabled
+    }
+
+    private func attachHostingViewIfNeeded() {
+        guard hostingController.view.superview == nil else { return }
+        view.addSubview(hostingController.view)
+        hostingConstraints = [
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ]
+        NSLayoutConstraint.activate(hostingConstraints)
+    }
+
+    private func detachHostingView() {
+        NSLayoutConstraint.deactivate(hostingConstraints)
+        hostingConstraints.removeAll()
+        hostingController.view.removeFromSuperview()
+    }
+
+    private func updateAccessibilityVisibility(isPresented: Bool) {
+        view.accessibilityElementsHidden = !isPresented
+        view.accessibilityViewIsModal = isPresented
+        hostingController.view.accessibilityElementsHidden = !isPresented
     }
 }
 
@@ -387,6 +557,10 @@ private struct PlaceProfilePreviewCard: View {
         .onAppear(perform: onReady)
         .task(id: photoResolutionKey) {
             await resolvePhoto()
+        }
+        .task(id: mapSnapshotRequest?.cacheKey) {
+            guard let mapSnapshotRequest else { return }
+            _ = await PlaceProfileMapSnapshotCache.shared.image(for: mapSnapshotRequest)
         }
         .sheet(isPresented: $isShareSheetPresented) {
             if let shareContent {
@@ -786,6 +960,14 @@ private struct PlaceProfilePreviewCard: View {
 
     private var photoResolutionKey: String {
         "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
+    }
+
+    private var mapSnapshotRequest: PlaceProfileMapSnapshotRequest? {
+        PlaceProfileMapSnapshotRequest(
+            latitude: place.latitude,
+            longitude: place.longitude,
+            displayScale: displayScale
+        )
     }
 
     private func resolvePhoto() async {
@@ -1200,7 +1382,7 @@ private struct PlaceProfileFullView: View {
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                             heading
 
                             PlaceProfileTagRail(tags: displayTags, compact: false)
@@ -2501,6 +2683,146 @@ private struct PlacePhotoGalleryViewer: View {
     }
 }
 
+private struct PlaceProfileMapRenderedSnapshot {
+    let key: String
+    let image: UIImage
+}
+
+private struct PlaceProfileMapSnapshotRequest {
+    static let renderSize = CGSize(width: 430, height: 300)
+
+    let coordinate: CLLocationCoordinate2D
+    let displayScale: CGFloat
+    let cacheKey: String
+
+    init?(latitude: Double?, longitude: Double?, displayScale: CGFloat) {
+        guard let latitude, let longitude else { return nil }
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+
+        let scale = min(max(displayScale, 1), 2)
+        self.coordinate = coordinate
+        self.displayScale = scale
+        cacheKey = "\(latitude.bitPattern):\(longitude.bitPattern)@\(Double(scale).bitPattern)"
+    }
+
+    var region: MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+        )
+    }
+}
+
+@MainActor
+private final class PlaceProfileMapSnapshotCache {
+    static let shared = PlaceProfileMapSnapshotCache()
+
+    private let images: NSCache<NSString, UIImage>
+    private var inFlightTasks: [NSString: Task<UIImage?, Never>] = [:]
+
+    private init() {
+        let images = NSCache<NSString, UIImage>()
+        images.countLimit = 12
+        images.totalCostLimit = 24 * 1_024 * 1_024
+        self.images = images
+    }
+
+    func cachedImage(for request: PlaceProfileMapSnapshotRequest) -> UIImage? {
+        images.object(forKey: request.cacheKey as NSString)
+    }
+
+    func image(for request: PlaceProfileMapSnapshotRequest) async -> UIImage? {
+        let key = request.cacheKey as NSString
+        if let cached = images.object(forKey: key) {
+            return cached
+        }
+        if let inFlightTask = inFlightTasks[key] {
+            return await inFlightTask.value
+        }
+
+        let task = Task<UIImage?, Never> {
+            try? await Self.render(request)
+        }
+        inFlightTasks[key] = task
+        let image = await task.value
+        inFlightTasks[key] = nil
+
+        if let image {
+            let pixelWidth = Int((PlaceProfileMapSnapshotRequest.renderSize.width * request.displayScale).rounded())
+            let pixelHeight = Int((PlaceProfileMapSnapshotRequest.renderSize.height * request.displayScale).rounded())
+            images.setObject(image, forKey: key, cost: pixelWidth * pixelHeight * 4)
+        }
+        return image
+    }
+
+    private static func render(_ request: PlaceProfileMapSnapshotRequest) async throws -> UIImage {
+        let options = MKMapSnapshotter.Options()
+        options.region = request.region
+        options.size = PlaceProfileMapSnapshotRequest.renderSize
+        options.traitCollection = UITraitCollection(mutations: { traits in
+            traits.displayScale = request.displayScale
+            traits.userInterfaceStyle = .light
+        })
+
+        let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+        configuration.pointOfInterestFilter = .excludingAll
+        options.preferredConfiguration = configuration
+
+        return try await MKMapSnapshotter(options: options).start().image
+    }
+}
+
+private struct PlaceProfileMapSnapshotView: View {
+    let place: PlaceSheetPlace
+    @Environment(\.displayScale) private var displayScale
+    @State private var renderedSnapshot: PlaceProfileMapRenderedSnapshot?
+
+    private var request: PlaceProfileMapSnapshotRequest? {
+        PlaceProfileMapSnapshotRequest(
+            latitude: place.latitude,
+            longitude: place.longitude,
+            displayScale: displayScale
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            PlaceProfileMapFallback()
+
+            if let request,
+               let renderedSnapshot,
+               renderedSnapshot.key == request.cacheKey {
+                Image(uiImage: renderedSnapshot.image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            }
+
+            PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 54)
+                .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .task(id: request?.cacheKey) {
+            renderedSnapshot = nil
+            guard let request else { return }
+
+            if let cached = PlaceProfileMapSnapshotCache.shared.cachedImage(for: request) {
+                renderedSnapshot = PlaceProfileMapRenderedSnapshot(key: request.cacheKey, image: cached)
+                return
+            }
+
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled,
+                  let image = await PlaceProfileMapSnapshotCache.shared.image(for: request),
+                  !Task.isCancelled
+            else { return }
+            renderedSnapshot = PlaceProfileMapRenderedSnapshot(key: request.cacheKey, image: image)
+        }
+    }
+}
+
 private struct PlaceProfileMapHeader: View {
     static let minimumFullBleedTopInset: CGFloat = 54
 
@@ -2642,15 +2964,8 @@ private struct PlaceProfileMapHeader: View {
 
     @ViewBuilder
     private var mapFallback: some View {
-        if let latitude = place.latitude, let longitude = place.longitude {
-            Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
-                Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                    PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 54)
-                        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .allowsHitTesting(false)
+        if place.latitude != nil, place.longitude != nil {
+            PlaceProfileMapSnapshotView(place: place)
         } else {
             PlaceProfileMapFallback()
         }
@@ -2660,12 +2975,6 @@ private struct PlaceProfileMapHeader: View {
         max(safeAreaTopInset, minimumFullBleedTopInset)
     }
 
-    private func headerRegion(latitude: Double, longitude: Double) -> MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-        )
-    }
 }
 
 struct PlaceProfilePhotoImage: View {

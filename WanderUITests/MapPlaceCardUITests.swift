@@ -172,6 +172,59 @@ final class MapPlaceCardUITests: XCTestCase {
         capture("rec-293-place-card-returned")
     }
 
+    func testRepeatedImageHeavyPlaceProfilePresentationRoundTrips() {
+        executionTimeAllowance = 60
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-WanderMapCapture",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapCardLocationFixture",
+            "-WanderMapPlace",
+            "Hearthline Coffee"
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+
+        for _ in 0..<6 {
+            card.tap()
+            XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 3))
+
+            app.buttons["Back"].tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 3))
+        }
+    }
+
+    func testRepeatedPhotoFallbackPlaceProfilePresentationRoundTrips() {
+        executionTimeAllowance = 60
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-WanderMapCapture",
+            "-WanderMapCaptureNoPhotos",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapCardLocationFixture",
+            "-WanderMapPlace",
+            "Canyon Lookout Trail"
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+
+        for _ in 0..<6 {
+            card.tap()
+            XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 3))
+
+            app.buttons["Back"].tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 3))
+        }
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
