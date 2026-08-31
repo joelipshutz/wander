@@ -247,6 +247,87 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(dataset.visiblePlaceByPlaceID[result.id]?.userPlace.id, userPlace.id)
     }
 
+    func testProfileDatasetScopesLiveDataToTheRequestedMember() throws {
+        let now = Date(timeIntervalSince1970: 1_787_623_200)
+        let memberPlace = LocalPlace(
+            localID: "member-place-local",
+            canonicalName: "Member Coffee",
+            category: "cafe",
+            locality: "Los Angeles",
+            country: "United States",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let viewerPlace = LocalPlace(
+            localID: "viewer-place-local",
+            canonicalName: "Viewer Bakery",
+            category: "bakery",
+            locality: "New York",
+            country: "United States",
+            latitude: 40.7128,
+            longitude: -74.0060
+        )
+        let memberUserPlace = LocalUserPlace(
+            localID: "member-save-local",
+            userID: "member",
+            placeID: memberPlace.id,
+            status: .been,
+            visibility: .followers,
+            visitedAt: now,
+            sourceType: "manual"
+        )
+        let viewerUserPlace = LocalUserPlace(
+            localID: "viewer-save-local",
+            userID: "viewer",
+            placeID: viewerPlace.id,
+            status: .been,
+            visibility: .selfOnly,
+            visitedAt: now,
+            sourceType: "manual"
+        )
+        let memberVisiblePlace = VisiblePlace(
+            id: memberUserPlace.id,
+            place: memberPlace,
+            userPlace: memberUserPlace,
+            owner: LocalProfile(localID: "member", handle: "member", displayName: "Member")
+        )
+        let viewerVisiblePlace = VisiblePlace(
+            id: viewerUserPlace.id,
+            place: viewerPlace,
+            userPlace: viewerUserPlace,
+            owner: LocalProfile(localID: "viewer", handle: "viewer", displayName: "Viewer")
+        )
+        let dataset = YourMapPrototypeDataset.make(
+            ownerID: "member",
+            userPlaces: [viewerUserPlace, memberUserPlace],
+            visits: [
+                LocalPlaceVisit(
+                    localID: "viewer-visit-local",
+                    userPlaceID: viewerUserPlace.id,
+                    visitedAt: now,
+                    tags: ["viewer-only"]
+                ),
+                LocalPlaceVisit(
+                    localID: "member-visit-local",
+                    userPlaceID: memberUserPlace.id,
+                    visitedAt: now,
+                    tags: ["member-only"]
+                )
+            ],
+            places: [viewerPlace, memberPlace],
+            visiblePlaces: [viewerVisiblePlace, memberVisiblePlace],
+            now: now
+        )
+
+        XCTAssertEqual(dataset.places.map(\.id), [memberPlace.id])
+        XCTAssertEqual(dataset.places.first?.tags, ["member-only"])
+        XCTAssertEqual(
+            dataset.visiblePlaceByPlaceID[memberPlace.id]?.userPlace.id,
+            memberUserPlace.id
+        )
+        XCTAssertNil(dataset.visiblePlaceByPlaceID[viewerPlace.id])
+    }
+
     func testProfilePreviewPushesAFullMapWithoutReplicaBottomNavigation() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -271,7 +352,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)"))
         XCTAssertFalse(profileScreen.contains("handledYourMapPrototypeLaunch"))
         XCTAssertFalse(profileScreen.contains("WanderShowYourMapPrototype"))
-        XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? \"Your Map\" : \"Patterns\")"))
+        XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? mapTitle : \"Patterns\")"))
         XCTAssertTrue(yourMapScreen.contains("MapPinOutlineStroke"))
         XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSelectablePin"))
         XCTAssertTrue(yourMapScreen.contains("PlaceProfileMapSurface("))
@@ -290,6 +371,36 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertFalse(yourMapScreen.contains("YourMapPrototypeTabBar"))
         XCTAssertFalse(yourMapScreen.contains("navigationBarBackButtonHidden"))
         XCTAssertFalse(sharedScheme.contains("-WanderShowYourMapPrototype"))
+    }
+
+    func testMemberProfileRoutesToTheSameScopedMap() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let detailStart = try XCTUnwrap(profileScreen.range(of: "struct ProfileDetailView: View {"))
+        let memberProfile = String(profileScreen[detailStart.lowerBound...])
+
+        XCTAssertTrue(profileHome.contains("if let yourMapAction {"))
+        XCTAssertFalse(profileHome.contains("if mode.isOwner, let yourMapAction"))
+        XCTAssertTrue(memberProfile.contains("yourMapAction: {"))
+        XCTAssertTrue(memberProfile.contains("showsYourMapPrototype = true"))
+        XCTAssertTrue(memberProfile.contains(".navigationDestination(isPresented: $showsYourMapPrototype)"))
+        XCTAssertTrue(memberProfile.contains("YourMapPrototypeScreen("))
+        XCTAssertTrue(memberProfile.contains("ownerID: profileID"))
+        XCTAssertTrue(memberProfile.contains("userPlaces: profileVisiblePlaces.map(\\.userPlace)"))
+        XCTAssertTrue(memberProfile.contains("places: profileVisiblePlaces.map(\\.place)"))
+        XCTAssertTrue(memberProfile.contains("visiblePlaces: profileVisiblePlaces"))
+        XCTAssertTrue(memberProfile.contains("viewerID: store.currentUser.id"))
+        let yourMapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeScreen.swift")
+        )
+        XCTAssertTrue(yourMapScreen.contains("currentUserID: viewerID ?? selectedVisiblePlace.owner.id"))
     }
 
     func testYourMapIsCompiledIntoReleaseBuilds() throws {

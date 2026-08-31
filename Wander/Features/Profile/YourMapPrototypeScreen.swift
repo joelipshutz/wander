@@ -4,6 +4,8 @@ import UIKit
 
 struct YourMapPrototypeScreen: View {
     let dataset: YourMapPrototypeDataset
+    let viewerID: String?
+    let mapTitle: String
 
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
@@ -16,10 +18,14 @@ struct YourMapPrototypeScreen: View {
 
     init(
         dataset: YourMapPrototypeDataset,
+        viewerID: String? = nil,
+        mapTitle: String = "Your Map",
         initialMode: YourMapPrototypeMode = .map,
         initialShowsSharePreview: Bool = false
     ) {
         self.dataset = dataset
+        self.viewerID = viewerID
+        self.mapTitle = mapTitle
         _mode = State(initialValue: initialMode)
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
@@ -68,7 +74,7 @@ struct YourMapPrototypeScreen: View {
                 dismiss: { showsSharePreview = false }
             )
         }
-        .navigationTitle(mode == .map ? "Your Map" : "Patterns")
+        .navigationTitle(mode == .map ? mapTitle : "Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -170,7 +176,7 @@ struct YourMapPrototypeScreen: View {
                     )
                 ],
                 tasteSaves: [],
-                currentUserID: selectedVisiblePlace.owner.id,
+                currentUserID: viewerID ?? selectedVisiblePlace.owner.id,
                 viewerLocation: nil,
                 action: .none,
                 onOpen: {},
@@ -446,10 +452,10 @@ struct YourMapPrototypeScreen: View {
             Image(systemName: dataset.places.isEmpty ? "mappin.and.ellipse" : "line.3.horizontal.decrease.circle")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(WanderTheme.terracotta.color)
-            Text(dataset.places.isEmpty ? "Your map starts with one place" : "No places match this lens")
+            Text(dataset.places.isEmpty ? "\(mapTitle) has no places you can see yet" : "No places match this lens")
                 .font(WanderTypography.editorialCardTitle)
                 .multilineTextAlignment(.center)
-            Text(dataset.places.isEmpty ? "Add a place worth remembering and it will appear here." : "Keep the lens or loosen one filter. Your choices stay intact until you reset them.")
+            Text(dataset.places.isEmpty ? emptyMapDetail : "Keep the lens or loosen one filter. Your choices stay intact until you reset them.")
                 .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .multilineTextAlignment(.center)
@@ -471,6 +477,12 @@ struct YourMapPrototypeScreen: View {
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
         .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, y: 6)
         .padding(.bottom, 84)
+    }
+
+    private var emptyMapDetail: String {
+        mapTitle == "Your Map"
+            ? "Add a place worth remembering and it will appear here."
+            : "Places they choose to share with you will appear here."
     }
 
     private var patternsEmptyState: some View {
