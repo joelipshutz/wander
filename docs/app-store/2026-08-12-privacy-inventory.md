@@ -82,7 +82,7 @@ Do not declare precise or coarse device location unless the production archive o
 | Contacts | Invite entry point after contextual primer | Username search/share link remains available | Address book stays local; social graph disclosed |
 | Camera | User chooses to take a photo | Photo picker/manual save remains available | Uploaded chosen photos disclosed |
 | Photo Library Add | User chooses Save/Instagram/TikTok for generated share media | Standard share paths remain available | User-initiated write only |
-| Calendars Full Access | Optional onboarding or notification-settings connection | Manual check-ins and every non-calendar feature remain available | Raw EventKit content is not collected; the derived restaurant/time reminder intent is covered by Other User Content |
+| Calendars Full Access | Profile → Settings → Notifications connection | Manual check-ins and every non-calendar feature remain available | Raw EventKit content is not collected; the derived restaurant/time reminder intent is covered by Other User Content |
 | Notifications | Onboarding or Settings opt-in | Core app remains available | Device push token is disclosed as Device ID for app functionality |
 
 ## Validation completed on this branch

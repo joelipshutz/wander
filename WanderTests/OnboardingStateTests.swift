@@ -661,13 +661,21 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
-    func testOptionalStepOrderIsStableForPhaseBReuse() {
+    func testOptionalStepOrderDefersCalendarConnectionToSettings() {
         XCTAssertEqual(OnboardingStep.identity.next, .location)
         XCTAssertEqual(OnboardingStep.location.next, .contacts)
         XCTAssertEqual(OnboardingStep.contacts.next, .friends)
-        XCTAssertEqual(OnboardingStep.friends.next, .calendar)
-        XCTAssertEqual(OnboardingStep.calendar.next, .notifications)
+        XCTAssertEqual(OnboardingStep.friends.next, .notifications)
         XCTAssertNil(OnboardingStep.notifications.next)
+    }
+
+    func testLegacyCalendarStepResumesAtNotifications() throws {
+        let encodedStep = try XCTUnwrap("\"calendar\"".data(using: .utf8))
+
+        XCTAssertEqual(
+            try JSONDecoder().decode(OnboardingStep.self, from: encodedStep),
+            .notifications
+        )
     }
 
     func testForegroundSessionRefreshKeepsReadyRootMounted() async throws {

@@ -23,7 +23,7 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 | Section | Question | Definition |
 |---|---|---|
 | Acquisition | Which channels reach the app? | Unique devices recording `app_first_opened` plus sanitized UTM properties on `acquisition_link_opened`. `direct_or_unknown` is an honest bucket. |
-| Activation | Where does onboarding lose people? | Ordered funnel: first open → sign-up start/completion → onboarding start → identity → location → contacts → friends → Apple Calendar → notifications → completion. |
+| Activation | Where does onboarding lose people? | Ordered funnel: first open → sign-up start/completion → onboarding start → identity → location → contacts → friends → notifications → completion. |
 | Activation | Did a new user reach trusted value? | `onboarding_started` → at least one `follow_created` (during or after onboarding) → `onboarding_completed` → at least one `place_saved`, within 14 days. |
 | Engagement | Which human need is the app serving? | Unique users and action volume for `engagement_action_performed`, broken down by `need` and `action`. |
 | Retention | Do activated users come back? | Exact D1, D7, D14, and D30 `app_session_started` return after `onboarding_completed`. |

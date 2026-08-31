@@ -5,8 +5,33 @@ enum OnboardingStep: String, CaseIterable, Codable, Equatable {
     case location
     case contacts
     case friends
-    case calendar
     case notifications
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+
+        // REC-200 briefly persisted Calendar as an onboarding step in local test
+        // builds. Resume those installs at Notifications now that Calendar setup
+        // lives in Profile settings.
+        if rawValue == "calendar" {
+            self = .notifications
+            return
+        }
+
+        guard let step = Self(rawValue: rawValue) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown onboarding step: \(rawValue)"
+            )
+        }
+        self = step
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 
     var next: OnboardingStep? {
         guard let index = Self.allCases.firstIndex(of: self) else { return nil }
