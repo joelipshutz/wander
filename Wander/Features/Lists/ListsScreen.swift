@@ -37,6 +37,7 @@ private struct ListsHomeProjectionKey: Equatable {
 
 struct ListsScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -386,21 +387,33 @@ struct ListsScreen: View {
     private var homeScreen: some View {
         let renderedLists = activeLists
 
-        return ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                header
-                scopeSwitch
-
-                if renderedLists.isEmpty {
-                    emptyState
-                } else {
-                    listGrid(lists: renderedLists)
+        return ZStack(alignment: .top) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    if renderedLists.isEmpty {
+                        emptyState
+                    } else {
+                        listGrid(lists: renderedLists)
+                    }
                 }
+                .padding(WanderTheme.spacing4)
+                .padding(.top, 152)
+                .padding(.bottom, WanderTheme.spacing16)
             }
-            .padding(WanderTheme.spacing4)
-            .padding(.bottom, WanderTheme.spacing16)
+
+            AstirFloatingHeaderSurface {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    AstirMastheadLockup(isCompact: true)
+                    header
+                    scopeSwitch
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
+                .padding(.bottom, WanderTheme.spacing3)
+            }
         }
-        .wanderScreen()
+        .background(astirBrandMode.background)
+        .foregroundStyle(astirBrandMode.primaryText)
         .task {
             await syncAndRefreshLists()
         }
@@ -413,33 +426,34 @@ struct ListsScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                 Text("lists")
-                    .font(.system(.title2, design: .default, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTheme.display(30))
+                    .foregroundStyle(astirBrandMode.primaryText)
 
                 Spacer(minLength: WanderTheme.spacing2)
 
-                WanderGlassActionButton(
+                AstirIconActionButton(
                     systemImage: "plus",
                     accessibilityLabel: "New list",
-                    accessibilityIdentifier: "lists.headerAdd"
-                ) {
+                    accessibilityIdentifier: "lists.headerAdd",
+                    action: {
                     walkthroughs.perform(.listsCreate)
                     walkthroughs.activate(.listEditor)
                     editorPresentation = .create
-                }
+                    }
+                )
                 .walkthroughTarget(.listsCreate)
             }
 
             Text("save places into a plan you can actually use")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
         }
     }
 
     private var scopeSwitch: some View {
-        WanderGlassSegmentedSwitch(
+        AstirEditorialSegmentedSwitch(
             options: ListsScope.allCases.map { WanderSegmentOption(id: $0.rawValue, title: $0.title) },
             selection: Binding(
                 get: { selectedScopeID },
@@ -468,21 +482,20 @@ struct ListsScreen: View {
                     Image(systemName: "plus")
                         .font(.system(size: 42, weight: .black))
                         .frame(width: 92, height: 92)
-                        .background(WanderTheme.terracotta.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Circle())
-                        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 16, x: 0, y: 8)
+                        .background(astirBrandMode.accent)
+                        .foregroundStyle(astirBrandMode.background)
+                        .overlay(Rectangle().stroke(astirBrandMode.accent, lineWidth: 1))
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(emptyStateTitle)
-                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .font(AstirTheme.display(40))
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .foregroundStyle(astirBrandMode.primaryText)
 
                         Text(emptyStateSubtitle)
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(astirBrandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -490,17 +503,17 @@ struct ListsScreen: View {
                         .font(.system(size: 16, weight: .black))
                         .padding(.horizontal, WanderTheme.spacing4)
                         .frame(minHeight: 48)
-                        .background(WanderTheme.textInk.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Capsule())
+                        .background(astirBrandMode.accent)
+                        .foregroundStyle(astirBrandMode.background)
+                        .overlay(Rectangle().stroke(astirBrandMode.accent, lineWidth: 1))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(WanderTheme.spacing6)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
+                .background(astirBrandMode.raisedBackground)
+                .clipShape(Rectangle())
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    Rectangle()
+                        .stroke(astirBrandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -792,6 +805,7 @@ enum ListsScreenScenario: String {
 private struct ListTile: View {
     let list: PlaceListMock
     let showsCollaborators: Bool
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -802,28 +816,28 @@ private struct ListTile: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
                     Text(list.name)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTheme.display(20))
+                        .foregroundStyle(astirBrandMode.primaryText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
 
                     if list.isStealth {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(astirBrandMode.secondaryText)
                     }
 
                     if list.isCollaborative {
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .foregroundStyle(astirBrandMode.accent)
                             .accessibilityLabel("Collaborative list")
                     }
                 }
 
                 Text(list.subtitle)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(astirBrandMode.secondaryText)
                     .lineLimit(1)
             }
 
@@ -832,7 +846,7 @@ private struct ListTile: View {
                     FacePileView(collaborators: list.collaborators, size: 24)
                     Text(list.collaboratorSummary)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                 }
             }
@@ -844,16 +858,17 @@ private struct ListTile: View {
 
 private struct ListPreviewMosaic: View {
     let list: PlaceListMock
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         mosaicContent
         .padding(3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(astirBrandMode.raisedBackground)
+        .clipShape(Rectangle())
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
+            Rectangle()
+                .stroke(astirBrandMode.border, lineWidth: 1)
         )
     }
 
@@ -904,12 +919,12 @@ private struct ListPreviewMosaic: View {
 
     private var emptyCover: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .fill(WanderTheme.surfaceSand.color)
+            Rectangle()
+                .fill(astirBrandMode.raisedBackground)
 
             Image(systemName: "bookmark.fill")
                 .font(.system(size: 38, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color.opacity(0.34))
+                .foregroundStyle(astirBrandMode.accent.opacity(0.46))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -918,7 +933,7 @@ private struct ListPreviewMosaic: View {
     private func mosaicTile(place: ListPlaceMock) -> some View {
         ListPlacePhotoMedia(
             place: place,
-            cornerRadius: WanderTheme.radiusSmall,
+            cornerRadius: 0,
             fallbackEmojiSize: 22,
             eligibleUserIDs: list.photoContributorUserIDs
         )

@@ -1192,6 +1192,7 @@ struct MapScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @Environment(\.placeProfileFloatingActionVariant) private var placeProfileFloatingActionVariant
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -1864,40 +1865,48 @@ struct MapScreen: View {
                 }
                 VStack(spacing: 0) {
                     if !isMapSearchFocused {
-                        WanderGlassButtonCluster {
-                            HStack(spacing: WanderTheme.spacing1) {
-                                ForEach(MapSource.allCases) { source in
+                        AstirFloatingHeaderSurface {
+                            VStack(spacing: WanderTheme.spacing1) {
+                                HStack {
+                                    AstirMastheadLockup(isCompact: true)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, WanderTheme.spacing3)
+
+                                HStack(spacing: WanderTheme.spacing1) {
+                                    ForEach(MapSource.allCases) { source in
+                                        Button {
+                                            selectMapSource(source)
+                                        } label: {
+                                            MapSourceFilterChip(
+                                                source: source,
+                                                isSelected: mapFilterState.source == source
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .frame(minWidth: 44, minHeight: 48)
+                                        .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                        .walkthroughTarget(source.walkthroughTarget)
+                                    }
+
                                     Button {
-                                        selectMapSource(source)
+                                        toggleMoreFilters()
                                     } label: {
-                                        MapSourceFilterChip(
-                                            source: source,
-                                            isSelected: mapFilterState.source == source
+                                        MapMoreFilterChip(
+                                            selectedOptionCount: mapFilterState.more.activeOptionCount,
+                                            isExpanded: isMoreFiltersPresented
                                         )
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 48)
-                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
-                                    .walkthroughTarget(source.walkthroughTarget)
+                                    .accessibilityIdentifier("map.filter.more")
+                                    .walkthroughTarget(.mapMoreFilters)
                                 }
-
-                                Button {
-                                    toggleMoreFilters()
-                                } label: {
-                                    MapMoreFilterChip(
-                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
-                                        isExpanded: isMoreFiltersPresented
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 48)
-                                .accessibilityIdentifier("map.filter.more")
-                                .walkthroughTarget(.mapMoreFilters)
+                                .padding(.horizontal, WanderTheme.spacing3)
                             }
+                            .padding(.top, WanderTheme.spacing1)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(height: 52)
                         .overlay(alignment: .topTrailing) {
                             if isMoreFiltersPresented {
                                 MapMoreFiltersPopover(
@@ -1907,7 +1916,7 @@ struct MapScreen: View {
                                     dismiss: dismissMoreFilters
                                 )
                                 .padding(.trailing, WanderTheme.spacing3)
-                                .offset(y: 52)
+                                .offset(y: 88)
                                 .transition(
                                     reduceMotion
                                         ? .opacity
@@ -1957,9 +1966,8 @@ struct MapScreen: View {
                             }
                         }
 
-                        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
-                            HStack(spacing: WanderTheme.spacing3) {
-                                SearchBar(
+                        HStack(spacing: WanderTheme.spacing3) {
+                            SearchBar(
                                     query: $mapQuery,
                                     isFocused: $isMapSearchFocused,
                                     focusRequestID: mapSearchFocusRequestID,
@@ -1970,33 +1978,33 @@ struct MapScreen: View {
                                     onQueryEdited: clearMapSearchPreviewForEditing,
                                     onClear: clearMapSelectionAndSearch,
                                     onSubmit: submitMapSearch
-                                )
-                                .walkthroughTarget(
+                            )
+                            .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapSendoff
                                         ? .mapSendoff
                                         : .mapSearch
                                 )
 
-                                if isMapSearchFocused {
-                                    MapSearchCancelButton(action: cancelMapSearch)
-                                } else {
-                                    MapGlassAddButton {
+                            if isMapSearchFocused {
+                                MapSearchCancelButton(action: cancelMapSearch)
+                            } else {
+                                MapGlassAddButton {
                                         dismissMoreFilters()
                                         onAdd()
-                                    }
-                                    .walkthroughTarget(
+                                }
+                                .walkthroughTarget(
                                         walkthroughs.currentStep?.target == .mapAddAgain
                                             ? .mapAddAgain
                                             : .mapAdd
                                     )
-                                    .walkthroughSlowPulse(
+                                .walkthroughSlowPulse(
                                         isActive: walkthroughs.currentStep?.target == .mapAdd
                                             || walkthroughs.currentStep?.target == .mapAddAgain
-                                    )
-                                }
+                                )
                             }
-                            .frame(maxWidth: .infinity)
-                            .overlay(alignment: .bottomTrailing) {
+                        }
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .bottomTrailing) {
                                 if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
                                     RecenterButton(
                                         isLoading: isRecenteringOnUser,
@@ -2013,7 +2021,6 @@ struct MapScreen: View {
                                     .opacity(nearbyOpacity)
                                     .allowsHitTesting(nearbyOpacity > 0.5)
                                 }
-                            }
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -8725,17 +8732,12 @@ private struct MapGlassAddButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 18, weight: .black))
-                .frame(width: 44, height: 44)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .contentShape(Circle())
-                .wanderGlassCapsule(tone: .accent)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a place")
-        .accessibilityIdentifier("map.headerAdd")
+        AstirIconActionButton(
+            systemImage: "plus",
+            accessibilityLabel: "Add a place",
+            accessibilityIdentifier: "map.headerAdd",
+            action: action
+        )
     }
 }
 
@@ -8750,6 +8752,7 @@ private struct SearchBar: View {
     let onClear: () -> Void
     let onSubmit: (String) -> Void
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @State private var draftQuery: String
     @State private var queryCommitTask: Task<Void, Never>?
 
@@ -8775,18 +8778,18 @@ private struct SearchBar: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(appearance.secondaryText)
+                .foregroundStyle(astirBrandMode.secondaryText)
             TextField(
                 "search your map or people...",
                 text: $draftQuery,
                 prompt: Text("search your map or people...")
-                    .foregroundStyle(appearance.secondaryText)
+                    .foregroundStyle(astirBrandMode.secondaryText)
             )
                 .focused(isFocused)
                 .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(appearance.primaryText)
-                .tint(WanderTheme.terracotta.color)
+                .foregroundStyle(astirBrandMode.primaryText)
+                .tint(astirBrandMode.accent)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -8813,7 +8816,7 @@ private struct SearchBar: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(appearance.faintText)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                 }
                 .accessibilityLabel("Clear map search")
                 .accessibilityIdentifier("map.searchClear")
@@ -8821,7 +8824,7 @@ private struct SearchBar: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
-        .contentShape(Capsule())
+        .contentShape(Rectangle())
         .mapSearchCapsuleSurface()
         .overlay {
             if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
@@ -8898,6 +8901,7 @@ private struct SearchBar: View {
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -8905,21 +8909,21 @@ private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
             content
                 .glassEffect(
                     .regular
-                        .tint(appearance.isDark ? Color.black.opacity(0.50) : nil)
+                        .tint(astirBrandMode.background.opacity(0.74))
                         .interactive(true),
-                    in: Capsule()
+                    in: Rectangle()
                 )
                 .overlay {
-                    Capsule()
-                        .stroke(appearance.border, lineWidth: 1)
+                    Rectangle()
+                        .stroke(astirBrandMode.border, lineWidth: 1)
                 }
         } else {
             content
-                .background(.ultraThinMaterial, in: Capsule())
-                .background(appearance.raisedSurface.opacity(0.88), in: Capsule())
+                .background(.ultraThinMaterial, in: Rectangle())
+                .background(astirBrandMode.raisedBackground.opacity(0.88), in: Rectangle())
                 .overlay {
-                    Capsule()
-                        .stroke(appearance.border, lineWidth: 1)
+                    Rectangle()
+                        .stroke(astirBrandMode.border, lineWidth: 1)
                 }
         }
     }
@@ -8934,15 +8938,16 @@ private extension View {
 private struct MapSearchCancelButton: View {
     let action: () -> Void
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         Button(action: action) {
             Text("Cancel")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(appearance.primaryText)
+                .foregroundStyle(astirBrandMode.primaryText)
                 .frame(minWidth: 64, minHeight: 44)
-                .contentShape(Capsule())
-                .wanderGlassCapsule(tone: appearance.neutralGlassTone)
+                .contentShape(Rectangle())
+                .astirOutlinedSurface()
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("map.searchCancel")
@@ -9257,6 +9262,7 @@ private struct MapFilterEmptyNotice: View {
     let canReset: Bool
     let reset: () -> Void
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -9278,8 +9284,8 @@ private struct MapFilterEmptyNotice: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, canReset ? WanderTheme.spacing2 : WanderTheme.spacing3)
         .frame(minHeight: 44)
-        .background(appearance.surface.opacity(0.94), in: Capsule())
-        .overlay(Capsule().stroke(appearance.border, lineWidth: 1))
+        .background(astirBrandMode.raisedBackground.opacity(0.94), in: Rectangle())
+        .overlay(Rectangle().stroke(astirBrandMode.border, lineWidth: 1))
         .shadow(color: appearance.shadow, radius: 10, x: 0, y: 5)
         .accessibilityElement(children: .combine)
     }
@@ -9289,6 +9295,7 @@ private struct MapSourceFilterChip: View {
     let source: MapSource
     let isSelected: Bool
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -9302,20 +9309,12 @@ private struct MapSourceFilterChip: View {
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(appearance.primaryText)
-        .contentShape(Capsule())
-        .wanderGlassCapsule(
-            tone: appearance.glassTone(isSelected: isSelected),
-            showsBorder: !appearance.isDark
-        )
-        .overlay {
-            if appearance.isDark {
-                Capsule()
-                    .stroke(
-                        isSelected ? WanderTheme.terracotta.color : appearance.border,
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            }
+        .foregroundStyle(isSelected ? astirBrandMode.accent : astirBrandMode.primaryText)
+        .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)
+                .frame(height: isSelected ? 2 : 1)
         }
         .padding(.vertical, 2)
         .accessibilityLabel("\(source.title) map source")
@@ -9328,6 +9327,7 @@ private struct MapMoreFilterChip: View {
     let selectedOptionCount: Int
     let isExpanded: Bool
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     private var isActive: Bool {
         selectedOptionCount > 0
@@ -9357,20 +9357,12 @@ private struct MapMoreFilterChip: View {
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(appearance.primaryText)
-        .contentShape(Capsule())
-        .wanderGlassCapsule(
-            tone: appearance.glassTone(isSelected: isActive),
-            showsBorder: !appearance.isDark
-        )
-        .overlay {
-            if appearance.isDark {
-                Capsule()
-                    .stroke(
-                        isActive ? WanderTheme.terracotta.color : appearance.border,
-                        lineWidth: isActive ? 2 : 1
-                    )
-            }
+        .foregroundStyle(isActive ? astirBrandMode.accent : astirBrandMode.primaryText)
+        .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(isActive ? astirBrandMode.accent : astirBrandMode.border)
+                .frame(height: isActive ? 2 : 1)
         }
         .padding(.vertical, 2)
         .accessibilityLabel("More map filters")
@@ -9572,6 +9564,7 @@ private struct MapMoreOptionChip: View {
     let isSelected: Bool
     let action: () -> Void
     @Environment(\.wanderMapAppearance) private var appearance
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         Button(action: action) {
@@ -9589,24 +9582,14 @@ private struct MapMoreOptionChip: View {
                 Spacer(minLength: 0)
             }
             .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(isSelected ? appearance.accentText : appearance.primaryText)
+            .foregroundStyle(isSelected ? astirBrandMode.accent : astirBrandMode.primaryText)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
-            .wanderGlassPanel(
-                cornerRadius: WanderTheme.radiusMedium,
-                tone: appearance.glassTone(isSelected: isSelected),
-                interactive: true,
-                showsBorder: !appearance.isDark
-            )
+            .contentShape(Rectangle())
+            .background(astirBrandMode.raisedBackground.opacity(0.94))
             .overlay {
-                if appearance.isDark {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                        .stroke(
-                            isSelected ? WanderTheme.terracotta.color : appearance.border,
-                            lineWidth: isSelected ? 2 : 1
-                        )
-                }
+                Rectangle()
+                    .stroke(isSelected ? astirBrandMode.accent : astirBrandMode.border, lineWidth: isSelected ? 2 : 1)
             }
         }
         .buttonStyle(.plain)
@@ -16674,6 +16657,8 @@ struct PlaceActivitySection: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     @State private var filter: PlaceActivityFilter = .all
@@ -16683,9 +16668,9 @@ struct PlaceActivitySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("check-in history")
-                .font(.system(size: 12, weight: .black))
+                .font(visualStyle == .astir ? AstirTheme.display(22) : .system(size: 12, weight: .black))
                 .textCase(.uppercase)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textMuted.color)
 
             PlaceActivityFilterControl(selection: $filter)
                 .frame(maxWidth: .infinity)
@@ -16907,6 +16892,8 @@ struct PlaceActivitySection: View {
 
 private struct PlaceActivityFilterControl: View {
     @Binding var selection: PlaceActivityFilter
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         HStack(spacing: 0) {
@@ -16921,39 +16908,62 @@ private struct PlaceActivityFilterControl: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .foregroundStyle(selection == filter ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
-                        .background(selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
+                        .foregroundStyle(
+                            visualStyle == .astir
+                                ? (selection == filter ? astirBrandMode.selectedForeground : astirBrandMode.secondaryText)
+                                : (selection == filter ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
+                        )
+                        .background(
+                            visualStyle == .astir
+                                ? (selection == filter && astirBrandMode == .editorial ? astirBrandMode.selectedFill : Color.clear)
+                                : (selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
+                        )
+                        .clipShape(visualStyle == .astir ? AnyShape(Rectangle()) : AnyShape(Capsule()))
                         .overlay(
-                            Capsule()
-                                .stroke(selection == filter ? WanderTheme.terracotta.color : Color.clear, lineWidth: 1.5)
+                            visualStyle == .astir
+                                ? AnyShape(Rectangle()).stroke(
+                                    selection == filter && astirBrandMode == .cinemaGold ? astirBrandMode.accent : Color.clear,
+                                    lineWidth: 2
+                                )
+                                : AnyShape(Capsule()).stroke(
+                                    selection == filter ? WanderTheme.terracotta.color : Color.clear,
+                                    lineWidth: 1.5
+                                )
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(visualStyle == .astir ? 0 : 4)
         .frame(maxWidth: .infinity)
-        .background(WanderTheme.surfaceSand.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .background(visualStyle == .astir ? astirBrandMode.raisedBackground : WanderTheme.surfaceSand.color)
+        .clipShape(visualStyle == .astir ? AnyShape(Rectangle()) : AnyShape(Capsule()))
+        .overlay {
+            if visualStyle == .astir {
+                Rectangle().stroke(astirBrandMode.border, lineWidth: 1)
+            } else {
+                Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            }
+        }
     }
 }
 
 private struct PlaceActivityEmptyState: View {
     let text: String
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
         Text(text)
             .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(WanderTheme.textMuted.color)
+            .foregroundStyle(visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(visualStyle == .astir ? astirBrandMode.raisedBackground : WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: visualStyle == .astir ? 0 : WanderTheme.radiusLarge)
+                    .stroke(visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderHairline.color, lineWidth: 1)
             )
     }
 }
@@ -16962,6 +16972,8 @@ private struct PlaceActivityCard: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let entry: PlaceActivityEntry
     let photos: [PlaceActivityPhoto]
     let companions: [SharedVisitCompanion]
@@ -16989,19 +17001,34 @@ private struct PlaceActivityCard: View {
                 Text("\"\(note)\"")
                     .font(.system(size: 14, weight: .medium))
                     .italic()
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(
+                        visualStyle == .astir
+                            ? astirBrandMode.secondaryText
+                            : WanderTheme.textMuted.color
+                    )
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if !entry.tags.isEmpty || entry.ratingText != nil {
-                MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-                    if let ratingText = entry.ratingText {
-                        PlaceFactPill(title: "Rated \(ratingText)", systemImage: "star.fill")
-                            .fixedSize(horizontal: true, vertical: false)
+                if visualStyle == .astir {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let ratingText = entry.ratingText {
+                            PlaceActivityFactLine(title: "Rated \(ratingText)", systemImage: "star.fill")
+                        }
+                        ForEach(entry.tags.prefix(6), id: \.self) { tag in
+                            PlaceActivityFactLine(title: tag, systemImage: "tag.fill")
+                        }
                     }
-                    ForEach(entry.tags.prefix(6), id: \.self) { tag in
-                        PlaceFactPill(title: tag, systemImage: "tag.fill")
-                            .fixedSize(horizontal: true, vertical: false)
+                } else {
+                    MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
+                        if let ratingText = entry.ratingText {
+                            PlaceFactPill(title: "Rated \(ratingText)", systemImage: "star.fill")
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        ForEach(entry.tags.prefix(6), id: \.self) { tag in
+                            PlaceFactPill(title: tag, systemImage: "tag.fill")
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
                     }
                 }
             }
@@ -17020,16 +17047,17 @@ private struct PlaceActivityCard: View {
             if let photoError {
                 Text(photoError)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color)
             }
         }
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .checkInTicketSurface(
             accent: ticketAccentColor,
-            surface: WanderTheme.surfaceRaised.color,
+            surface: visualStyle == .astir ? astirBrandMode.raisedBackground : WanderTheme.surfaceRaised.color,
             surroundingSurface: WanderTheme.surfaceBone.color,
-            notchEdges: .trailing
+            notchEdges: .trailing,
+            castsShadow: visualStyle != .astir
         )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
@@ -17086,7 +17114,10 @@ private struct PlaceActivityCard: View {
     }
 
     private var ticketAccentColor: Color {
-        entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
+        if visualStyle == .astir {
+            return astirBrandMode.accent
+        }
+        return entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
     }
 
     private var engagementContext: ActivityEngagementContext {
@@ -17193,12 +17224,12 @@ private struct PlaceActivityCard: View {
                     .foregroundStyle(ticketAccentColor)
                     .lineLimit(1)
                 Text(entry.displayName)
-                    .font(WanderTypography.editorialCardTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(visualStyle == .astir ? AstirTheme.display(20) : WanderTypography.editorialCardTitle)
+                    .foregroundStyle(visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textInk.color)
                     .lineLimit(1)
                 Text(entry.isCurrentUser ? entry.timestampText : "@\(entry.owner.handle) · \(entry.timestampText)")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
@@ -17314,6 +17345,30 @@ private struct PlaceActivityCard: View {
         await MainActor.run {
             selectedPhotoItems = []
         }
+    }
+}
+
+private struct PlaceActivityFactLine: View {
+    let title: String
+    let systemImage: String
+    @Environment(\.astirBrandMode) private var astirBrandMode
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Rectangle()
+                .fill(astirBrandMode.accent)
+                .frame(width: 3, height: 18)
+
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .black))
+                .foregroundStyle(astirBrandMode.accent)
+
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(astirBrandMode.primaryText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -17947,14 +18002,29 @@ struct SavedStatusBadge: View {
 
 private struct StatusBadge: View {
     let status: PlaceStatus
+    @Environment(\.placeProfileVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var astirBrandMode
 
+    @ViewBuilder
     var body: some View {
-        Text(status == .been ? CheckInCopy.noun : "wanna")
-            .font(.system(size: 12, weight: .bold))
-            .padding(.horizontal, WanderTheme.spacing2)
-            .padding(.vertical, WanderTheme.spacing1)
-            .background(status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color)
-            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
-            .clipShape(Capsule())
+        if visualStyle == .astir {
+            HStack(spacing: 7) {
+                Rectangle()
+                    .fill(astirBrandMode.accent)
+                    .frame(width: 3, height: 18)
+                Text(status == .been ? CheckInCopy.noun : "wanna")
+                    .font(.system(size: 11, weight: .black))
+                    .textCase(.uppercase)
+                    .foregroundStyle(astirBrandMode.accent)
+            }
+        } else {
+            Text(status == .been ? CheckInCopy.noun : "wanna")
+                .font(.system(size: 12, weight: .bold))
+                .padding(.horizontal, WanderTheme.spacing2)
+                .padding(.vertical, WanderTheme.spacing1)
+                .background(status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color)
+                .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
+                .clipShape(Capsule())
+        }
     }
 }

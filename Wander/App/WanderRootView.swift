@@ -288,6 +288,7 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -500,9 +501,11 @@ struct WanderRootView: View {
                 .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
         }
-        .tint(WanderTheme.terracotta.color)
-        .preferredColorScheme(.light)
-        .toolbarColorScheme(mapAppearanceColorScheme, for: .tabBar)
+        .tint(astirBrandMode.accent)
+        .preferredColorScheme(astirBrandMode == .cinemaGold ? .dark : .light)
+        .toolbarBackground(astirBrandMode.background, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(.dark, for: .tabBar)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(

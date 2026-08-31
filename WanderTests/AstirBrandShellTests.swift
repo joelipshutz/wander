@@ -55,6 +55,26 @@ final class AstirBrandShellTests: XCTestCase {
         )
     }
 
+    func testProductionAstirModeDefaultsToEditorial() {
+        XCTAssertEqual(AstirBrandMode.resolved(from: ["Wander"]), .editorial)
+    }
+
+    func testCinemaGoldModeSupportsStableScreenshotArguments() {
+        for value in ["cinemaGold", "cinema-gold", "gold"] {
+            XCTAssertEqual(
+                AstirBrandMode.resolved(from: ["Wander", "-AstirBrandMode", value]),
+                .cinemaGold
+            )
+        }
+    }
+
+    func testAstirModesKeepBlackFieldsAndDistinctAccentTokens() {
+        XCTAssertEqual(AstirTheme.ink.hex, "#141714")
+        XCTAssertEqual(AstirTheme.cinemaBlack.hex, "#070706")
+        XCTAssertEqual(AstirTheme.signal.hex, "#F05A3C")
+        XCTAssertEqual(AstirTheme.cinemaGold.hex, "#C7A45D")
+    }
+
     func testPrototypeKeepsAstirSpellingAndCurrentNavigationContract() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
