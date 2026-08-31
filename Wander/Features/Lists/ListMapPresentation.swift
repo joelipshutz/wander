@@ -100,6 +100,39 @@ struct ListMapCoordinate: Identifiable, Equatable {
     }
 }
 
+enum ListMapPlaceFocusCamera {
+    private static let neighborhoodSpan: CLLocationDegrees = 0.012
+
+    static func region(
+        around coordinate: CLLocationCoordinate2D,
+        preserving visibleRegion: MKCoordinateRegion
+    ) -> MKCoordinateRegion? {
+        guard ListMapCoordinate(id: "focused-place", coordinate: coordinate).isMappable else {
+            return nil
+        }
+
+        let latitudeDelta = focusedSpan(from: visibleRegion.span.latitudeDelta)
+        let longitudeDelta = focusedSpan(from: visibleRegion.span.longitudeDelta)
+        let latitudeCenterLimit = (180 - latitudeDelta) / 2
+
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: min(max(coordinate.latitude, -latitudeCenterLimit), latitudeCenterLimit),
+                longitude: coordinate.longitude
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta,
+                longitudeDelta: longitudeDelta
+            )
+        )
+    }
+
+    private static func focusedSpan(from visibleSpan: CLLocationDegrees) -> CLLocationDegrees {
+        guard visibleSpan.isFinite, visibleSpan > 0 else { return neighborhoodSpan }
+        return min(visibleSpan, neighborhoodSpan)
+    }
+}
+
 struct ListMapCluster: Identifiable, Equatable {
     let id: String
     let memberIDs: [String]
