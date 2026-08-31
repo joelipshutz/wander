@@ -221,6 +221,9 @@ struct AstirMastheadLockup: View {
             }
         }
         .foregroundStyle(brandMode.primaryText)
+        .padding(.horizontal, isCompact ? 12 : 14)
+        .padding(.vertical, isCompact ? 8 : 10)
+        .astirGlassSurface(cornerRadius: isCompact ? 15 : 18, castsShadow: true)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Astir, Ocean Park")
     }
@@ -302,8 +305,8 @@ extension View {
     }
 }
 
-/// A true floating overlay. On iOS 26 this uses Apple's liquid-glass renderer;
-/// older systems receive a translucent material fallback with the same shape.
+/// Positions independently floating controls without placing another glass
+/// slab behind the group.
 struct AstirFloatingHeaderSurface<Content: View>: View {
     private let content: Content
 
@@ -313,7 +316,6 @@ struct AstirFloatingHeaderSurface<Content: View>: View {
 
     var body: some View {
         content
-            .astirGlassSurface(cornerRadius: 26, castsShadow: true)
             .padding(.horizontal, WanderTheme.spacing2)
             .padding(.top, WanderTheme.spacing1)
     }
@@ -332,7 +334,7 @@ struct AstirIconActionButton: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(brandMode == .cinemaGold ? brandMode.accent : brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
+                .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2, castsShadow: true)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -380,23 +382,36 @@ struct AstirEditorialSegmentedSwitch: View {
             }
         }
         .padding(4)
-        .astirGlassSurface(cornerRadius: 17)
+        .astirGlassSurface(cornerRadius: 17, castsShadow: true)
     }
 }
 
 struct AstirOutlinedSurface: ViewModifier {
     @Environment(\.astirBrandMode) private var brandMode
     var selected = false
+    var castsShadow = false
 
     func body(content: Content) -> some View {
         content
-            .astirGlassSurface(cornerRadius: 16, selected: selected)
+            .astirGlassSurface(
+                cornerRadius: 16,
+                selected: selected,
+                castsShadow: castsShadow
+            )
     }
 }
 
 extension View {
-    func astirOutlinedSurface(selected: Bool = false) -> some View {
-        modifier(AstirOutlinedSurface(selected: selected))
+    func astirOutlinedSurface(
+        selected: Bool = false,
+        castsShadow: Bool = false
+    ) -> some View {
+        modifier(
+            AstirOutlinedSurface(
+                selected: selected,
+                castsShadow: castsShadow
+            )
+        )
     }
 }
 
