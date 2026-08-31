@@ -82,15 +82,17 @@ The app parses `recme.deeplink_url` first and falls back to `notification_type` 
 
 ## Apple Calendar Reservations
 
-Apple Calendar access is currently offered only in Profile → Settings →
-Notifications. Onboarding integration is deferred until the NUX reaches the
-social experience where the feature can be explained in context. iOS reads
-EventKit only after full-access consent, recognizes likely restaurant
-reservations, resolves the place through the existing MapKit boundary, and
-uploads only a SHA-256 occurrence key plus derived place identity, service
-times, and time-zone identifier. Raw event identifiers, titles, notes,
-attendees, URLs, and addresses are never sent to rec.me services. MapKit
-receives the bounded place query needed to resolve the restaurant.
+Apple Calendar access is currently offered only in Profile → Settings → Privacy
+and trust, under Permissions. The reservation-reminder delivery preference
+remains in Notifications, so device-data access and alert delivery are separate
+choices. Onboarding integration is deferred until the NUX reaches the social
+experience where the feature can be explained in context. iOS reads EventKit
+only after full-access consent, recognizes likely restaurant reservations,
+resolves the place through the existing MapKit boundary, and uploads only a
+SHA-256 occurrence key plus derived place identity, service times, and time-zone
+identifier. Raw event identifiers, titles, notes, attendees, URLs, and addresses
+are never sent to rec.me services. MapKit receives the bounded place query
+needed to resolve the restaurant.
 
 The client scans the previous two days through the next 180 days at signed-in
 launch, foreground return, EventKit change, or explicit **sync now**, with a

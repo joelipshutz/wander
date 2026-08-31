@@ -1732,6 +1732,38 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
     }
 
+    func testAppleCalendarPermissionLivesInPrivacySettings() throws {
+        let notificationSettingsSource = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/SettingsScreen.swift"
+            )
+        )
+        let profileSettingsSource = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/ProfileSettingsViews.swift"
+            )
+        )
+
+        let notificationSettings = try XCTUnwrap(
+            notificationSettingsSource.components(separatedBy: "struct NotificationSettingsSheet: View").last?
+                .components(separatedBy: "struct SettingsTrustSurface").first
+        )
+        let privacySettings = try XCTUnwrap(
+            profileSettingsSource.components(separatedBy: "struct ProfilePrivacyTrustScreen: View").last?
+                .components(separatedBy: "enum ProfileRelationshipFilter").first
+        )
+
+        XCTAssertFalse(notificationSettings.contains("Apple Calendar"))
+        XCTAssertFalse(notificationSettings.contains("connect calendar"))
+        XCTAssertTrue(notificationSettings.contains("title: \"Reservation check-in reminders\""))
+
+        XCTAssertTrue(privacySettings.contains("Text(\"Permissions\")"))
+        XCTAssertTrue(privacySettings.contains("Text(\"Apple Calendar\")"))
+        XCTAssertTrue(privacySettings.contains("connectOrSyncCalendar()"))
+        XCTAssertTrue(privacySettings.contains("settings.privacy.calendar.action"))
+        XCTAssertFalse(privacySettings.contains("NotificationPreferencesUpdate"))
+    }
+
     func testDebugSettingsAreSimulatorOrServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
         let profileSettings = try String(
             contentsOf: projectRoot.appendingPathComponent(
