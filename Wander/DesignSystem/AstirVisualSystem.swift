@@ -237,13 +237,13 @@ private struct AstirGlassSurface: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         if #available(iOS 26.0, *) {
+            let glass = selected
+                ? Glass.regular.tint(brandMode.accent.opacity(0.24))
+                : Glass.clear.tint(brandMode.background.opacity(0.05))
+
             content
                 .glassEffect(
-                    .regular.tint(
-                        selected
-                            ? brandMode.accent.opacity(0.24)
-                            : brandMode.raisedBackground.opacity(0.16)
-                    ),
+                    glass,
                     in: shape
                 )
                 .overlay {
@@ -313,7 +313,7 @@ struct AstirFloatingHeaderSurface<Content: View>: View {
 
     var body: some View {
         content
-            .astirGlassSurface(cornerRadius: 30, castsShadow: true)
+            .astirGlassSurface(cornerRadius: 26, castsShadow: true)
             .padding(.horizontal, WanderTheme.spacing2)
             .padding(.top, WanderTheme.spacing1)
     }
