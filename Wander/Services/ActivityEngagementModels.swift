@@ -204,6 +204,7 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         case .wanna: "added to Wanna"
         case .list: "saved to"
         case .saved: "saved"
+        case .question: "asked"
         }
     }
 
@@ -217,6 +218,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             "See \(actor.displayName)'s list activity for \(placeName) on rec.me"
         case .saved:
             "See \(actor.displayName)'s save for \(placeName) on rec.me"
+        case .question:
+            "Help answer \(actor.displayName)'s question on rec.me: \(placeName)"
         }
     }
 }
@@ -228,6 +231,7 @@ extension FeedTicketKind {
         case .wanna: "Wanna"
         case .list: "ADDED TO LIST"
         case .saved: "SAVED A PLACE"
+        case .question: "QUESTION"
         }
     }
 
@@ -237,6 +241,7 @@ extension FeedTicketKind {
         case .wanna: "added to Wanna"
         case .list: "added this to a list"
         case .saved: "saved this place"
+        case .question: "asked"
         }
     }
 }

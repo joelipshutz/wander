@@ -1880,6 +1880,13 @@ extension PlaceRepository {
 @MainActor
 protocol FeedRepository {
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage
+    func createQuestion(text: String) async throws -> FeedActivity
+}
+
+extension FeedRepository {
+    func createQuestion(text: String) async throws -> FeedActivity {
+        throw WanderRemoteError.notImplemented("Feed questions")
+    }
 }
 
 @MainActor

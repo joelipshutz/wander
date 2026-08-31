@@ -2,6 +2,7 @@ import {
   classifyAPNsFailure,
   notificationDeliveryAnalyticsEvent,
   notificationFrequencyAnalyticsEvents,
+  normalizedNotificationType,
   PushEvent,
   PushToken,
   sendToToken,
@@ -187,6 +188,11 @@ Deno.test("delivery analytics replaces unexpected notification types", () => {
   );
 
   assertEquals(analyticsEvent.properties.notification_type, "unknown");
+});
+
+Deno.test("question notification type remains available to delivery analytics", () => {
+  assertEquals(normalizedNotificationType("question_asked"), "question_asked");
+  assertEquals(normalizedNotificationType("private-question-copy"), "unknown");
 });
 
 Deno.test("frequency analytics exposes summary and complete aggregate histogram only", () => {

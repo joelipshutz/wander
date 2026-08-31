@@ -707,6 +707,20 @@ struct SupabaseFeedRepository: FeedRepository {
             mediaByActivityID: mediaByActivityID
         )
     }
+
+    func createQuestion(text: String) async throws -> FeedActivity {
+        let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedText.isEmpty, normalizedText.count <= 280 else {
+            throw WanderRemoteError.invalidResponse("Question must be between 1 and 280 characters.")
+        }
+        try CommunityContentPolicy.validate(normalizedText)
+
+        let response: RemoteFeedActivityDTO = try await rpc.call(
+            "create_feed_question",
+            params: CreateFeedQuestionParams(questionText: normalizedText)
+        )
+        return try await response.activity(storage: storage)
+    }
 }
 
 struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
@@ -3269,6 +3283,14 @@ private struct FollowedFeedParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case before = "input_before"
         case limit = "input_limit"
+    }
+}
+
+private struct CreateFeedQuestionParams: Encodable {
+    let questionText: String
+
+    enum CodingKeys: String, CodingKey {
+        case questionText = "input_question_text"
     }
 }
 

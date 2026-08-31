@@ -7,14 +7,27 @@ enum ImportHelpDestination {
 
 struct AddImportEntrySection: View {
     let summary: PlaceImportSummary
+    let showsHeading: Bool
     let action: () -> Void
+
+    init(
+        summary: PlaceImportSummary,
+        showsHeading: Bool = true,
+        action: @escaping () -> Void
+    ) {
+        self.summary = summary
+        self.showsHeading = showsHeading
+        self.action = action
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Import")
-                .font(.system(size: 17, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .accessibilityAddTraits(.isHeader)
+            if showsHeading {
+                Text("Import")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             Button(action: action) {
                 HStack(spacing: WanderTheme.spacing3) {

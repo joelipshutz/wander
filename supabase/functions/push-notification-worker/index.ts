@@ -322,7 +322,7 @@ function postHogProjectToken(): string | null {
   return Deno.env.get("WANDER_POSTHOG_PROJECT_TOKEN")?.trim() || null;
 }
 
-function normalizedNotificationType(value: string): string {
+export function normalizedNotificationType(value: string): string {
   return [
       "activity_commented",
       "activity_liked",
@@ -334,6 +334,7 @@ function normalizedNotificationType(value: string): string {
       "list_place_added",
       "mutual_follow",
       "place_saved_from_your_map",
+      "question_asked",
       "shared_visit",
     ].includes(value)
     ? value

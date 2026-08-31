@@ -472,6 +472,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
     let actor: RemoteProfileShellDTO
     let place: RemoteVisiblePlaceDTO?
     let list: RemoteFeedListDTO?
+    let questionText: String?
     let note: String?
     let rating: Double?
     let media: [RemoteFeedMediaDTO]
@@ -483,6 +484,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
         case actor
         case place
         case list
+        case questionText = "question_text"
         case note
         case rating
         case media
@@ -521,6 +523,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             actor: actor.profileShell(fallbackRelationship: .follower),
             place: try place?.visiblePlace(),
             list: list?.localList(),
+            questionText: questionText,
             occurredAt: occurredAt,
             note: note,
             rating: rating,

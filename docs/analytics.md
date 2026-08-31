@@ -49,7 +49,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_commented`, `question_asked`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -73,6 +73,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `check_in_created` | A visit is created | `is_repeat`, `visibility`, `date_bucket` |
 | `activity_like_changed` | Like state succeeds locally/remotely | `is_liked`, `outcome` |
 | `activity_comment_created` | Comment succeeds locally/remotely | `outcome` |
+| `feed_question_created` | A question post succeeds locally/remotely or fails | `outcome` |
 | `activity_share_opened` | Share preview opens | `ticket_kind` |
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |

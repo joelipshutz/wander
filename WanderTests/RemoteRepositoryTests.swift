@@ -1106,6 +1106,44 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testCreateFeedQuestionCallsOwnerScopedRPCAndDecodesQuestionEnvelope() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["create_feed_question"] = """
+        {
+          "id": "40000000-0000-0000-0000-000000000395",
+          "event_type": "question_asked",
+          "occurred_at": "2026-08-31T21:45:00Z",
+          "actor": {
+            "id": "user_joe",
+            "handle": "joelipshutz",
+            "display_name": "Joe Lipshutz",
+            "avatar_url": null,
+            "relationship": "owner"
+          },
+          "place": null,
+          "list": null,
+          "question_text": "Where is the best iced latte in West LA?",
+          "note": null,
+          "rating": null,
+          "media": []
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let activity = try await repository.createQuestion(
+            text: "  Where is the best iced latte in West LA?  "
+        )
+
+        XCTAssertEqual(activity.kind, .questionAsked)
+        XCTAssertEqual(activity.questionText, "Where is the best iced latte in West LA?")
+        XCTAssertEqual(activity.actor.relationship, .owner)
+        XCTAssertEqual(rpc.calls.map(\.name), ["create_feed_question"])
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_question_text"] as? String,
+            "Where is the best iced latte in West LA?"
+        )
+    }
+
     func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -3934,6 +3972,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("activity_liked", data: ["activity_id": "activity-1"]), .activityComments(id: "activity-1"))
         XCTAssertEqual(destination("activity_commented", data: ["activity_id": "activity-2"]), .activityComments(id: "activity-2"))
+        XCTAssertEqual(destination("question_asked", data: ["activity_id": "activity-3"]), .activityComments(id: "activity-3"))
         XCTAssertEqual(destination("wanna_go_reminder", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(
             destination(

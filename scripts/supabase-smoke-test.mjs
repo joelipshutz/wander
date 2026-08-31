@@ -91,6 +91,12 @@ async function main() {
           collaboratorUserID,
           strangerUserID,
         );
+        await runFeedQuestionSmokeChecks(
+          client,
+          smokeUserID,
+          collaboratorUserID,
+          strangerUserID,
+        );
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
@@ -105,7 +111,7 @@ async function main() {
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
         await runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID);
         await runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, private taxonomy snapshots, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, global rec.me place search, and paid social-import admission are valid.");
+        console.log("Supabase smoke test passed: profile updates, mutes, Feed questions and answers, profile insights, private taxonomy snapshots, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, global rec.me place search, and paid social-import admission are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -360,6 +366,147 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
     /permission denied for function begin_social_import_paid_work/,
   );
   await client.query("reset role");
+}
+
+async function runFeedQuestionSmokeChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+) {
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values ($1, $2, 'profile')
+      on conflict (follower_user_id, followed_user_id) do nothing
+    `,
+    [collaboratorUserID, smokeUserID],
+  );
+  await client.query(
+    `
+      delete from public.notification_events
+      where recipient_user_id in ($1, $2, $3)
+        and notification_type in ('question_asked', 'activity_commented')
+    `,
+    [smokeUserID, collaboratorUserID, strangerUserID],
+  );
+
+  await expectQuery(
+    client,
+    "Feed question RPC metadata",
+    `
+      select
+        p.prosecdef,
+        p.provolatile = 'v' as volatile,
+        'search_path=pg_catalog, public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'public.create_feed_question(text)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "question follower enables followed-activity notifications",
+    `
+      select
+        (public.update_notification_preferences($1::jsonb)).push_enabled as push_enabled,
+        (public.get_notification_preferences()).followed_activity_enabled as followed_activity_enabled
+    `,
+    [JSON.stringify({ push_enabled: true, followed_activity_enabled: true })],
+    (result) => result.rows[0]?.push_enabled === true
+      && result.rows[0]?.followed_activity_enabled === true,
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "question owner enables answer notifications",
+    `
+      select
+        (public.update_notification_preferences($1::jsonb)).push_enabled as push_enabled,
+        (public.get_notification_preferences()).engagement_enabled as engagement_enabled
+    `,
+    [JSON.stringify({ push_enabled: true, engagement_enabled: true })],
+    (result) => result.rows[0]?.push_enabled === true
+      && result.rows[0]?.engagement_enabled === true,
+  );
+  const created = await expectQuery(
+    client,
+    "authenticated create_feed_question production payload",
+    "select public.create_feed_question($1) as activity",
+    ["Where is the best iced latte in West LA?"],
+    (result) => result.rows[0]?.activity?.event_type === "question_asked"
+      && result.rows[0]?.activity?.question_text === "Where is the best iced latte in West LA?"
+      && result.rows[0]?.activity?.actor?.id === smokeUserID,
+  );
+  const activityID = created.rows[0].activity.id;
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "question appears in a follower Feed",
+    "select public.followed_feed(null, 25) as page",
+    [],
+    (result) => result.rows[0]?.page?.activity?.some(
+      (activity) => activity.id === activityID
+        && activity.question_text === "Where is the best iced latte in West LA?",
+    ) === true,
+  );
+  await expectQuery(
+    client,
+    "follower answers a Feed question",
+    "select public.add_activity_comment($1::uuid, $2) as result",
+    [activityID, "Try Goodboybob in Santa Monica."],
+    (result) => result.rows[0]?.result?.comment?.body === "Try Goodboybob in Santa Monica."
+      && result.rows[0]?.result?.engagement?.comment_count === 1,
+  );
+
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQueryFailure(
+    client,
+    "non-follower cannot resolve a Feed question",
+    "select public.activity_detail($1::uuid)",
+    [activityID],
+    /activity_not_visible/,
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "question owner reads the answer thread",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.body === "Try Goodboybob in Santa Monica.",
+    ) === true,
+  );
+
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "question and answer notification fanout",
+    `
+      select
+        count(*) filter (
+          where recipient_user_id = $1 and notification_type = 'question_asked'
+        )::integer as follower_question_count,
+        count(*) filter (
+          where recipient_user_id = $2 and notification_type = 'activity_commented'
+            and title = 'New answer'
+        )::integer as owner_answer_count
+      from public.notification_events
+      where data->>'activity_id' = $3
+    `,
+    [collaboratorUserID, smokeUserID, activityID],
+    (result) => result.rows[0]?.follower_question_count === 1
+      && result.rows[0]?.owner_answer_count === 1,
+  );
 }
 
 async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID) {

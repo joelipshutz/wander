@@ -694,6 +694,7 @@ struct ActivitySharePreviewScreen: View {
         case .wanna: "wanna"
         case .list: "list"
         case .saved: "saved"
+        case .question: "question"
         }
     }
 }
@@ -844,6 +845,7 @@ private struct ActivityShareTicket: View {
         case .wanna: "bookmark.fill"
         case .list: "list.bullet"
         case .saved: "mappin.circle.fill"
+        case .question: "questionmark.bubble.fill"
         }
     }
 
@@ -853,6 +855,7 @@ private struct ActivityShareTicket: View {
         case .wanna: WanderTheme.stateWarning.color
         case .list: WanderTheme.terracotta.color
         case .saved: WanderTheme.categorySage.color
+        case .question: WanderTheme.stateWarning.color
         }
     }
 }
