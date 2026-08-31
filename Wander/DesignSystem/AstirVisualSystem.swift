@@ -378,8 +378,8 @@ private struct AstirHeaderBlurBackdrop: View {
             } else {
                 Rectangle()
                     .fill(.ultraThinMaterial)
-                    .opacity(brandMode.prefersDarkInterface ? 0.56 : 0.66)
-                    .overlay(brandMode.background.opacity(brandMode.prefersDarkInterface ? 0.10 : 0.06))
+                    .opacity(brandMode.prefersDarkInterface ? 0.34 : 0.42)
+                    .overlay(brandMode.background.opacity(brandMode.prefersDarkInterface ? 0.04 : 0.025))
             }
         }
         .mask {
