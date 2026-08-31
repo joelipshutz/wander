@@ -796,6 +796,59 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        let activityID = "40000000-0000-0000-0000-000000000386"
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [{
+            "id": "\(activityID)",
+            "event_type": "place_been",
+            "occurred_at": "2026-08-30T20:00:00Z",
+            "actor": {
+              "id": "user_ryan",
+              "handle": "ryan",
+              "display_name": "Ryan",
+              "avatar_url": null,
+              "relationship": "follower"
+            },
+            "place": null,
+            "list": null,
+            "note": "Dudley Market",
+            "rating": null,
+            "media": []
+          }],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-08-30T20:01:00Z"
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [{
+          "activity_id": "\(activityID)",
+          "media": [{
+            "id": "55000000-0000-0000-0000-000000000386",
+            "url": null,
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_dudley/photo.jpg",
+            "accessibility_label": "Activity photo"
+          }]
+        }]
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc, storage: storage)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25)
+
+        XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
+        )
+    }
+
     func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -2883,7 +2936,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testPlacePhotoRepositoryMapsPaginatedVisibleGalleryWithContributorIdentity() async throws {
         let rpc = RecordingRPC()
-        rpc.responses["visible_place_photos"] = """
+        rpc.responses["visible_place_photos_for_places"] = """
         [{
           "photo_id": "55000000-0000-0000-0000-000000000133",
           "storage_bucket": "visit-photos",
@@ -2914,7 +2967,11 @@ final class RemoteRepositoryTests: XCTestCase {
         )
 
         let page = try await repository.visiblePhotoGalleryPage(
-            placeID: "50000000-0000-0000-0000-000000000133",
+            placeIDs: [
+                "50000000-0000-0000-0000-000000000134",
+                "50000000-0000-0000-0000-000000000133",
+                "50000000-0000-0000-0000-000000000134"
+            ],
             after: cursor,
             limit: 1
         )
@@ -2927,10 +2984,13 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(page.nextCursor?.photoID, "55000000-0000-0000-0000-000000000133")
         XCTAssertEqual(page.nextCursor?.sortOrder, 2)
         XCTAssertTrue(page.hasMore)
-        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_photos"])
+        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_photos_for_places"])
         XCTAssertEqual(
-            rpc.rawBodies[0]["input_place_id"] as? String,
-            "50000000-0000-0000-0000-000000000133"
+            rpc.rawBodies[0]["input_place_ids"] as? [String],
+            [
+                "50000000-0000-0000-0000-000000000133",
+                "50000000-0000-0000-0000-000000000134"
+            ]
         )
         XCTAssertEqual(rpc.rawBodies[0]["input_after_sort_order"] as? Int, 1)
         XCTAssertEqual(

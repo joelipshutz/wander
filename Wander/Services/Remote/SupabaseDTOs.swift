@@ -508,11 +508,19 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
     }
 
     @MainActor
-    func followedFeedPage() async throws -> FollowedFeedPage {
+    func followedFeedPage(
+        storage: (any RemoteStorageCalling)? = nil,
+        mediaByActivityID: [String: [RemoteFeedMediaDTO]] = [:]
+    ) async throws -> FollowedFeedPage {
         var renderedActivity: [FeedActivity] = []
         renderedActivity.reserveCapacity(activity.count)
         for item in activity {
-            renderedActivity.append(try await item.activity())
+            renderedActivity.append(
+                try await item.activity(
+                    storage: storage,
+                    mediaOverride: mediaByActivityID[item.id.lowercased()]
+                )
+            )
         }
         let actorsByID = Dictionary(
             renderedActivity.map { ($0.actor.id, $0.actor) },

@@ -672,9 +672,11 @@ private struct PublicSharedPlacePreview: Decodable {
 
 struct SupabaseFeedRepository: FeedRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
         self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
@@ -682,7 +684,28 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try await response.followedFeedPage()
+        let activityIDs = Array(
+            Set(response.activity.compactMap { item in
+                UUID(uuidString: item.id)?.uuidString.lowercased()
+            })
+        ).sorted()
+        let mediaRows: [RemoteActivityMediaDTO]
+        if activityIDs.isEmpty {
+            mediaRows = []
+        } else {
+            mediaRows = (try? await rpc.call(
+                "activity_media",
+                params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+            )) ?? []
+        }
+        let mediaByActivityID = Dictionary(
+            mediaRows.map { ($0.activityID.lowercased(), $0.media) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        return try await response.followedFeedPage(
+            storage: storage,
+            mediaByActivityID: mediaByActivityID
+        )
     }
 }
 
@@ -2223,19 +2246,25 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        guard let rpc, UUID(uuidString: placeID) != nil else {
+        guard let rpc else {
+            throw WanderRemoteError.notConfigured
+        }
+        let canonicalPlaceIDs = Array(
+            Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
+        ).sorted()
+        guard !canonicalPlaceIDs.isEmpty else {
             throw WanderRemoteError.invalidResponse("Place photo gallery requires a canonical place id")
         }
 
         let pageSize = min(max(limit, 1), 100)
         let rows: [VisiblePlacePhotoGalleryRow] = try await rpc.call(
-            "visible_place_photos",
+            "visible_place_photos_for_places",
             params: VisiblePlacePhotoGalleryParams(
-                inputPlaceID: placeID,
+                inputPlaceIDs: canonicalPlaceIDs,
                 inputAfterCreatedAt: cursor?.createdAt,
                 inputAfterSortOrder: cursor?.sortOrder,
                 inputAfterPhotoID: cursor?.photoID,
@@ -2426,14 +2455,14 @@ private struct FirstVisiblePlacePhotoByUsersParams: Encodable {
 }
 
 private struct VisiblePlacePhotoGalleryParams: Encodable {
-    let inputPlaceID: String
+    let inputPlaceIDs: [String]
     let inputAfterCreatedAt: Date?
     let inputAfterSortOrder: Int?
     let inputAfterPhotoID: String?
     let inputLimit: Int
 
     enum CodingKeys: String, CodingKey {
-        case inputPlaceID = "input_place_id"
+        case inputPlaceIDs = "input_place_ids"
         case inputAfterCreatedAt = "input_after_created_at"
         case inputAfterSortOrder = "input_after_sort_order"
         case inputAfterPhotoID = "input_after_photo_id"

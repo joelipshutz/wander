@@ -244,7 +244,7 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {

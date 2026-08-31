@@ -939,6 +939,28 @@ begin
 end
 $photo_gallery_metadata$;
 
+do $grouped_photo_gallery_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=pg_catalog, public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'visible_place_photos_for_places'
+    and pg_get_function_identity_arguments(p.oid)
+      = 'input_place_ids uuid[], input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer';
+  if valid is distinct from true then
+    raise exception 'grouped place-photo gallery metadata contract failed';
+  end if;
+end
+$grouped_photo_gallery_metadata$;
+
 do $quota_metadata$
 declare
   valid boolean;
@@ -1427,6 +1449,7 @@ $owner_scoped_photos$;
 do $owner_photo_gallery$
 declare
   visible_count integer;
+  grouped_visible_count integer;
   attributed_count integer;
   ranked_contributors text[];
   rank_cursors integer[];
@@ -1445,6 +1468,15 @@ begin
      or ranked_contributors is distinct from array[${smokeUser}, ${collaboratorUser}]::text[]
      or rank_cursors is distinct from array[0, 1]::integer[] then
     raise exception 'owner place-photo gallery ranking/attribution fixture failed';
+  end if;
+
+  select count(*)::integer into grouped_visible_count
+  from public.visible_place_photos_for_places(array[(
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  )]::uuid[]);
+  if grouped_visible_count <> 2 then
+    raise exception 'owner grouped place-photo gallery fixture failed';
   end if;
 end
 $owner_photo_gallery$;
@@ -4321,6 +4353,32 @@ async function runFirstVisiblePlacePhotoChecks(
     },
   );
 
+  await expectQuery(
+    client,
+    "grouped place photo gallery RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=pg_catalog, public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'visible_place_photos_for_places'
+        and pg_get_function_identity_arguments(p.oid)
+          = 'input_place_ids uuid[], input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
   await client.query(
     `
       insert into public.follows (follower_user_id, followed_user_id, source)
@@ -4472,6 +4530,18 @@ async function runFirstVisiblePlacePhotoChecks(
       && result.rows[0]?.sort_order === 0
       && result.rows[0]?.contributor_user_id === smokeUserID
       && result.rows[0]?.contributor_handle,
+  );
+  await expectQuery(
+    client,
+    "owner grouped place-photo gallery accepts the production place-id array",
+    `
+      select *
+      from public.visible_place_photos_for_places(array[$1::uuid, $1::uuid])
+    `,
+    [smokePlaceID],
+    (result) => result.rows.length === 2
+      && result.rows[0]?.photo_id === expectedPhotoID
+      && result.rows[1]?.photo_id === expectedCollaboratorPhotoID,
   );
   await expectQuery(
     client,

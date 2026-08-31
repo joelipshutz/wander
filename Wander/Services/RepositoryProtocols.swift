@@ -1932,7 +1932,7 @@ protocol PlacePhotoRepository {
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage
@@ -1988,7 +1988,7 @@ extension PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
