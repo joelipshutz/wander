@@ -1296,7 +1296,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
     }
 
-    func testFeedHeaderFloatsAbovePlacesAndPeopleContent() {
+    func testFeedHeaderHidesOnDownScrollAndReturnsOnUpScrollAcrossSurfaces() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -1309,15 +1309,13 @@ final class OnboardingUITests: XCTestCase {
 
         let placeSearch = app.buttons["feed.searchLauncher"]
         let addButton = app.buttons["feed.headerAdd"]
-        let feedSectionButtons = app.buttons.matching(
-            NSPredicate(format: "label == %@", "Feed section")
-        )
-        let placesButton = feedSectionButtons.element(boundBy: 0)
-        let peopleButton = feedSectionButtons.element(boundBy: 1)
+        let placesButton = app.buttons["Places"]
+        let peopleButton = app.buttons["People"]
 
         XCTAssertTrue(placeSearch.waitForExistence(timeout: 6))
         XCTAssertTrue(addButton.isHittable)
-        XCTAssertEqual(feedSectionButtons.count, 2)
+        XCTAssertTrue(placesButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(peopleButton.exists)
         XCTAssertTrue(placesButton.isSelected)
         XCTAssertLessThan(placeSearch.frame.maxY, placesButton.frame.minY)
         XCTAssertEqual(placesButton.frame.midY, addButton.frame.midY, accuracy: 2)
@@ -1326,7 +1324,20 @@ final class OnboardingUITests: XCTestCase {
         let initialControlsY = placesButton.frame.minY
         app.swipeUp()
 
-        XCTAssertTrue(placeSearch.isHittable)
+        let hidden = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"),
+            object: placeSearch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 3), .completed)
+        XCTAssertFalse(addButton.isHittable)
+
+        app.swipeDown()
+
+        let revealed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: placeSearch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 3), .completed)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
         XCTAssertEqual(placesButton.frame.minY, initialControlsY, accuracy: 2)
@@ -1339,7 +1350,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(addButton.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-281 floating Feed header on People"
+        screenshot.name = "REC-383 adaptive Feed header restored on People"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
