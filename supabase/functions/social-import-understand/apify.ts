@@ -5,6 +5,7 @@ import {
   cleanString,
   sourceValueMatches,
 } from "./source.ts";
+import { mayReceiveApifyAuthorization, validatedMediaURL } from "./media.ts";
 import type {
   AcquiredMedia,
   AcquisitionEvidence,
@@ -25,8 +26,11 @@ const terminalRunStatuses = new Set([
 ]);
 
 export const maximumInstagramProfileAliases = 20;
-export const instagramProfileEnrichmentDeadlineMilliseconds = 12_000;
-export const minimumProfileEnrichmentGlobalBudgetMilliseconds = 45_000;
+export const instagramProfileEnrichmentDeadlineMilliseconds = 24_000;
+export const minimumProfileEnrichmentGlobalBudgetMilliseconds = 95_000;
+export const maximumRestrictedInstagramMediaItems = 20;
+export const restrictedInstagramMediaFallbackDeadlineMilliseconds = 60_000;
+const minimumRestrictedInstagramFallbackBudgetMilliseconds = 5_000;
 
 type ApifyRunConfiguration = {
   actor: string;
@@ -39,6 +43,7 @@ type ApifyRunConfiguration = {
   maximumPollAttempts: number;
   initialPollDelayMilliseconds: number;
   maximumPollDelayMilliseconds: number;
+  acceptPartialResults?: boolean;
 };
 
 export type ApifyActorRequest = {
@@ -59,16 +64,11 @@ export function apifyActorRequest(source: SocialSource): ApifyActorRequest {
       },
     };
   }
-  if (source.contentType === "reel") {
-    return {
-      actor: "apify/instagram-reel-scraper",
-      input: {
-        username: [source.url],
-        resultsLimit: 1,
-        includeDownloadedVideo: true,
-      },
-    };
-  }
+  // The general Instagram Scraper returns the caption and direct reel video
+  // URL in one post record. In a real Ojai reel canary it completed in seven
+  // seconds, while the dedicated Reel Scraper produced no dataset and was
+  // still running after 105 seconds. The general actor also keeps reels and
+  // posts on the same source-identity and normalization path.
   return {
     actor: "apify/instagram-scraper",
     input: {
@@ -124,7 +124,85 @@ export async function acquireWithApify(
   if (!dataset.response.ok) {
     throw new SocialImportError("apify_dataset_http_error");
   }
+  if (isValidatedRestrictedInstagramItem(dataset.body, source)) {
+    return await acquireRestrictedInstagramMedia(
+      source,
+      token,
+      deadline,
+      dependencies,
+      cancellationSignal,
+    );
+  }
   return normalizeApifyDataset(dataset.body, source);
+}
+
+async function acquireRestrictedInstagramMedia(
+  source: SocialSource,
+  token: string,
+  parentDeadline: Deadline,
+  dependencies: RuntimeDependencies,
+  cancellationSignal?: AbortSignal,
+): Promise<AcquisitionEvidence> {
+  assertNotCancelled(cancellationSignal);
+  const availableMilliseconds = parentDeadline.remaining();
+  if (
+    availableMilliseconds < minimumRestrictedInstagramFallbackBudgetMilliseconds
+  ) {
+    throw new SocialImportError("deadline_exceeded");
+  }
+  const deadline = new Deadline(
+    Math.min(
+      restrictedInstagramMediaFallbackDeadlineMilliseconds,
+      availableMilliseconds,
+    ),
+    dependencies.now,
+  );
+  const run = await runApifyActor(
+    {
+      actor: "crawlerbros/instagram-downloader-api",
+      input: { postUrls: [source.url] },
+      timeoutSeconds: 55,
+      maxItems: maximumRestrictedInstagramMediaItems,
+      maxTotalChargeUsd: "0.10",
+      startRequestTimeoutMilliseconds: 5_000,
+      pollRequestTimeoutMilliseconds: 4_000,
+      maximumPollAttempts: 32,
+      initialPollDelayMilliseconds: 500,
+      maximumPollDelayMilliseconds: 2_000,
+    },
+    token,
+    deadline,
+    dependencies,
+    cancellationSignal,
+  );
+
+  const datasetID = cleanString(run.defaultDatasetId, 160);
+  if (!datasetID) throw new SocialImportError("apify_dataset_missing");
+  const datasetURL = new URL(
+    `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetID)}/items`,
+  );
+  datasetURL.searchParams.set("clean", "true");
+  datasetURL.searchParams.set("format", "json");
+  datasetURL.searchParams.set(
+    "fields",
+    "post_url,type,download_status,download_url",
+  );
+  datasetURL.searchParams.set(
+    "limit",
+    String(maximumRestrictedInstagramMediaItems),
+  );
+  const dataset = await fetchJSON(
+    datasetURL.toString(),
+    { headers: providerHeaders(token) },
+    512_000,
+    5_000,
+    deadline,
+    dependenciesWithCancellation(dependencies, cancellationSignal),
+  );
+  if (!dataset.response.ok) {
+    throw new SocialImportError("apify_dataset_http_error");
+  }
+  return normalizeRestrictedInstagramMediaDataset(dataset.body, source);
 }
 
 export async function acquireInstagramProfileAliases(
@@ -162,14 +240,15 @@ export async function acquireInstagramProfileAliases(
         usernames: requested,
         includeAboutSection: false,
       },
-      timeoutSeconds: 10,
+      timeoutSeconds: 18,
       maxItems: maximumInstagramProfileAliases,
       maxTotalChargeUsd: "0.10",
       startRequestTimeoutMilliseconds: 5_000,
       pollRequestTimeoutMilliseconds: 4_000,
-      maximumPollAttempts: 16,
+      maximumPollAttempts: 28,
       initialPollDelayMilliseconds: 350,
       maximumPollDelayMilliseconds: 1_000,
+      acceptPartialResults: true,
     },
     token,
     childDeadline,
@@ -319,7 +398,10 @@ async function runApifyActor(
       throw error;
     }
   }
-  if (status !== "SUCCEEDED") {
+  const partialDatasetAvailable = configuration.acceptPartialResults === true &&
+    (status === "TIMED-OUT" || status === "TIMED_OUT") &&
+    cleanString(run.defaultDatasetId, 160) !== null;
+  if (status !== "SUCCEEDED" && !partialDatasetAvailable) {
     throw new SocialImportError("apify_run_failed");
   }
   return run;
@@ -430,6 +512,94 @@ function normalizedInstagramUsername(value: unknown): string | null {
       /^[a-z0-9_](?:[a-z0-9_]|\.(?=[a-z0-9_])){0,29}$/u.test(username)
     ? username
     : null;
+}
+
+function isValidatedRestrictedInstagramItem(
+  raw: unknown,
+  source: SocialSource,
+): boolean {
+  if (source.platform !== "instagram") return false;
+  const records = recordsFrom(raw);
+  if (records.length !== 1) return false;
+  const record = records[0];
+  if (
+    !sourceValues(record).some((value) => sourceValueMatches(value, source))
+  ) return false;
+  if (
+    cleanString(record.error, 100)?.toLocaleLowerCase("en-US") !==
+      "restricted_page"
+  ) return false;
+  return vendorErrorFields(record).every((field) =>
+    field === "error" || field === "errorDescription" ||
+    field === "error_description"
+  );
+}
+
+function normalizeRestrictedInstagramMediaDataset(
+  raw: unknown,
+  source: SocialSource,
+): AcquisitionEvidence {
+  const records = recordsFrom(raw);
+  if (records.length === 0) throw new SocialImportError("vendor_empty_dataset");
+  if (records.length > maximumRestrictedInstagramMediaItems) {
+    throw new SocialImportError("vendor_item_error");
+  }
+  if (records.some((record) => vendorErrorFields(record).length > 0)) {
+    throw new SocialImportError("vendor_item_error");
+  }
+
+  const pending: Array<Omit<AcquiredMedia, "id">> = [];
+  for (const [index, record] of records.entries()) {
+    const identities = sourceValues(record);
+    if (identities.length === 0) {
+      throw new SocialImportError("vendor_source_unverified");
+    }
+    if (!identities.some((value) => sourceValueMatches(value, source))) {
+      throw new SocialImportError("vendor_source_mismatch");
+    }
+    const status = cleanString(record.download_status, 40)
+      ?.toLocaleLowerCase("en-US");
+    const kind = cleanString(record.type, 40)?.toLocaleLowerCase("en-US");
+    const url = restrictedInstagramDownloadURL(record.download_url);
+    if (
+      status !== "finished" || (kind !== "image" && kind !== "video") || !url
+    ) {
+      throw new SocialImportError("vendor_missing_media_assets");
+    }
+    addMedia(pending, {
+      index,
+      kind,
+      url,
+      thumbnailURL: null,
+      altText: null,
+    });
+  }
+  if (pending.length === 0) {
+    throw new SocialImportError("vendor_missing_media_assets");
+  }
+  if (
+    source.contentType === "reel" &&
+    !pending.some((item) => item.kind === "video")
+  ) {
+    throw new SocialImportError("vendor_missing_video_asset");
+  }
+  return {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: pending.map((item, index) => ({ ...item, id: `media:${index}` })),
+  };
+}
+
+function restrictedInstagramDownloadURL(value: unknown): string | null {
+  const candidate = cleanString(value, 4_096);
+  if (!candidate) return null;
+  try {
+    const url = validatedMediaURL(candidate);
+    return mayReceiveApifyAuthorization(url) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export function normalizeApifyDataset(

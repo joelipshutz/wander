@@ -2060,6 +2060,8 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
             throw WanderRemoteError.invalidResponse("Unknown social import response outcome")
         }
 
+        let providerPath = Self.providerPath(response.providerPath)
+        let serverReasoningIsAuthoritative = providerPath == "apify_gemini"
         var seen = Set<String>()
         let hints = response.hints.prefix(Self.maximumHints).compactMap { hint -> SocialPlaceSearchHint? in
             guard ["destination", "itinerary"].contains(hint.classification),
@@ -2081,7 +2083,12 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
                 .joined(separator: "|")
                 .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             guard seen.insert(identity).inserted else { return nil }
-            return SocialPlaceSearchHint(name: name, area: area, evidence: evidence)
+            return SocialPlaceSearchHint(
+                name: name,
+                area: area,
+                evidence: evidence,
+                isServerGrounded: serverReasoningIsAuthoritative
+            )
         }
 
         let outcome: SocialImportUnderstandingOutcome
@@ -2103,9 +2110,9 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
             outcome: outcome,
             hints: hints,
             diagnostics: SocialImportUnderstandingDiagnostics(
-                providerPath: Self.providerPath(response.providerPath),
+                providerPath: providerPath,
                 mediaCount: Self.clamped(response.mediaCount, maximum: Self.maximumHints),
-                modelAttemptCount: Self.clamped(response.modelAttemptCount, maximum: 5),
+                modelAttemptCount: Self.clamped(response.modelAttemptCount, maximum: 6),
                 failureCategory: Self.cleaned(response.failureCategory, maximumLength: 64)
             )
         )

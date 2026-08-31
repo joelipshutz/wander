@@ -1,3 +1,4 @@
+import { inventoryInstagramCaption } from "./caption-inventory.ts";
 import { cleanString } from "./source.ts";
 import type {
   AcquisitionEvidence,
@@ -77,6 +78,64 @@ const declaredCountNouns = new Set([
   "trails",
   "venue",
   "venues",
+]);
+const nonListCountNouns = new Set([
+  "carousel",
+  "carousels",
+  "clip",
+  "clips",
+  "day",
+  "days",
+  "episode",
+  "episodes",
+  "frame",
+  "frames",
+  "hour",
+  "hours",
+  "image",
+  "images",
+  "minute",
+  "minutes",
+  "month",
+  "months",
+  "night",
+  "nights",
+  "page",
+  "pages",
+  "part",
+  "parts",
+  "photo",
+  "photos",
+  "picture",
+  "pictures",
+  "post",
+  "posts",
+  "reel",
+  "reels",
+  "second",
+  "seconds",
+  "slide",
+  "slides",
+  "story",
+  "stories",
+  "video",
+  "videos",
+  "week",
+  "weeks",
+  "year",
+  "years",
+]);
+const genericListTitlePrefixes = new Set([
+  "best",
+  "favorite",
+  "favorites",
+  "favourite",
+  "favourites",
+  "my",
+  "our",
+  "the",
+  "top",
+  "ultimate",
 ]);
 const declaredCountNames = [
   "zero",
@@ -166,6 +225,8 @@ export function groundedHints(
   rejectedCount: number;
   excludedCount: number;
   intentionalExcludedCount: number;
+  expectedCount: number | null;
+  missingExpectedCount: number;
 } {
   const textByID = new Map(catalog.texts.map((item) => [item.id, item]));
   const mediaByID = new Map(catalog.media.map((item) => [item.id, item]));
@@ -208,6 +269,9 @@ export function groundedHints(
       ...new Set(
         candidate.evidenceIds
           .map((value) => cleanString(value, 80))
+          .map((value) =>
+            value ? canonicalEvidenceID(value, textByID, mediaByID) : null
+          )
           .filter((value): value is string => value !== null),
       ),
     ]
@@ -244,6 +308,8 @@ export function groundedHints(
         candidate.modality,
         evidenceIDs,
         textByID,
+        mediaByID,
+        ingestionByID,
       )
       : area;
     const usesGlobalArea = !geographyEntityTypes.has(candidate.entityType) &&
@@ -269,31 +335,44 @@ export function groundedHints(
     };
     const identity = normalizedIdentity(groundedName, hint.area);
     const existingIndex = preparedIndexes.get(identity);
+    const textualSourceMention = textualModality(candidate.modality) &&
+        sourceMention
+      ? sourceMention
+      : null;
+    const sourceHandle = textualSourceMention
+      ? exactHandle(textualSourceMention)
+      : null;
+    const usesProfileAlias = textualSourceMention
+      ? profileAliasSupportsName(
+        name,
+        textualSourceMention,
+        profileAliasNames,
+      )
+      : false;
     const value: PreparedHint = {
       hint,
       directEvidenceIDs: evidenceIDs,
       entityType: candidate.entityType,
       itemIndex: candidate.itemIndex,
-      sourceIdentity: textualModality(candidate.modality) && sourceMention
-        ? normalizedSourceIdentity(sourceMention)
+      sourceIdentity: textualSourceMention
+        ? normalizedSourceIdentity(textualSourceMention)
         : null,
-      usesProfileAlias: textualModality(candidate.modality) && sourceMention
-        ? profileAliasSupportsName(
-          name,
-          sourceMention,
-          profileAliasNames,
-        )
-        : false,
-      usesLiteralHandleFallback: groundedName !== name,
+      usesProfileAlias,
+      usesLiteralHandleFallback: groundedName !== name ||
+        (sourceHandle !== null &&
+          name.normalize("NFKC").trim().toLocaleLowerCase("en-US") ===
+            sourceHandle.normalize("NFKC").toLocaleLowerCase("en-US") &&
+          !usesProfileAlias),
     };
     if (existingIndex === undefined) {
       preparedIndexes.set(identity, prepared.length);
       prepared.push(value);
     } else {
       excludedCount += 1;
-      if (hint.confidence > prepared[existingIndex].hint.confidence) {
-        prepared[existingIndex] = value;
-      }
+      const existing = prepared[existingIndex];
+      prepared[existingIndex] = hint.confidence > existing.hint.confidence
+        ? mergePreparedHints(value, existing)
+        : mergePreparedHints(existing, value);
     }
   }
 
@@ -306,12 +385,13 @@ export function groundedHints(
       continue;
     }
     const matchingIndexes = sourceIndexes.get(sourceIdentity) ?? [];
-    const existingIndex = matchingIndexes.find((index) =>
-      sourceAreasReferToSamePlace(
-        withoutDuplicateSources[index].hint.area,
+    const existingIndex = matchingIndexes.find((index) => {
+      const existing = withoutDuplicateSources[index];
+      return sourceAreasReferToSamePlace(
+        existing.hint.area,
         candidate.hint.area,
-      )
-    );
+      ) && sourceNamesReferToSamePlace(existing, candidate);
+    });
     if (existingIndex === undefined) {
       sourceIndexes.set(sourceIdentity, [
         ...matchingIndexes,
@@ -322,32 +402,36 @@ export function groundedHints(
     }
     excludedCount += 1;
     const existing = withoutDuplicateSources[existingIndex];
-    const existingHasArea = existing.hint.area !== null;
-    const candidateHasArea = candidate.hint.area !== null;
-    const equallySpecificAreas = existingHasArea === candidateHasArea;
-    if (
-      (!existingHasArea && candidateHasArea) ||
-      (equallySpecificAreas &&
-        !existing.usesProfileAlias && candidate.usesProfileAlias) ||
-      (existing.usesProfileAlias === candidate.usesProfileAlias &&
-        equallySpecificAreas &&
-        existing.usesLiteralHandleFallback &&
-        !candidate.usesLiteralHandleFallback) ||
-      (existing.usesProfileAlias === candidate.usesProfileAlias &&
-        equallySpecificAreas &&
-        existing.usesLiteralHandleFallback ===
-          candidate.usesLiteralHandleFallback &&
-        candidate.hint.confidence > existing.hint.confidence)
-    ) {
-      withoutDuplicateSources[existingIndex] = candidate;
-    }
+    withoutDuplicateSources[existingIndex] = preferredDuplicateSourceCandidate(
+        existing,
+        candidate,
+      )
+      ? mergePreparedHints(candidate, existing)
+      : mergePreparedHints(existing, candidate);
   }
 
-  const withoutGeographyContext = withoutDuplicateSources.filter(
+  const withoutRedundantLiteralHandles = withoutDuplicateSources.filter(
+    (candidate, index, values) => {
+      if (
+        !candidate.usesLiteralHandleFallback || candidate.itemIndex < 0
+      ) return true;
+      const hasHumanCandidateForItem = values.some((other, otherIndex) =>
+        otherIndex !== index && other.itemIndex === candidate.itemIndex &&
+        !other.usesLiteralHandleFallback &&
+        classificationSelectionRank(other.hint.classification) <=
+          classificationSelectionRank(candidate.hint.classification)
+      );
+      if (!hasHumanCandidateForItem) return true;
+      excludedCount += 1;
+      return false;
+    },
+  );
+
+  const withoutGeographyContext = withoutRedundantLiteralHandles.filter(
     (candidate, index, values) => {
       if (context.intent === "geography_list") return true;
       if (
-        context.intent === "place_list" &&
+        context.intent === "place_list" && context.declaredCount === null &&
         geographyEntityTypes.has(candidate.entityType)
       ) {
         excludedCount += 1;
@@ -361,39 +445,95 @@ export function groundedHints(
         candidate.entityType,
       ) && values.some((other, otherIndex) =>
         otherIndex !== index && other.hint.area !== null &&
+        classificationSelectionRank(other.hint.classification) <=
+          classificationSelectionRank(candidate.hint.classification) &&
         nameIdentity === normalizedValue(other.hint.area)
       );
       const unknownMatchesPOIArea = candidate.entityType === "unknown" &&
         values.some((other, otherIndex) =>
           otherIndex !== index && other.entityType === "poi" &&
+          classificationSelectionRank(other.hint.classification) <=
+            classificationSelectionRank(candidate.hint.classification) &&
           candidate.itemIndex >= 0 && candidate.itemIndex === other.itemIndex &&
           other.hint.area !== null &&
           nameIdentity === normalizedValue(other.hint.area)
+        );
+      const sameItemMistypedGeography = context.intent === "place_list" &&
+        candidate.entityType === "poi" && candidate.itemIndex >= 0 &&
+        values.some((other, otherIndex) =>
+          otherIndex !== index && other.entityType === "poi" &&
+          classificationSelectionRank(other.hint.classification) <=
+            classificationSelectionRank(candidate.hint.classification) &&
+          candidate.itemIndex === other.itemIndex &&
+          other.hint.area !== null &&
+          nameIdentity === normalizedValue(other.hint.area) &&
+          sharesDirectEvidence(candidate, other)
         );
       const likelyMistypedGeography = context.intent === "place_list" &&
         context.declaredCount !== null &&
         values.length > context.declaredCount &&
         values.some((other, otherIndex) =>
           otherIndex !== index && other.entityType === "poi" &&
+          classificationSelectionRank(other.hint.classification) <=
+            classificationSelectionRank(candidate.hint.classification) &&
           other.hint.area !== null &&
           nameIdentity === normalizedValue(other.hint.area) &&
           sharesDirectEvidence(candidate, other)
         );
       if (
         !matchesGlobalArea && !matchesAnotherArea && !unknownMatchesPOIArea &&
-        !likelyMistypedGeography
+        !sameItemMistypedGeography && !likelyMistypedGeography
       ) return true;
       excludedCount += 1;
       return false;
     },
   );
 
-  const usesDeclaredCount = context.intent === "place_list" ||
-    context.intent === "geography_list";
-  const groundedLimit = context.declaredCount === null || !usesDeclaredCount
+  // In a grounded declared-count list, a non-negative item index is Gemini's
+  // identity for one enumerated result. Caption and media support for that item
+  // enrich one result; they must not consume separate count slots. Uncounted
+  // itineraries may intentionally offer several destinations in one step, so
+  // only conservative name variants with matching item/evidence/area identity
+  // are folded there.
+  const itemIndexes = new Map<number, number[]>();
+  const withoutDuplicateItems: PreparedHint[] = [];
+  for (const candidate of withoutGeographyContext) {
+    if (candidate.itemIndex < 0) {
+      withoutDuplicateItems.push(candidate);
+      continue;
+    }
+    const matchingIndexes = itemIndexes.get(candidate.itemIndex) ?? [];
+    const existingIndex = context.declaredCount === null
+      ? matchingIndexes.find((index) =>
+        sameUncountedLogicalItemVariant(
+          withoutDuplicateItems[index],
+          candidate,
+        )
+      )
+      : matchingIndexes[0];
+    if (existingIndex === undefined) {
+      itemIndexes.set(candidate.itemIndex, [
+        ...matchingIndexes,
+        withoutDuplicateItems.length,
+      ]);
+      withoutDuplicateItems.push(candidate);
+      continue;
+    }
+    excludedCount += 1;
+    const existing = withoutDuplicateItems[existingIndex];
+    withoutDuplicateItems[existingIndex] = preferredSameItemCandidate(
+        existing,
+        candidate,
+      )
+      ? mergePreparedHints(candidate, existing)
+      : mergePreparedHints(existing, candidate);
+  }
+
+  const usesDeclaredCount = context.declaredCount !== null;
+  const groundedLimit = !usesDeclaredCount
     ? limit
-    : Math.min(limit, context.declaredCount);
-  const ordered = withoutGeographyContext
+    : Math.min(limit, context.declaredCount as number);
+  const sourceOrdered = withoutDuplicateItems
     .map((candidate, stableIndex) => ({ candidate, stableIndex }))
     .sort((left, right) => {
       const leftIndex = left.candidate.itemIndex;
@@ -406,14 +546,205 @@ export function groundedHints(
       return leftIndex - rightIndex || left.stableIndex - right.stableIndex;
     })
     .map(({ candidate }) => candidate);
-  const hints = ordered.slice(0, groundedLimit).map((value) => value.hint);
-  excludedCount += Math.max(0, ordered.length - groundedLimit);
+  // A declared count describes primary destinations, not every supporting
+  // venue mentioned alongside them. Gemini deliberately distinguishes those
+  // with `destination` versus `itinerary`. When primary coverage is incomplete,
+  // return the grounded primaries and report the gap instead of filling it with
+  // supporting rows.
+  const selected = usesDeclaredCount
+    ? sourceOrdered
+      .filter((candidate) => candidate.hint.classification === "destination")
+      .slice(0, groundedLimit)
+    : sourceOrdered.slice(0, groundedLimit);
+  const hints = selected.map((value) => value.hint);
+  excludedCount += Math.max(0, sourceOrdered.length - selected.length);
+  const expectedCount = context.declaredCount;
   return {
     hints,
     rejectedCount,
     excludedCount,
     intentionalExcludedCount,
+    expectedCount,
+    missingExpectedCount: expectedCount === null
+      ? 0
+      : Math.max(0, expectedCount - hints.length),
   };
+}
+
+function preferredDuplicateSourceCandidate(
+  existing: PreparedHint,
+  candidate: PreparedHint,
+): boolean {
+  // A raw handle is only a last-resort query. It must never replace a human
+  // venue name merely because the fallback inherited a more specific area.
+  if (
+    existing.usesLiteralHandleFallback !== candidate.usesLiteralHandleFallback
+  ) return existing.usesLiteralHandleFallback;
+
+  if (existing.usesProfileAlias && candidate.usesProfileAlias) {
+    const candidateIsCanonicalRefinement = profileAliasCanonicalRefinement(
+      candidate.hint.name,
+      existing.hint.name,
+    );
+    const existingIsCanonicalRefinement = profileAliasCanonicalRefinement(
+      existing.hint.name,
+      candidate.hint.name,
+    );
+    if (
+      candidateIsCanonicalRefinement !== existingIsCanonicalRefinement
+    ) return candidateIsCanonicalRefinement;
+  }
+
+  const existingHasArea = existing.hint.area !== null;
+  const candidateHasArea = candidate.hint.area !== null;
+  const equallySpecificAreas = existingHasArea === candidateHasArea;
+  if (!existingHasArea && candidateHasArea) return true;
+  if (!equallySpecificAreas) return false;
+  if (existing.usesProfileAlias !== candidate.usesProfileAlias) {
+    return candidate.usesProfileAlias;
+  }
+  return candidate.hint.confidence > existing.hint.confidence;
+}
+
+function preferredSameItemCandidate(
+  existing: PreparedHint,
+  candidate: PreparedHint,
+): boolean {
+  if (
+    existing.usesLiteralHandleFallback !== candidate.usesLiteralHandleFallback
+  ) return existing.usesLiteralHandleFallback;
+  const classificationDifference = classificationSelectionRank(
+    candidate.hint.classification,
+  ) - classificationSelectionRank(existing.hint.classification);
+  if (classificationDifference !== 0) return classificationDifference < 0;
+  if (existing.usesProfileAlias !== candidate.usesProfileAlias) {
+    return candidate.usesProfileAlias;
+  }
+  const existingHasArea = existing.hint.area !== null;
+  const candidateHasArea = candidate.hint.area !== null;
+  if (existingHasArea !== candidateHasArea) return candidateHasArea;
+  return candidate.hint.confidence > existing.hint.confidence;
+}
+
+function sameUncountedLogicalItemVariant(
+  left: PreparedHint,
+  right: PreparedHint,
+): boolean {
+  return left.itemIndex >= 0 && left.itemIndex === right.itemIndex &&
+    sourceAreasReferToSamePlace(left.hint.area, right.hint.area) &&
+    sharesDirectEvidence(left, right) &&
+    sameOrSimpleSingularPluralName(left.hint.name, right.hint.name);
+}
+
+function sameOrSimpleSingularPluralName(left: string, right: string): boolean {
+  const leftWords = words(left);
+  const rightWords = words(right);
+  if (leftWords.length === 0 || leftWords.length !== rightWords.length) {
+    return false;
+  }
+  const finalIndex = leftWords.length - 1;
+  if (
+    !leftWords.slice(0, finalIndex).every((word, index) =>
+      word === rightWords[index]
+    )
+  ) return false;
+  const leftFinal = leftWords[finalIndex];
+  const rightFinal = rightWords[finalIndex];
+  return leftFinal === rightFinal ||
+    simpleEnglishPluralOf(leftFinal, rightFinal) ||
+    simpleEnglishPluralOf(rightFinal, leftFinal);
+}
+
+function simpleEnglishPluralOf(singular: string, plural: string): boolean {
+  if (singular.length < 3) return false;
+  if (plural === `${singular}s`) return true;
+  if (
+    /(?:s|x|z|ch|sh)$/u.test(singular) && plural === `${singular}es`
+  ) return true;
+  return /[^aeiou]y$/u.test(singular) &&
+    plural === `${singular.slice(0, -1)}ies`;
+}
+
+function mergePreparedHints(
+  preferred: PreparedHint,
+  supporting: PreparedHint,
+): PreparedHint {
+  const sameName = normalizedValue(preferred.hint.name) ===
+    normalizedValue(supporting.hint.name);
+  return {
+    ...preferred,
+    directEvidenceIDs: mergedEvidenceIDs(
+      preferred.directEvidenceIDs,
+      supporting.directEvidenceIDs,
+    ),
+    hint: {
+      ...preferred.hint,
+      area: preferred.hint.area ??
+        (sameName ? supporting.hint.area : null),
+      classification: classificationSelectionRank(
+          preferred.hint.classification,
+        ) <= classificationSelectionRank(supporting.hint.classification)
+        ? preferred.hint.classification
+        : supporting.hint.classification,
+      evidence_ids: mergedEvidenceIDs(
+        preferred.hint.evidence_ids,
+        supporting.hint.evidence_ids,
+      ),
+      confidence: Math.max(
+        preferred.hint.confidence,
+        supporting.hint.confidence,
+      ),
+      start_ms: preferred.hint.start_ms ?? supporting.hint.start_ms,
+      end_ms: preferred.hint.end_ms ?? supporting.hint.end_ms,
+    },
+  };
+}
+
+function mergedEvidenceIDs(primary: string[], supporting: string[]): string[] {
+  return [...new Set([...primary, ...supporting])].slice(0, 8);
+}
+
+function classificationSelectionRank(
+  classification: PlaceHint["classification"],
+): number {
+  return classification === "destination" ? 0 : 1;
+}
+
+function sourceNamesReferToSamePlace(
+  left: PreparedHint,
+  right: PreparedHint,
+): boolean {
+  if (normalizedValue(left.hint.name) === normalizedValue(right.hint.name)) {
+    return true;
+  }
+  // Collapse a literal handle only when the human venue name is actually
+  // represented inside that handle. Sharing a source mention is not enough:
+  // @rorys_place_ojai can accompany both Rory's Place and the distinct
+  // Rory's Other Place in the same post.
+  if (left.usesLiteralHandleFallback || right.usesLiteralHandleFallback) {
+    const literal = left.usesLiteralHandleFallback ? left : right;
+    const named = left.usesLiteralHandleFallback ? right : left;
+    if (named.usesProfileAlias) return true;
+    const literalIdentity = normalizedValue(literal.hint.name);
+    const namedIdentity = normalizedValue(named.hint.name);
+    return namedIdentity.length >= 4 &&
+      (literalIdentity.includes(namedIdentity) ||
+        namedIdentity.includes(literalIdentity));
+  }
+  if (
+    left.usesProfileAlias && right.usesProfileAlias &&
+    (sameProfileAliasName(left.hint.name, right.hint.name) ||
+      profileAliasCanonicalRefinement(left.hint.name, right.hint.name) ||
+      profileAliasCanonicalRefinement(right.hint.name, left.hint.name))
+  ) return true;
+  if (
+    left.itemIndex >= 0 && right.itemIndex >= 0 &&
+    left.itemIndex !== right.itemIndex
+  ) return false;
+  // Distinct human venue names are not duplicates. In particular,
+  // containment is not identity: `Gjusta` and `Gjusta Goods`, or `Rory's
+  // Place` and `Rory's Other Place`, must survive.
+  return false;
 }
 
 function isGlobalAreaVariant(name: string, globalArea: string): boolean {
@@ -503,6 +834,9 @@ function contextEvidenceIDs(
     ...new Set(
       values
         .map((value) => cleanString(value, 80))
+        .map((value) =>
+          value ? canonicalEvidenceID(value, textByID, mediaByID) : null
+        )
         .filter((value): value is string => value !== null),
     ),
   ].filter((id) => {
@@ -512,6 +846,22 @@ function contextEvidenceIDs(
     const ingestion = ingestionByID.get(id);
     return media !== undefined && ingestion?.status === "ok";
   }).slice(0, 8);
+}
+
+function canonicalEvidenceID(
+  value: string,
+  textByID: Map<string, EvidenceCatalog["texts"][number]>,
+  mediaByID: Map<string, EvidenceCatalog["media"][number]>,
+): string | null {
+  if (textByID.has(value) || mediaByID.has(value)) return value;
+  for (const mediaID of mediaByID.keys()) {
+    if (!value.startsWith(`${mediaID}.`)) continue;
+    const suffix = value.slice(mediaID.length);
+    if (/^\.(?:\d{1,3}:){1,2}\d{1,3}(?:\.\d{1,3})?$/u.test(suffix)) {
+      return mediaID;
+    }
+  }
+  return null;
 }
 
 function textContainsDeclaredCount(value: string, count: number): boolean {
@@ -527,20 +877,56 @@ function textContainsDeclaredCount(value: string, count: number): boolean {
       const isNumberedMarker = token === String(count) && index === 0 &&
         new RegExp(`^\\s*${count}[.)]\\s+`, "u").test(line);
       if (isNumberedMarker) continue;
+      const subjectWindow = lineWords.slice(index + 1, index + 5);
+      const declaredNounIndex = subjectWindow.findIndex((word) =>
+        declaredCountNouns.has(word)
+      );
+      const nonListUnitIndex = subjectWindow.findIndex((word) =>
+        nonListCountNouns.has(word)
+      );
       if (
-        lineWords.slice(index + 1, index + 5).some((word) =>
-          declaredCountNouns.has(word)
-        )
-      ) return true;
+        nonListUnitIndex >= 0 &&
+        (declaredNounIndex < 0 || nonListUnitIndex < declaredNounIndex)
+      ) continue;
+      if (declaredNounIndex >= 0) return true;
+      if (genericListTitleContainsCount(line, lineWords, index)) return true;
     }
   }
 
   return false;
 }
 
+function genericListTitleContainsCount(
+  line: string,
+  lineWords: string[],
+  countIndex: number,
+): boolean {
+  // Generic nouns are safe only in a compact title shape: either the count
+  // opens the line (`10 TOTALLY TEXAS THINGS`) or follows a bounded title
+  // prefix (`TOP 10 PIZZAS`). Ordinary prose cannot establish a cap.
+  if (line.length > 180 || lineWords.length > 14) return false;
+  const prefix = lineWords.slice(0, countIndex);
+  const hasTitlePrefix = prefix.length > 0 && prefix.length <= 3 &&
+    prefix.every((word) => genericListTitlePrefixes.has(word)) &&
+    prefix.some((word) =>
+      word === "top" || word === "best" || word === "favorite" ||
+      word === "favorites" || word === "favourite" ||
+      word === "favourites" || word === "ultimate"
+    );
+  if (countIndex !== 0 && !hasTitlePrefix) return false;
+
+  const subjectWindow = lineWords.slice(countIndex + 1, countIndex + 6);
+  if (
+    subjectWindow.length === 0 ||
+    subjectWindow.some((word) => nonListCountNouns.has(word))
+  ) return false;
+  return subjectWindow.some((word) => /\p{L}/u.test(word));
+}
+
 export function deterministicFallbackHints(
   catalog: EvidenceCatalog,
   limit = 150,
+  profileAliases: InstagramProfileAlias[] = [],
 ): PlaceHint[] {
   const hints: PlaceHint[] = [];
   const identities = new Set<string>();
@@ -571,10 +957,18 @@ export function deterministicFallbackHints(
 
   const caption = catalog.texts.find((item) => item.modality === "caption");
   if (!caption) return hints;
-  const lines = caption.text.split(/\r?\n/).map((line) => line.trim()).filter(
-    Boolean,
+  const inventory = inventoryInstagramCaption(caption.text);
+  const secondaryLineIndexes = new Set(
+    inventory.mentions
+      .filter((mention) =>
+        mention.structuralRole !== "primary_list_item" &&
+        mention.structuralRole !== "unstructured"
+      )
+      .map((mention) => mention.lineIndex),
   );
-  for (const line of lines) {
+  const lines = caption.text.split(/\r?\n/).map((line) => line.trim());
+  for (const [lineIndex, line] of lines.entries()) {
+    if (!line || secondaryLineIndexes.has(lineIndex)) continue;
     const explicit = line.match(
       /^(?:📍|(?:location|located)\s*[:\-])\s*(.{3,180})$/iu,
     );
@@ -592,10 +986,17 @@ export function deterministicFallbackHints(
     });
   }
 
-  const numbered = lines.flatMap((line) => {
-    const match = line.match(/^\s*\d{1,3}[.)]\s+(.{3,180})$/u);
-    return match ? [match[1]] : [];
-  });
+  // Keep the existing conservative numbered-list fallback, but use the
+  // structural inventory to ensure rows under honorable-mention, credit, or
+  // partner headings can never become destinations merely because they are
+  // numbered.
+  const numbered = inventory.listItems
+    .filter((item) => {
+      if (!item.isPrimary || item.marker !== "numbered") return false;
+      const sourceLine = lines[item.lineIndex] ?? "";
+      return /^\s*\d{1,3}[.)]\s+.{3,180}$/u.test(sourceLine);
+    })
+    .map((item) => item.text);
   if (numbered.length >= 2) {
     for (const value of numbered) {
       const parsed = parseNameAndArea(value);
@@ -611,7 +1012,143 @@ export function deterministicFallbackHints(
       });
     }
   }
+  mergePrimaryCaptionProfileAliasHints(
+    hints,
+    primaryCaptionProfileAliasEntries(catalog, profileAliases, limit),
+    limit,
+  );
   return hints;
+}
+
+type CaptionProfileAliasHint = {
+  username: string;
+  hint: PlaceHint;
+};
+
+/**
+ * Returns only deterministic caption-list destinations whose Instagram
+ * handle resolved to exactly one public profile name. Unstructured handles
+ * and handles in honorable-mention, credit, and partner sections are excluded
+ * even if profile enrichment resolved them successfully.
+ */
+export function primaryCaptionProfileAliasHints(
+  catalog: EvidenceCatalog,
+  profileAliases: InstagramProfileAlias[],
+  limit = 150,
+): PlaceHint[] {
+  return primaryCaptionProfileAliasEntries(catalog, profileAliases, limit).map(
+    (entry) => entry.hint,
+  );
+}
+
+function primaryCaptionProfileAliasEntries(
+  catalog: EvidenceCatalog,
+  profileAliases: InstagramProfileAlias[],
+  limit: number,
+): CaptionProfileAliasHint[] {
+  const caption = catalog.texts.find((item) => item.modality === "caption");
+  if (!caption) return [];
+  const names = profileAliasNameMap(profileAliases);
+  const seen = new Set<string>();
+  const entries: CaptionProfileAliasHint[] = [];
+  const boundedLimit = Number.isFinite(limit)
+    ? Math.max(0, Math.min(150, Math.trunc(limit)))
+    : 0;
+  if (boundedLimit === 0) return entries;
+  for (
+    const mention of inventoryInstagramCaption(caption.text).handleMentions
+  ) {
+    if (!mention.isPrimary || seen.has(mention.username)) continue;
+    seen.add(mention.username);
+    const name = names.get(mention.username);
+    if (!name) continue;
+    entries.push({
+      username: mention.username,
+      hint: {
+        name,
+        area: null,
+        classification: "destination",
+        modality: "caption",
+        evidence_ids: [caption.id],
+        confidence: 0.92,
+        start_ms: null,
+        end_ms: null,
+      },
+    });
+    if (entries.length >= boundedLimit) break;
+  }
+  return entries;
+}
+
+function mergePrimaryCaptionProfileAliasHints(
+  hints: PlaceHint[],
+  aliases: CaptionProfileAliasHint[],
+  limit: number,
+): void {
+  for (const alias of aliases) {
+    const rawHandleIndexes = hints.flatMap((hint, index) =>
+      hint.modality === "caption" &&
+        containsExactHandle(hint.name, alias.username)
+        ? [index]
+        : []
+    );
+    const canonicalName = normalizedValue(alias.hint.name);
+    const rawHandleIndexSet = new Set(rawHandleIndexes);
+    const canonicalIndex = hints.findIndex((hint, index) =>
+      !rawHandleIndexSet.has(index) &&
+      normalizedValue(hint.name) === canonicalName
+    );
+
+    if (canonicalIndex >= 0) {
+      hints[canonicalIndex] = rawHandleIndexes.reduce(
+        (merged, index) => mergeFallbackHint(merged, hints[index]),
+        mergeFallbackHint(hints[canonicalIndex], alias.hint),
+      );
+      removeHintIndexes(hints, rawHandleIndexes, canonicalIndex);
+      continue;
+    }
+
+    const rawHandleIndex = rawHandleIndexes[0];
+    if (rawHandleIndex !== undefined) {
+      hints[rawHandleIndex] = {
+        ...mergeFallbackHint(hints[rawHandleIndex], alias.hint),
+        name: alias.hint.name,
+      };
+      removeHintIndexes(hints, rawHandleIndexes.slice(1));
+      continue;
+    }
+
+    if (hints.length < limit) hints.push(alias.hint);
+  }
+}
+
+function mergeFallbackHint(
+  preferred: PlaceHint,
+  supporting: PlaceHint,
+): PlaceHint {
+  return {
+    ...preferred,
+    area: preferred.area ?? supporting.area,
+    evidence_ids: [
+      ...new Set([
+        ...preferred.evidence_ids,
+        ...supporting.evidence_ids,
+      ]),
+    ].slice(0, 8),
+    confidence: Math.max(preferred.confidence, supporting.confidence),
+  };
+}
+
+function removeHintIndexes(
+  hints: PlaceHint[],
+  indexes: number[],
+  preservedIndex = -1,
+): void {
+  for (
+    const index of [...new Set(indexes)].sort((left, right) => right - left)
+  ) {
+    if (index !== preservedIndex) hints.splice(index, 1);
+  }
 }
 
 function textualModality(modality: EvidenceModality): boolean {
@@ -623,13 +1160,20 @@ function textAttestedArea(
   modality: EvidenceModality,
   evidenceIDs: string[],
   textByID: Map<string, EvidenceCatalog["texts"][number]>,
+  mediaByID: Map<string, EvidenceCatalog["media"][number]>,
+  ingestionByID: Map<string, MediaIngestion>,
 ): string | null {
   if (!area) return null;
-  return evidenceIDs.some((id) => {
-      const evidence = textByID.get(id);
-      return evidence?.modality === modality &&
-        containsTokenSequence(evidence.text, area);
-    })
+  const textAttestsArea = evidenceIDs.some((id) => {
+    const evidence = textByID.get(id);
+    return evidence?.modality === modality &&
+      containsTokenSequence(evidence.text, area);
+  });
+  return textAttestsArea || hasIngestedMediaEvidence(
+      evidenceIDs,
+      mediaByID,
+      ingestionByID,
+    )
     ? area
     : null;
 }
@@ -661,9 +1205,25 @@ function groundedCandidateName(
       return containsTokenSequence(evidence.text, sourceMention);
     });
     if (!hasExactEvidence) return null;
+    const hasExplicitNameEvidence = evidenceIDs.some((id) => {
+      const evidence = textByID.get(id);
+      return evidence?.modality === modality &&
+        containsTokenSequence(
+          handle
+            ? textWithoutExactHandle(evidence.text, handle)
+            : evidence.text,
+          name,
+        );
+    });
     if (
       sourceMentionSupportsName(name, sourceMention, globalArea) ||
-      profileAliasSupportsName(name, sourceMention, profileAliasNames)
+      profileAliasSupportsName(name, sourceMention, profileAliasNames) ||
+      hasExplicitNameEvidence ||
+      (!requiresCaptionVenueGrammar && hasIngestedMediaEvidence(
+        evidenceIDs,
+        mediaByID,
+        ingestionByID,
+      ))
     ) return name;
     return handle;
   }
@@ -677,6 +1237,16 @@ function groundedCandidateName(
     })
     ? name
     : null;
+}
+
+function hasIngestedMediaEvidence(
+  evidenceIDs: string[],
+  mediaByID: Map<string, EvidenceCatalog["media"][number]>,
+  ingestionByID: Map<string, MediaIngestion>,
+): boolean {
+  return evidenceIDs.some((id) =>
+    mediaByID.has(id) && ingestionByID.get(id)?.status === "ok"
+  );
 }
 
 function promotedClassification(
@@ -703,8 +1273,10 @@ export function captionRecommendsHandle(
   handle: string,
 ): boolean {
   const lines = caption.split(/\r?\n/u);
+  const negativeLines = negativeCaptionHandleLines(caption, handle);
   return lines.some((line, lineIndex) => {
     return exactHandleIndexes(line, handle).some((index) => {
+      if (negativeLines.has(lineIndex)) return false;
       const beforeLine = line.slice(0, index).toLocaleLowerCase("en-US");
       const boundary = captionClauseBoundary(beforeLine);
       const clause = beforeLine.slice(boundary + 1);
@@ -733,8 +1305,10 @@ function captionAllowsModelAcceptedHandle(
   caption: string,
   handle: string,
 ): boolean {
-  return caption.split(/\r?\n/u).some((line) =>
+  const negativeLines = negativeCaptionHandleLines(caption, handle);
+  return caption.split(/\r?\n/u).some((line, lineIndex) =>
     exactHandleIndexes(line, handle).some((index) => {
+      if (negativeLines.has(lineIndex)) return false;
       const beforeLine = line.slice(0, index).toLocaleLowerCase("en-US");
       const boundary = captionClauseBoundary(beforeLine);
       const clause = beforeLine.slice(boundary + 1);
@@ -743,6 +1317,22 @@ function captionAllowsModelAcceptedHandle(
       return captionPhysicalFromMarkerAtEnd(clause) ||
         !captionAttributionBeforeHandle(clause);
     })
+  );
+}
+
+function negativeCaptionHandleLines(
+  caption: string,
+  handle: string,
+): Set<number> {
+  const username = handle.toLocaleLowerCase("en-US");
+  return new Set(
+    inventoryInstagramCaption(caption).handleMentions
+      .filter((mention) =>
+        mention.username === username &&
+        mention.structuralRole !== "primary_list_item" &&
+        mention.structuralRole !== "unstructured"
+      )
+      .map((mention) => mention.lineIndex),
   );
 }
 
@@ -766,6 +1356,12 @@ export function recommendedCaptionHandles(
   return recommendedCaptionHandleMentions(caption, limit).map((value) =>
     value.username
   );
+}
+
+export function prioritizedCaptionProfileUsernames(caption: string): string[] {
+  const preferred = recommendedCaptionHandles(caption, 20);
+  const all = inventoryInstagramCaption(caption).profileUsernames;
+  return [...new Set([...preferred, ...all])].slice(0, 20);
 }
 
 export function profileAliasCandidates(
@@ -855,8 +1451,44 @@ function profileAliasSupportsName(
 ): boolean {
   const handle = exactHandle(sourceMention)?.toLocaleLowerCase("en-US");
   const alias = handle ? profileAliasNames.get(handle) : null;
-  return alias !== null && alias !== undefined &&
-    normalizedValue(name) === normalizedValue(alias);
+  if (alias === null || alias === undefined) return false;
+  if (sameProfileAliasName(name, alias)) return true;
+
+  // A public profile name can omit an optional article and the physical-site
+  // qualifier used by map providers. Preserve Gemini's provider-ready name
+  // only when the complete profile name remains the unchanged leading venue
+  // identity and the sole addition is a bounded `at …` qualifier. This keeps
+  // the alias useful for `Sixth Floor Museum` -> `The Sixth Floor Museum at
+  // Dealey Plaza` without allowing an unrelated or freely extended model name
+  // to borrow the handle's trust.
+  return profileAliasCanonicalRefinement(name, alias);
+}
+
+function sameProfileAliasName(left: string, right: string): boolean {
+  const leftWords = withoutLeadingDefiniteArticle(words(left));
+  const rightWords = withoutLeadingDefiniteArticle(words(right));
+  return leftWords.length > 0 && leftWords.length === rightWords.length &&
+    leftWords.every((word, index) => word === rightWords[index]);
+}
+
+function profileAliasCanonicalRefinement(
+  name: string,
+  alias: string,
+): boolean {
+  const aliasWords = withoutLeadingDefiniteArticle(words(alias));
+  const nameWords = withoutLeadingDefiniteArticle(words(name));
+  if (
+    aliasWords.length < 2 || nameWords.length <= aliasWords.length ||
+    !aliasWords.every((word, index) => nameWords[index] === word)
+  ) return false;
+  const qualifierWords = nameWords.slice(aliasWords.length);
+  return qualifierWords[0] === "at" && qualifierWords.length >= 2 &&
+    qualifierWords.length <= 6 &&
+    !qualifierWords.some((word) => word === "and" || word === "or");
+}
+
+function withoutLeadingDefiniteArticle(values: string[]): string[] {
+  return values[0] === "the" ? values.slice(1) : values;
 }
 
 function captionAttributionBeforeHandle(value: string): boolean {
@@ -930,8 +1562,8 @@ function sourceMentionSupportsName(
 ): boolean {
   const handle = exactHandle(sourceMention);
   if (!handle) return containsTokenSequence(sourceMention, name);
-  const canonical = normalizedValue(name);
-  if (!canonical) return false;
+  const canonicalVariants = normalizedNameVariants(name);
+  if (canonicalVariants.size === 0) return false;
   let core = normalizedValue(handle);
   const suffixes = new Set(["official"]);
   for (const word of words(globalArea ?? "")) {
@@ -948,8 +1580,27 @@ function sourceMentionSupportsName(
       }
     }
   }
-  if (core === canonical) return true;
-  return core.startsWith("its") && core.slice(3) === canonical;
+  const coreVariants = new Set([core]);
+  if (core.startsWith("its") && core.length > 3) {
+    coreVariants.add(core.slice(3));
+  }
+  for (const value of [...coreVariants]) {
+    if ([...value.matchAll(/flr/gu)].length === 1) {
+      coreVariants.add(value.replace("flr", "floor"));
+    }
+  }
+  return [...coreVariants].some((value) => canonicalVariants.has(value));
+}
+
+function normalizedNameVariants(name: string): Set<string> {
+  const nameWords = words(name);
+  const variants = new Set<string>();
+  if (nameWords.length === 0) return variants;
+  variants.add(nameWords.join(""));
+  if (nameWords[0] === "the" && nameWords.length > 1) {
+    variants.add(nameWords.slice(1).join(""));
+  }
+  return variants;
 }
 
 function exactHandle(value: string): string | null {
@@ -975,6 +1626,17 @@ function exactHandleIndexes(value: string, handle: string): number[] {
 
 function containsExactHandle(value: string, handle: string): boolean {
   return exactHandleIndexes(value, handle).length > 0;
+}
+
+function textWithoutExactHandle(value: string, handle: string): string {
+  const escaped = handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(
+    new RegExp(
+      `(^|[^A-Za-z0-9._@])@${escaped}(?![A-Za-z0-9_]|\\.[A-Za-z0-9_])`,
+      "giu",
+    ),
+    "$1 ",
+  );
 }
 
 function normalizedSourceIdentity(sourceMention: string): string | null {

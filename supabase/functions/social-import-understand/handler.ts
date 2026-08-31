@@ -3,8 +3,8 @@ import {
   deterministicFallbackHints,
   evidenceCatalog,
   groundedHints,
+  prioritizedCaptionProfileUsernames,
   profileAliasCandidates,
-  recommendedCaptionHandles,
 } from "./evidence.ts";
 import { understandWithGemini } from "./gemini.ts";
 import { boundedRequestBody, fetchJSON } from "./http.ts";
@@ -23,6 +23,7 @@ import type {
 import { Deadline, SocialImportError } from "./types.ts";
 
 export const maximumHandlerDurationMilliseconds = 112_000;
+const paidWorkAdmissionFinishTimeoutMilliseconds = 3_000;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
 type PaidWorkAdmissionDecision =
@@ -178,7 +179,14 @@ export async function handleRequest(
         authorization,
         clientRequestID,
         admission.admissionID,
-        deadline,
+        // Paid provider work remains bounded by the main handler deadline, but
+        // releasing its admission slot needs a short independent cleanup
+        // window after that deadline has expired. This mirrors best-effort
+        // provider cleanup and never retries or extends paid work.
+        new Deadline(
+          paidWorkAdmissionFinishTimeoutMilliseconds,
+          dependencies.now,
+        ),
         dependencies,
       );
     } catch {
@@ -221,7 +229,7 @@ async function runAdmittedImport(
   const profileAliasesPromise: Promise<InstagramProfileAlias[]> =
     source.platform === "instagram" && evidence.caption
       ? acquireInstagramProfileAliases(
-        recommendedCaptionHandles(evidence.caption),
+        prioritizedCaptionProfileUsernames(evidence.caption),
         apifyToken,
         deadline,
         dependencies,
@@ -238,6 +246,7 @@ async function runAdmittedImport(
         apifyToken,
         deadline,
         dependencies,
+        signal,
       ),
       profileAliasesPromise,
     ]);
@@ -253,6 +262,7 @@ async function runAdmittedImport(
       catalog,
       ingestions,
       0,
+      profileAliases,
     );
   }
 
@@ -280,6 +290,7 @@ async function runAdmittedImport(
       catalog,
       ingestions,
       attempts,
+      profileAliases,
     );
   }
 
@@ -299,6 +310,9 @@ async function runAdmittedImport(
   const failedCount = ingestions.length - ingestedCount;
   const failureCategory = failedCount > 0
     ? "media_incomplete"
+    : understanding.coverageIncomplete === true ||
+        grounded.missingExpectedCount > 0
+    ? "grounding_incomplete"
     : grounded.rejectedCount > 0
     ? "grounding_rejected"
     : null;
@@ -314,6 +328,17 @@ async function runAdmittedImport(
         media_count: evidence.media.length,
         model_attempt_count: understanding.attemptCount,
         failure_category: "media_incomplete",
+      };
+    }
+    if (grounded.missingExpectedCount > 0) {
+      return {
+        schema_version: 1,
+        outcome: "partial",
+        provider_path: "apify_gemini",
+        hints: [],
+        media_count: evidence.media.length,
+        model_attempt_count: understanding.attemptCount,
+        failure_category: "grounding_incomplete",
       };
     }
     if (grounded.rejectedCount > 0) {
@@ -480,7 +505,7 @@ export async function finishPaidWorkAdmission(
       }),
     },
     64_000,
-    3_000,
+    paidWorkAdmissionFinishTimeoutMilliseconds,
     deadline,
     dependencies,
   );
@@ -496,9 +521,10 @@ function fallbackResponse(
   catalog: EvidenceCatalog | null,
   ingestions: MediaIngestion[],
   modelAttempts: number,
+  profileAliases: InstagramProfileAlias[] = [],
 ): UnderstandResponse {
   const safeCatalog = catalog ?? { texts: [], media: [] };
-  const hints = deterministicFallbackHints(safeCatalog);
+  const hints = deterministicFallbackHints(safeCatalog, 150, profileAliases);
   clearMediaBytes(ingestions);
   return {
     schema_version: 1,

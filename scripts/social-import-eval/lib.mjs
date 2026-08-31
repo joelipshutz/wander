@@ -93,7 +93,7 @@ export function buildRescoreProvenance({
 }) {
   return {
     appliedTransforms: [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
       ...(rebuildUnderstandingHints
         ? [{ kind: "understanding_hints", revision: "grounded-hints-v3" }]
         : []),
@@ -986,18 +986,40 @@ export function extractGroundedModelHints(
 
 function labelMatchesPrediction(label, prediction) {
   const predictionKey = canonicalPlaceName(prediction).replaceAll(" ", "");
+  const predictionSupplementalKey = scoringSupplementalKey(prediction);
   const predictionCore = coreName(prediction);
   return [label.name, ...(label.aliases ?? [])].some((name) => {
     const labelKey = canonicalPlaceName(name).replaceAll(" ", "");
+    const labelSupplementalKey = scoringSupplementalKey(name);
     if (labelKey && labelKey === predictionKey) return true;
+    if (
+      labelSupplementalKey &&
+      labelSupplementalKey === predictionSupplementalKey
+    ) return true;
     // A hint can preserve surrounding creator text (for example
     // "Yintang Spicy Hotpot, Convoy") and still contain the full labeled name.
     // Keep this deliberately one-way: a fragment such as "Caption" must never
     // satisfy "Caption by Hyatt Namba".
     if (labelKey.length >= 5 && predictionKey.includes(labelKey)) return true;
+    if (
+      labelSupplementalKey.length >= 5 &&
+      predictionSupplementalKey.includes(labelSupplementalKey)
+    ) return true;
     const labelCore = coreName(name);
     return Boolean(labelCore && labelCore === predictionCore);
   });
+}
+
+function scoringSupplementalKey(value) {
+  const aliasAware = String(value ?? "")
+    .normalize("NFKD")
+    .replace(/&/gu, " and ")
+    // Providers commonly expand an official apostrophe-year brand such as
+    // `Since '93` to `Since 1993`. Limit this equivalence to a four-digit year
+    // immediately following `since`; ordinary numbers and different years
+    // remain distinct.
+    .replace(/\bsince\s+(?:19|20)(\d{2})\b/giu, "since $1");
+  return canonicalPlaceName(aliasAware).replaceAll(" ", "");
 }
 
 export function scorePredictions(labels, predictions) {
@@ -1011,11 +1033,17 @@ export function scorePredictions(labels, predictions) {
     // let an early fragment ("Caption") erase a later complete prediction
     // ("Caption by Hyatt Namba Osaka") before ground-truth scoring.
     const predictionKey = canonicalPlaceName(prediction).replaceAll(" ", "");
+    const predictionSupplementalKey = scoringSupplementalKey(prediction);
     const predictionCore = coreName(prediction);
     if (!uniquePredictions.some((item) => {
       const itemKey = canonicalPlaceName(item).replaceAll(" ", "");
+      const itemSupplementalKey = scoringSupplementalKey(item);
       const itemCore = coreName(item);
       return itemKey === predictionKey
+        || Boolean(
+          itemSupplementalKey &&
+          itemSupplementalKey === predictionSupplementalKey
+        )
         || Boolean(itemCore && predictionCore && itemCore === predictionCore);
     })) {
       uniquePredictions.push(prediction);
@@ -1062,9 +1090,6 @@ export function scorePredictions(labels, predictions) {
   const acceptableHits = labels.acceptable.filter((_, index) =>
     acceptableMatching.labelToPrediction.has(index)
   );
-  const forbiddenHits = labels.forbidden.filter((label) =>
-    uniquePredictions.some((prediction) => labelMatchesPrediction(label, prediction))
-  );
   const correctPredictionIndexes = new Set([
     ...requiredMatching.predictionToLabel.keys(),
     ...acceptableMatching.predictionToLabel.keys(),
@@ -1074,6 +1099,13 @@ export function scorePredictions(labels, predictions) {
   );
   const falsePredictions = uniquePredictions.filter((_, index) =>
     !correctPredictionIndexes.has(index)
+  );
+  // Forbidden labels describe standalone false-positive predictions. A venue
+  // already consumed by required/acceptable matching must not be penalized a
+  // second time merely because its proper name contains a forbidden geography
+  // (for example "Billy Bob's Texas" or "Sake House Malibu").
+  const forbiddenHits = labels.forbidden.filter((label) =>
+    falsePredictions.some((prediction) => labelMatchesPrediction(label, prediction))
   );
   const precision = uniquePredictions.length === 0
     ? (labels.required.length === 0 ? 1 : 0)

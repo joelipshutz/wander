@@ -42,6 +42,7 @@ Options:
                            gemini,google-video,
                            aws-rekognition-transcribe,azure-video-indexer
   --resolve <mode>         none or mapkit (default: none)
+  --corpus <path>          corpus JSON path (default: committed corpus.json)
   --out <directory>        output directory (default: ignored timestamped run)
   --fixture-dir <path>     replay saved acquisition envelopes; offline by default
   --allow-network-after-fixture
@@ -56,6 +57,7 @@ function parseArguments(argv) {
     providers: ["current", "current-improved"],
     understanders: ["deterministic"],
     resolver: "none",
+    corpusPath: null,
     out: null,
     fixtureDirectory: null,
     allowNetworkAfterFixture: false,
@@ -81,6 +83,9 @@ function parseArguments(argv) {
       break;
     case "--resolve":
       options.resolver = next;
+      break;
+    case "--corpus":
+      options.corpusPath = next;
       break;
     case "--out":
       options.out = next;
@@ -212,7 +217,9 @@ async function main() {
     process.stdout.write(usage());
     return;
   }
-  const corpusPath = join(moduleDirectory, "corpus.json");
+  const corpusPath = options.corpusPath
+    ? absoluteFromWorkingDirectory(options.corpusPath)
+    : join(moduleDirectory, "corpus.json");
   const corpusBytes = await readFile(corpusPath);
   const corpus = JSON.parse(corpusBytes);
   const requestedCaseIDs = new Set(options.cases);

@@ -3518,6 +3518,181 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
 
+    func testSocialOCRRecoverySelectsColocatedCafeKevahDuplicatesAfterExactMiss() async throws {
+        let cafeKevah = placeImportCandidate(
+            name: "Cafe Kevah",
+            address: "48510 Highway 1",
+            locality: "Big Sur",
+            latitude: 36.23295,
+            longitude: -121.76612
+        )
+        let cafeKevahDuplicate = placeImportCandidate(
+            name: "Cafe Kevah",
+            address: "48510 CA-1",
+            locality: "Big Sur",
+            latitude: 36.23299,
+            longitude: -121.76610
+        )
+        let nepenthe = placeImportCandidate(
+            name: "Nepenthe",
+            address: "48510 Highway 1",
+            locality: "Big Sur",
+            latitude: 36.23286,
+            longitude: -121.76615
+        )
+        let bigSurBakery = placeImportCandidate(
+            name: "Big Sur Bakery",
+            address: "47540 CA-1",
+            locality: "Big Sur",
+            latitude: 36.23775,
+            longitude: -121.76598
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "cafe nivah": [],
+            "cafe": [nepenthe, cafeKevah, bigSurBakery, cafeKevahDuplicate]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: socialUnderstandingResult(
+                    hint: SocialPlaceSearchHint(
+                        name: "Cafe Nivah",
+                        area: "Big Sur",
+                        evidence: .imageText
+                    )
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/p/ocr-cafe-kevah/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .candidates(let candidates, let selectedCandidateID) = resolution else {
+            return XCTFail("Expected recovered Cafe Kevah candidates, got \(resolution)")
+        }
+        XCTAssertEqual(selectedCandidateID, cafeKevah.id)
+        XCTAssertEqual(candidates.first?.name, "Cafe Kevah")
+        XCTAssertEqual(
+            Set(candidates.map(\.id)),
+            Set([cafeKevah.id, cafeKevahDuplicate.id, nepenthe.id, bigSurBakery.id])
+        )
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe"])
+        XCTAssertEqual(placeResolver.manualInputs.map(\.areaHint), ["Big Sur", "Big Sur"])
+    }
+
+    func testSocialCaptionMissDoesNotUseOCRDesignatorRecovery() async throws {
+        let cafeKevah = placeImportCandidate(
+            name: "Cafe Kevah",
+            locality: "Big Sur",
+            latitude: 36.23295,
+            longitude: -121.76612
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "cafe nivah": [],
+            "cafe": [cafeKevah]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: socialUnderstandingResult(
+                    hint: SocialPlaceSearchHint(
+                        name: "Cafe Nivah",
+                        area: "Big Sur",
+                        evidence: .itineraryPhrase
+                    )
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/p/caption-cafe-nivah/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected an unresolved caption hint, got \(resolution)")
+        }
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah"])
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertTrue(entries[0].candidates.isEmpty)
+        XCTAssertNil(entries[0].selectedCandidateID)
+    }
+
+    func testSocialOCRRecoveryLeavesNonColocatedCafeKevahCandidatesUnresolved() async throws {
+        let northCafeKevah = placeImportCandidate(
+            name: "Cafe Kevah",
+            address: "48510 Highway 1",
+            locality: "Big Sur",
+            latitude: 36.23295,
+            longitude: -121.76612
+        )
+        let southCafeKevah = placeImportCandidate(
+            name: "Cafe Kevah",
+            address: "47225 Highway 1",
+            locality: "Big Sur",
+            latitude: 36.21420,
+            longitude: -121.75720
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "cafe nivah": [],
+            "cafe": [northCafeKevah, southCafeKevah]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: socialUnderstandingResult(
+                    hint: SocialPlaceSearchHint(
+                        name: "Cafe Nivah",
+                        area: "Big Sur",
+                        evidence: .imageText
+                    )
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/p/ocr-cafe-kevah-ambiguous/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected non-colocated candidates to require review, got \(resolution)")
+        }
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe"])
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].candidates.map(\.id), [northCafeKevah.id, southCafeKevah.id])
+        XCTAssertNil(entries[0].selectedCandidateID)
+    }
+
     func testServerUnderstandingTurnsBlindCarouselIntoEightResolvedMapKitRows() async throws {
         let places: [(String, String)] = [
             ("Carbon Beach Club", "Malibu"),
@@ -3800,6 +3975,86 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertTrue(entries.allSatisfy { $0.candidates.isEmpty && $0.helpMessage != nil })
     }
 
+    func testEveryRequiredRemoteHintKeepsOneReviewRowAcrossResolvedAmbiguousAndUnresolvedMatches() async throws {
+        let bartsBooks = placeImportCandidate(
+            name: "Bart's Books",
+            address: "302 W Matilija St",
+            locality: "Ojai",
+            latitude: 34.4481,
+            longitude: -119.2489
+        )
+        let kennethHahnMatches = [
+            placeImportCandidate(
+                name: "Kenneth Hahn State Recreation Area",
+                address: "4100 S La Cienega Blvd",
+                locality: "Los Angeles",
+                latitude: 34.0064,
+                longitude: -118.3658
+            ),
+            placeImportCandidate(
+                name: "Kenneth Hahn State Recreation Area",
+                address: "Bowl Loop",
+                locality: "Los Angeles",
+                latitude: 34.0224,
+                longitude: -118.3581
+            )
+        ]
+        let requiredHints = [
+            SocialPlaceSearchHint(name: "Bart's Books", area: "Ojai", evidence: .itineraryPhrase),
+            SocialPlaceSearchHint(
+                name: "Kenneth Hahn State Recreation Area",
+                area: "Los Angeles",
+                evidence: .imageText
+            ),
+            SocialPlaceSearchHint(name: "Paseo del Mar Bluffs", area: "Los Angeles", evidence: .imageText)
+        ]
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .ok,
+                hints: requiredHints,
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 3,
+                    modelAttemptCount: 1,
+                    failureCategory: nil
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "bart's books": [bartsBooks],
+                "kenneth hahn state recreation area": kennethHahnMatches
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/required-review-rows/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected one review row per required hint, got \(resolution)")
+        }
+        XCTAssertEqual(entries.map(\.seed.nameHint), requiredHints.map { Optional($0.name) })
+        XCTAssertEqual(entries.count, requiredHints.count)
+        XCTAssertNotNil(entries[0].selectedCandidateID)
+        XCTAssertNil(entries[1].selectedCandidateID)
+        XCTAssertEqual(entries[1].candidates.count, 2)
+        XCTAssertNil(entries[2].selectedCandidateID)
+        XCTAssertTrue(entries[2].candidates.isEmpty)
+        XCTAssertNotNil(entries[2].helpMessage)
+    }
+
     func testServerUnderstandingUsesAttemptScopedRequestIDWhenPresent() async throws {
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
@@ -3921,13 +4176,66 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
     }
 
+    func testServerMediaFallbackKeepsReelResultsVisiblyRetryable() async throws {
+        let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_deterministic",
+                    mediaCount: 1,
+                    modelAttemptCount: 0,
+                    failureCategory: "media_unavailable"
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "fremont lake": [candidate]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Stop at Fremont Lake!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/media-fallback/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected an honest partial result, got \(resolution)")
+        }
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
+        XCTAssertNil(entries.last?.seed.nameHint)
+        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+    }
+
     func testServerFallbackUsesExistingCaptionAndVisionPath() async throws {
         let candidate = placeImportCandidate(name: "Mendocino Farms")
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
                 outcome: .fallback,
                 hints: [],
-                diagnostics: .localFallback
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_deterministic",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "feature_disabled"
+                )
             )
         )
         let resolver = DevicePlaceImportResolver(
@@ -4079,6 +4387,79 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         XCTAssertEqual(planned.map(\.name), ["Caroline's Seaside Cafe"])
         XCTAssertEqual(planned.first?.area, "San Diego")
+    }
+
+    func testEvidencePlannerRemovesContextCityForVenueWithoutGenericDesignator() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "Westlake Village",
+                area: "California",
+                evidence: .imageText
+            ),
+            SocialPlaceSearchHint(
+                name: "The Stonehaus",
+                area: "Westlake Village",
+                evidence: .imageText
+            )
+        ]
+
+        let planned = SocialImportEvidencePlanner.reviewHints(hints)
+
+        XCTAssertEqual(planned.map(\.name), ["The Stonehaus"])
+        XCTAssertEqual(planned.first?.area, "Westlake Village")
+    }
+
+    func testEvidencePlannerKeepsDistinctNestedVenueNames() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "Gjusta",
+                area: "Venice, California",
+                evidence: .imageText
+            ),
+            SocialPlaceSearchHint(
+                name: "Gjusta Goods",
+                area: "Venice, California",
+                evidence: .imageText
+            )
+        ]
+
+        let planned = SocialImportEvidencePlanner.reviewHints(hints)
+
+        XCTAssertEqual(planned.map(\.name), ["Gjusta", "Gjusta Goods"])
+    }
+
+    func testEvidencePlannerTrustsServerReasoningForGeographyAndNestedVenues() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "Westlake Village",
+                area: "California",
+                evidence: .itineraryPhrase,
+                isServerGrounded: true
+            ),
+            SocialPlaceSearchHint(
+                name: "The Stonehaus",
+                area: "Westlake Village",
+                evidence: .itineraryPhrase,
+                isServerGrounded: true
+            ),
+            SocialPlaceSearchHint(
+                name: "Acme",
+                area: "Ojai",
+                evidence: .imageText,
+                isServerGrounded: true
+            ),
+            SocialPlaceSearchHint(
+                name: "Acme Market",
+                area: "Ojai",
+                evidence: .imageText,
+                isServerGrounded: true
+            )
+        ]
+
+        XCTAssertEqual(
+            SocialImportEvidencePlanner.reviewHints(hints).map(\.name),
+            ["Westlake Village", "The Stonehaus", "Acme", "Acme Market"]
+        )
     }
 
     func testEvidencePlannerKeepsGeographyWithoutDurableVenueContext() {
@@ -6661,6 +7042,21 @@ private func googleSharedListPayload(count: Int) throws -> Data {
     var payload = Data(")]}'\n".utf8)
     payload.append(json)
     return payload
+}
+
+private func socialUnderstandingResult(
+    hint: SocialPlaceSearchHint
+) -> SocialImportUnderstandingResult {
+    SocialImportUnderstandingResult(
+        outcome: .ok,
+        hints: [hint],
+        diagnostics: SocialImportUnderstandingDiagnostics(
+            providerPath: "apify_gemini",
+            mediaCount: 1,
+            modelAttemptCount: 1,
+            failureCategory: nil
+        )
+    )
 }
 
 private func placeImportCandidate(

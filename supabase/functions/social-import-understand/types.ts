@@ -118,6 +118,7 @@ export type PublicFallbackReason =
   | "media_incomplete"
   | "understanding_unavailable"
   | "grounding_rejected"
+  | "grounding_incomplete"
   | "deadline_exceeded";
 
 export type UnderstandResponse = {

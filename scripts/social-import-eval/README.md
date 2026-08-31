@@ -43,7 +43,7 @@ npm run eval:social-import -- --providers current,current-improved --resolve non
 
 After a scoring-only change, regenerate an existing run's `results.json` and
 summaries without reacquiring social media or rerunning understanding. Every
-invocation appends a `score-contract-v3` transform and chained input/output
+invocation appends a `score-contract-v4` transform and chained input/output
 result hashes to the run manifest:
 
 ```bash
@@ -92,11 +92,97 @@ Useful options:
 --understanders <deterministic,apple-vision,apple-vision-keyframes,gemini,google-video,
                  aws-rekognition-transcribe,azure-video-indexer>
 --resolve <none|mapkit>
+--corpus <path to corpus JSON; defaults to the committed corpus.json>
 --out <directory>
 --fixture-dir <directory of saved acquisition JSON; offline by default>
 --allow-network-after-fixture
                  explicitly allow media/model/MapKit network after fixture load
 ```
+
+Use a separate corpus for a private launch-gate or one-off live evaluation
+without editing the committed benchmark. The selected corpus path and SHA-256
+are recorded in the run manifest:
+
+```bash
+npm run eval:social-import -- \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --providers apify \
+  --understanders gemini \
+  --resolve mapkit \
+  --out /private/tmp/rec120-launch-gate-run
+```
+
+Keep private corpora and their live outputs outside the repository. The runner
+does not copy API credentials into the manifest, but source captions, provider
+payloads, and expiring media URLs remain sensitive run artifacts.
+
+### Production-parity diagnostic
+
+`production-parity.ts` is the narrow diagnostic for the current server pipeline.
+Unlike the historical provider comparator above, it directly composes the
+production source parser, Apify acquisition and profile enrichment, media
+ingestion, Gemini understanding, and grounding modules. Cases run serially and
+use the production 112-second per-case deadline.
+
+Supply credentials through the process environment, create a new private output
+directory, and run:
+
+```bash
+deno run \
+  --allow-env=APIFY_TOKEN,GEMINI_API_KEY,GEMINI_MODEL \
+  --allow-read \
+  --allow-write=/private/tmp/rec120-production-parity \
+  --allow-net \
+  scripts/social-import-eval/production-parity.ts \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --out /private/tmp/rec120-production-parity \
+  --fixture-dir /private/tmp/rec120-launch-gate.vUN2Dx
+```
+
+`--fixture-dir` accepts either an evaluator run directory or its `raw/`
+subdirectory. It reuses each case's validated `apify.json` acquisition envelope
+and passes the saved raw dataset through the current production Apify normalizer.
+It never falls back to a new post scrape when a fixture is missing or failed.
+Private Apify key-value-store media remains usable because the production media
+ingestor reconstructs its narrowly scoped authorization header from the
+in-memory `APIFY_TOKEN`; that header is never serialized. Profile-handle
+enrichment and Gemini are still live provider calls. Omit `--fixture-dir` only
+when a fresh main acquisition is intentionally wanted.
+
+The output directory must be new or already private to its owner. The runner
+refuses to overwrite an existing manifest or result set. It writes only:
+
+- `manifest.json`: corpus hash, bounded case IDs, and completion counts;
+- `results.json`: source kind, acquisition/media/profile stage summaries,
+  structured Gemini candidates and post context, grounded hints, and bounded
+  error codes.
+
+It deliberately omits source URLs, raw captions and titles, profile aliases,
+media URLs, media bytes, and provider responses. Candidate and hint strings that
+look like URLs are redacted, and every write fails closed if either provider
+credential appears in the serialized output. The diagnostic does not run
+MapKit; final POI resolution remains the iOS trust-boundary stage.
+
+Media or Gemini failures preserve the same deterministic fallback hints returned
+by the production handler. Score a completed diagnostic offline with:
+
+```bash
+node scripts/social-import-eval/score-production-parity.mjs \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --results /private/tmp/rec120-production-parity/results.json \
+  --manifest /private/tmp/rec120-production-parity/manifest.json \
+  --out /private/tmp/rec120-production-parity/score-summary.json
+```
+
+The scorer verifies the exact corpus SHA-256, requires the manifest and results
+to contain the complete corpus case-ID set, and refuses older media/Gemini
+failure records that omitted their production fallback hints. It joins cases by
+ID and applies the evaluator's existing name/alias and forbidden-label scoring
+contract to final `grounding.hints`. The new output file is owner-only and is
+never overwritten. It contains bounded per-case scores and aggregate macro,
+micro, post-success, forbidden-hit, and exact-set metrics, but no source URLs,
+raw evidence, prediction strings, provider payloads, or credentials. This is
+server hint accuracy only; it does not claim final MapKit POI identity accuracy.
 
 The committed corpus currently contains eight manually labeled public posts and
 121 required place mentions. Summary JSON includes both macro metrics (every

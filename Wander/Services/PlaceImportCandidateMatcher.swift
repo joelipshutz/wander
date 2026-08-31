@@ -409,6 +409,7 @@ enum PlaceImportCandidateMatcher {
         latitude: Double? = nil,
         longitude: Double? = nil,
         allowNearSpellingMatch: Bool = false,
+        maximumNearSpellingEdits: Int = 1,
         selectionPolicy: PlaceImportCandidateSelectionPolicy = .conservative
     ) -> PlaceImportCandidateMatch {
         let geographicallyEligibleCandidates = candidates.filter {
@@ -445,7 +446,10 @@ enum PlaceImportCandidateMatcher {
                     nameHint: nameHint,
                     areaHint: areaHint,
                     latitude: latitude,
-                    longitude: longitude
+                    longitude: longitude,
+                    maximumNearSpellingEdits: allowNearSpellingMatch
+                        ? max(1, min(2, maximumNearSpellingEdits))
+                        : 0
                 ),
                 index: index
             )
@@ -459,16 +463,28 @@ enum PlaceImportCandidateMatcher {
         let runnerUpScore = scored.dropFirst().first?.score ?? 0
         let equivalentName = namesAreEquivalent(best.candidate.name, nameHint)
         let nearSpellingName = allowNearSpellingMatch
-            && isNearSpellingMatch(best.candidate.name, nameHint)
+            && isNearSpellingMatch(
+                best.candidate.name,
+                nameHint,
+                maximumEdits: maximumNearSpellingEdits
+            )
         let exactEquivalentCount = scored.filter { scoredCandidate in
             namesAreEquivalent(scoredCandidate.candidate.name, nameHint)
                 || (allowNearSpellingMatch
-                    && isNearSpellingMatch(scoredCandidate.candidate.name, nameHint))
+                    && isNearSpellingMatch(
+                        scoredCandidate.candidate.name,
+                        nameHint,
+                        maximumEdits: maximumNearSpellingEdits
+                    ))
         }.count
         let equivalentCandidates = scored.filter { scoredCandidate in
             namesAreEquivalent(scoredCandidate.candidate.name, nameHint)
                 || (allowNearSpellingMatch
-                    && isNearSpellingMatch(scoredCandidate.candidate.name, nameHint))
+                    && isNearSpellingMatch(
+                        scoredCandidate.candidate.name,
+                        nameHint,
+                        maximumEdits: maximumNearSpellingEdits
+                    ))
         }
         let hasClearLead = best.score - runnerUpScore >= 0.08
         let isUniqueExactMatch = (equivalentName || nearSpellingName)
@@ -589,7 +605,8 @@ enum PlaceImportCandidateMatcher {
         nameHint: String,
         areaHint: String?,
         latitude: Double?,
-        longitude: Double?
+        longitude: Double?,
+        maximumNearSpellingEdits: Int
     ) -> Double {
         let hintKey = canonicalNameKey(nameHint)
         let candidateKey = canonicalNameKey(candidate.name)
@@ -605,6 +622,13 @@ enum PlaceImportCandidateMatcher {
             score = 0.8
         } else if creatorQualifiedVenueNamesMatch(candidate.name, nameHint) {
             score = 0.8
+        } else if maximumNearSpellingEdits > 0,
+                  isNearSpellingMatch(
+                    candidate.name,
+                    nameHint,
+                    maximumEdits: maximumNearSpellingEdits
+                  ) {
+            score = 0.78
         } else if min(hintKey.count, candidateKey.count) >= 5,
                   hintKey.contains(candidateKey) || candidateKey.contains(hintKey) {
             score = 0.72
@@ -723,11 +747,16 @@ enum PlaceImportCandidateMatcher {
             .filter { $0.isLetter || $0.isNumber }
     }
 
-    private static func isNearSpellingMatch(_ lhs: String, _ rhs: String) -> Bool {
+    private static func isNearSpellingMatch(
+        _ lhs: String,
+        _ rhs: String,
+        maximumEdits: Int
+    ) -> Bool {
         let lhsCharacters = Array(normalized(lhs))
         let rhsCharacters = Array(normalized(rhs))
+        let boundedMaximumEdits = max(1, min(2, maximumEdits))
         guard min(lhsCharacters.count, rhsCharacters.count) >= 8,
-              abs(lhsCharacters.count - rhsCharacters.count) <= 1
+              abs(lhsCharacters.count - rhsCharacters.count) <= boundedMaximumEdits
         else { return false }
 
         var lhsIndex = 0
@@ -740,7 +769,7 @@ enum PlaceImportCandidateMatcher {
                 continue
             }
             edits += 1
-            guard edits <= 1 else { return false }
+            guard edits <= boundedMaximumEdits else { return false }
             if lhsCharacters.count > rhsCharacters.count {
                 lhsIndex += 1
             } else if rhsCharacters.count > lhsCharacters.count {
@@ -753,7 +782,7 @@ enum PlaceImportCandidateMatcher {
         if lhsIndex < lhsCharacters.count || rhsIndex < rhsCharacters.count {
             edits += 1
         }
-        return edits == 1
+        return edits > 0 && edits <= boundedMaximumEdits
     }
 
     private static let nameTokenAliases = [

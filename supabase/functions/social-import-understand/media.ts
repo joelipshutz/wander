@@ -9,6 +9,7 @@ import { Deadline, SocialImportError } from "./types.ts";
 export const maximumImageBytes = 10 * 1_024 * 1_024;
 export const maximumVideoBytes = 60 * 1_024 * 1_024;
 export const maximumTotalMediaBytes = 60 * 1_024 * 1_024;
+const maximumMediaFetchAttempts = 3;
 
 const mediaDomains = [
   "cdninstagram.com",
@@ -34,10 +35,13 @@ export async function ingestAcquiredMedia(
   apifyToken: string,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
+  requestSignal?: AbortSignal,
 ): Promise<MediaIngestion[]> {
+  assertRequestActive(requestSignal);
   const results: MediaIngestion[] = [];
   let totalBytes = 0;
   for (const item of media.slice(0, 150)) {
+    assertRequestActive(requestSignal);
     deadline.assertAvailable();
     const remaining = maximumTotalMediaBytes - totalBytes;
     if (remaining <= 0) {
@@ -56,6 +60,7 @@ export async function ingestAcquiredMedia(
         apifyToken,
         deadline,
         dependencies,
+        requestSignal,
       );
       totalBytes += downloaded.byteCount;
       results.push({
@@ -68,6 +73,11 @@ export async function ingestAcquiredMedia(
         errorCode: null,
       });
     } catch (error) {
+      assertRequestActive(requestSignal);
+      if (
+        error instanceof SocialImportError &&
+        error.code === "request_cancelled"
+      ) throw error;
       results.push(failed(
         item,
         error instanceof SocialImportError ? error.code : "media_fetch_failed",
@@ -85,15 +95,56 @@ export async function fetchMediaBytes(
   apifyToken: string,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
+  requestSignal?: AbortSignal,
 ): Promise<DownloadedMedia> {
+  assertRequestActive(requestSignal);
   let url = validatedMediaURL(value);
-  for (let redirectCount = 0; redirectCount <= 4; redirectCount += 1) {
-    const response = await dependencies.fetch(url, {
-      method: "GET",
-      redirect: "manual",
-      headers: mediaHeaders(url, expectedKind, source, apifyToken),
-      signal: AbortSignal.timeout(deadline.remaining(30_000)),
-    });
+  let retryCount = 0;
+  let redirectCount = 0;
+  while (redirectCount <= 4) {
+    assertRequestActive(requestSignal);
+    const timeoutMilliseconds = deadline.remaining(30_000);
+    let response: Response;
+    try {
+      response = await dependencies.fetch(url, {
+        method: "GET",
+        redirect: "manual",
+        headers: mediaHeaders(url, expectedKind, source, apifyToken),
+        signal: combinedMediaSignal(requestSignal, timeoutMilliseconds),
+      });
+    } catch (error) {
+      assertRequestActive(requestSignal);
+      if (
+        error instanceof SocialImportError ||
+        retryCount >= maximumMediaFetchAttempts - 1
+      ) throw error;
+      retryCount += 1;
+      await mediaRetryDelay(
+        retryCount,
+        deadline,
+        dependencies,
+        requestSignal,
+      );
+      continue;
+    }
+    if (requestSignal?.aborted) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new SocialImportError("request_cancelled");
+    }
+    if (
+      isRetryableMediaStatus(response.status) &&
+      retryCount < maximumMediaFetchAttempts - 1
+    ) {
+      await response.body?.cancel().catch(() => undefined);
+      retryCount += 1;
+      await mediaRetryDelay(
+        retryCount,
+        deadline,
+        dependencies,
+        requestSignal,
+      );
+      continue;
+    }
     if (redirectStatuses.has(response.status)) {
       const location = response.headers.get("location");
       await response.body?.cancel().catch(() => undefined);
@@ -101,6 +152,7 @@ export async function fetchMediaBytes(
         throw new SocialImportError("media_redirect_invalid");
       }
       url = validatedMediaURL(new URL(location, url).toString());
+      redirectCount += 1;
       continue;
     }
     if (!response.ok) {
@@ -112,7 +164,14 @@ export async function fetchMediaBytes(
       await response.body?.cancel().catch(() => undefined);
       throw new SocialImportError("media_too_large");
     }
-    const bytes = await boundedBytes(response, maximumBytes);
+    let bytes: Uint8Array;
+    try {
+      bytes = await boundedBytes(response, maximumBytes);
+    } catch (error) {
+      assertRequestActive(requestSignal);
+      throw error;
+    }
+    assertRequestActive(requestSignal);
     const mimeType = validatedMIMEType(
       bytes,
       response.headers.get("content-type"),
@@ -121,6 +180,68 @@ export async function fetchMediaBytes(
     return { bytes, byteCount: bytes.byteLength, mimeType };
   }
   throw new SocialImportError("media_redirect_invalid");
+}
+
+function isRetryableMediaStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+async function mediaRetryDelay(
+  retryCount: number,
+  deadline: Deadline,
+  dependencies: RuntimeDependencies,
+  requestSignal?: AbortSignal,
+): Promise<void> {
+  assertRequestActive(requestSignal);
+  const delay = Math.min(
+    Math.floor(
+      Math.min(1_500, 250 * (2 ** (retryCount - 1))) * dependencies.random(),
+    ),
+    deadline.remaining(1_500),
+  );
+  if (delay > 0) {
+    await cancellableMediaSleep(delay, dependencies, requestSignal);
+  }
+  assertRequestActive(requestSignal);
+}
+
+async function cancellableMediaSleep(
+  milliseconds: number,
+  dependencies: RuntimeDependencies,
+  requestSignal?: AbortSignal,
+): Promise<void> {
+  assertRequestActive(requestSignal);
+  if (!requestSignal) {
+    await dependencies.sleep(milliseconds);
+    return;
+  }
+  let onAbort: (() => void) | null = null;
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new SocialImportError("request_cancelled"));
+    requestSignal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    await Promise.race([dependencies.sleep(milliseconds), cancellation]);
+  } finally {
+    if (onAbort) requestSignal.removeEventListener("abort", onAbort);
+  }
+  assertRequestActive(requestSignal);
+}
+
+function combinedMediaSignal(
+  requestSignal: AbortSignal | undefined,
+  timeoutMilliseconds: number,
+): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMilliseconds);
+  return requestSignal
+    ? AbortSignal.any([requestSignal, timeoutSignal])
+    : timeoutSignal;
+}
+
+function assertRequestActive(requestSignal?: AbortSignal): void {
+  if (requestSignal?.aborted) {
+    throw new SocialImportError("request_cancelled");
+  }
 }
 
 export function validatedMediaURL(value: string): URL {

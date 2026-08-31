@@ -76,6 +76,230 @@ Deno.test("Apify starts immediately, polls a known run, and reads its dataset", 
   );
 });
 
+Deno.test("a matching restricted Instagram item triggers one bounded media fallback", async () => {
+  const calls: ObservedCall[] = [];
+  const fallbackMediaURL =
+    "https://api.apify.com/v2/key-value-stores/store_123/records/video.mp4?signature=opaque";
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (call.url.pathname === "/v2/actors/apify~instagram-scraper/runs") {
+      return Response.json({
+        data: {
+          id: "primary_restricted_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "primary_restricted_dataset",
+        },
+      });
+    }
+    if (
+      call.url.pathname === "/v2/datasets/primary_restricted_dataset/items"
+    ) {
+      return Response.json([{
+        url: instagramURL,
+        restricted_age: 21,
+        error: "restricted_page",
+        errorDescription: "Restricted access, only partial data available",
+      }]);
+    }
+    if (
+      call.url.pathname ===
+        "/v2/actors/crawlerbros~instagram-downloader-api/runs"
+    ) {
+      return Response.json({
+        data: {
+          id: "fallback_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "fallback_dataset",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/fallback_dataset/items") {
+      return Response.json([{
+        post_url: `${instagramURL}/`,
+        username: "must_not_be_used_as_caption",
+        type: "video",
+        download_status: "finished",
+        download_url: fallbackMediaURL,
+      }]);
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  const result = await acquireWithApify(
+    source(),
+    "private-apify-token",
+    new Deadline(112_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result, {
+    title: null,
+    caption: null,
+    taggedLocations: [],
+    media: [{
+      index: 0,
+      kind: "video",
+      url: fallbackMediaURL,
+      thumbnailURL: null,
+      altText: null,
+      id: "media:0",
+    }],
+  });
+  const fallbackStarts = calls.filter((call) =>
+    call.url.pathname ===
+      "/v2/actors/crawlerbros~instagram-downloader-api/runs"
+  );
+  assertEquals(fallbackStarts.length, 1);
+  const fallbackStart = fallbackStarts[0];
+  assertEquals(fallbackStart.url.searchParams.get("waitForFinish"), "0");
+  assertEquals(fallbackStart.url.searchParams.get("timeout"), "55");
+  assertEquals(fallbackStart.url.searchParams.get("maxItems"), "20");
+  assertEquals(fallbackStart.url.searchParams.get("maxTotalChargeUsd"), "0.10");
+  assertEquals(fallbackStart.url.searchParams.has("token"), false);
+  assertEquals(fallbackStart.authorization, "Bearer private-apify-token");
+  assertEquals(JSON.parse(fallbackStart.body), {
+    postUrls: [instagramURL],
+  });
+  const fallbackDataset = calls[3];
+  assertEquals(
+    fallbackDataset.url.searchParams.get("fields"),
+    "post_url,type,download_status,download_url",
+  );
+  assertEquals(fallbackDataset.url.searchParams.get("limit"), "20");
+});
+
+Deno.test("an ordinary matching provider item error does not trigger the restricted fallback", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (call.url.pathname === "/v2/actors/apify~instagram-scraper/runs") {
+      return Response.json({
+        data: {
+          id: "primary_error_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "primary_error_dataset",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/primary_error_dataset/items") {
+      return Response.json([{
+        url: instagramURL,
+        error: "private_page",
+        errorDescription: "not a restricted-page media fallback",
+      }]);
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  await assertRejectsCode(
+    () =>
+      acquireWithApify(
+        source(),
+        "private-apify-token",
+        new Deadline(112_000, dependencies.now),
+        dependencies,
+      ),
+    "vendor_item_error",
+  );
+  assertEquals(
+    calls.filter((call) => call.url.pathname.includes("crawlerbros")).length,
+    0,
+  );
+});
+
+Deno.test("a restricted primary item must match the requested source before fallback", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (call.url.pathname === "/v2/actors/apify~instagram-scraper/runs") {
+      return Response.json({
+        data: {
+          id: "primary_mismatch_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "primary_mismatch_dataset",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/primary_mismatch_dataset/items") {
+      return Response.json([{
+        url: "https://www.instagram.com/reel/OtherSource123/",
+        error: "restricted_page",
+        errorDescription: "Restricted access, only partial data available",
+      }]);
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  await assertRejectsCode(
+    () =>
+      acquireWithApify(
+        source(),
+        "private-apify-token",
+        new Deadline(112_000, dependencies.now),
+        dependencies,
+      ),
+    "vendor_item_error",
+  );
+  assertEquals(
+    calls.filter((call) => call.url.pathname.includes("crawlerbros")).length,
+    0,
+  );
+});
+
+Deno.test("the restricted fallback rejects a mismatched downloader row", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = restrictedFallbackRuntime(calls, () =>
+    Response.json([{
+      post_url: "https://www.instagram.com/reel/OtherSource123/",
+      type: "video",
+      download_status: "finished",
+      download_url:
+        "https://api.apify.com/v2/key-value-stores/store_123/records/video.mp4?signature=opaque",
+    }]));
+
+  await assertRejectsCode(
+    () =>
+      acquireWithApify(
+        source(),
+        "private-apify-token",
+        new Deadline(112_000, dependencies.now),
+        dependencies,
+      ),
+    "vendor_source_mismatch",
+  );
+  assertEquals(
+    calls.filter((call) => call.url.pathname.includes("crawlerbros")).length,
+    1,
+  );
+});
+
+Deno.test("a restricted media fallback failure is returned without a second fallback", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = restrictedFallbackRuntime(
+    calls,
+    () => Response.json({ data: { id: "fallback_run", status: "FAILED" } }),
+    true,
+  );
+
+  await assertRejectsCode(
+    () =>
+      acquireWithApify(
+        source(),
+        "private-apify-token",
+        new Deadline(112_000, dependencies.now),
+        dependencies,
+      ),
+    "apify_run_failed",
+  );
+  assertEquals(
+    calls.filter((call) => call.url.pathname.includes("crawlerbros")).length,
+    1,
+  );
+});
+
 Deno.test("a terminal failed provider run is not sent a redundant abort", async () => {
   const calls: ObservedCall[] = [];
   const dependencies = runtime((input, init) => {
@@ -304,7 +528,7 @@ Deno.test("profile enrichment is capped, field-limited, and returns identity ali
   assertEquals(result, [{ username: "hvojai", fullName: "Hip Vegan" }]);
   const start = calls[0];
   assertEquals(start.url.searchParams.get("waitForFinish"), "0");
-  assertEquals(start.url.searchParams.get("timeout"), "10");
+  assertEquals(start.url.searchParams.get("timeout"), "18");
   assertEquals(
     start.url.searchParams.get("maxItems"),
     String(maximumInstagramProfileAliases),
@@ -320,6 +544,79 @@ Deno.test("profile enrichment is capped, field-limited, and returns identity ali
     dataset.url.searchParams.get("limit"),
     String(maximumInstagramProfileAliases),
   );
+});
+
+Deno.test("profile enrichment retains aliases from a timed-out run's partial dataset", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (
+      call.url.pathname ===
+        "/v2/actors/apify~instagram-profile-scraper/runs"
+    ) {
+      return Response.json({
+        data: {
+          id: "profile_run_partial",
+          status: "TIMED-OUT",
+          defaultDatasetId: "profile_dataset_partial",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/profile_dataset_partial/items") {
+      return Response.json([
+        { username: "bartsbooksojai", fullName: "Bart's Books" },
+        { username: "thedutchessojai", fullName: "The Dutchess" },
+      ]);
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  const result = await acquireInstagramProfileAliases(
+    ["bartsbooksojai", "thedutchessojai"],
+    "private-apify-token",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result, [
+    { username: "bartsbooksojai", fullName: "Bart's Books" },
+    { username: "thedutchessojai", fullName: "The Dutchess" },
+  ]);
+  assertEquals(calls.length, 2);
+});
+
+Deno.test("primary acquisition rejects a timed-out run even when a partial dataset exists", async () => {
+  const calls: ObservedCall[] = [];
+  const dependencies = runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (
+      call.url.pathname.includes("/v2/actors/") &&
+      call.url.pathname.endsWith("/runs")
+    ) {
+      return Response.json({
+        data: {
+          id: "primary_run_partial",
+          status: "TIMED_OUT",
+          defaultDatasetId: "primary_dataset_partial",
+        },
+      });
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+
+  await assertRejectsCode(
+    () =>
+      acquireWithApify(
+        source(),
+        "private-apify-token",
+        new Deadline(30_000, dependencies.now),
+        dependencies,
+      ),
+    "apify_run_failed",
+  );
+  assertEquals(calls.length, 1);
 });
 
 Deno.test("profile normalization rejects mismatches, duplicates, and empty names", () => {
@@ -397,12 +694,13 @@ Deno.test("profile child deadline aborts its exact nonterminal run", async () =>
     },
   });
 
+  const parentDeadline = new Deadline(100_000, dependencies.now);
   await assertRejectsCode(
     () =>
       acquireInstagramProfileAliases(
         ["hvojai"],
         "private-apify-token",
-        new Deadline(100_000, dependencies.now),
+        parentDeadline,
         dependencies,
       ),
     "deadline_exceeded",
@@ -411,6 +709,7 @@ Deno.test("profile child deadline aborts its exact nonterminal run", async () =>
     calls.filter((call) => call.url.pathname.endsWith("/abort")).length,
     1,
   );
+  assertEquals(parentDeadline.remaining() >= 70_000, true);
 });
 
 type TestFetcher = (
@@ -424,6 +723,52 @@ type ObservedCall = {
   authorization: string | null;
   body: string;
 };
+
+function restrictedFallbackRuntime(
+  calls: ObservedCall[],
+  fallbackResponse: () => Response,
+  failAtActorRun = false,
+): RuntimeDependencies {
+  return runtime((input, init) => {
+    const call = observe(input, init);
+    calls.push(call);
+    if (call.url.pathname === "/v2/actors/apify~instagram-scraper/runs") {
+      return Response.json({
+        data: {
+          id: "primary_restricted_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "primary_restricted_dataset",
+        },
+      });
+    }
+    if (
+      call.url.pathname === "/v2/datasets/primary_restricted_dataset/items"
+    ) {
+      return Response.json([{
+        url: instagramURL,
+        restricted_age: 21,
+        error: "restricted_page",
+        errorDescription: "Restricted access, only partial data available",
+      }]);
+    }
+    if (
+      call.url.pathname ===
+        "/v2/actors/crawlerbros~instagram-downloader-api/runs"
+    ) {
+      return failAtActorRun ? fallbackResponse() : Response.json({
+        data: {
+          id: "fallback_run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "fallback_dataset",
+        },
+      });
+    }
+    if (call.url.pathname === "/v2/datasets/fallback_dataset/items") {
+      return fallbackResponse();
+    }
+    throw new Error(`unexpected fetch ${call.url}`);
+  });
+}
 
 function runtime(
   fetcher: TestFetcher,

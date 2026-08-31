@@ -935,6 +935,19 @@ struct SocialPlaceSearchHint: Equatable {
     let name: String
     let area: String?
     let evidence: Evidence
+    let isServerGrounded: Bool
+
+    init(
+        name: String,
+        area: String?,
+        evidence: Evidence,
+        isServerGrounded: Bool = false
+    ) {
+        self.name = name
+        self.area = area
+        self.evidence = evidence
+        self.isServerGrounded = isServerGrounded
+    }
 }
 
 enum SocialPlaceHintExtractor {
@@ -1749,16 +1762,21 @@ enum SocialImportEvidencePlanner {
         let first = normalizedWords(lhs.name)
         let second = normalizedWords(rhs.name)
         guard !first.isEmpty, !second.isEmpty else { return false }
+        if lhs.isServerGrounded && rhs.isServerGrounded {
+            return first == second
+        }
         return first == second
-            || isContiguousSubsequence(first, of: second)
-            || isContiguousSubsequence(second, of: first)
+            || isAliasExpansion(first, of: second)
+            || isAliasExpansion(second, of: first)
     }
 
-    private static func isContiguousSubsequence(_ shorter: [String], of longer: [String]) -> Bool {
+    private static func isAliasExpansion(_ shorter: [String], of longer: [String]) -> Bool {
         guard shorter.count < longer.count, shorter.count <= longer.count else { return false }
         for start in 0...(longer.count - shorter.count) {
             if Array(longer[start..<(start + shorter.count)]) == shorter {
-                return true
+                let addedWords = Array(longer[..<start])
+                    + Array(longer[(start + shorter.count)...])
+                return addedWords.allSatisfy(aliasExpansionWords.contains)
             }
         }
         return false
@@ -1773,10 +1791,11 @@ enum SocialImportEvidencePlanner {
         at index: Int,
         among hints: [SocialPlaceSearchHint]
     ) -> Bool {
+        if hint.isServerGrounded { return false }
         switch hint.evidence {
-        case .explicitLocation, .imageText, .namedEntity:
+        case .explicitLocation, .itineraryPhrase, .imageText, .namedEntity:
             break
-        case .itineraryPhrase, .acquisitionPhrase, .itineraryHandle, .socialHandle:
+        case .acquisitionPhrase, .itineraryHandle, .socialHandle:
             return false
         }
         let nameWords = normalizedWords(hint.name)
@@ -1788,7 +1807,6 @@ enum SocialImportEvidencePlanner {
         return hints.enumerated().contains { otherIndex, other in
             guard otherIndex != index,
                   other.evidence.shouldRemainVisibleWithoutCandidates,
-                  hasVenueDesignator(other.name),
                   let area = other.area
             else { return false }
             return normalizedWords(area) == nameWords
@@ -1822,6 +1840,11 @@ enum SocialImportEvidencePlanner {
         "deli", "gallery", "garden", "hotel", "kitchen", "market", "museum",
         "park", "restaurant", "shop", "store", "theater", "theatre", "trail", "zoo"
     ]
+
+    private static let aliasExpansionWords = venueDesignators.union([
+        "a", "an", "city", "county", "historic", "historical", "memorial",
+        "national", "public", "regional", "state", "the"
+    ])
 }
 
 private func cgImageOrientation(for orientation: UIImage.Orientation) -> CGImagePropertyOrientation {

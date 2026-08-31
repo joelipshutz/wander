@@ -230,10 +230,14 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         "No destination was explicitly identified in this post. Add a place name and nearby city to match it."
                     )
                 case .fallback:
-                    if remote.diagnostics.failureCategory == "duplicate_request" {
-                        // A previous invocation is still running. Local evidence
-                        // may provide useful rows, but keep a source-level Retry
-                        // item so incomplete video/carousel coverage is visible.
+                    if let failureCategory = remote.diagnostics.failureCategory,
+                       failureCategory != "feature_disabled" {
+                        // The server attempted or admitted the richer path but
+                        // could not complete it. Local caption/cover evidence may
+                        // still provide useful rows, but it cannot prove complete
+                        // video or carousel coverage, so keep a source-level Retry
+                        // item. A deliberate server kill-switch preserves the
+                        // established local-only behavior.
                         understandingWasPartial = true
                     }
                     break
@@ -244,8 +248,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 try Task.checkCancellation()
                 // Provider, auth, and timeout failures are deliberately non-fatal.
                 // The existing public-metadata and on-device Vision path remains
-                // available without exposing the source URL in logs.
+                // available without exposing the source URL in logs, but it
+                // cannot claim complete video/carousel coverage.
                 understandingPath = "local_fallback"
+                understandingWasPartial = true
             }
         }
 
@@ -360,7 +366,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var recoveryHints: [SocialRecoveryHint] = []
         for hint in hints {
             try Task.checkCancellation()
-            let fetchedCandidates: [PlaceCandidate]
+            var fetchedCandidates: [PlaceCandidate]
+            var usedOCRRecoveryLookup = false
             do {
                 fetchedCandidates = try await placeResolver.resolveManualEntry(
                     ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
@@ -381,6 +388,25 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     rejectedHintCount += 1
                 }
                 continue
+            }
+            if fetchedCandidates.isEmpty,
+               let recoveryInput = SocialOCRPlaceRecovery.manualInput(for: hint) {
+                do {
+                    fetchedCandidates = try await placeResolver.resolveManualEntry(recoveryInput)
+                    usedOCRRecoveryLookup = !fetchedCandidates.isEmpty
+                } catch PlaceResolutionError.noCandidates {
+                    fetchedCandidates = []
+                } catch {
+                    try Task.checkCancellation()
+                    lookupFailureCount += 1
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
+                        )
+                    )
+                    continue
+                }
             }
             try Task.checkCancellation()
             let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
@@ -406,6 +432,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 nameHint: hint.name,
                 areaHint: hint.area,
                 allowNearSpellingMatch: hint.evidence == .imageText,
+                maximumNearSpellingEdits: usedOCRRecoveryLookup ? 2 : 1,
                 selectionPolicy: .socialGroundedArea
             )
             if let selectedCandidateID = match.selectedCandidateID,
@@ -537,6 +564,32 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
         )
+    }
+
+    private enum SocialOCRPlaceRecovery {
+        static func manualInput(for hint: SocialPlaceSearchHint) -> ManualPlaceInput? {
+            guard hint.evidence == .imageText,
+                  let area = hint.area?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !area.isEmpty else { return nil }
+
+            let tokens = hint.name
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+            guard let designator = recoveryDesignators.first(where: { tokens.contains($0.key) })?.value else {
+                return nil
+            }
+            return ManualPlaceInput(name: designator, areaHint: area, category: nil)
+        }
+
+        private static let recoveryDesignators: [(key: String, value: String)] = [
+            ("cafe", "Cafe"), ("coffee", "Coffee"), ("restaurant", "Restaurant"),
+            ("bakery", "Bakery"), ("bookstore", "Bookstore"), ("books", "Books"),
+            ("brewery", "Brewery"), ("hotel", "Hotel"), ("inn", "Inn"),
+            ("lodge", "Lodge"), ("market", "Market"), ("museum", "Museum"),
+            ("resort", "Resort"), ("winery", "Winery")
+        ]
     }
 
     private func socialMetadata(

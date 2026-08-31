@@ -244,7 +244,7 @@ test("rescore provenance always records scoring plus only optional transforms th
     reresolveMapKit: false,
     mapKitResolverID: resolver,
   }), {
-    appliedTransforms: [{ kind: "scoring", revision: "score-contract-v3" }],
+    appliedTransforms: [{ kind: "scoring", revision: "score-contract-v4" }],
     mapKitHintSource: "saved_understanding_hints",
   });
   assert.deepEqual(buildRescoreProvenance({
@@ -253,7 +253,7 @@ test("rescore provenance always records scoring plus only optional transforms th
     mapKitResolverID: resolver,
   }), {
     appliedTransforms: [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
       { kind: "understanding_hints", revision: "grounded-hints-v3" },
     ],
     mapKitHintSource: "rebuilt_understanding_hints",
@@ -264,7 +264,7 @@ test("rescore provenance always records scoring plus only optional transforms th
     mapKitResolverID: resolver,
   }), {
     appliedTransforms: [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
       { kind: "mapkit_resolution", revision: resolver },
     ],
     mapKitHintSource: "saved_understanding_hints",
@@ -275,7 +275,7 @@ test("rescore provenance always records scoring plus only optional transforms th
     mapKitResolverID: resolver,
   }), {
     appliedTransforms: [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
       { kind: "understanding_hints", revision: "grounded-hints-v3" },
       { kind: "mapkit_resolution", revision: resolver },
     ],
@@ -521,6 +521,96 @@ test("scores recall, false positives, and forbidden attribution separately", () 
   assert.equal(score.recall, 1);
   assert.equal(score.precision, 1 / 3);
   assert.equal(score.exactRequiredSet, false);
+});
+
+test("scorer normalizes bounded punctuation and since-year aliases without fuzzy matches", () => {
+  const labels = {
+    status: "labeled",
+    required: [{
+      name: "Sentinel and Cook's Meadow Loop",
+      aliases: ["Sentinel and Cooks Meadows"],
+    }],
+    acceptable: [],
+    forbidden: [],
+  };
+  const equivalent = scorePredictions(labels, [
+    "Sentinel & Cooks Meadows",
+    "Sentinel and Cook's Meadows",
+  ]);
+  assert.equal(equivalent.requiredHitCount, 1);
+  assert.equal(equivalent.predictionCount, 1);
+  assert.deepEqual(equivalent.requiredMisses, []);
+  assert.deepEqual(equivalent.falsePredictions, []);
+
+  for (const unrelated of [
+    "Sentinel & Cooks Meadow",
+    "Sentinel & Cook Meadow",
+    "Sentinel Dome & Cooks Meadows",
+  ]) {
+    const score = scorePredictions(labels, [unrelated]);
+    assert.equal(score.requiredHitCount, 0, unrelated);
+    assert.deepEqual(score.falsePredictions, [unrelated]);
+  }
+
+  const yearAlias = {
+    status: "labeled",
+    required: [{ name: "Chill Since '93", aliases: ["Chill Since 93"] }],
+    acceptable: [],
+    forbidden: [],
+  };
+  const expandedYear = scorePredictions(yearAlias, ["Chill Since 1993 Pizza"]);
+  assert.equal(expandedYear.requiredHitCount, 1);
+  assert.deepEqual(expandedYear.requiredMisses, []);
+  assert.deepEqual(expandedYear.falsePredictions, []);
+
+  for (const unrelated of [
+    "Chill Since 1994 Pizza",
+    "Room 1993",
+    "Chill Since 1893 Pizza",
+  ]) {
+    const score = scorePredictions(yearAlias, [unrelated]);
+    assert.equal(score.requiredHitCount, 0, unrelated);
+    assert.deepEqual(score.falsePredictions, [unrelated]);
+  }
+});
+
+test("forbidden geography only inspects predictions unmatched by required or acceptable labels", () => {
+  const labels = {
+    status: "labeled",
+    required: [
+      { name: "Billy Bob's Texas", aliases: [] },
+      { name: "Sake House Malibu", aliases: [] },
+    ],
+    acceptable: [{ name: "Malibu Seafood", aliases: [] }],
+    forbidden: [
+      { name: "Texas", aliases: [] },
+      { name: "Malibu", aliases: [] },
+    ],
+  };
+  const matchedVenues = scorePredictions(labels, [
+    "Billy Bob's Texas",
+    "Sake House Malibu",
+    "Malibu Seafood",
+  ]);
+  assert.equal(matchedVenues.requiredHitCount, 2);
+  assert.equal(matchedVenues.acceptableHitCount, 1);
+  assert.equal(matchedVenues.forbiddenHitCount, 0);
+  assert.deepEqual(matchedVenues.falsePredictions, []);
+  assert.equal(matchedVenues.exactRequiredSet, true);
+
+  const standaloneGeography = scorePredictions(labels, [
+    "Billy Bob's Texas",
+    "Sake House Malibu",
+    "Malibu Seafood",
+    "Texas",
+    "Malibu",
+  ]);
+  assert.equal(standaloneGeography.requiredHitCount, 2);
+  assert.equal(standaloneGeography.acceptableHitCount, 1);
+  assert.equal(standaloneGeography.forbiddenHitCount, 2);
+  assert.deepEqual(standaloneGeography.forbiddenHits, ["Texas", "Malibu"]);
+  assert.deepEqual(standaloneGeography.falsePredictions, ["Texas", "Malibu"]);
+  assert.equal(standaloneGeography.exactRequiredSet, false);
 });
 
 test("ground-truth scoring rejects fuzzy name fragments", () => {
@@ -1121,7 +1211,7 @@ test("scoring-only rescore records its transform and result hash chain", async (
     assert.match(manifest.lastRescoredAt, /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(manifest.rescoreHistory.length, 1);
     assert.deepEqual(manifest.rescoreHistory[0].appliedTransforms, [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
     ]);
     assert.equal(manifest.rescoreHistory[0].rebuildUnderstandingHints, false);
     assert.equal(manifest.rescoreHistory[0].reresolveMapKit, false);
@@ -1195,7 +1285,7 @@ test("understanding-hint rebuild produces a model-directed resolver-none replay"
     assert.equal(manifest.rescoreHistory.length, 1);
     const history = manifest.rescoreHistory[0];
     assert.deepEqual(history.appliedTransforms, [
-      { kind: "scoring", revision: "score-contract-v3" },
+      { kind: "scoring", revision: "score-contract-v4" },
       { kind: "understanding_hints", revision: "grounded-hints-v3" },
     ]);
     assert.equal(history.rebuildUnderstandingHints, true);
@@ -1276,6 +1366,82 @@ test("fixture replay blocks network-capable understanding unless explicitly allo
       return true;
     },
   );
+});
+
+test("runner accepts an external corpus and keeps the committed corpus as its default", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "rec120-external-corpus-"));
+  const corpusPath = join(temporaryDirectory, "launch-gate.json");
+  const outputDirectory = join(temporaryDirectory, "run");
+  const defaultOutputDirectory = join(temporaryDirectory, "default-run");
+  const externalCorpus = {
+    schemaVersion: 1,
+    name: "private launch gate",
+    cases: [{
+      id: "external-instagram-case",
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/DbPM9o1mzbL/",
+      modalitiesExpected: [],
+      labels: {
+        status: "pending_manual_label",
+        required: [],
+        acceptable: [],
+        forbidden: [],
+      },
+    }],
+  };
+  try {
+    await writeFile(corpusPath, JSON.stringify(externalCorpus));
+    const runner = new URL("./social-import-eval/run.mjs", import.meta.url);
+    await execFileAsync(process.execPath, [
+      runner.pathname,
+      "--corpus", corpusPath,
+      "--cases", "external-instagram-case",
+      "--providers", "apify",
+      "--understanders", "deterministic",
+      "--resolve", "none",
+      "--out", outputDirectory,
+    ], {
+      env: { ...process.env, APIFY_TOKEN: "" },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outputDirectory, "manifest.json"), "utf8"),
+    );
+    const results = JSON.parse(
+      await readFile(join(outputDirectory, "results.json"), "utf8"),
+    );
+    assert.equal(manifest.corpus.path, corpusPath);
+    assert.equal(
+      manifest.corpus.sha256,
+      createHash("sha256").update(JSON.stringify(externalCorpus)).digest("hex"),
+    );
+    assert.deepEqual(manifest.corpus.selectedCaseIDs, ["external-instagram-case"]);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].case.id, "external-instagram-case");
+    assert.equal(results[0].acquisition.status, "not_configured");
+
+    await execFileAsync(process.execPath, [
+      runner.pathname,
+      "--cases", "instagram-caption-cave-springs",
+      "--providers", "apify",
+      "--understanders", "deterministic",
+      "--resolve", "none",
+      "--out", defaultOutputDirectory,
+    ], {
+      env: { ...process.env, APIFY_TOKEN: "" },
+    });
+    const defaultManifest = JSON.parse(
+      await readFile(join(defaultOutputDirectory, "manifest.json"), "utf8"),
+    );
+    assert.match(defaultManifest.corpus.path, /\/social-import-eval\/corpus\.json$/);
+    assert.deepEqual(
+      defaultManifest.corpus.selectedCaseIDs,
+      ["instagram-caption-cave-springs"],
+    );
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
 
 test("credentialed providers fail closed without leaking configuration", async () => {

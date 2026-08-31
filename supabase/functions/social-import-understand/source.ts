@@ -28,11 +28,13 @@ export function parseSocialSource(value: unknown): SocialSource | null {
   const host = url.hostname.toLowerCase();
   const path = url.pathname.replace(/\/{2,}/g, "/");
   if (instagramHosts.has(host)) {
-    const match = path.match(/^\/(p|reel|tv)\/([A-Za-z0-9_-]{5,30})(?:\/|$)/i);
+    const match = path.match(
+      /^\/(p|reels?|tv)\/([A-Za-z0-9_-]{5,30})(?:\/|$)/i,
+    );
     if (!match) return null;
     return {
       platform: "instagram",
-      contentType: match[1].toLowerCase() === "reel" ? "reel" : "post",
+      contentType: match[1].toLowerCase().startsWith("reel") ? "reel" : "post",
       url: canonicalURL(url),
       sourceID: match[2],
     };

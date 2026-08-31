@@ -32,7 +32,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 }
               ],
               "media_count": 9,
-              "model_attempt_count": 1,
+              "model_attempt_count": 99,
               "failure_category": null
             }
             """.utf8
@@ -51,20 +51,106 @@ final class RemoteRepositoryTests: XCTestCase {
             SocialPlaceSearchHint(
                 name: "Carbon Beach Club",
                 area: "Malibu",
-                evidence: .imageText
+                evidence: .imageText,
+                isServerGrounded: true
             ),
             SocialPlaceSearchHint(
                 name: "Hotel Bel-Air",
                 area: "Los Angeles",
-                evidence: .explicitLocation
+                evidence: .explicitLocation,
+                isServerGrounded: true
             )
         ])
         XCTAssertEqual(result.diagnostics.mediaCount, 9)
+        XCTAssertEqual(result.diagnostics.modelAttemptCount, 6)
         XCTAssertEqual(functions.calls.map(\.name), ["function:social-import-understand"])
         XCTAssertEqual(functions.rawBodies.first?["schema_version"] as? Int, 1)
         XCTAssertEqual(functions.rawBodies.first?["platform"] as? String, "instagram")
         XCTAssertEqual(functions.rawBodies.first?["url"] as? String, url.absoluteString)
         XCTAssertEqual(functions.rawBodies.first?["client_request_id"] as? String, "stable-request-id")
+    }
+
+    func testGeminiDecodedRoryVenuesRemainDistinctThroughEvidencePlanning() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "Rory's Place",
+                  "area": "Ojai",
+                  "modality": "video_text",
+                  "classification": "itinerary"
+                },
+                {
+                  "name": "Rory's Other Place",
+                  "area": "Ojai",
+                  "modality": "video_text",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 1,
+              "model_attempt_count": 2,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/reel/rorys-distinct-venues/")),
+            source: .instagram,
+            clientRequestID: "rorys-request"
+        )
+        let planned = SocialImportEvidencePlanner.reviewHints(result.hints)
+
+        XCTAssertTrue(result.hints.allSatisfy(\.isServerGrounded))
+        XCTAssertEqual(planned.map(\.name), ["Rory's Place", "Rory's Other Place"])
+    }
+
+    func testDeterministicDecodedContextCityIsStillRemovedByEvidencePlanning() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "partial",
+              "provider_path": "apify_deterministic",
+              "hints": [
+                {
+                  "name": "Westlake Village",
+                  "area": "California",
+                  "modality": "caption",
+                  "classification": "itinerary"
+                },
+                {
+                  "name": "The Stonehaus",
+                  "area": "Westlake Village",
+                  "modality": "caption",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 0,
+              "model_attempt_count": 3,
+              "failure_category": "understanding_unavailable"
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/deterministic-context-city/")),
+            source: .instagram,
+            clientRequestID: "deterministic-request"
+        )
+        let planned = SocialImportEvidencePlanner.reviewHints(result.hints)
+
+        XCTAssertTrue(result.hints.allSatisfy { !$0.isServerGrounded })
+        XCTAssertEqual(planned.map(\.name), ["The Stonehaus"])
+        XCTAssertEqual(planned.first?.area, "Westlake Village")
     }
 
     func testSocialImportUnderstandingFailsClosedToFallbackWhenAllReturnedHintsAreInvalid() async throws {
