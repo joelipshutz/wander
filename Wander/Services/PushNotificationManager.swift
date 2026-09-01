@@ -895,6 +895,62 @@ final class PushNotificationManager: ObservableObject {
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
+    func notifyImportMatchingFinished(
+        batchIDs: [String],
+        matchedCount: Int,
+        needsReviewCount: Int,
+        sourceRetryCount: Int
+    ) async -> Bool {
+        guard !batchIDs.isEmpty else { return false }
+        await refreshAuthorizationStatus()
+        guard canRegisterForRemoteNotifications else { return false }
+
+        let content = UNMutableNotificationContent()
+        if matchedCount == 0, needsReviewCount == 0, sourceRetryCount > 0 {
+            content.title = sourceRetryCount == 1
+                ? "Your source scan needs a retry"
+                : "\(sourceRetryCount) source scans need a retry"
+            content.body = "Open rec.me to retry the incomplete source scan."
+        } else if sourceRetryCount > 0 {
+            content.title = "Your import is ready"
+            content.body = "\(matchedCount) matched. Open rec.me to review and retry the incomplete source scan."
+        } else if needsReviewCount > 0 {
+            content.title = "Your import is ready"
+            content.body = "\(matchedCount) matched. \(needsReviewCount) need a quick look."
+        } else {
+            content.title = "Your import is ready"
+            content.body = matchedCount == 1
+                ? "1 place is ready to add to your map."
+                : "\(matchedCount) places are ready to add to your map."
+        }
+        content.sound = .default
+        let eventID = "local-import-\(UUID().uuidString.lowercased())"
+        content.userInfo = [
+            "recme": [
+                "event_id": eventID,
+                "notification_type": "import_finished",
+                "data": ["batch_ids": batchIDs]
+            ]
+        ]
+        do {
+            try await UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: eventID,
+                    content: content,
+                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                )
+            )
+            return true
+        } catch {
+            #if DEBUG
+            WanderDebugLog.imports.error(
+                "import matching notification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            return false
+        }
+    }
+
     func notifyImportFinished(
         batchIDs: [String],
         savedCount: Int,

@@ -1015,6 +1015,18 @@ protocol PlaceImportPersisting {
     func save(_ snapshot: PlaceImportSnapshot) throws
 }
 
+final class EphemeralPlaceImportPersistence: PlaceImportPersisting {
+    private var snapshot = PlaceImportSnapshot()
+
+    func load() throws -> PlaceImportSnapshot {
+        snapshot
+    }
+
+    func save(_ snapshot: PlaceImportSnapshot) throws {
+        self.snapshot = snapshot
+    }
+}
+
 final class FilePlaceImportPersistence: PlaceImportPersisting {
     private let fileURL: URL
 

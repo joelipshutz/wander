@@ -167,6 +167,87 @@ enum PlaceImportReceiptOutcome: String, Codable, Equatable {
     case failed
 }
 
+struct PlaceImportCompletionNotice: Equatable, Identifiable {
+    let batchIDs: [String]
+    let foundCount: Int
+    let matchedCount: Int
+    let needsReviewCount: Int
+    let sourceRetryCount: Int
+    let sourceName: String
+
+    var id: String {
+        batchIDs.sorted().joined(separator: "|")
+    }
+
+    var bannerTitle: String {
+        "Your import is ready"
+    }
+
+    var bannerDetail: String {
+        if foundCount == 0, sourceRetryCount > 0 {
+            return sourceRetryCount == 1
+                ? "Source scan needs a retry"
+                : "\(sourceRetryCount) source scans need a retry"
+        }
+        if sourceRetryCount > 0 {
+            let placeSummary = needsReviewCount > 0
+                ? "\(matchedCount) matched · \(needsReviewCount) need a look"
+                : matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
+            return "\(placeSummary) · scan incomplete"
+        }
+        if needsReviewCount > 0 {
+            return "\(matchedCount) matched · \(needsReviewCount) need a look"
+        }
+        return matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
+    }
+
+    static func resolved(
+        batchIDs: [String],
+        batches: [PlaceImportBatch],
+        items: [PlaceImportItem]
+    ) -> PlaceImportCompletionNotice? {
+        let requestedIDs = Set(batchIDs)
+        let scopedBatches = batches.filter { requestedIDs.contains($0.id) }
+        let scopedItems = items.filter {
+            requestedIDs.contains($0.batchID) && $0.state != .dismissed
+        }
+        guard !scopedBatches.isEmpty, !scopedItems.isEmpty else { return nil }
+        let placeItems = scopedItems.filter { !$0.isSourceRetry }
+        let sourceRetryCount = scopedItems.filter(\.isSourceRetry).count
+
+        let matchedCount = placeItems.filter {
+            [.ready, .duplicate, .saved].contains($0.state)
+        }.count
+        let needsReviewCount = placeItems.filter {
+            [.ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        let foundCount = matchedCount + needsReviewCount
+        guard foundCount > 0 || sourceRetryCount > 0 else { return nil }
+
+        let sources = Set(scopedBatches.map(\.source))
+        let sourceName: String
+        if sources.count == 1, let source = sources.first {
+            sourceName = switch source {
+            case .googleMaps: "Google Maps"
+            case .instagram: "Instagram"
+            case .tiktok: "TikTok"
+            case .textNotes: "Your notes"
+            }
+        } else {
+            sourceName = "Multiple sources"
+        }
+
+        return PlaceImportCompletionNotice(
+            batchIDs: scopedBatches.map(\.id),
+            foundCount: foundCount,
+            matchedCount: matchedCount,
+            needsReviewCount: needsReviewCount,
+            sourceRetryCount: sourceRetryCount,
+            sourceName: sourceName
+        )
+    }
+}
+
 struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
     let id: String
     let itemID: String
