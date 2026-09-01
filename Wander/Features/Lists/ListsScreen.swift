@@ -511,22 +511,21 @@ struct ListsScreen: View {
             Image(systemName: "bookmark.fill")
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 44, height: 44)
-                .background(WanderTheme.terracottaTint.color)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .clipShape(Circle())
+                .background(astirBrandMode.accentWash)
+                .foregroundStyle(astirBrandMode.accent)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("coming next")
                     .font(AstirTypography.label)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(astirBrandMode.primaryText)
                 Text("Saved places will get an add-to-list action from map surfaces.")
                     .font(AstirTypography.bodySmall)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(astirBrandMode.secondaryText)
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceSand.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(astirBrandMode.raisedBackground)
+        .overlay(Rectangle().stroke(astirBrandMode.border, lineWidth: 1))
     }
 
     private func listGrid(lists: [PlaceListMock]) -> some View {

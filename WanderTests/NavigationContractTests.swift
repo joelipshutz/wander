@@ -4641,7 +4641,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapPicker.contains("WanderGlassButtonCluster"))
     }
 
-    func testOtherUserProfileUsesPersistentStandaloneInCommonGlassRowAndOwnerParity() throws {
+    func testOtherUserProfileUsesDividerOnlyInCommonRowAndOwnerParity() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
         )
@@ -4685,7 +4685,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(body.contains("viewerID: viewerProfile.id"))
         XCTAssertFalse(body.contains("savedPlacesSection"))
         XCTAssertTrue(inCommonRow.contains("See where your maps overlap"))
-        XCTAssertTrue(inCommonRow.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertFalse(inCommonRow.contains(".wanderGlassPanel("))
+        XCTAssertTrue(inCommonRow.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(inCommonRow.contains(".overlay(alignment: .bottom)"))
+        XCTAssertTrue(inCommonRow.contains(".fill(brandMode.border)"))
         XCTAssertTrue(inCommonRow.contains("viewerProfile.avatarURL"))
         XCTAssertTrue(inCommonRow.contains("profile.avatarURL"))
         XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))

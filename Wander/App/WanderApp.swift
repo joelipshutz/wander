@@ -133,8 +133,10 @@ struct WanderApp: App {
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
                 ClerkNativeAuthView(mode: .signIn)
                     .environmentObject(auth)
+                    .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
+                    .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
             } else if let inCommonMockupPage = InCommonDesignMockupPage.resolved() {
