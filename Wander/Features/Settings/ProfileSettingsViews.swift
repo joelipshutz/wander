@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum FeatureFlagBooleanOverrideChoice: String, CaseIterable, Identifiable {
     case remote
@@ -832,11 +833,16 @@ struct SettingsAccountIdentityPresentation {
 }
 
 struct ProfilePrivacyTrustScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var pendingPrivateProfileValue: Bool?
     @State private var showsWarning = false
+    @State private var isConnectingCalendar = false
     @State private var errorMessage: String?
+    @State private var calendarErrorMessage: String?
 
     var body: some View {
         List {
@@ -873,6 +879,8 @@ struct ProfilePrivacyTrustScreen: View {
                 .disabled(store.isPrivateProfile)
             }
 
+            calendarPermissionSection
+
             Section("How privacy works") {
                 ForEach(SettingsTrustSurface.facts) { fact in
                     HStack(alignment: .top, spacing: WanderTheme.spacing3) {
@@ -904,6 +912,10 @@ struct ProfilePrivacyTrustScreen: View {
         .navigationTitle("Privacy and trust")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            calendarReservations.refreshAuthorizationStatus()
+        }
         .alert(
             SettingsProfilePrivacySurface.warningTitle(enabling: pendingPrivateProfileValue ?? false),
             isPresented: $showsWarning
@@ -921,6 +933,98 @@ struct ProfilePrivacyTrustScreen: View {
         } message: {
             Text(SettingsProfilePrivacySurface.warningBody(enabling: pendingPrivateProfileValue ?? false))
         }
+    }
+
+    private var calendarPermissionSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: 38, height: 38)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Circle())
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text("Apple Calendar")
+                            .font(.system(size: 15, weight: .black))
+                        Text(calendarReservations.hasFullAccess
+                             ? "Connected. rec.me can recognize restaurant reservations on this iPhone."
+                             : "Connect to let rec.me look for restaurant reservations on this iPhone.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                }
+
+                Button {
+                    Task { await connectOrSyncCalendar() }
+                } label: {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: calendarReservations.hasFullAccess
+                              ? "arrow.triangle.2.circlepath"
+                              : "calendar.badge.plus")
+                        Text(isConnectingCalendar
+                             ? "working"
+                             : (calendarReservations.hasFullAccess ? "sync now" : "connect calendar"))
+                    }
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Capsule())
+                }
+                .disabled(isConnectingCalendar || !auth.isSignedIn)
+                .accessibilityIdentifier("settings.privacy.calendar.action")
+
+                Text("rec.me never uploads or stores raw calendar titles, notes, guests, URLs, or addresses—only the matched restaurant and reservation time.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Text("Choose whether to receive reservation reminders in Notifications.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                if let calendarErrorMessage {
+                    Text(calendarErrorMessage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.stateError.color)
+                }
+            }
+            .padding(.vertical, WanderTheme.spacing1)
+            .accessibilityIdentifier("settings.privacy.calendar")
+        } header: {
+            Text("Permissions")
+        }
+    }
+
+    @MainActor
+    private func connectOrSyncCalendar() async {
+        isConnectingCalendar = true
+        calendarErrorMessage = nil
+        defer { isConnectingCalendar = false }
+
+        if !calendarReservations.hasFullAccess {
+            let granted = await calendarReservations.requestAccess()
+            guard granted else {
+                if calendarReservations.authorizationStatus == .denied,
+                   let url = URL(string: UIApplication.openSettingsURLString) {
+                    await UIApplication.shared.open(url)
+                } else {
+                    calendarErrorMessage = calendarReservations.lastErrorMessage
+                }
+                return
+            }
+        }
+
+        await calendarReservations.syncIfNeeded(
+            backend: backend,
+            store: store,
+            userID: store.currentUser.id,
+            force: true,
+            reason: "settings_manual"
+        )
+        calendarErrorMessage = calendarReservations.lastErrorMessage
     }
 
     private var privateProfileBinding: Binding<Bool> {

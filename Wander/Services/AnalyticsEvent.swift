@@ -254,6 +254,7 @@ enum WanderAnalyticsEvents {
     static let saveStreakReminderCancelledBySave = "save_streak_reminder_cancelled_by_save"
     static let saveStreakReminderOpened = "save_streak_reminder_opened"
     static let saveStreakReminderCompletedSaveAfterOpen = "save_streak_reminder_completed_save_after_open"
+    static let calendarReservationSyncCompleted = "calendar_reservation_sync_completed"
     static let visibilityChanged = "visibility_changed"
     static let followCreated = "follow_created"
     static let followRemoved = "follow_removed"

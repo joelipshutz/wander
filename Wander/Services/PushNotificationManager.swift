@@ -289,6 +289,7 @@ enum NotificationDestination: Equatable {
     case place(id: String)
     case activityComments(id: String)
     case sharedVisit(participantID: String, generation: Int)
+    case calendarReservation(id: String)
     case drafts(extractionJobID: String?)
     case importReview(batchIDs: [String])
     case discover
@@ -666,6 +667,8 @@ final class PushNotificationManager: ObservableObject {
         case "import_finished":
             let batchIDs = data?["batch_ids"] as? [String] ?? []
             return batchIDs.isEmpty ? nil : .importReview(batchIDs: batchIDs)
+        case "calendar_reservation_live", "calendar_reservation_follow_up":
+            return (data?["reservation_id"] as? String).map { .calendarReservation(id: $0) }
         case "followed_activity_digest":
             return .discover
         default:
@@ -685,6 +688,8 @@ final class PushNotificationManager: ObservableObject {
             "activity_commented",
             "activity_liked",
             "capture_ready",
+            "calendar_reservation_follow_up",
+            "calendar_reservation_live",
             "followed_activity_digest",
             "followed_place_visit",
             "followed_you",
@@ -723,6 +728,8 @@ final class PushNotificationManager: ObservableObject {
             return "activity_comments"
         case .sharedVisit:
             return "shared_visit"
+        case .calendarReservation:
+            return "calendar_reservation"
         case .drafts:
             return "drafts"
         case .importReview:
@@ -750,6 +757,8 @@ final class PushNotificationManager: ObservableObject {
                 return .list(id: listID)
             case .listInvite(let token):
                 return .listInvite(token: token)
+            case .calendarReservation(let reservationID):
+                return .calendarReservation(id: reservationID)
             default:
                 break
             }
@@ -775,6 +784,12 @@ final class PushNotificationManager: ObservableObject {
                   let generation = Int(generationString)
             else { return nil }
             return .sharedVisit(participantID: identifier, generation: generation)
+        case "reservations":
+            return identifier.flatMap { reservationID in
+                UUID(uuidString: reservationID).map { _ in
+                    .calendarReservation(id: reservationID)
+                }
+            }
         case "extraction-jobs":
             return .drafts(extractionJobID: identifier)
         case "discover":
@@ -816,6 +831,7 @@ final class PushNotificationManager: ObservableObject {
 
     func reconcileWannaGoReminders(
         _ items: [WannaGoReminderItem],
+        backend: WanderBackend,
         now: Date = .now
     ) async {
         await refreshAuthorizationStatus()
@@ -824,27 +840,49 @@ final class PushNotificationManager: ObservableObject {
             .map(\.identifier)
             .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
 
-        guard wannaGoRemindersEnabled, canRegisterForRemoteNotifications else {
-            if !existingIdentifiers.isEmpty {
-                center.removePendingNotificationRequests(withIdentifiers: existingIdentifiers)
-            }
-            return
-        }
-
         let plans = WannaGoReminderPlanner.plans(for: items, now: now)
         if !existingIdentifiers.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: existingIdentifiers)
         }
 
-        for plan in plans {
-            do {
-                try await center.add(WannaGoReminderPlanner.request(for: plan))
-            } catch {
-                lastErrorMessage = "Could not schedule a Wanna go reminder."
-                #if DEBUG
-                WanderDebugLog.remote.error("wanna reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
-                #endif
+        let intents: [ClientNotificationIntent] = if wannaGoRemindersEnabled,
+                                                     canRegisterForRemoteNotifications {
+            plans.map { plan in
+                let plannedDate = WannaGoDate.storageString(from: plan.item.plannedDate)
+                let displayDate = WannaGoDate.displayString(for: plan.item.plannedDate)
+                let encodedPlaceID = plan.item.placeID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+                    ?? plan.item.placeID
+                return ClientNotificationIntent(
+                    intentKey: "\(plan.item.userPlaceID):\(plannedDate)",
+                    title: "Wanna go reminder",
+                    body: "You wanted to try \(plan.item.placeName) on \(displayDate).",
+                    deeplinkURL: "recme://places/\(encodedPlaceID)",
+                    data: [
+                        "place_id": .string(plan.item.placeID),
+                        "user_place_id": .string(plan.item.userPlaceID),
+                        "planned_date": .string(plannedDate)
+                    ],
+                    earliestAt: plan.fireDate,
+                    latestAt: plan.fireDate.addingTimeInterval(24 * 60 * 60),
+                    priority: 40,
+                    conflictGroup: "wanna:\(plan.item.userPlaceID)",
+                    recipientTimezone: TimeZone.autoupdatingCurrent.identifier
+                )
             }
+        } else {
+            []
+        }
+
+        do {
+            _ = try await backend.reconcileClientNotificationIntents(
+                source: WannaGoReminderPlanner.notificationType,
+                intents: intents
+            )
+        } catch {
+            lastErrorMessage = "Could not sync Wanna go reminders."
+            #if DEBUG
+            WanderDebugLog.remote.error("wanna reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
         }
     }
 
@@ -861,36 +899,36 @@ final class PushNotificationManager: ObservableObject {
         batchIDs: [String],
         savedCount: Int,
         needsReviewCount: Int,
-        sourceRetryCount: Int = 0
+        sourceRetryCount: Int = 0,
+        backend: WanderBackend
     ) async {
         guard !batchIDs.isEmpty else { return }
         await refreshAuthorizationStatus()
         guard canRegisterForRemoteNotifications else { return }
 
-        let content = UNMutableNotificationContent()
         let copy = PlaceImportFinishedNotificationCopy.make(
             savedCount: savedCount,
             needsReviewCount: needsReviewCount,
             sourceRetryCount: sourceRetryCount
         )
-        content.title = copy.title
-        content.body = copy.body
-        content.sound = .default
-        let eventID = "local-import-\(UUID().uuidString.lowercased())"
-        content.userInfo = [
-            "recme": [
-                "event_id": eventID,
-                "notification_type": "import_finished",
-                "data": ["batch_ids": batchIDs]
-            ]
-        ]
+        let requestedAt = Date.now
         do {
-            try await UNUserNotificationCenter.current().add(
-                UNNotificationRequest(
-                    identifier: eventID,
-                    content: content,
-                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-                )
+            _ = try await backend.reconcileClientNotificationIntents(
+                source: "import_finished",
+                intents: [
+                    ClientNotificationIntent(
+                        intentKey: UUID().uuidString.lowercased(),
+                        title: copy.title,
+                        body: copy.body,
+                        deeplinkURL: nil,
+                        data: ["batch_ids": .array(batchIDs.map(JSONValue.string))],
+                        earliestAt: requestedAt,
+                        latestAt: requestedAt.addingTimeInterval(24 * 60 * 60),
+                        priority: 50,
+                        conflictGroup: "import_finished",
+                        recipientTimezone: TimeZone.autoupdatingCurrent.identifier
+                    )
+                ]
             )
         } catch {
             #if DEBUG
@@ -903,6 +941,7 @@ final class PushNotificationManager: ObservableObject {
 
     func reconcileSaveStreakReminder(
         _ summary: SaveStreakSummary,
+        backend: WanderBackend,
         now: Date = .now,
         cancelledBySaveStatus: PlaceStatus? = nil
     ) async {
@@ -916,10 +955,7 @@ final class PushNotificationManager: ObservableObject {
 
         let plans = SaveStreakReminderPlanner.plans(for: summary, now: now)
 
-        guard saveStreakRemindersEnabled,
-              canRegisterForRemoteNotifications,
-              !plans.isEmpty
-        else {
+        guard saveStreakRemindersEnabled, canRegisterForRemoteNotifications, !plans.isEmpty else {
             if summary.isTodayCovered,
                let cancelledBySaveStatus {
                 for request in productionRequests {
@@ -933,15 +969,18 @@ final class PushNotificationManager: ObservableObject {
             if !identifiers.isEmpty {
                 center.removePendingNotificationRequests(withIdentifiers: identifiers)
             }
+            do {
+                _ = try await backend.reconcileClientNotificationIntents(
+                    source: SaveStreakReminderPlanner.notificationType,
+                    intents: []
+                )
+            } catch {
+                lastErrorMessage = "Could not sync save streak reminders."
+            }
             return
         }
 
-        let matchingIdentifiers = Set(plans.compactMap { plan in
-            productionRequests.first(where: {
-                SaveStreakReminderPlanner.matches($0, plan: plan)
-            })?.identifier
-        })
-        let staleRequests = productionRequests.filter { !matchingIdentifiers.contains($0.identifier) }
+        let staleRequests = productionRequests
         if summary.isTodayCovered,
            let cancelledBySaveStatus {
             for request in staleRequests {
@@ -956,16 +995,39 @@ final class PushNotificationManager: ObservableObject {
             center.removePendingNotificationRequests(withIdentifiers: staleRequests.map(\.identifier))
         }
 
-        for plan in plans where !matchingIdentifiers.contains(plan.identifier) {
-            do {
-                try await center.add(SaveStreakReminderPlanner.request(for: plan))
+        let intents = plans.map { plan in
+            let copy = plan.copyVariant.copy(streakCount: plan.streakCount)
+            return ClientNotificationIntent(
+                intentKey: "\(plan.kind.rawValue):\(Int(plan.fireDate.timeIntervalSince1970))",
+                title: copy.title,
+                body: copy.body,
+                deeplinkURL: "recme://add/here-now",
+                data: [
+                    "streak_count": .string("\(plan.streakCount)"),
+                    "copy_variant": .string(plan.copyVariant.rawValue),
+                    "scheduled_weekday": .string(plan.scheduledWeekday),
+                    "reminder_kind": .string(plan.kind.rawValue)
+                ],
+                earliestAt: plan.fireDate,
+                latestAt: plan.fireDate.addingTimeInterval(4 * 60 * 60),
+                priority: 30,
+                conflictGroup: "save_streak",
+                recipientTimezone: TimeZone.autoupdatingCurrent.identifier
+            )
+        }
+        do {
+            let result = try await backend.reconcileClientNotificationIntents(
+                source: SaveStreakReminderPlanner.notificationType,
+                intents: intents
+            )
+            for plan in plans.prefix(result.createdCount) {
                 saveStreakReminderAnalytics.recordScheduled(plan)
-            } catch {
-                lastErrorMessage = "Could not schedule a save streak reminder."
-                #if DEBUG
-                WanderDebugLog.remote.error("save streak reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
-                #endif
             }
+        } catch {
+            lastErrorMessage = "Could not sync save streak reminders."
+            #if DEBUG
+            WanderDebugLog.remote.error("save streak reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
         }
     }
 

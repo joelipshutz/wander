@@ -52,6 +52,8 @@
 		<string>snssdk1180</string>
 		<string>snssdk1233</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>rec.me reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>rec.me uses the camera only when you choose to take a photo in the app.</string>
 	<key>NSContactsUsageDescription</key>

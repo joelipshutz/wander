@@ -1,6 +1,6 @@
 # rec.me App Store privacy inventory
 
-Updated: 2026-08-14
+Updated: 2026-08-28
 
 Owner: [REC-185](https://linear.app/recme/issue/REC-185/complete-app-store-privacy-manifests-labels-and-permission-audit)
 
@@ -14,6 +14,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 - Keep native Contacts. Access follows a contextual primer and reads name and phone fields locally. Address-book data is never uploaded or analytics-logged; selected phone numbers go only to Apple's Messages composer. The server-side social graph is still disclosed as Contacts because Apple's category includes social graphs.
 - Do not declare device precise location as collected. Current location is used on-device for nearby MapKit results and the nearby widget, and is not uploaded or analytics-logged. Saved businesses carry their own place coordinates, which are place metadata rather than a device location trail.
 - Declare trusted-search history. The raw query is sent to the authenticated parsing function and AI provider to produce filters.
+- Treat Apple Calendar access as optional app functionality. EventKit rows are inspected locally; MapKit receives a bounded restaurant query, while rec.me services receive only a hashed occurrence key, matched place identity, reservation time, and time zone. Raw calendar identifiers, titles, notes, attendees, URLs, and addresses are not uploaded to rec.me.
 
 ## App-owned privacy manifest
 
@@ -81,6 +82,7 @@ Do not declare precise or coarse device location unless the production archive o
 | Contacts | Invite entry point after contextual primer | Username search/share link remains available | Address book stays local; social graph disclosed |
 | Camera | User chooses to take a photo | Photo picker/manual save remains available | Uploaded chosen photos disclosed |
 | Photo Library Add | User chooses Save/Instagram/TikTok for generated share media | Standard share paths remain available | User-initiated write only |
+| Calendars Full Access | Profile → Settings → Privacy and trust → Permissions connection | Manual check-ins and every non-calendar feature remain available | Raw EventKit content is not collected; the derived restaurant/time reminder intent is covered by Other User Content |
 | Notifications | Onboarding or Settings opt-in | Core app remains available | Device push token is disclosed as Device ID for app functionality |
 
 ## Validation completed on this branch

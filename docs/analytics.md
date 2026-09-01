@@ -84,6 +84,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `contact_invite_delivery_started` | Messages/share sheet begins | `surface`, `delivery_mode`, `recipient_count` |
 | `contact_invite_completed` | Invite handoff sends, cancels, or fails | `surface`, `delivery_mode`, `outcome`, `sent_count` |
 | `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
+| `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
 
 The push worker also emits three server-side operational events. They use
@@ -113,6 +114,10 @@ Analytics must never receive:
 - auth tokens, backend payloads, photos, or private error messages.
 
 Prefer enums, booleans, counts, lengths, coarse error categories, internal build metadata, and opaque authenticated user IDs. `WanderAnalyticsSchema.sanitized` drops known forbidden property keys and truncates values, but that is defense in depth—not permission to create a sensitive property under a different name.
+
+Apple Calendar analytics is aggregate-only. It must never include calendar event
+identifiers, titles, notes, attendees, URLs, addresses, place names, provider
+place IDs, reservation IDs, timestamps, or time zones.
 
 Notification operations are stricter: never export recipient IDs, event IDs,
 actor IDs, APNs IDs, device tokens, notification title/body, deep links, or

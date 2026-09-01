@@ -53,6 +53,23 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         )
     }
 
+    func testCalendarReservationRouteBuildsExactURLAndRoundTrips() throws {
+        let reservationID = "90000000-0000-0000-0000-000000000001"
+        let route = WanderDeepLinkRoute.calendarReservation(reservationID: reservationID)
+        let url = try XCTUnwrap(route.url)
+
+        XCTAssertEqual(
+            url.absoluteString,
+            "recme://add/reservations/90000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
+        XCTAssertNil(
+            WanderDeepLinkRoute.parse(
+                try XCTUnwrap(URL(string: "recme://add/reservations/not-a-uuid"))
+            )
+        )
+    }
+
     func testCalendarDateRejectsMalformedAndImpossibleValues() throws {
         XCTAssertNil(WanderCalendarDate(urlValue: "2026-7-25"))
         XCTAssertNil(WanderCalendarDate(urlValue: "2026-07-25-extra"))

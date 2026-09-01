@@ -291,6 +291,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -721,6 +722,8 @@ struct WanderRootView: View {
             applyAuthStateIfNeeded(auth.state)
             await refreshWannaGoReminders(for: auth.state)
             guard !Task.isCancelled, isSessionValidated else { return }
+            await refreshCalendarReservations(reason: "session_validated")
+            guard !Task.isCancelled, isSessionValidated else { return }
             drainPendingNotificationResponses()
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
@@ -761,6 +764,9 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
             if previousState.session?.userID != nextUserID {
+                if let previousUserID = previousState.session?.userID {
+                    calendarReservations.clearAccountState(userID: previousUserID)
+                }
                 walkthroughFeatureFlagRefreshTask?.cancel()
                 walkthroughFeatureFlagRefreshTask = nil
                 placeProfileFloatingActionVariant = .productionDefault
@@ -787,6 +793,7 @@ struct WanderRootView: View {
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
+                await refreshCalendarReservations(reason: "auth_state_changed")
             }
         }
     }
@@ -796,7 +803,7 @@ struct WanderRootView: View {
         .onChange(of: store.wannaGoReminderItems) { _, items in
             guard isSessionValidated else { return }
             Task {
-                await pushNotifications.reconcileWannaGoReminders(items)
+                await pushNotifications.reconcileWannaGoReminders(items, backend: backend)
             }
         }
         .onChange(of: store.sharedVisitInvitations) { _, invitations in
@@ -817,6 +824,7 @@ struct WanderRootView: View {
             Task {
                 await pushNotifications.reconcileSaveStreakReminder(
                     store.saveStreakSummary,
+                    backend: backend,
                     cancelledBySaveStatus: celebration?.status
                 )
             }
@@ -887,6 +895,13 @@ struct WanderRootView: View {
             refreshNearbyWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: auth.state)
+                await refreshCalendarReservations(reason: "foreground")
+            }
+        }
+        .onChange(of: calendarReservations.eventStoreRevision) { _, _ in
+            guard scenePhase == .active, isSessionValidated else { return }
+            Task {
+                await refreshCalendarReservations(force: true, reason: "event_store_changed")
             }
         }
         .modifier(
@@ -1289,7 +1304,8 @@ struct WanderRootView: View {
                             batchIDs: result.batchIDs,
                             savedCount: result.savedCount,
                             needsReviewCount: result.needsReviewCount,
-                            sourceRetryCount: result.sourceRetryCount
+                            sourceRetryCount: result.sourceRetryCount,
+                            backend: backend
                         )
                     }
                 }
@@ -1357,7 +1373,7 @@ struct WanderRootView: View {
         widgetCalendarLastHydratedAt = .now
         publishWidgetSnapshot(allowFreshnessAdvance: true)
         Task {
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
         }
     }
 
@@ -1411,6 +1427,11 @@ struct WanderRootView: View {
         if request.destination == .quickCapture {
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .quickCapture)
+            return
+        }
+        if case .calendarReservation(let reservationID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .calendarReservation(reservationID: reservationID))
             return
         }
         if case .profile(let profileID) = request.destination {
@@ -1470,7 +1491,7 @@ struct WanderRootView: View {
         case .people, .drafts: .profile
         case .importReview: .map
         case .list, .listInvite: .lists
-        case .place, .sharedVisit: .map
+        case .place, .sharedVisit, .calendarReservation: .map
         case .activityComments: .discover
         case .discover: .discover
         }
@@ -1995,6 +2016,15 @@ struct WanderRootView: View {
             )
             addSheetDetent = .large
             isPresentingAdd = true
+        case .calendarReservation(let reservationID):
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(
+                destination: .calendarReservation(id: reservationID)
+            )
+            addSheetDetent = .large
+            isPresentingAdd = true
         case .quickSearch(let query):
             selectedTab = .map
             mapSearchLaunchRequest = WanderMapSearchLaunchRequest(query: query)
@@ -2230,6 +2260,11 @@ struct WanderRootView: View {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
+            await refreshCalendarReservations(reason: "maintenance")
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
             let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
             guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
                 finishSignedInMaintenance(runID: runID)
@@ -2337,9 +2372,25 @@ struct WanderRootView: View {
         guard auth.state == state, !Task.isCancelled else { return }
         await store.refreshRemoteWannaGoPlans(backend: backend)
         guard auth.state == state, !Task.isCancelled else { return }
-        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
         guard auth.state == state, !Task.isCancelled else { return }
-        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+    }
+
+    private func refreshCalendarReservations(
+        force: Bool = false,
+        reason: String
+    ) async {
+        guard isSessionValidated,
+              case .signedIn(let session) = auth.state
+        else { return }
+        await calendarReservations.syncIfNeeded(
+            backend: backend,
+            store: store,
+            userID: session.userID,
+            force: force,
+            reason: reason
+        )
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {

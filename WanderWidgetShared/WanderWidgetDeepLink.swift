@@ -71,6 +71,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case map
     case quickSearch(query: String?)
     case nearbyPlace(candidateID: String)
+    case calendarReservation(reservationID: String)
     case profileCalendar
     case profileCalendarDate(WanderCalendarDate)
     case sharedProfile(profileID: String)
@@ -91,6 +92,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             Self.quickSearchURL(query: query)
         case .nearbyPlace(let candidateID):
             Self.nearbyPlaceURL(candidateID: candidateID)
+        case .calendarReservation(let reservationID):
+            Self.calendarReservationURL(reservationID: reservationID)
         case .profileCalendar:
             WanderWidgetConstants.profileCalendarURL
         case .profileCalendarDate(let date):
@@ -164,6 +167,14 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
                 return nil
             }
             return .nearbyPlace(candidateID: candidateID)
+
+        case ("add", let segments)
+            where segments.count == 2 && segments[0] == "reservations":
+            let reservationID = segments[1]
+            guard hasNoQuery(in: components), UUID(uuidString: reservationID) != nil else {
+                return nil
+            }
+            return .calendarReservation(reservationID: reservationID)
 
         case ("profile", ["calendar"]):
             guard hasNoQuery(in: components) else { return nil }
@@ -317,6 +328,15 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
 
         var components = baseComponents(host: "add", path: "")
         components.percentEncodedPath = "/nearby/\(encodedID)"
+        return components.url
+    }
+
+    private static func calendarReservationURL(reservationID: String) -> URL? {
+        guard UUID(uuidString: reservationID) != nil,
+              let encodedID = reservationID.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
+        else { return nil }
+        var components = baseComponents(host: "add", path: "")
+        components.percentEncodedPath = "/reservations/\(encodedID)"
         return components.url
     }
 

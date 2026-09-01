@@ -1,18 +1,21 @@
 # Notifications Platform
 
-REC-60 establishes the first rec.me push notification pipeline. The immediate contract is intentionally small: app devices register APNs tokens, product code queues notification events, and the Supabase Edge Function claims and sends those events.
+REC-60 establishes the first rec.me push notification pipeline. REC-200 expands it into the single notification-intent governor: app devices register APNs tokens, product producers reconcile bounded intents, and the Supabase Edge Function claims and sends eligible events.
 
 ## Current Pipeline
 
 1. A signed-in iOS device registers with `public.register_push_token`.
-2. Product-side Supabase triggers or service-role jobs call `app.queue_notification_event`.
-3. `app.queue_notification_event` checks the recipient profile, self-actions, blocks, preference buckets, and pending dedupe keys. A consented event can wait up to 24 hours for an active token instead of being discarded during a transient registration gap.
+2. Product-side Supabase triggers or service-role jobs call `app.queue_notification_event`; authenticated device-owned producers use strict reconciliation RPCs that feed `app.queue_notification_intent`.
+3. The queue checks the recipient profile, self-actions, blocks, preference buckets, pending dedupe keys, source, priority, conflict group, and delivery window. A consented event can wait for an active token only until its product-specific deadline.
 4. `push-notification-worker` claims events with `public.claim_pending_push_notifications`, sends APNs payloads, and settles every device independently with `public.record_push_notification_delivery_results`.
 5. Retryable device failures return only unfinished tokens to `pending` with backoff. Expired claims are reclaimable, stale claim results are ignored, and exhausted events fail.
 6. Supabase Cron invokes the worker once per minute. The cron command reads `recme_project_url` and `recme_push_worker_secret` from Supabase Vault, so no runtime secret is committed to Git.
 7. After database settlement, the worker sends only coarse delivery outcomes and
    aggregate 30-day frequency buckets to PostHog. Notification taps emit a
    separate allowlisted `notification_opened` event from iOS.
+8. Claim-time governance rechecks current consent, expiry, mute state, and
+   reservation availability. Future spacing and quiet-hour rules belong in
+   this claim boundary so producers do not need to coordinate with one another.
 
 ## Hosted Runtime Configuration
 
@@ -72,8 +75,37 @@ Notification taps resolve as follows:
 | `shared_visit` | The exact pending invitation generation in Save This Place; accepted invitations resolve to the recipient visit and terminal invitations show an unavailable state |
 | `capture_ready` | The matching Profile draft, or the drafts section |
 | `followed_activity_digest` | Discover |
+| `calendar_reservation_live` | Prefilled Check-in for the matched reservation |
+| `calendar_reservation_follow_up` | The same prefilled Check-in if no save completed |
 
 The app parses `recme.deeplink_url` first and falls back to `notification_type` plus safe routing IDs in `recme.data`. This keeps older queued notifications routable if their URL format changes.
+
+## Apple Calendar Reservations
+
+Apple Calendar access is currently offered only in Profile → Settings → Privacy
+and trust, under Permissions. The reservation-reminder delivery preference
+remains in Notifications, so device-data access and alert delivery are separate
+choices. Onboarding integration is deferred until the NUX reaches the social
+experience where the feature can be explained in context. iOS reads EventKit
+only after full-access consent, recognizes likely restaurant reservations,
+resolves the place through the existing MapKit boundary, and uploads only a
+SHA-256 occurrence key plus derived place identity, service times, and time-zone
+identifier. Raw event identifiers, titles, notes, attendees, URLs, and addresses
+are never sent to rec.me services. MapKit receives the bounded place query
+needed to resolve the restaurant.
+
+The client scans the previous two days through the next 180 days at signed-in
+launch, foreground return, EventKit change, or explicit **sync now**, with a
+15-minute foreground throttle. The server stores at most one derived row per
+account and occurrence, queues `calendar_reservation_live` for one hour after
+the reservation begins, and queues `calendar_reservation_follow_up` for 8 AM
+the following morning. A completed matching check-in suppresses every remaining
+prompt. A notification tap resolves the derived reservation for its owner and
+opens the normal Add editor with Check-in, place, and visit time prefilled.
+
+Wanna, save-streak, and import-complete reminders also reconcile into the same
+remote queue. Their authenticated RPC accepts only source-specific data and
+deep-link allowlists; it cannot address another recipient.
 
 ## Shared Visits
 
@@ -94,9 +126,9 @@ Use this checklist for each new producer:
 1. Choose a `notification_type` name and preference bucket.
 2. Add the type to the `notification_events.notification_type` check and `app.queue_notification_event` validation.
 3. Map the type in `app.notification_type_enabled`.
-4. Add one producer function or service-role job that builds title, body, deeplink, safe `data`, and a stable `dedupe_key`.
+4. Add one producer function, authenticated allowlisted reconciliation source, or service-role job that builds title, body, deeplink, safe `data`, stable `dedupe_key`, source, priority, conflict group, and delivery deadline.
 5. Keep private notes, raw coordinates, auth data, email addresses, and raw private payloads out of `data`.
-6. Make self-actions, blocks, missing recipients, and disabled preferences no-op before queueing. Missing active tokens remain pending only for the bounded 24-hour repair window.
+6. Make self-actions, blocks, missing recipients, disabled preferences, completed intents, and expired delivery windows no-op before claiming. Missing active tokens remain pending only through the intent deadline.
 7. Add pgTAP coverage for the positive path and at least one no-push path.
 8. If the notification needs UI controls, add or reuse a Settings preference bucket.
 9. Add the type to the fixed server and iOS analytics allowlists. Do not export

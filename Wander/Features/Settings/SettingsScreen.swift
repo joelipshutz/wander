@@ -381,6 +381,7 @@ struct NotificationSettingsSheet: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var preferences = NotificationPreferences.allDisabled
     @State private var isLoading = false
     @State private var isSaving = false
@@ -452,6 +453,13 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Reservation check-in reminders",
+                            systemImage: "fork.knife.circle",
+                            binding: preferenceBinding(\.reservationRemindersEnabled) {
+                                NotificationPreferencesUpdate(reservationRemindersEnabled: $0)
+                            }
+                        )
+                        notificationToggle(
                             title: "Save streak reminders",
                             systemImage: "flame",
                             binding: saveStreakReminderBinding
@@ -484,7 +492,8 @@ struct NotificationSettingsSheet: View {
             await load()
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, isWaitingForSettingsAuthorization else { return }
+            guard phase == .active else { return }
+            guard isWaitingForSettingsAuthorization else { return }
             Task {
                 await pushNotifications.refreshAuthorizationStatus()
                 guard pushNotifications.canRegisterForRemoteNotifications else { return }
@@ -621,7 +630,7 @@ struct NotificationSettingsSheet: View {
                 for: store.currentUser.id
             )
             Task {
-                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
             }
         }
     }
@@ -643,8 +652,8 @@ struct NotificationSettingsSheet: View {
                 : .allDisabled
             pushNotifications.applyNotificationPreferences(preferences)
             pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
         } catch {
             errorMessage = "Could not load notification settings."
         }
@@ -682,8 +691,15 @@ struct NotificationSettingsSheet: View {
         }
         preferences = enabledPreferences
         pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+        await calendarReservations.syncIfNeeded(
+            backend: backend,
+            store: store,
+            userID: store.currentUser.id,
+            force: true,
+            reason: "notifications_enabled"
+        )
     }
 
     private func disableNotifications() async {
@@ -713,8 +729,17 @@ struct NotificationSettingsSheet: View {
         do {
             preferences = try await backend.updateNotificationPreferences(update)
             pushNotifications.applyNotificationPreferences(preferences)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+            if update.reservationRemindersEnabled == true {
+                await calendarReservations.syncIfNeeded(
+                    backend: backend,
+                    store: store,
+                    userID: store.currentUser.id,
+                    force: true,
+                    reason: "reservation_reminders_enabled"
+                )
+            }
         } catch {
             errorMessage = "Could not save notification settings."
         }
