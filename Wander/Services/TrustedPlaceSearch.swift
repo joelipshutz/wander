@@ -303,25 +303,25 @@ enum MapSearchCandidatePolicy {
         }
 
         let exactSaved = strongSavedCandidates
-            .filter { nameLexicalScore(of: $0, query: query) == 1_000 }
+            .filter { hasExactNameMatch($0, query: query) }
             .map(MapSearchCandidate.saved)
         let otherStrongSaved = strongSavedCandidates
-            .filter { nameLexicalScore(of: $0, query: query) != 1_000 }
+            .filter { !hasExactNameMatch($0, query: query) }
             .map(MapSearchCandidate.saved)
         let exactMapKit = mapKit
             .filter {
-                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) == 1_000
+                MapSearchQueryPolicy.isExactNameMatch($0.name, query: query)
             }
             .map(MapSearchCandidate.mapKit)
         let partialMapKit = mapKit
             .filter {
-                let score = MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query)
-                return score > 0 && score < 1_000
+                MapSearchQueryPolicy.hasNameMatch($0.name, query: query)
+                    && !MapSearchQueryPolicy.isExactNameMatch($0.name, query: query)
             }
             .map(MapSearchCandidate.mapKit)
         let unrelatedMapKit = mapKit
             .filter {
-                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) == 0
+                !MapSearchQueryPolicy.hasNameMatch($0.name, query: query)
             }
             .map(MapSearchCandidate.mapKit)
 
@@ -345,6 +345,18 @@ enum MapSearchCandidatePolicy {
                 )
             }
             .max() ?? 0
+    }
+
+    static func hasExactNameMatch(
+        _ candidate: MapSearchSavedCandidate,
+        query: String
+    ) -> Bool {
+        candidate.group.places.contains {
+            MapSearchQueryPolicy.isExactNameMatch(
+                $0.place.canonicalName,
+                query: query
+            )
+        }
     }
 
     static func strength(of candidate: MapSearchSavedCandidate) -> SavedStrength {

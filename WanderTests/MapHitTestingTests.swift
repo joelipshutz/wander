@@ -186,14 +186,7 @@ final class MapHitTestingTests: XCTestCase {
         )
         let viewerLocation = CLLocation(latitude: 40.71, longitude: -74.01)
 
-        let cachedOrigin = MapSearchPerformancePolicy.rankingOrigin(
-            viewerLocation: viewerLocation,
-            mapRegion: region
-        )
-        let fallbackOrigin = MapSearchPerformancePolicy.rankingOrigin(
-            viewerLocation: nil,
-            mapRegion: region
-        )
+        let rankingOrigin = MapSearchPerformancePolicy.rankingOrigin(mapRegion: region)
         let cachedDistanceOrigin = MapSearchPerformancePolicy.distanceOrigin(
             viewerLocation: viewerLocation,
             mapRegion: region
@@ -203,10 +196,8 @@ final class MapHitTestingTests: XCTestCase {
             mapRegion: region
         )
 
-        XCTAssertEqual(cachedOrigin.coordinate.latitude, region.center.latitude)
-        XCTAssertEqual(cachedOrigin.coordinate.longitude, region.center.longitude)
-        XCTAssertEqual(fallbackOrigin.coordinate.latitude, region.center.latitude)
-        XCTAssertEqual(fallbackOrigin.coordinate.longitude, region.center.longitude)
+        XCTAssertEqual(rankingOrigin.coordinate.latitude, region.center.latitude)
+        XCTAssertEqual(rankingOrigin.coordinate.longitude, region.center.longitude)
         XCTAssertEqual(
             cachedDistanceOrigin.coordinate.latitude,
             viewerLocation.coordinate.latitude
@@ -435,16 +426,17 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
-    func testAdaptiveSearchCountsSavedAndUniqueProviderResultsTowardFourRows() {
-        var accumulator = MapAdaptiveSearchAccumulator(savedResultSlotCount: 2)
+    func testAdaptiveSearchDeduplicatesProviderResultsAcrossRadiusPasses() {
+        var deduper = MapProviderResultDeduper()
 
-        XCTAssertTrue(accumulator.needsMoreResults)
         XCTAssertEqual(
-            accumulator.appendUnique(["dayglow", "dayglow", "jones"]) { $0 },
+            deduper.appendUnique(["dayglow", "dayglow", "jones"]) { $0 },
             ["dayglow", "jones"]
         )
-        XCTAssertEqual(accumulator.uniqueProviderResultCount, 2)
-        XCTAssertFalse(accumulator.needsMoreResults)
+        XCTAssertEqual(
+            deduper.appendUnique(["jones", "maru"]) { $0 },
+            ["maru"]
+        )
     }
 
     func testExternalMapSearchCandidatesAllowAllAndCategoryORRefinements() {
@@ -639,11 +631,7 @@ final class MapHitTestingTests: XCTestCase {
         let schedule = map[scheduleStart.lowerBound..<scheduleEnd.lowerBound]
 
         XCTAssertTrue(schedule.contains("let refinements = mapFilterState.more"))
-        XCTAssertTrue(
-            schedule.contains(
-                "Task { @MainActor [savedCandidates, searchRegion, refinements] in"
-            )
-        )
+        XCTAssertTrue(schedule.contains("authorizationContext"))
         XCTAssertTrue(schedule.contains("savedCandidates: savedCandidates"))
         XCTAssertTrue(schedule.contains("refinements: refinements"))
         XCTAssertTrue(schedule.contains("mapFilterState.more == refinements"))
@@ -861,9 +849,7 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertTrue(map.contains("private var mapSearchSavedCorpus"))
         XCTAssertTrue(map.contains("from: store.visiblePlaces()"))
         XCTAssertTrue(map.contains("refinements: mapFilterState.more"))
-        XCTAssertTrue(
-            map.contains("Task { @MainActor [savedCandidates, searchRegion, refinements] in")
-        )
+        XCTAssertTrue(map.contains("mapSearchAuthorizationContext == authorizationContext"))
 
         let searchStart = try XCTUnwrap(map.range(of: "private func runMapSearch("))
         let searchEnd = try XCTUnwrap(
@@ -946,51 +932,42 @@ final class MapHitTestingTests: XCTestCase {
     }
 
     @MainActor
-    func testSubmittedSearchDoesNotSelectAPlaceRetainedOnlyForPresentation() throws {
+    func testProviderSuggestionResolvesPhysicalDuplicateToAuthorizedSavedGroup() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
-        let retainedPlace = try XCTUnwrap(store.visiblePlaces().first)
-        let renderedPlaces = MapActivePinRetention.places(
-            from: [],
-            retaining: retainedPlace
-        )
+        let savedPlace = try XCTUnwrap(store.visiblePlaces().first)
         let candidate = PlaceCandidate(
-            id: "unrelated-mapkit-result",
-            name: "Unrelated Result",
-            category: "Cafe",
-            latitude: 34.05,
-            longitude: -118.25,
+            id: "provider-duplicate",
+            name: savedPlace.place.canonicalName,
+            category: savedPlace.place.category,
+            latitude: savedPlace.place.latitude,
+            longitude: savedPlace.place.longitude,
+            sourceProvider: savedPlace.place.sourceProvider,
+            sourceProviderPlaceID: savedPlace.place.sourceProviderPlaceID,
             confidence: 1
         )
 
-        XCTAssertEqual(renderedPlaces.map(\.id), [retainedPlace.id])
+        switch MapProviderSuggestionPolicy.destination(
+            for: candidate,
+            in: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        ) {
+        case .saved(let savedGroup):
+            XCTAssertTrue(savedGroup.places.contains {
+                $0.userPlace.id == savedPlace.userPlace.id
+            })
+        case .candidate:
+            XCTFail("A provider duplicate should open the authorized saved-memory group.")
+        }
 
-        switch MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [],
-            mapKitCandidates: [candidate]
+        switch MapProviderSuggestionPolicy.destination(
+            for: candidate,
+            in: [],
+            currentUserID: store.currentUser.id
         ) {
         case .candidate(let selectedCandidate):
             XCTAssertEqual(selectedCandidate, candidate)
-        case .saved, .none:
-            XCTFail("A presentation-only retained pin must not beat the MapKit result.")
-        }
-
-        switch MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [retainedPlace],
-            mapKitCandidates: [candidate]
-        ) {
-        case .saved(let selectedPlace):
-            XCTAssertEqual(selectedPlace.id, retainedPlace.id)
-        case .candidate, .none:
-            XCTFail("A genuine saved-place query match should remain preferred.")
-        }
-
-        if case .none = MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [],
-            mapKitCandidates: []
-        ) {
-            // Expected.
-        } else {
-            XCTFail("An empty search result set should remain empty.")
+        case .saved:
+            XCTFail("A provider result must not recover a save outside the authorized corpus.")
         }
     }
 }
@@ -1365,6 +1342,73 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(
             Set(retainedGroups.flatMap(\.places).map(\.userPlace.id))
                 .isSuperset(of: submittedUserPlaceIDs)
+        )
+    }
+
+    @MainActor
+    func testActivePinRetentionDropsAGroupAfterAuthorizationIsRevoked() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let authorizedPlaces = store.visiblePlaces()
+        let retainedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: authorizedPlaces,
+                currentUserID: currentUserID
+            ).first
+        )
+        let retainedIDs = Set(retainedGroup.places.map(\.userPlace.id))
+        let afterRevocation = authorizedPlaces.filter {
+            !retainedIDs.contains($0.userPlace.id)
+        }
+
+        let authorizedActive = MapActivePinRetention.authorizedPlace(
+            retainedGroup.primary,
+            within: afterRevocation
+        )
+        let authorizedGroup = MapActivePinRetention.authorizedGroup(
+            retainedGroup,
+            requiring: authorizedActive,
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
+            [retainedGroup],
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+
+        XCTAssertNil(authorizedActive)
+        XCTAssertNil(authorizedGroup)
+        XCTAssertTrue(authorizedSubmittedGroups.isEmpty)
+    }
+
+    @MainActor
+    func testSubmittedRetentionRebuildsGroupsFromCurrentAuthorizedRows() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let authorizedPlaces = store.visiblePlaces()
+        let retainedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: authorizedPlaces,
+                currentUserID: currentUserID
+            ).first { $0.saveCount > 1 }
+        )
+        let revokedID = try XCTUnwrap(retainedGroup.places.last?.userPlace.id)
+        let afterRevocation = authorizedPlaces.filter {
+            $0.userPlace.id != revokedID
+        }
+
+        let refreshedGroups = MapActivePinRetention.authorizedGroups(
+            [retainedGroup],
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+        let refreshedIDs = Set(refreshedGroups.flatMap(\.places).map(\.userPlace.id))
+
+        XCTAssertFalse(refreshedIDs.contains(revokedID))
+        XCTAssertEqual(
+            refreshedIDs,
+            Set(retainedGroup.places.map(\.userPlace.id)).subtracting([revokedID])
         )
     }
 
