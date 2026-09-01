@@ -832,6 +832,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
         XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(mapCaptureRoot.contains("initialSession: auth.state.session"))
         XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
         XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
         XCTAssertTrue(app.contains("provider: \"google_places\""))
@@ -2087,8 +2088,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(adaptiveReview.contains("systemImage: \"checkmark\""))
         XCTAssertTrue(adaptiveReview.contains("action: onDone"))
         XCTAssertFalse(adaptiveReview.contains("View on map"))
-        XCTAssertTrue(adaptiveReview.contains("let excludedItems = activeItems.filter { !$0.isSelectedForImport }"))
-        XCTAssertTrue(adaptiveReview.contains("let items = activeItems.filter(\\.isSelectedForImport)"))
+        XCTAssertTrue(adaptiveReview.contains("let placeItems = activeItems.filter { !$0.isSourceRetry }"))
+        XCTAssertTrue(adaptiveReview.contains("let excludedItems = placeItems.filter { !$0.isSelectedForImport }"))
+        XCTAssertTrue(adaptiveReview.contains("let items = placeItems.filter(\\.isSelectedForImport)"))
         XCTAssertTrue(adaptiveReview.contains("importStore.dismiss(itemID: item.id)"))
         XCTAssertFalse(adaptiveReview.contains("PlaceImportStatusSelector("))
     }
@@ -2863,6 +2865,16 @@ final class NavigationContractTests: XCTestCase {
             ),
             .demo
         )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderAuthenticatedUITest", "-WanderUseEphemeralEmptyFixtures"],
+                usesSimulatorTestSession: true
+            ),
+            .ephemeralEmpty
+        )
+        let ephemeralEmptyFixtures = WanderRootView.resolvedFixtures(mode: .ephemeralEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.places.isEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.userPlaces.isEmpty)
         XCTAssertEqual(
             WanderRootView.resolvedFixtureMode(
                 from: ["Wander"],

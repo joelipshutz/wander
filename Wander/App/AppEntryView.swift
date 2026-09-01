@@ -111,7 +111,11 @@ struct AppEntryView: View {
                         deepLinkInbox.consume(requestID)
                     },
                     analytics: analytics,
-                    parser: parser
+                    parser: parser,
+                    socialImportUnderstandingRepository: backend.socialImportUnderstandingProvider(
+                        for: session.userID,
+                        authSession: auth
+                    )
                 )
                 .id(session.userID)
             case .recoverableFailure(_, let message, let canContinueOffline):

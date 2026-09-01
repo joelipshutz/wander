@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,8 +8,10 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 
 import {
+  buildRescoreProvenance,
   buildSummary,
   extractDeterministicHints,
+  extractGroundedModelHints,
   namesEquivalent,
   renderSummaryMarkdown,
   scorePredictions,
@@ -48,10 +51,10 @@ function tinyJPEGBytes() {
   return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 }
 
-function JSONResponse(value, status = 200) {
+function JSONResponse(value, status = 200, headers = {}) {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }
 
@@ -91,6 +94,421 @@ test("model output drops attribution and incidental candidates", () => {
   assert.deepEqual(hints.map((hint) => hint.name), ["Frank N Frank's"]);
 });
 
+test("structured model hints are evidence-grounded and replace raw heuristic noise", () => {
+  const result = extractGroundedModelHints({
+    caption: "Video by Creator on July 25, 2026. Stop at @windriverbrewing.",
+    modelCandidates: [
+      {
+        name: "Wind River Brewing",
+        area: "Wyoming",
+        classification: "destination",
+        modality: "caption",
+        evidence: "Stop at @windriverbrewing",
+        confidence: 0.95,
+      },
+      {
+        name: "Pine Coffee",
+        area: "Wyoming",
+        classification: "destination",
+        modality: "image_text",
+        evidence: "PINE COFFEE & SUPPLY",
+        confidence: 0.9,
+      },
+      {
+        name: "Pine Coffee Supply",
+        area: "Wyoming",
+        classification: "destination",
+        modality: "image_text",
+        evidence: "PINE COFFEE & SUPPLY",
+        confidence: 0.98,
+      },
+      {
+        name: "Story and Soil Coffee",
+        area: "Connecticut",
+        classification: "destination",
+        modality: "image_text",
+        evidence: "STORY AND SOIL COFFEE",
+        confidence: 1,
+      },
+      {
+        name: "Former Employer Cafe",
+        area: "California",
+        classification: "attribution",
+        modality: "caption",
+        evidence: "veterans of Former Employer Cafe",
+        confidence: 1,
+      },
+      {
+        name: "Invented Hotel",
+        area: "California",
+        classification: "destination",
+        modality: "video_text",
+        evidence: "a beautiful sunset",
+        confidence: 0.99,
+      },
+      {
+        name: "Scenery Guess",
+        area: "California",
+        classification: "destination",
+        modality: "visual_scene",
+        evidence: "Scenery Guess inferred from the skyline",
+        confidence: 0.99,
+      },
+    ],
+  }, 150, {
+    mediaIngestion: [{ mediaIndex: 0, type: "image", status: "ok" }],
+  });
+  assert.deepEqual(result.hints.map((hint) => hint.name), [
+    "Wind River Brewing",
+    "Pine Coffee",
+    "Pine Coffee Supply",
+    "Story and Soil Coffee",
+  ]);
+  assert.equal(result.validation.candidateCount, 7);
+  assert.equal(result.validation.acceptedCount, 4);
+  assert.equal(result.validation.mergedAliasCount, 0);
+  assert.deepEqual(result.validation.rejections.map((item) => item.reason), [
+    "non_destination_classification",
+    "ungrounded_name",
+    "unsupported_modality",
+  ]);
+});
+
+test("structured model grounding requires ingested media and uses token boundaries", () => {
+  const evidence = {
+    caption: "An unrelated sunset with parking and dinner nearby.",
+    modelCandidates: [
+      {
+        name: "Self Echo Hotel",
+        classification: "destination",
+        modality: "caption",
+        evidence: "The caption says Self Echo Hotel",
+        confidence: 1,
+      },
+      {
+        name: "Visible Media Cafe",
+        classification: "destination",
+        modality: "video_text",
+        evidence: "Visible sign reads Visible Media Cafe",
+        confidence: 1,
+      },
+      {
+        name: "Park",
+        classification: "destination",
+        modality: "caption",
+        evidence: "The caption says Park",
+        confidence: 1,
+      },
+      {
+        name: "Inn",
+        classification: "destination",
+        modality: "caption",
+        evidence: "The caption says Inn",
+        confidence: 1,
+      },
+    ],
+  };
+
+  const noMedia = extractGroundedModelHints(evidence);
+  assert.deepEqual(noMedia.hints, []);
+  assert.deepEqual(noMedia.validation.rejections.map((item) => item.reason), [
+    "ungrounded_name",
+    "missing_ingested_media",
+    "ungrounded_name",
+    "ungrounded_name",
+  ]);
+
+  const failedMedia = extractGroundedModelHints(evidence, 150, {
+    mediaIngestion: [{ mediaIndex: 0, type: "video", status: "failed" }],
+  });
+  assert.deepEqual(failedMedia.hints, []);
+  assert.equal(failedMedia.validation.rejections[1].reason, "missing_ingested_media");
+
+  const result = extractGroundedModelHints(evidence, 150, {
+    mediaIngestion: [{ mediaIndex: 0, type: "video", status: "ok" }],
+  });
+
+  assert.deepEqual(result.hints.map((hint) => hint.name), ["Visible Media Cafe"]);
+  assert.equal(result.hints[0].grounding, "model_attested_media_evidence");
+  assert.equal(result.validation.independentlyGroundedCount, 0);
+  assert.equal(result.validation.modelAttestedMediaCount, 1);
+  assert.deepEqual(result.validation.rejections.map((item) => item.reason), [
+    "ungrounded_name", "ungrounded_name", "ungrounded_name",
+  ]);
+});
+
+test("rescore provenance always records scoring plus only optional transforms that ran", () => {
+  const resolver = "mapkit-production-query-ranking-and-threshold-mirror-v5";
+  assert.deepEqual(buildRescoreProvenance({
+    rebuildUnderstandingHints: false,
+    reresolveMapKit: false,
+    mapKitResolverID: resolver,
+  }), {
+    appliedTransforms: [{ kind: "scoring", revision: "score-contract-v4" }],
+    mapKitHintSource: "saved_understanding_hints",
+  });
+  assert.deepEqual(buildRescoreProvenance({
+    rebuildUnderstandingHints: true,
+    reresolveMapKit: false,
+    mapKitResolverID: resolver,
+  }), {
+    appliedTransforms: [
+      { kind: "scoring", revision: "score-contract-v4" },
+      { kind: "understanding_hints", revision: "grounded-hints-v3" },
+    ],
+    mapKitHintSource: "rebuilt_understanding_hints",
+  });
+  assert.deepEqual(buildRescoreProvenance({
+    rebuildUnderstandingHints: false,
+    reresolveMapKit: true,
+    mapKitResolverID: resolver,
+  }), {
+    appliedTransforms: [
+      { kind: "scoring", revision: "score-contract-v4" },
+      { kind: "mapkit_resolution", revision: resolver },
+    ],
+    mapKitHintSource: "saved_understanding_hints",
+  });
+  assert.deepEqual(buildRescoreProvenance({
+    rebuildUnderstandingHints: true,
+    reresolveMapKit: true,
+    mapKitResolverID: resolver,
+  }), {
+    appliedTransforms: [
+      { kind: "scoring", revision: "score-contract-v4" },
+      { kind: "understanding_hints", revision: "grounded-hints-v3" },
+      { kind: "mapkit_resolution", revision: resolver },
+    ],
+    mapKitHintSource: "rebuilt_understanding_hints",
+  });
+});
+
+test("alias collapse preserves distinct nested POIs", () => {
+  const result = extractGroundedModelHints({
+    caption: "Visit Central Park and Central Park Zoo, then Disneyland and Disneyland Hotel.",
+    modelCandidates: [
+      { name: "Central Park", classification: "destination", modality: "caption", evidence: "Central Park", confidence: 1 },
+      { name: "Central Park Zoo", classification: "destination", modality: "caption", evidence: "Central Park Zoo", confidence: 1 },
+      { name: "Disneyland", classification: "destination", modality: "caption", evidence: "Disneyland", confidence: 1 },
+      { name: "Disneyland Hotel", classification: "destination", modality: "caption", evidence: "Disneyland Hotel", confidence: 1 },
+    ],
+  });
+
+  assert.deepEqual(result.hints.map((hint) => hint.name), [
+    "Central Park", "Central Park Zoo", "Disneyland", "Disneyland Hotel",
+  ]);
+  assert.equal(result.validation.mergedAliasCount, 0);
+});
+
+test("structured model hints demote geography already carried by a venue area", () => {
+  const result = extractGroundedModelHints({
+    caption: "Lunch at Yintang Spicy Hotpot in San Diego.",
+    taggedLocations: [{ name: "San Diego", address: "California, United States" }],
+    modelCandidates: [
+      {
+        name: "Yintang Spicy Hotpot",
+        area: "Convoy, San Diego",
+        classification: "destination",
+        modality: "caption",
+        evidence: "Yintang Spicy Hotpot in San Diego",
+        confidence: 1,
+      },
+      {
+        name: "San Diego",
+        area: "California, United States",
+        classification: "itinerary",
+        modality: "tagged_location",
+        evidence: "San Diego",
+        confidence: 1,
+      },
+    ],
+  });
+
+  assert.deepEqual(result.hints.map((hint) => hint.name), ["Yintang Spicy Hotpot"]);
+  assert.equal(result.validation.demotedContextCount, 1);
+  assert.deepEqual(result.validation.demotedContexts.map((item) => item.name), ["San Diego"]);
+
+  const geographyOnly = extractGroundedModelHints({
+    caption: "A weekend in San Diego.",
+    modelCandidates: [{
+      name: "San Diego",
+      area: "California, United States",
+      classification: "itinerary",
+      modality: "caption",
+      evidence: "weekend in San Diego",
+      confidence: 1,
+    }],
+  });
+  assert.deepEqual(geographyOnly.hints.map((hint) => hint.name), ["San Diego"]);
+});
+
+test("deterministic fallback extracts bounded objects from numbered itineraries", () => {
+  const caption = `First time in Osaka? Here are the stops.
+
+1. Eat takoyaki (octopus balls). Osaka's soul food that can be found everywhere.
+2. Stroll down Dotonbori and gawk at the giant restaurant signboards
+3. Take a photo with the Glico man
+4. Grab a Japanese cheesecake from Rikuro
+5. Go to Teppanyaro izakaya in Namba for okonomiyaki
+6. Shop til you drop in Amerikamura
+7. Eat your way through Kuromon Market
+8. Explore Kitchen Street (Doguyasuji)
+9. Fish your own meal at Turikichi
+10. Base yourself in the heart of Osaka @Caption by Hyatt Namba to explore the city`;
+  const hints = extractDeterministicHints({
+    caption,
+    taggedLocations: [{ name: "Osaka", address: "Osaka, Japan" }],
+  });
+
+  assert.deepEqual(hints.map((hint) => hint.name), [
+    "Dotonbori",
+    "Glico man",
+    "Rikuro",
+    "Teppanyaro izakaya",
+    "Amerikamura",
+    "Kuromon Market",
+    "Kitchen Street (Doguyasuji)",
+    "Turikichi",
+    "Caption by Hyatt Namba",
+  ]);
+  assert.equal(hints.find((hint) => hint.name === "Teppanyaro izakaya")?.area, "Namba");
+  assert.equal(hints.some((hint) => hint.name === "Osaka"), false);
+  assert.equal(hints.some((hint) => /^Stroll|^Take|^Grab|^Shop|^Eat|^Explore|^Fish/u.test(hint.name)), false);
+});
+
+test("numbered fallback preserves proper names, multiple stops, and rejects generic instructions", () => {
+  const hints = extractDeterministicHints({
+    caption: `1. Pine Coffee Supply
+2. Farson Mercantile
+3. Visit Story and Soil Coffee
+4. Go to Atte for Coffee
+5. Breakfast at Gjusta, then drinks at Bar Stella
+6. Go get coffee
+7. Grab lunch at the hotel
+8. Shop in local markets
+9. Eat at Gjusta with @Ryan`,
+  });
+
+  assert.deepEqual(hints.map((hint) => hint.name), [
+    "Pine Coffee Supply",
+    "Farson Mercantile",
+    "Story and Soil Coffee",
+    "Atte for Coffee",
+    "Gjusta",
+    "Bar Stella",
+  ]);
+  assert.equal(hints.some((hint) => hint.name === "Ryan"), false);
+});
+
+test("numbered fallback rejects prose while preserving lowercase and names containing in", () => {
+  const hints = extractDeterministicHints({
+    caption: `1. Pack sunscreen
+2. Check the weather
+3. Dinner at gjusta
+4. Base yourself at @captionbyhyattnambaosaka
+5. Visit Alice in Wonderland Cafe
+6. Explore all of these spots
+7. Visit frank n franks
+8. Visit @carolines_seaside_cafe
+9. Visit Baked in Brooklyn
+10. Visit 麺屋 一燈
+11. Dinner at the @sunrise_bakery
+12. Visit Nobu in Malibu
+13. Go to dave and busters
+14. Walk to mama shelter`,
+  });
+
+  assert.deepEqual(hints.map((hint) => hint.name), [
+    "gjusta",
+    "captionbyhyattnambaosaka",
+    "Alice in Wonderland Cafe",
+    "frank n franks",
+    "carolines seaside cafe",
+    "Baked in Brooklyn",
+    "麺屋 一燈",
+    "sunrise bakery",
+    "Nobu",
+    "dave and busters",
+    "mama shelter",
+  ]);
+  assert.equal(hints.find((hint) => hint.name === "Alice in Wonderland Cafe")?.area, null);
+  assert.equal(hints.find((hint) => hint.name === "Baked in Brooklyn")?.area, null);
+  assert.equal(hints.find((hint) => hint.name === "Nobu")?.area, "Malibu");
+  assert.equal(
+    hints.find((hint) => hint.name === "captionbyhyattnambaosaka")?.evidence,
+    "itinerary_handle",
+  );
+  assert.deepEqual(
+    {
+      evidence: hints.find((hint) => hint.name === "carolines seaside cafe")?.evidence,
+      durable: hints.find((hint) => hint.name === "carolines seaside cafe")?.durable,
+      trustRank: hints.find((hint) => hint.name === "carolines seaside cafe")?.trustRank,
+    },
+    { evidence: "itinerary_handle", durable: false, trustRank: 1 },
+  );
+  assert.deepEqual(
+    {
+      evidence: hints.find((hint) => hint.name === "sunrise bakery")?.evidence,
+      durable: hints.find((hint) => hint.name === "sunrise bakery")?.durable,
+      trustRank: hints.find((hint) => hint.name === "sunrise bakery")?.trustRank,
+    },
+    { evidence: "itinerary_handle", durable: false, trustRank: 1 },
+  );
+});
+
+test("numbered fallback rejects activity wrappers and incidental stay mentions", () => {
+  const hints = extractDeterministicHints({
+    caption: `1. Stay at Hotel Juno with @ryan for two nights
+2. Walk to get ice cream
+3. Go to see the sunset
+4. Drive to find parking
+5. Visit Made in Italy`,
+  });
+
+  assert.deepEqual(hints.map((hint) => hint.name), ["Hotel Juno", "Made in Italy"]);
+  assert.ok(hints.every((hint) => hint.area == null));
+});
+
+test("numbered visible-media fallback preserves the lower image-text trust", () => {
+  const hints = extractDeterministicHints({
+    media: [{
+      ocrText: `1. Dinner at Gjusta
+2. Visit Alice in Wonderland Cafe`,
+    }],
+  });
+
+  assert.deepEqual(hints.map(({ name, evidence, durable, trustRank }) => ({
+    name,
+    evidence,
+    durable,
+    trustRank,
+  })), [
+    {
+      name: "Gjusta",
+      evidence: "image_or_video_text",
+      durable: true,
+      trustRank: 3,
+    },
+    {
+      name: "Alice in Wonderland Cafe",
+      evidence: "image_or_video_text",
+      durable: true,
+      trustRank: 3,
+    },
+  ]);
+});
+
+test("deterministic fallback normalizes array-shaped scene descriptions", () => {
+  const hints = extractDeterministicHints({
+    sceneDescription: [
+      { description: "Dinner at Array Cafe." },
+      { text: "Visit Scene Museum." },
+    ],
+  });
+
+  assert.deepEqual(hints.map((hint) => hint.name), ["Array Cafe", "Scene Museum"]);
+});
+
 test("scores recall, false positives, and forbidden attribution separately", () => {
   const score = scorePredictions({
     status: "labeled",
@@ -103,6 +521,96 @@ test("scores recall, false positives, and forbidden attribution separately", () 
   assert.equal(score.recall, 1);
   assert.equal(score.precision, 1 / 3);
   assert.equal(score.exactRequiredSet, false);
+});
+
+test("scorer normalizes bounded punctuation and since-year aliases without fuzzy matches", () => {
+  const labels = {
+    status: "labeled",
+    required: [{
+      name: "Sentinel and Cook's Meadow Loop",
+      aliases: ["Sentinel and Cooks Meadows"],
+    }],
+    acceptable: [],
+    forbidden: [],
+  };
+  const equivalent = scorePredictions(labels, [
+    "Sentinel & Cooks Meadows",
+    "Sentinel and Cook's Meadows",
+  ]);
+  assert.equal(equivalent.requiredHitCount, 1);
+  assert.equal(equivalent.predictionCount, 1);
+  assert.deepEqual(equivalent.requiredMisses, []);
+  assert.deepEqual(equivalent.falsePredictions, []);
+
+  for (const unrelated of [
+    "Sentinel & Cooks Meadow",
+    "Sentinel & Cook Meadow",
+    "Sentinel Dome & Cooks Meadows",
+  ]) {
+    const score = scorePredictions(labels, [unrelated]);
+    assert.equal(score.requiredHitCount, 0, unrelated);
+    assert.deepEqual(score.falsePredictions, [unrelated]);
+  }
+
+  const yearAlias = {
+    status: "labeled",
+    required: [{ name: "Chill Since '93", aliases: ["Chill Since 93"] }],
+    acceptable: [],
+    forbidden: [],
+  };
+  const expandedYear = scorePredictions(yearAlias, ["Chill Since 1993 Pizza"]);
+  assert.equal(expandedYear.requiredHitCount, 1);
+  assert.deepEqual(expandedYear.requiredMisses, []);
+  assert.deepEqual(expandedYear.falsePredictions, []);
+
+  for (const unrelated of [
+    "Chill Since 1994 Pizza",
+    "Room 1993",
+    "Chill Since 1893 Pizza",
+  ]) {
+    const score = scorePredictions(yearAlias, [unrelated]);
+    assert.equal(score.requiredHitCount, 0, unrelated);
+    assert.deepEqual(score.falsePredictions, [unrelated]);
+  }
+});
+
+test("forbidden geography only inspects predictions unmatched by required or acceptable labels", () => {
+  const labels = {
+    status: "labeled",
+    required: [
+      { name: "Billy Bob's Texas", aliases: [] },
+      { name: "Sake House Malibu", aliases: [] },
+    ],
+    acceptable: [{ name: "Malibu Seafood", aliases: [] }],
+    forbidden: [
+      { name: "Texas", aliases: [] },
+      { name: "Malibu", aliases: [] },
+    ],
+  };
+  const matchedVenues = scorePredictions(labels, [
+    "Billy Bob's Texas",
+    "Sake House Malibu",
+    "Malibu Seafood",
+  ]);
+  assert.equal(matchedVenues.requiredHitCount, 2);
+  assert.equal(matchedVenues.acceptableHitCount, 1);
+  assert.equal(matchedVenues.forbiddenHitCount, 0);
+  assert.deepEqual(matchedVenues.falsePredictions, []);
+  assert.equal(matchedVenues.exactRequiredSet, true);
+
+  const standaloneGeography = scorePredictions(labels, [
+    "Billy Bob's Texas",
+    "Sake House Malibu",
+    "Malibu Seafood",
+    "Texas",
+    "Malibu",
+  ]);
+  assert.equal(standaloneGeography.requiredHitCount, 2);
+  assert.equal(standaloneGeography.acceptableHitCount, 1);
+  assert.equal(standaloneGeography.forbiddenHitCount, 2);
+  assert.deepEqual(standaloneGeography.forbiddenHits, ["Texas", "Malibu"]);
+  assert.deepEqual(standaloneGeography.falsePredictions, ["Texas", "Malibu"]);
+  assert.equal(standaloneGeography.exactRequiredSet, false);
 });
 
 test("ground-truth scoring rejects fuzzy name fragments", () => {
@@ -215,12 +723,21 @@ test("summary reports macro and micro metrics without hiding dense-post misses",
     poiResolution: { response: null },
     timing: { totalMs: 10 + index },
   }));
+  results[1].understanding = {
+    status: "failed",
+    fallback: { used: true, strategy: "deterministic_evidence" },
+  };
   const item = buildSummary(results).variants[0];
   assert.equal(item.extractionRecall, 2 / 3);
   assert.equal(item.extractionMicroRecall, 1 / 2);
   assert.equal(item.extractionMicroPrecision, 2 / 3);
   assert.equal(item.selectedNameRequiredCount, 4);
   assert.equal(item.selectedNameRequiredHitCount, 2);
+  assert.equal(item.fallbackAssistedCaseCount, 1);
+  assert.equal(item.fallbackAssistedCaseRate, 1 / 2);
+  assert.equal(item.modelSuccessLabeledCaseCount, 1);
+  assert.equal(item.modelSuccessRequiredPlaceCount, 1);
+  assert.equal(item.modelSuccessRequiredPlaceHitCount, 1);
   assert.match(renderSummaryMarkdown(buildSummary(results)), /Hint micro P\/R/);
 });
 
@@ -249,6 +766,34 @@ test("summary never presents unresolved hints as selected-name quality", () => {
   assert.equal(item.selectedNameLabeledCaseCount, 0);
 });
 
+test("summary emits explicit zero model-success totals for an all-fallback cohort", () => {
+  const labels = {
+    status: "labeled",
+    required: [{ name: "Fallback Cafe", aliases: [] }],
+    acceptable: [],
+    forbidden: [],
+  };
+  const score = scorePredictions(labels, ["Fallback Cafe"]);
+  const item = buildSummary([{
+    variant: "all-fallback",
+    case: { labels, modalitiesExpected: [] },
+    acquisition: { status: "ok", modalityCoverage: { complete: true } },
+    understanding: { status: "failed", fallback: { used: true } },
+    scores: {
+      extraction: score,
+      endToEnd: score,
+      endToEndStage: "unresolved_hints",
+    },
+    poiResolution: { mode: "none", status: "not_run", response: null },
+    timing: { totalMs: 1 },
+  }]).variants[0];
+  assert.equal(item.modelSuccessLabeledCaseCount, 0);
+  assert.equal(item.modelSuccessRequiredPlaceCount, 0);
+  assert.equal(item.modelSuccessRequiredPlaceHitCount, 0);
+  assert.equal(item.modelSuccessExtractionMicroPrecision, null);
+  assert.equal(item.modelSuccessExtractionMicroRecall, null);
+});
+
 test("MapKit geography mirror preserves production LA, Georgia, and DC semantics", {
   skip: process.platform !== "darwin",
 }, async () => {
@@ -275,6 +820,298 @@ test("MapKit geography mirror preserves production LA, Georgia, and DC semantics
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });
   }
+});
+
+test("MapKit query mirror retries distinctive bluffs without over-broadening businesses", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitGeography([
+    {
+      id: "paseo-del-mar-bluffs",
+      area: "Los Angeles, California",
+      searchPlanName: "Paseo del Mar Bluffs",
+    },
+    {
+      id: "ordinary-business",
+      area: "Los Angeles, California",
+      searchPlanName: "Starbucks",
+    },
+  ], null);
+
+  assert.deepEqual(actual[0].queryVariants, [
+    "Paseo del Mar Bluffs Los Angeles",
+    "Paseo del Mar Bluffs",
+    "Paseo del Mar Los Angeles",
+    "Paseo del Mar",
+  ]);
+  assert.deepEqual(actual[1].queryVariants, ["Starbucks Los Angeles"]);
+});
+
+test("MapKit social mirror selects a same-state Mount Wilson provider lead and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "mount-wilson-provider-lead",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Mount Wilson",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "pasadena-alternative",
+          name: "Mount Wilson",
+          locality: "Pasadena",
+          region: "CA",
+        },
+        {
+          id: "provider-lead",
+          name: "Mount Wilson",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "provider-lead",
+    "pasadena-alternative",
+  ]);
+  assert.equal(actual.candidateSelection.selectedCandidateID, "provider-lead");
+  assert.equal(actual.candidateSelection.didSelectCandidate, true);
+});
+
+test("MapKit social mirror selects a unique same-state landmark without locality", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "unique-landmark",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Vetter Mountain",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "trail",
+          name: "Vetter Mountain Trail",
+          locality: "Palmdale",
+          region: "CA",
+          latitude: 34.2901,
+          longitude: -118.0302,
+        },
+        {
+          id: "landmark",
+          name: "Vetter Mountain",
+          region: "CA",
+          latitude: 34.2914,
+          longitude: -118.0281,
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "landmark");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, ["landmark", "trail"]);
+});
+
+test("MapKit social mirror selects colocated provider duplicates and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "colocated-duplicate",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Griffith Observatory",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "first",
+          name: "Griffith Observatory",
+          locality: "Los Angeles",
+          region: "CA",
+          latitude: 34.118105,
+          longitude: -118.300376,
+        },
+        {
+          id: "duplicate",
+          name: "Griffith Observatory",
+          locality: "Los Angeles",
+          region: "CA",
+          latitude: 34.118099,
+          longitude: -118.300400,
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "first");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, ["first", "duplicate"]);
+});
+
+test("MapKit social mirror selects a grounded feature-core result and keeps alternatives", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "feature-core",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Paseo del Mar Bluffs",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "palos-verdes",
+          name: "Paseo del Mar",
+          locality: "Palos Verdes Estates",
+          region: "CA",
+        },
+        {
+          id: "unrelated-street",
+          name: "Puerto del Mar St",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+        {
+          id: "los-angeles",
+          name: "Paseo del Mar",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "los-angeles");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "palos-verdes",
+    "unrelated-street",
+  ]);
+});
+
+test("MapKit social mirror treats LA as Los Angeles locality evidence", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "la-locality-alias",
+    area: "LA",
+    candidateSelection: {
+      nameHint: "Summit Archive",
+      policy: "socialGroundedArea",
+      candidates: [
+        {
+          id: "los-angeles",
+          name: "Summit Archive",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+        {
+          id: "pasadena",
+          name: "Summit Archive",
+          locality: "Pasadena",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.selectedCandidateID, "los-angeles");
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "pasadena",
+  ]);
+});
+
+test("MapKit social mirror rejects conflicting states and unsupported same-state locality guesses", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const actual = await inspectMapKitGeography([
+    {
+      id: "state-conflict",
+      area: "Los Angeles, California",
+      candidateSelection: {
+        nameHint: "Vital Junction",
+        policy: "socialGroundedArea",
+        candidates: [{
+          id: "austin",
+          name: "Vital Junction",
+          locality: "Austin",
+          region: "TX",
+        }],
+      },
+    },
+    {
+      id: "same-state-without-locality",
+      area: "Los Angeles, California",
+      candidateSelection: {
+        nameHint: "Vital Junction",
+        policy: "socialGroundedArea",
+        candidates: [{
+          id: "california-only",
+          name: "Vital Junction",
+          region: "CA",
+        }],
+      },
+    },
+  ], null);
+
+  assert.deepEqual(actual[0].candidateSelection.orderedCandidateIDs, []);
+  assert.equal(actual[0].candidateSelection.didSelectCandidate, false);
+  assert.equal(actual[1].candidateSelection.didSelectCandidate, false);
+  assert.deepEqual(actual[1].candidateSelection.orderedCandidateIDs, ["california-only"]);
+});
+
+test("MapKit grounded-area defaults do not change conservative manual selection", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "conservative-manual",
+    area: "Los Angeles, California",
+    candidateSelection: {
+      nameHint: "Summit Archive",
+      policy: "conservative",
+      candidates: [
+        {
+          id: "pasadena",
+          name: "Summit Archive",
+          locality: "Pasadena",
+          region: "CA",
+        },
+        {
+          id: "los-angeles",
+          name: "Summit Archive",
+          locality: "Los Angeles",
+          region: "CA",
+        },
+      ],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.didSelectCandidate, false);
+  assert.deepEqual(actual.candidateSelection.orderedCandidateIDs, [
+    "los-angeles",
+    "pasadena",
+  ]);
+});
+
+test("MapKit social mirror treats Vgn as Vegan for a grounded venue", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const [actual] = await inspectMapKitGeography([{
+    id: "hip-vegan-alias",
+    area: "Ojai, California",
+    candidateSelection: {
+      nameHint: "Hip Vegan",
+      policy: "socialGroundedArea",
+      candidates: [{
+        id: "hip-vgn",
+        name: "Hip Vgn",
+        locality: "Ojai",
+        region: "CA",
+      }],
+    },
+  }], null);
+
+  assert.equal(actual.candidateSelection.didSelectCandidate, true);
+  assert.equal(actual.candidateSelection.selectedCandidateID, "hip-vgn");
 });
 
 test("MapKit ranking mirror applies production category ordering before truncation", {
@@ -336,6 +1173,150 @@ test("MapKit re-resolution fails rather than relabeling a resolver-none run", as
   }
 });
 
+test("scoring-only rescore records its transform and result hash chain", async () => {
+  const runDirectory = await mkdtemp(join(tmpdir(), "rec120-rescore-scoring-"));
+  const labels = {
+    status: "labeled",
+    required: [{ name: "Grounded Cafe", aliases: [] }],
+    acceptable: [],
+    forbidden: [],
+  };
+  try {
+    await Promise.all([
+      writeFile(join(runDirectory, "manifest.json"), JSON.stringify({
+        schemaVersion: 1,
+        resolver: "none",
+      })),
+      writeFile(join(runDirectory, "results.json"), JSON.stringify([{
+        schemaVersion: 1,
+        variant: "fixture+deterministic+none",
+        case: { id: "grounded", labels, modalitiesExpected: [] },
+        acquisition: { status: "ok", modalityCoverage: { complete: true }, evidence: {} },
+        understanding: { status: "ok", hints: [{ name: "Grounded Cafe" }] },
+        poiResolution: { mode: "none", status: "not_run", response: null, latencyMs: 0 },
+        predictions: { extraction: ["Grounded Cafe"], endToEnd: ["Grounded Cafe"] },
+        scores: {
+          extraction: scorePredictions(labels, ["Grounded Cafe"]),
+          endToEnd: scorePredictions(labels, ["Grounded Cafe"]),
+          endToEndStage: "unresolved_hints",
+        },
+        timing: { acquisitionMs: 0, understandingMs: 0, resolutionMs: 0, totalMs: 0 },
+      }])),
+    ]);
+
+    const rescorer = new URL("./social-import-eval/rescore.mjs", import.meta.url);
+    await execFileAsync(process.execPath, [rescorer.pathname, runDirectory]);
+
+    const manifest = JSON.parse(await readFile(join(runDirectory, "manifest.json"), "utf8"));
+    assert.match(manifest.lastRescoredAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(manifest.rescoreHistory.length, 1);
+    assert.deepEqual(manifest.rescoreHistory[0].appliedTransforms, [
+      { kind: "scoring", revision: "score-contract-v4" },
+    ]);
+    assert.equal(manifest.rescoreHistory[0].rebuildUnderstandingHints, false);
+    assert.equal(manifest.rescoreHistory[0].reresolveMapKit, false);
+    assert.equal(manifest.rescoreHistory[0].paidAcquisitionOrUnderstandingCalls, false);
+    assert.match(manifest.rescoreHistory[0].inputResultsSHA256, /^[a-f0-9]{64}$/);
+    assert.match(manifest.rescoreHistory[0].outputResultsSHA256, /^[a-f0-9]{64}$/);
+  } finally {
+    await rm(runDirectory, { recursive: true, force: true });
+  }
+});
+
+test("understanding-hint rebuild produces a model-directed resolver-none replay", async () => {
+  const runDirectory = await mkdtemp(join(tmpdir(), "rec120-rebuild-hints-"));
+  const labels = {
+    status: "labeled",
+    required: [{ name: "Grounded Cafe", aliases: [] }],
+    acceptable: [],
+    forbidden: [],
+  };
+  try {
+    await Promise.all([
+      writeFile(join(runDirectory, "manifest.json"), JSON.stringify({
+        schemaVersion: 1,
+        resolver: "none",
+      })),
+      writeFile(join(runDirectory, "results.json"), JSON.stringify([{
+        schemaVersion: 1,
+        variant: "apify+gemini+none",
+        case: { id: "grounded", labels, modalitiesExpected: [] },
+        acquisition: { status: "ok", modalityCoverage: { complete: true }, evidence: {} },
+        understanding: {
+          status: "ok",
+          mediaIngestion: [{ mediaIndex: 0, type: "video", status: "ok" }],
+          evidence: {
+            caption: "Video by Creator",
+            modelCandidates: [{
+              name: "Grounded Cafe",
+              area: "California",
+              classification: "destination",
+              modality: "video_text",
+              evidence: "Visible text reads Grounded Cafe",
+              confidence: 1,
+            }],
+          },
+          hints: [{ name: "Video by Creator" }],
+        },
+        poiResolution: { mode: "none", status: "not_run", response: null, latencyMs: 0 },
+        predictions: { extraction: ["Video by Creator"], endToEnd: ["Video by Creator"] },
+        scores: {
+          extraction: scorePredictions(labels, ["Video by Creator"]),
+          endToEnd: scorePredictions(labels, ["Video by Creator"]),
+          endToEndStage: "unresolved_hints",
+        },
+        timing: { acquisitionMs: 1, understandingMs: 1, resolutionMs: 0, totalMs: 2 },
+      }])),
+    ]);
+    const rescorer = new URL("./social-import-eval/rescore.mjs", import.meta.url);
+    await execFileAsync(process.execPath, [
+      rescorer.pathname,
+      runDirectory,
+      "--rebuild-understanding-hints",
+    ]);
+    const results = JSON.parse(await readFile(join(runDirectory, "results.json"), "utf8"));
+    assert.deepEqual(results[0].predictions.extraction, ["Grounded Cafe"]);
+    assert.equal(results[0].scores.extraction.requiredHitCount, 1);
+    assert.equal(results[0].understanding.modelCandidateValidation.acceptedCount, 1);
+    const manifest = JSON.parse(await readFile(join(runDirectory, "manifest.json"), "utf8"));
+    assert.equal(manifest.understandingHintRebuild.paidAcquisitionOrUnderstandingCalls, false);
+    assert.equal(manifest.understandingHintRebuild.fallbackAssistedCaseCount, 0);
+    assert.equal(manifest.understandingHintRebuild.transformRevision, "grounded-hints-v3");
+    assert.equal(manifest.rescoreHistory.length, 1);
+    const history = manifest.rescoreHistory[0];
+    assert.deepEqual(history.appliedTransforms, [
+      { kind: "scoring", revision: "score-contract-v4" },
+      { kind: "understanding_hints", revision: "grounded-hints-v3" },
+    ]);
+    assert.equal(history.rebuildUnderstandingHints, true);
+    assert.equal(history.reresolveMapKit, false);
+    assert.equal(history.paidAcquisitionOrUnderstandingCalls, false);
+    assert.match(history.inputResultsSHA256, /^[a-f0-9]{64}$/);
+    assert.match(history.outputResultsSHA256, /^[a-f0-9]{64}$/);
+    assert.notEqual(history.inputResultsSHA256, history.outputResultsSHA256);
+    const savedResultsText = await readFile(join(runDirectory, "results.json"), "utf8");
+    assert.equal(
+      history.outputResultsSHA256,
+      createHash("sha256").update(savedResultsText).digest("hex"),
+    );
+    await execFileAsync(process.execPath, [
+      rescorer.pathname,
+      runDirectory,
+      "--rebuild-understanding-hints",
+    ]);
+    const repeatedManifest = JSON.parse(
+      await readFile(join(runDirectory, "manifest.json"), "utf8"),
+    );
+    assert.equal(repeatedManifest.rescoreHistory.length, 2);
+    assert.equal(
+      repeatedManifest.rescoreHistory[1].inputResultsSHA256,
+      repeatedManifest.rescoreHistory[0].outputResultsSHA256,
+    );
+  } finally {
+    await rm(runDirectory, { recursive: true, force: true });
+  }
+});
+
 test("local helper subprocesses never inherit provider credentials", {
   concurrency: false,
 }, async () => {
@@ -385,6 +1366,82 @@ test("fixture replay blocks network-capable understanding unless explicitly allo
       return true;
     },
   );
+});
+
+test("runner accepts an external corpus and keeps the committed corpus as its default", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "rec120-external-corpus-"));
+  const corpusPath = join(temporaryDirectory, "launch-gate.json");
+  const outputDirectory = join(temporaryDirectory, "run");
+  const defaultOutputDirectory = join(temporaryDirectory, "default-run");
+  const externalCorpus = {
+    schemaVersion: 1,
+    name: "private launch gate",
+    cases: [{
+      id: "external-instagram-case",
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/DbPM9o1mzbL/",
+      modalitiesExpected: [],
+      labels: {
+        status: "pending_manual_label",
+        required: [],
+        acceptable: [],
+        forbidden: [],
+      },
+    }],
+  };
+  try {
+    await writeFile(corpusPath, JSON.stringify(externalCorpus));
+    const runner = new URL("./social-import-eval/run.mjs", import.meta.url);
+    await execFileAsync(process.execPath, [
+      runner.pathname,
+      "--corpus", corpusPath,
+      "--cases", "external-instagram-case",
+      "--providers", "apify",
+      "--understanders", "deterministic",
+      "--resolve", "none",
+      "--out", outputDirectory,
+    ], {
+      env: { ...process.env, APIFY_TOKEN: "" },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outputDirectory, "manifest.json"), "utf8"),
+    );
+    const results = JSON.parse(
+      await readFile(join(outputDirectory, "results.json"), "utf8"),
+    );
+    assert.equal(manifest.corpus.path, corpusPath);
+    assert.equal(
+      manifest.corpus.sha256,
+      createHash("sha256").update(JSON.stringify(externalCorpus)).digest("hex"),
+    );
+    assert.deepEqual(manifest.corpus.selectedCaseIDs, ["external-instagram-case"]);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].case.id, "external-instagram-case");
+    assert.equal(results[0].acquisition.status, "not_configured");
+
+    await execFileAsync(process.execPath, [
+      runner.pathname,
+      "--cases", "instagram-caption-cave-springs",
+      "--providers", "apify",
+      "--understanders", "deterministic",
+      "--resolve", "none",
+      "--out", defaultOutputDirectory,
+    ], {
+      env: { ...process.env, APIFY_TOKEN: "" },
+    });
+    const defaultManifest = JSON.parse(
+      await readFile(join(defaultOutputDirectory, "manifest.json"), "utf8"),
+    );
+    assert.match(defaultManifest.corpus.path, /\/social-import-eval\/corpus\.json$/);
+    assert.deepEqual(
+      defaultManifest.corpus.selectedCaseIDs,
+      ["instagram-caption-cave-springs"],
+    );
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
 
 test("credentialed providers fail closed without leaking configuration", async () => {
@@ -543,7 +1600,13 @@ test("normalizes official Clockworks TikTok video and slideshow payloads", () =>
   const video = normalizeVendorDataset(videoFixture, videoCase);
   assert.equal(video.status, "ok");
   assert.equal(video.evidence.caption, "Hidden coffee stop");
-  assert.equal(video.evidence.sceneDescription, "A storefront sign reads Pine Coffee Supply.");
+  assert.equal(video.evidence.sceneDescription, null);
+  assert.deepEqual(video.evidence.vendorModelEvidence, [{
+    provider: "acquisition_vendor",
+    kind: "scene_description",
+    text: "A storefront sign reads Pine Coffee Supply.",
+    independentlyGrounded: false,
+  }]);
   assert.deepEqual(video.evidence.taggedLocations, [{
     name: "Pine Coffee Supply",
     address: "Pinedale, Wyoming",
@@ -560,6 +1623,14 @@ test("normalizes official Clockworks TikTok video and slideshow payloads", () =>
     videoText: null,
   }]);
   assert.equal(video.evidence.transcript, null);
+  assert.equal(
+    extractDeterministicHints({
+      ...video.evidence,
+      taggedLocations: [],
+      caption: null,
+    }).some((hint) => hint.name === "Pine Coffee Supply"),
+    false,
+  );
   assert.equal(JSON.stringify(videoFixture), before);
   assert.equal(videoFixture[0].videoMeta.transcriptionLink, transcriptionLink);
 
@@ -1032,6 +2103,57 @@ test("Gemini retries transient provider failures without redownloading media", {
   }
 });
 
+test("Gemini retries every documented transient HTTP class and honors Retry-After", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  const originalAttempts = process.env.GEMINI_MAX_ATTEMPTS;
+  const originalBase = process.env.GEMINI_RETRY_BASE_MS;
+  const originalMaximum = process.env.GEMINI_RETRY_MAX_MS;
+  process.env.GEMINI_API_KEY = "unit-test-gemini-key";
+  process.env.GEMINI_MAX_ATTEMPTS = "2";
+  process.env.GEMINI_RETRY_BASE_MS = "1";
+  process.env.GEMINI_RETRY_MAX_MS = "2";
+  try {
+    for (const status of [408, 429, 500, 502, 504]) {
+      let modelFetches = 0;
+      globalThis.fetch = async () => {
+        modelFetches += 1;
+        if (modelFetches === 1) {
+          return JSONResponse(
+            { error: { code: status, status: "TRANSIENT" } },
+            status,
+            status === 429 ? { "retry-after": "0" } : undefined,
+          );
+        }
+        return JSONResponse({
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [] }) }] } }],
+        });
+      };
+      const result = await runUnderstandingProvider("gemini", {
+        platform: "instagram",
+        contentType: "post",
+        url: "https://www.instagram.com/p/ABC123xyz/",
+      }, { status: "ok", evidence: { media: [] } });
+      assert.equal(result.status, "ok", String(status));
+      assert.equal(modelFetches, 2, String(status));
+      assert.deepEqual(result.requestAttempts.map((item) => item.statusCode), [status, 200]);
+      assert.ok(result.requestAttempts[0].retryDelayMs <= 2, String(status));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+    if (originalAttempts == null) delete process.env.GEMINI_MAX_ATTEMPTS;
+    else process.env.GEMINI_MAX_ATTEMPTS = originalAttempts;
+    if (originalBase == null) delete process.env.GEMINI_RETRY_BASE_MS;
+    else process.env.GEMINI_RETRY_BASE_MS = originalBase;
+    if (originalMaximum == null) delete process.env.GEMINI_RETRY_MAX_MS;
+    else process.env.GEMINI_RETRY_MAX_MS = originalMaximum;
+  }
+});
+
 test("Gemini does not retry invalid requests", {
   concurrency: false,
 }, async () => {
@@ -1048,11 +2170,50 @@ test("Gemini does not retry invalid requests", {
       platform: "instagram",
       contentType: "post",
       url: "https://www.instagram.com/p/ABC123xyz/",
-    }, { status: "ok", evidence: { media: [] } });
+    }, {
+      status: "ok",
+      evidence: {
+        caption: "📍Fallback Cafe, CA",
+        media: [],
+        sceneDescription: [{ description: "Visit Scene Museum." }],
+      },
+    });
     assert.equal(result.status, "failed");
     assert.equal(result.error.message, "HTTP 400");
     assert.equal(modelFetches, 1);
     assert.deepEqual(result.requestAttempts.map((item) => item.statusCode), [400]);
+    assert.equal(result.fallback.used, true);
+    assert.deepEqual(result.hints.map((hint) => hint.name), ["Fallback Cafe", "Scene Museum"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  }
+});
+
+test("Gemini treats schema-invalid JSON as failure and uses deterministic fallback", {
+  concurrency: false,
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "unit-test-gemini-key";
+  globalThis.fetch = async () => JSONResponse({
+    candidates: [{ content: { parts: [{ text: "{}" }] } }],
+  });
+  try {
+    const result = await runUnderstandingProvider("gemini", {
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/ABC123xyz/",
+    }, {
+      status: "ok",
+      evidence: { caption: "📍Fallback Cafe, CA", media: [] },
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(result.error.code, "gemini_invalid_schema");
+    assert.equal(result.fallback.used, true);
+    assert.equal(result.fallback.reason, "gemini_invalid_schema");
+    assert.deepEqual(result.hints.map((hint) => hint.name), ["Fallback Cafe"]);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.GEMINI_API_KEY;

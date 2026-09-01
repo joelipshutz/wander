@@ -7,6 +7,11 @@ struct PlaceImportCandidateMatch: Equatable {
     let bestScore: Double
 }
 
+enum PlaceImportCandidateSelectionPolicy {
+    case conservative
+    case socialGroundedArea
+}
+
 struct PlaceImportSearchRegion: Equatable {
     let latitude: CLLocationDegrees
     let longitude: CLLocationDegrees
@@ -133,10 +138,121 @@ enum PlaceImportGeography {
     }
 
     static func candidateConflictsWithArea(_ candidate: PlaceCandidate, areaHint: String?) -> Bool {
+        if let expectedCountryCode = explicitInternationalArea(in: areaHint)?.countryCode,
+           let candidateCountryCode = SocialImportCountry.isoCode(for: candidate.country),
+           expectedCountryCode != candidateCountryCode {
+            return true
+        }
         guard let requestedState = areaStateCode(in: areaHint),
               let candidateState = candidateStateCode(candidate)
         else { return false }
         return requestedState != candidateState
+    }
+
+    static func candidateStronglyMatchesArea(
+        _ candidate: PlaceCandidate,
+        areaHint: String?
+    ) -> Bool {
+        guard !candidateConflictsWithArea(candidate, areaHint: areaHint),
+              let locality = localityText(in: areaHint)
+        else { return false }
+
+        if let internationalMatch = candidateMatchesExplicitInternationalArea(
+            candidate,
+            areaHint: areaHint
+        ) {
+            return internationalMatch
+        }
+
+        let requestedTokens = requestedLocalityTokens(locality)
+        guard !requestedTokens.isEmpty else { return false }
+
+        let candidateTokens = candidateAreaTokens(candidate)
+        return requestedTokens.isSubset(of: candidateTokens)
+    }
+
+    static func candidateHasCompatibleAreaEvidence(
+        _ candidate: PlaceCandidate,
+        areaHint: String?
+    ) -> Bool {
+        guard let areaHint = areaHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !areaHint.isEmpty
+        else { return true }
+        guard !candidateConflictsWithArea(candidate, areaHint: areaHint) else { return false }
+
+        if let internationalMatch = candidateMatchesExplicitInternationalArea(
+            candidate,
+            areaHint: areaHint
+        ) {
+            return internationalMatch
+        }
+
+        if let locality = localityText(in: areaHint),
+           !requestedLocalityTokens(locality).isEmpty {
+            return candidateStronglyMatchesArea(candidate, areaHint: areaHint)
+        }
+        if let requestedState = areaStateCode(in: areaHint),
+           let candidateState = candidateStateCode(candidate) {
+            return requestedState == candidateState
+        }
+        return candidateStronglyMatchesArea(candidate, areaHint: areaHint)
+    }
+
+    static func candidateMatchesExplicitInternationalCountryWithoutRecognizedSubdivision(
+        _ candidate: PlaceCandidate,
+        areaHint: String?
+    ) -> Bool {
+        guard let context = explicitInternationalArea(in: areaHint),
+              let candidateCountryCode = SocialImportCountry.isoCode(for: candidate.country)
+        else { return false }
+        guard context.countryCode == candidateCountryCode else { return false }
+        return context.details.allSatisfy {
+            recognizedSubdivisionCode(
+                for: $0,
+                countryCode: candidateCountryCode
+            ) == nil
+        }
+    }
+
+    static func candidateMatchesExplicitState(
+        _ candidate: PlaceCandidate,
+        areaHint: String?
+    ) -> Bool {
+        guard let requestedState = areaStateCode(in: areaHint),
+              let candidateState = candidateStateCode(candidate)
+        else { return false }
+        return requestedState == candidateState
+    }
+
+    static func isDistinctiveLandmarkFeatureName(_ value: String) -> Bool {
+        let tokens = normalizedWords(value)
+        guard tokens.count >= 2 else { return false }
+
+        if landmarkFeaturePrefixes.contains(tokens[0]), tokens.count == 2 {
+            return isDistinctiveLandmarkToken(tokens[1])
+        }
+
+        guard let suffix = tokens.last,
+              landmarkFeatureSuffixes.contains(suffix)
+        else { return false }
+        return tokens.dropLast().contains(where: isDistinctiveLandmarkToken)
+    }
+
+    static func candidateMatchesDistinctiveFeatureCore(
+        _ candidateName: String,
+        nameHint: String
+    ) -> Bool {
+        let hintTokens = normalizedWords(nameHint)
+        let candidateTokens = normalizedWords(candidateName)
+        guard hintTokens.count >= 3,
+              let suffix = hintTokens.last,
+              providerCoreRemovableFeatureSuffixes.contains(suffix)
+        else { return false }
+
+        let featureCore = Array(hintTokens.dropLast())
+        return candidateTokens == featureCore
+            && featureCore.count >= 2
+            && featureCore.contains(where: isDistinctiveLandmarkToken)
     }
 
     static func areaTokens(_ value: String) -> Set<String> {
@@ -150,12 +266,143 @@ enum PlaceImportGeography {
         return result
     }
 
+    static func candidateAreaTokens(_ candidate: PlaceCandidate) -> Set<String> {
+        let structuredArea = [candidate.address, candidate.locality, candidate.region]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        var result = areaTokens(structuredArea)
+        if let country = candidate.country {
+            // A provider country code such as CA means Canada, not the U.S.
+            // state of California. Preserve it as raw evidence without passing
+            // it through the state-code expander.
+            result.formUnion(normalizedWords(country))
+        }
+        return result
+    }
+
     private static func candidateStateCode(_ candidate: PlaceCandidate) -> String? {
-        stateCode(in: candidate.region)
+        if let countryCode = SocialImportCountry.isoCode(for: candidate.country),
+           countryCode != "US" {
+            return nil
+        }
+        return stateCode(in: candidate.region)
             ?? stateCode(in: candidate.address)
-            ?? stateCode(in: [candidate.locality, candidate.region, candidate.country]
+            ?? stateCode(in: [candidate.locality, candidate.region]
                 .compactMap { $0 }
                 .joined(separator: ", "))
+    }
+
+    private static func candidateMatchesExplicitInternationalArea(
+        _ candidate: PlaceCandidate,
+        areaHint: String?
+    ) -> Bool? {
+        guard let context = explicitInternationalArea(in: areaHint),
+              let candidateCountryCode = SocialImportCountry.isoCode(for: candidate.country)
+        else { return nil }
+        guard context.countryCode == candidateCountryCode else { return false }
+        guard !context.details.isEmpty else { return true }
+
+        let candidateTokens = candidateAreaTokens(candidate)
+        let candidateSubdivisionKeys = subdivisionKeys(
+            for: candidate.region,
+            countryCode: candidateCountryCode
+        )
+
+        return context.details.contains { detail in
+            let requestedTokens = Set(normalizedWords(detail))
+                .subtracting(broadAreaQualifierTokens)
+            if !requestedTokens.isEmpty,
+               requestedTokens.isSubset(of: candidateTokens) {
+                return true
+            }
+
+            let requestedSubdivisionKeys = subdivisionKeys(
+                for: detail,
+                countryCode: candidateCountryCode
+            )
+            return !requestedSubdivisionKeys.isDisjoint(with: candidateSubdivisionKeys)
+        }
+    }
+
+    private static func explicitInternationalArea(
+        in value: String?
+    ) -> (countryCode: String, details: [String])? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              areaStateCode(in: value) == nil
+        else { return nil }
+
+        let components = value.split(separator: ",", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let country = components.last,
+              let countryCode = SocialImportCountry.isoCode(for: country)
+        else { return nil }
+        return (countryCode, Array(components.dropLast()))
+    }
+
+    private static func subdivisionKeys(
+        for value: String?,
+        countryCode: String
+    ) -> Set<String> {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return [] }
+
+        let normalizedValue = normalizedWords(value).joined()
+        guard !normalizedValue.isEmpty else { return [] }
+        var keys: Set<String> = [normalizedValue]
+
+        if let aliases = subdivisionCodesByCountry[countryCode],
+           let code = recognizedSubdivisionCode(
+               for: value,
+               countryCode: countryCode
+           ) {
+            keys.insert(code.lowercased())
+            for (name, code) in aliases where code.caseInsensitiveCompare(normalizedValue) == .orderedSame {
+                keys.insert(name)
+            }
+        }
+
+        let words = normalizedWords(value)
+        if words.count > 1 {
+            keys.insert(words.compactMap(\.first).map(String.init).joined())
+        }
+        return keys
+    }
+
+    private static func recognizedSubdivisionCode(
+        for value: String?,
+        countryCode: String
+    ) -> String? {
+        guard let value,
+              let aliases = subdivisionCodesByCountry[countryCode]
+        else { return nil }
+        let normalizedValue = normalizedWords(value).joined()
+        if let code = aliases[normalizedValue] {
+            return code
+        }
+        return aliases.values.first {
+            $0.caseInsensitiveCompare(normalizedValue) == .orderedSame
+        }
+    }
+
+    private static func requestedLocalityTokens(_ locality: String) -> Set<String> {
+        var tokens = Set(normalizedWords(locality))
+            .subtracting(broadAreaQualifierTokens)
+        // In an unpunctuated area field, "LA" means Los Angeles (the state
+        // parser independently requires explicit Louisiana punctuation).
+        if tokens.remove("la") != nil {
+            tokens.formUnion(["los", "angeles"])
+        }
+        return tokens
+    }
+
+    private static func isDistinctiveLandmarkToken(_ token: String) -> Bool {
+        token.count >= 3
+            && !featureConnectorTokens.contains(token)
+            && !landmarkFeaturePrefixes.contains(token)
+            && !landmarkFeatureSuffixes.contains(token)
     }
 
     private static func areaStateCode(in value: String?) -> String? {
@@ -281,6 +528,39 @@ enum PlaceImportGeography {
 
     private static let stateByCode = Dictionary(uniqueKeysWithValues: states.map { ($0.code, $0) })
     private static let stateCodes = Set(states.map(\.code))
+    private static let broadAreaQualifierTokens: Set<String> = [
+        "area", "county", "greater", "metro", "metropolitan", "region", "vicinity"
+    ]
+    private static let subdivisionCodesByCountry: [String: [String: String]] = [
+        "CA": [
+            "alberta": "AB",
+            "britishcolumbia": "BC",
+            "manitoba": "MB",
+            "newbrunswick": "NB",
+            "newfoundlandandlabrador": "NL",
+            "northwestterritories": "NT",
+            "novascotia": "NS",
+            "nunavut": "NU",
+            "ontario": "ON",
+            "princeedwardisland": "PE",
+            "quebec": "QC",
+            "saskatchewan": "SK",
+            "yukon": "YT"
+        ]
+    ]
+    private static let landmarkFeaturePrefixes: Set<String> = ["mount", "mt"]
+    private static let landmarkFeatureSuffixes: Set<String> = [
+        "beach", "bluff", "bluffs", "canyon", "falls", "hill", "hills", "lake",
+        "mountain", "mountains", "observatories", "observatory", "overlook", "overlooks",
+        "peak", "peaks", "reservoir", "ridge", "summit", "summits", "trail"
+    ]
+    private static let featureConnectorTokens: Set<String> = [
+        "a", "an", "and", "at", "by", "for", "in", "near", "of", "on", "the", "to"
+    ]
+    private static let providerCoreRemovableFeatureSuffixes: Set<String> = [
+        "bluff", "bluffs", "mountain", "mountains", "observatories", "observatory",
+        "overlook", "overlooks", "peak", "peaks", "summit", "summits"
+    ]
 }
 
 enum PlaceImportCandidateMatcher {
@@ -290,7 +570,9 @@ enum PlaceImportCandidateMatcher {
         areaHint: String?,
         latitude: Double? = nil,
         longitude: Double? = nil,
-        allowNearSpellingMatch: Bool = false
+        allowNearSpellingMatch: Bool = false,
+        maximumNearSpellingEdits: Int = 1,
+        selectionPolicy: PlaceImportCandidateSelectionPolicy = .conservative
     ) -> PlaceImportCandidateMatch {
         let geographicallyEligibleCandidates = candidates.filter {
             !PlaceImportGeography.candidateConflictsWithArea($0, areaHint: areaHint)
@@ -301,12 +583,20 @@ enum PlaceImportCandidateMatcher {
         guard let nameHint = nameHint?.trimmingCharacters(in: .whitespacesAndNewlines),
               !nameHint.isEmpty
         else {
+            let soleCandidate = geographicallyEligibleCandidates.count == 1
+                ? geographicallyEligibleCandidates[0]
+                : nil
+            let canSelectSoleCandidate = soleCandidate.map { candidate in
+                selectionPolicy != .socialGroundedArea
+                    || PlaceImportGeography.candidateHasCompatibleAreaEvidence(
+                        candidate,
+                        areaHint: areaHint
+                    )
+            } ?? false
             return PlaceImportCandidateMatch(
                 candidates: geographicallyEligibleCandidates,
-                selectedCandidateID: geographicallyEligibleCandidates.count == 1
-                    ? geographicallyEligibleCandidates[0].id
-                    : nil,
-                bestScore: geographicallyEligibleCandidates.count == 1 ? 0.7 : 0
+                selectedCandidateID: canSelectSoleCandidate ? soleCandidate?.id : nil,
+                bestScore: soleCandidate == nil ? 0 : 0.7
             )
         }
 
@@ -318,7 +608,10 @@ enum PlaceImportCandidateMatcher {
                     nameHint: nameHint,
                     areaHint: areaHint,
                     latitude: latitude,
-                    longitude: longitude
+                    longitude: longitude,
+                    maximumNearSpellingEdits: allowNearSpellingMatch
+                        ? max(1, min(2, maximumNearSpellingEdits))
+                        : 0
                 ),
                 index: index
             )
@@ -330,18 +623,134 @@ enum PlaceImportCandidateMatcher {
 
         let best = scored[0]
         let runnerUpScore = scored.dropFirst().first?.score ?? 0
-        let equivalentName = namesAreEquivalent(best.candidate.name, nameHint)
+        let equivalentName = namesAreEquivalentForSelection(
+            best.candidate.name,
+            nameHint,
+            areaHint: areaHint,
+            selectionPolicy: selectionPolicy
+        )
         let nearSpellingName = allowNearSpellingMatch
-            && isNearSpellingMatch(best.candidate.name, nameHint)
+            && isNearSpellingMatch(
+                best.candidate.name,
+                nameHint,
+                maximumEdits: maximumNearSpellingEdits
+            )
         let exactEquivalentCount = scored.filter { scoredCandidate in
-            namesAreEquivalent(scoredCandidate.candidate.name, nameHint)
+            namesAreEquivalentForSelection(
+                scoredCandidate.candidate.name,
+                nameHint,
+                areaHint: areaHint,
+                selectionPolicy: selectionPolicy
+            )
                 || (allowNearSpellingMatch
-                    && isNearSpellingMatch(scoredCandidate.candidate.name, nameHint))
+                    && isNearSpellingMatch(
+                        scoredCandidate.candidate.name,
+                        nameHint,
+                        maximumEdits: maximumNearSpellingEdits
+                    ))
         }.count
+        let equivalentCandidates = scored.filter { scoredCandidate in
+            namesAreEquivalentForSelection(
+                scoredCandidate.candidate.name,
+                nameHint,
+                areaHint: areaHint,
+                selectionPolicy: selectionPolicy
+            )
+                || (allowNearSpellingMatch
+                    && isNearSpellingMatch(
+                        scoredCandidate.candidate.name,
+                        nameHint,
+                        maximumEdits: maximumNearSpellingEdits
+                    ))
+        }
         let hasClearLead = best.score - runnerUpScore >= 0.08
         let isUniqueExactMatch = (equivalentName || nearSpellingName)
             && exactEquivalentCount == 1
-        let selectedID = (isUniqueExactMatch || (best.score >= 0.82 && hasClearLead))
+        let strongAreaMatches = scored.filter {
+            PlaceImportGeography.candidateStronglyMatchesArea(
+                $0.candidate,
+                areaHint: areaHint
+            )
+        }
+        let hasUniqueStrongAreaLead = strongAreaMatches.count == 1
+            && strongAreaMatches[0].candidate.id == best.candidate.id
+        // Social extraction can ground a precise locality even when Apple Maps
+        // returns equivalent same-state branches. Treat that unique locality
+        // agreement as a categorical lead, but keep the conservative policy for
+        // manual entry and retain every ranked alternative for review.
+        let isSafeSocialAreaDefault = selectionPolicy == .socialGroundedArea
+            && hasUniqueStrongAreaLead
+            && best.score >= 0.82
+        // MapKit can return several exact records for a named landmark while
+        // omitting locality from its preferred result. In the social flow only,
+        // a high-confidence provider lead inside the explicitly grounded state
+        // is enough to preselect that result while preserving every alternative.
+        let isSafeSocialLandmarkProviderDefault = selectionPolicy == .socialGroundedArea
+            && PlaceImportGeography.isDistinctiveLandmarkFeatureName(nameHint)
+            && equivalentName
+            && exactEquivalentCount >= 1
+            && best.score >= 0.86
+            && (exactEquivalentCount == 1 || best.score - runnerUpScore >= 0.01)
+            && PlaceImportGeography.candidateMatchesExplicitState(
+                best.candidate,
+                areaHint: areaHint
+            )
+        // Apple Maps occasionally emits two records for the same venue a few
+        // metres apart (for example Griffith Observatory). That is provider
+        // duplication, not a meaningful user choice, so the social flow may
+        // select the first result while still returning both records.
+        let isSafeSocialColocatedDuplicateDefault = selectionPolicy == .socialGroundedArea
+            && equivalentCandidates.count > 1
+            && best.score >= 0.86
+            && PlaceImportGeography.candidateStronglyMatchesArea(
+                best.candidate,
+                areaHint: areaHint
+            )
+            && equivalentCandidates.allSatisfy {
+                candidateDistance($0.candidate, best.candidate) <= 25
+            }
+        // Some named natural features are indexed by Apple Maps under the
+        // distinctive core name only (for example "Paseo del Mar Bluffs" as
+        // "Paseo del Mar"). A grounded locality plus a provider-leading exact
+        // core match is sufficient to choose the best record while retaining
+        // the lower-scoring alternatives for user review.
+        let isSafeSocialFeatureCoreDefault = selectionPolicy == .socialGroundedArea
+            && PlaceImportGeography.candidateMatchesDistinctiveFeatureCore(
+                best.candidate.name,
+                nameHint: nameHint
+            )
+            && best.score >= 0.82
+            && best.score - runnerUpScore >= 0.04
+            && PlaceImportGeography.candidateStronglyMatchesArea(
+                best.candidate,
+                areaHint: areaHint
+            )
+        let selectionHasEnoughEvidence = (
+            isUniqueExactMatch
+                || (best.score >= 0.82 && hasClearLead)
+                || isSafeSocialAreaDefault
+                || isSafeSocialLandmarkProviderDefault
+                || isSafeSocialColocatedDuplicateDefault
+                || isSafeSocialFeatureCoreDefault
+        )
+        let socialAreaIsCompatible = selectionPolicy != .socialGroundedArea
+            || PlaceImportGeography.candidateHasCompatibleAreaEvidence(
+                best.candidate,
+                areaHint: areaHint
+            )
+            // Remote resort addresses often name a nearby municipality but
+            // omit the creator's broader geographic label (for example,
+            // "Cardamom Mountains, Cambodia"). A unique exact venue plus an
+            // exact country match is still a safe default; wrong-country
+            // results were already removed above.
+            || (isUniqueExactMatch
+                && PlaceImportGeography.candidateMatchesExplicitInternationalCountryWithoutRecognizedSubdivision(
+                    best.candidate,
+                    areaHint: areaHint
+                ))
+            || isSafeSocialLandmarkProviderDefault
+            || isSafeSocialColocatedDuplicateDefault
+        let selectedID = selectionHasEnoughEvidence && socialAreaIsCompatible
             ? best.candidate.id
             : nil
 
@@ -358,7 +767,55 @@ enum PlaceImportCandidateMatcher {
         }
         let lhsCore = coreTokens(lhs)
         let rhsCore = coreTokens(rhs)
-        return !lhsCore.isEmpty && lhsCore == rhsCore
+        return (!lhsCore.isEmpty && lhsCore == rhsCore)
+            || creatorQualifiedVenueNamesMatch(lhs, rhs)
+    }
+
+    private static func namesAreEquivalentForSelection(
+        _ lhs: String,
+        _ rhs: String,
+        areaHint: String?,
+        selectionPolicy: PlaceImportCandidateSelectionPolicy
+    ) -> Bool {
+        namesAreEquivalent(lhs, rhs)
+            || (selectionPolicy == .socialGroundedArea
+                && socialVenueDescriptorVariantsMatch(
+                    lhs,
+                    rhs,
+                    areaHint: areaHint
+                ))
+    }
+
+    private static func socialVenueDescriptorVariantsMatch(
+        _ lhs: String,
+        _ rhs: String,
+        areaHint: String?
+    ) -> Bool {
+        let removableTokens = socialVenueDescriptorTokens.union(
+            Set(nameWords(areaHint ?? ""))
+        )
+        let lhsCore = Set(nameWords(lhs)).subtracting(removableTokens)
+        let rhsCore = Set(nameWords(rhs)).subtracting(removableTokens)
+        guard lhsCore == rhsCore, !lhsCore.isEmpty else { return false }
+        return lhsCore.contains { token in
+            token.count >= 3 && !socialVenueDescriptorTokens.contains(token)
+        }
+    }
+
+    private static func candidateDistance(
+        _ lhs: PlaceCandidate,
+        _ rhs: PlaceCandidate
+    ) -> CLLocationDistance {
+        guard let lhsLatitude = lhs.latitude,
+              let lhsLongitude = lhs.longitude,
+              let rhsLatitude = rhs.latitude,
+              let rhsLongitude = rhs.longitude else {
+            return .infinity
+        }
+
+        return CLLocation(latitude: lhsLatitude, longitude: lhsLongitude).distance(
+            from: CLLocation(latitude: rhsLatitude, longitude: rhsLongitude)
+        )
     }
 
     private static func score(
@@ -366,7 +823,8 @@ enum PlaceImportCandidateMatcher {
         nameHint: String,
         areaHint: String?,
         latitude: Double?,
-        longitude: Double?
+        longitude: Double?,
+        maximumNearSpellingEdits: Int
     ) -> Double {
         let hintKey = canonicalNameKey(nameHint)
         let candidateKey = canonicalNameKey(candidate.name)
@@ -380,6 +838,15 @@ enum PlaceImportCandidateMatcher {
             score = 0.82
         } else if hintCore == candidateCore, !hintCore.isEmpty {
             score = 0.8
+        } else if creatorQualifiedVenueNamesMatch(candidate.name, nameHint) {
+            score = 0.8
+        } else if maximumNearSpellingEdits > 0,
+                  isNearSpellingMatch(
+                    candidate.name,
+                    nameHint,
+                    maximumEdits: maximumNearSpellingEdits
+                  ) {
+            score = 0.78
         } else if min(hintKey.count, candidateKey.count) >= 5,
                   hintKey.contains(candidateKey) || candidateKey.contains(hintKey) {
             score = 0.72
@@ -391,10 +858,7 @@ enum PlaceImportCandidateMatcher {
 
         if let areaHint = areaHint?.trimmingCharacters(in: .whitespacesAndNewlines), !areaHint.isEmpty {
             let areaTokens = PlaceImportGeography.areaTokens(areaHint)
-            let candidateArea = [candidate.address, candidate.locality, candidate.region, candidate.country]
-                .compactMap { $0 }
-                .joined(separator: " ")
-            let candidateAreaTokens = PlaceImportGeography.areaTokens(candidateArea)
+            let candidateAreaTokens = PlaceImportGeography.candidateAreaTokens(candidate)
             let overlapCount = areaTokens.intersection(candidateAreaTokens).count
             if overlapCount > 0 {
                 let denominator = max(1, min(areaTokens.count, candidateAreaTokens.count))
@@ -461,6 +925,32 @@ enum PlaceImportCandidateMatcher {
             .filter { !$0.isEmpty }
     }
 
+    private static func creatorQualifiedVenueNamesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsWords = nameWords(lhs)
+        let rhsWords = nameWords(rhs)
+        return creatorQualifiedVenueName(base: lhsWords, qualified: rhsWords)
+            || creatorQualifiedVenueName(base: rhsWords, qualified: lhsWords)
+    }
+
+    private static func creatorQualifiedVenueName(
+        base: [String],
+        qualified: [String]
+    ) -> Bool {
+        guard qualified.count >= base.count + 2,
+              Array(qualified.prefix(base.count)) == base,
+              qualified[base.count] == "by",
+              !Set(base).isDisjoint(with: creatorQualifiedVenueDesignators),
+              base.contains(where: isDistinctiveCreatorQualifiedToken)
+        else { return false }
+        return true
+    }
+
+    private static func isDistinctiveCreatorQualifiedToken(_ token: String) -> Bool {
+        token.count >= 2
+            && !creatorQualifiedVenueDesignators.contains(token)
+            && !creatorQualifiedVenueGenericTokens.contains(token)
+    }
+
     private static func hasUnrequestedStreetDesignator(_ candidateName: String, comparedWith hint: String) -> Bool {
         let candidateDesignators = canonicalNameTokens(candidateName).intersection(streetDesignators)
         guard !candidateDesignators.isEmpty else { return false }
@@ -472,11 +962,16 @@ enum PlaceImportCandidateMatcher {
             .filter { $0.isLetter || $0.isNumber }
     }
 
-    private static func isNearSpellingMatch(_ lhs: String, _ rhs: String) -> Bool {
+    private static func isNearSpellingMatch(
+        _ lhs: String,
+        _ rhs: String,
+        maximumEdits: Int
+    ) -> Bool {
         let lhsCharacters = Array(normalized(lhs))
         let rhsCharacters = Array(normalized(rhs))
+        let boundedMaximumEdits = max(1, min(2, maximumEdits))
         guard min(lhsCharacters.count, rhsCharacters.count) >= 8,
-              abs(lhsCharacters.count - rhsCharacters.count) <= 1
+              abs(lhsCharacters.count - rhsCharacters.count) <= boundedMaximumEdits
         else { return false }
 
         var lhsIndex = 0
@@ -489,7 +984,7 @@ enum PlaceImportCandidateMatcher {
                 continue
             }
             edits += 1
-            guard edits <= 1 else { return false }
+            guard edits <= boundedMaximumEdits else { return false }
             if lhsCharacters.count > rhsCharacters.count {
                 lhsIndex += 1
             } else if rhsCharacters.count > lhsCharacters.count {
@@ -502,15 +997,35 @@ enum PlaceImportCandidateMatcher {
         if lhsIndex < lhsCharacters.count || rhsIndex < rhsCharacters.count {
             edits += 1
         }
-        return edits == 1
+        return edits > 0 && edits <= boundedMaximumEdits
     }
 
     private static let nameTokenAliases = [
-        "merc": "mercantile"
+        "merc": "mercantile",
+        "vgn": "vegan"
     ]
 
     private static let streetDesignators: Set<String> = [
         "avenue", "ave", "boulevard", "blvd", "court", "ct", "highway", "hwy",
         "lane", "ln", "parkway", "pkwy", "road", "rd", "street", "st", "way"
+    ]
+
+    private static let creatorQualifiedVenueDesignators: Set<String> = [
+        "bakery", "bar", "brewery", "brewing", "cafe", "coffee", "deli", "eatery",
+        "gallery", "grill", "hotel", "inn", "kitchen", "lodge", "market", "museum",
+        "pub", "resort", "restaurant", "tavern"
+    ]
+    private static let socialVenueDescriptorTokens: Set<String> = [
+        "a", "an", "and", "at", "by", "camp", "chateau", "chateaux", "hotel",
+        "in", "island", "lodge", "of", "on", "private", "relais", "reserve",
+        "resort", "spa", "suite", "suites", "the", "treehouse", "treehouses",
+        "wilderness"
+    ]
+
+    private static let creatorQualifiedVenueGenericTokens: Set<String> = [
+        "a", "an", "and", "at", "avenue", "ave", "boulevard", "blvd", "by", "co",
+        "coffeehouse", "company", "court", "ct", "highway", "house", "hwy", "in",
+        "lane", "ln", "local", "neighborhood", "neighbourhood", "of", "on", "parkway",
+        "pkwy", "place", "road", "rd", "shop", "spot", "street", "st", "the", "way"
     ]
 }

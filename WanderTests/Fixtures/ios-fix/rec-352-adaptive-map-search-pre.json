@@ -1,0 +1,30 @@
+{
+  "issue": "REC-352",
+  "capture_source": "Joe's Map search behavior report plus verified pre-fix source flow on PR #554",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the deterministic source state and simulator fixture are the regression surface",
+  "privacy": "No raw user query telemetry, account identity, saved-place content, or precise user location is recorded.",
+  "precondition": {
+    "selected_tab": "map",
+    "map_zoom": "tighter than the useful nearby search radius",
+    "query_kind": "generic place category",
+    "example_query": "coffee"
+  },
+  "pre_fix": {
+    "external_search_region": "one MapKit request biased to the visible viewport",
+    "external_search_boundary": "no app-enforced radius",
+    "ranking_origin": "viewer GPS when available instead of the panned map center",
+    "generic_saved_match": "a strong saved category match short-circuits external search on Return",
+    "typeahead_camera": "does not move",
+    "submitted_camera": "centers the first result at a fixed span instead of fitting the returned set"
+  },
+  "expected": {
+    "external_search_region": "start at least at the viewport radius and expand within a bounded regional radius until four useful combined results are available or the cap is reached",
+    "external_search_boundary": "discard provider results outside the active pass radius because MapKit region is only a hint",
+    "ranking_origin": "captured map center",
+    "generic_saved_match": "counts toward the four visible rows but does not prevent external expansion when more results are needed",
+    "typeahead_camera": "remains unchanged while offscreen suggestions may appear",
+    "submitted_camera": "fits the retained submitted result set without zooming in, while an explicitly tapped suggestion still centers only that place",
+    "named_search": "retains regionless exact-name recovery, including single-word names",
+    "feed_search": "unchanged global rec.me-only retrieval with no proximity bias"
+  }
+}

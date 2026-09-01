@@ -821,7 +821,11 @@ enum VisiblePlaceGrouping {
     }
 
     static func matches(_ lhs: VisiblePlace, _ rhs: VisiblePlace) -> Bool {
-        !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
+        !matchingAliases(for: lhs).isDisjoint(with: matchingAliases(for: rhs))
+    }
+
+    static func matchingAliases(for visiblePlace: VisiblePlace) -> Set<String> {
+        Set(keys(for: visiblePlace))
     }
 
     static func matches(_ lhs: LocalPlace, _ rhs: LocalPlace) -> Bool {

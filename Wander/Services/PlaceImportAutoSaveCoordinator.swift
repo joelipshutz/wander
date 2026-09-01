@@ -5,9 +5,54 @@ struct PlaceImportAutoSaveResult: Equatable {
     let addedCount: Int
     let existingCount: Int
     let needsReviewCount: Int
+    let sourceRetryCount: Int
 
     var savedCount: Int { addedCount + existingCount }
-    var hasResult: Bool { savedCount > 0 || needsReviewCount > 0 }
+    var hasResult: Bool { savedCount > 0 || needsReviewCount > 0 || sourceRetryCount > 0 }
+}
+
+struct PlaceImportFinishedNotificationCopy: Equatable {
+    let title: String
+    let body: String
+
+    static func make(
+        savedCount: Int,
+        needsReviewCount: Int,
+        sourceRetryCount: Int
+    ) -> PlaceImportFinishedNotificationCopy {
+        let sourceRetryCopy = sourceRetryCount == 1
+            ? "retry the incomplete source scan"
+            : "retry \(sourceRetryCount) incomplete source scans"
+        let title: String
+        if savedCount == 0 {
+            if sourceRetryCount > 0, needsReviewCount == 0 {
+                title = sourceRetryCount == 1
+                    ? "Your source scan needs a retry"
+                    : "\(sourceRetryCount) source scans need a retry"
+            } else {
+                title = "Your import needs a quick review"
+            }
+        } else {
+            title = savedCount == 1
+                ? "1 place saved"
+                : "\(savedCount) places saved"
+        }
+
+        let body: String
+        switch (needsReviewCount > 0, sourceRetryCount > 0) {
+        case (true, true):
+            body = "Open rec.me to verify what was saved, review \(needsReviewCount) more, and \(sourceRetryCopy)."
+        case (true, false):
+            body = "Open rec.me to verify what was saved and review \(needsReviewCount) more."
+        case (false, true):
+            body = savedCount > 0
+                ? "Open rec.me to verify what was saved and \(sourceRetryCopy)."
+                : "Open rec.me to \(sourceRetryCopy)."
+        case (false, false):
+            body = "Open rec.me to verify the places from your import."
+        }
+        return PlaceImportFinishedNotificationCopy(title: title, body: body)
+    }
 }
 
 enum PlaceImportAutoSavePolicy {
@@ -18,7 +63,7 @@ enum PlaceImportAutoSavePolicy {
             .filter { batch in
                 batch.automaticSaveCompletedAt != nil
                     && batch.receipt?.presentedAt == nil
-                    && batch.receipt?.entries.isEmpty == false
+                    && batch.receipt?.hasContent == true
             }
             .sorted { $0.createdAt < $1.createdAt }
             .map(\.id)
@@ -57,7 +102,8 @@ enum PlaceImportAutoSavePolicy {
 
     private static func confidentItems(in items: [PlaceImportItem]) -> [PlaceImportItem] {
         items.filter {
-            $0.isSelectedForImport
+            !$0.isSourceRetry
+                && $0.isSelectedForImport
                 && (($0.state == .ready && $0.selectedCandidate != nil)
                     || ($0.state == .duplicate && $0.duplicateUserPlaceID != nil))
         }
@@ -114,6 +160,7 @@ enum PlaceImportAutoSaveCoordinator {
                 var addedCount = 0
                 var existingCount = 0
                 var needsReviewCount = 0
+                var sourceRetryCount = 0
                 var committedUserPlaceIDs = Set<String>()
 
                 for batchID in orderedIDs {
@@ -122,12 +169,17 @@ enum PlaceImportAutoSaveCoordinator {
                     else { continue }
 
                     let items = importStore.items(for: batchID)
-                    let committableIDs = allCommittableIDs.intersection(Set(items.map(\.id)))
+                    let placeItems = items.filter { !$0.isSourceRetry }
+                    let batchSourceRetryCount = items.filter {
+                        $0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
+                    }.count
+                    sourceRetryCount += batchSourceRetryCount
+                    let committableIDs = allCommittableIDs.intersection(Set(placeItems.map(\.id)))
                     let destination = committableIDs.isEmpty
                         ? nil
                         : destinationList(
                             for: batch,
-                            itemCount: items.count,
+                            itemCount: placeItems.count,
                             importStore: importStore,
                             store: store
                         )
@@ -200,7 +252,7 @@ enum PlaceImportAutoSaveCoordinator {
                     }
 
                     let pending = importStore.items(for: batchID).filter {
-                        ![.saved, .dismissed].contains($0.state)
+                        !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
                     }
                     needsReviewCount += pending.count
                     entries.append(contentsOf: pending.map { item in
@@ -227,7 +279,8 @@ enum PlaceImportAutoSaveCoordinator {
                     batchIDs: completedBatchIDs,
                     addedCount: addedCount,
                     existingCount: existingCount,
-                    needsReviewCount: needsReviewCount
+                    needsReviewCount: needsReviewCount,
+                    sourceRetryCount: sourceRetryCount
                 )
             }
         }
@@ -238,7 +291,8 @@ enum PlaceImportAutoSaveCoordinator {
             batchIDs: [],
             addedCount: 0,
             existingCount: 0,
-            needsReviewCount: 0
+            needsReviewCount: 0,
+            sourceRetryCount: 0
         )
     }
 

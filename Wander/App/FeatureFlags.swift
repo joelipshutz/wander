@@ -65,6 +65,7 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case debugSettings = "debug_settings"
     case placeProfileSaveTrayV1 = "place_profile_save_tray_v1"
     case semanticPlaceSearchV1 = "semantic_place_search_v1"
+    case socialImportApifyGeminiV1 = "social_import_apify_gemini_v1"
     case placeProfileActionVariant = "place_profile_action_variant"
 
     var definition: FeatureFlagDefinition {
@@ -103,6 +104,15 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: false,
+                isEditableOnDevice: true
+            )
+        case .socialImportApifyGeminiV1:
+            FeatureFlagDefinition(
+                title: "Apify + Gemini social import v1",
+                summary: "Uses server-backed understanding for Instagram and TikTok imports.",
+                bundledDefault: .boolean(false),
+                integerRange: nil,
+                allowsRemoteAccountOverride: true,
                 isEditableOnDevice: true
             )
         case .placeProfileActionVariant:
@@ -217,7 +227,10 @@ struct FeatureFlagOverrideStore {
             "wander.debugSettings.\(userID).firstVisitNUX.enabled"
         case .placeProfileActionVariant:
             "wander.debugSettings.\(userID).placeActionVariant"
-        case .debugSettings, .placeProfileSaveTrayV1, .semanticPlaceSearchV1:
+        case .debugSettings,
+             .placeProfileSaveTrayV1,
+             .semanticPlaceSearchV1,
+             .socialImportApifyGeminiV1:
             nil
         }
     }

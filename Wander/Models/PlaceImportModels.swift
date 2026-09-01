@@ -29,6 +29,15 @@ enum PlaceImportItemState: String, Codable, Equatable {
     case dismissed
 }
 
+/// Distinguishes an actual place row from source-level import recovery UI.
+///
+/// `PlaceImportItem.kind` is optional so snapshots written before this field
+/// existed continue to decode. A missing value means a normal place row.
+enum PlaceImportItemKind: String, Codable, Equatable, Sendable {
+    case place
+    case sourceRetry = "source_retry"
+}
+
 enum PlaceImportReviewSurface: String, Equatable {
     case resolving
     case quickAdd
@@ -62,15 +71,16 @@ struct PlaceImportReviewPlan: Equatable {
 
     init(items: [PlaceImportItem]) {
         let activeItems = items.filter { ![.saved, .dismissed].contains($0.state) }
-        let selectedItems = activeItems.filter(\.isSelectedForImport)
-        totalCount = activeItems.count
+        let placeItems = activeItems.filter { !$0.isSourceRetry }
+        let selectedItems = placeItems.filter(\.isSelectedForImport)
+        totalCount = placeItems.count
         selectedCount = selectedItems.count
         processingCount = activeItems.filter { [.queued, .resolving].contains($0.state) }.count
-        readyCount = activeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }.count
-        duplicateCount = activeItems.filter {
+        readyCount = placeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }.count
+        duplicateCount = placeItems.filter {
             $0.state == .duplicate && $0.duplicateUserPlaceID != nil
         }.count
-        needsHelpCount = activeItems.filter {
+        needsHelpCount = placeItems.filter {
             [.ambiguous, .needsHelp, .failed].contains($0.state)
         }.count
         selectedReadyCount = selectedItems.filter {
@@ -82,14 +92,21 @@ struct PlaceImportReviewPlan: Equatable {
         selectedNeedsHelpCount = selectedItems.filter {
             [.ambiguous, .needsHelp, .failed].contains($0.state)
         }.count
-        quickAddStatus = activeItems.count == 1 && selectedItems.count == 1
+        quickAddStatus = placeItems.count == 1 && selectedItems.count == 1
             ? selectedItems.first?.stagedStatus
             : nil
 
-        if totalCount == 0 {
+        if activeItems.isEmpty {
             surface = .complete
         } else if processingCount > 0 {
             surface = .resolving
+        } else if placeItems.isEmpty {
+            surface = .recovery
+        } else if activeItems.contains(where: \.isSourceRetry) {
+            // Quick-add and duplicate screens render only one place card. Keep
+            // the compact/batch surface whenever scan status is also present so
+            // the retry action cannot disappear below a single-place shortcut.
+            surface = totalCount <= 5 ? .compact : .batch
         } else if totalCount == 1, readyCount == 1 {
             surface = .quickAdd
         } else if totalCount == 1, duplicateCount == 1 {
@@ -189,6 +206,7 @@ struct PlaceImportReceipt: Codable, Equatable, Identifiable {
     let createdAt: Date
     let entries: [PlaceImportReceiptEntry]
     let destinationListID: String?
+    private let sourceRetryCountRaw: Int?
     var presentedAt: Date?
 
     init(
@@ -198,6 +216,7 @@ struct PlaceImportReceipt: Codable, Equatable, Identifiable {
         createdAt: Date = .now,
         entries: [PlaceImportReceiptEntry],
         destinationListID: String?,
+        sourceRetryCount: Int = 0,
         presentedAt: Date? = nil
     ) {
         self.id = id
@@ -206,7 +225,20 @@ struct PlaceImportReceipt: Codable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.entries = entries
         self.destinationListID = destinationListID
+        sourceRetryCountRaw = sourceRetryCount > 0 ? sourceRetryCount : nil
         self.presentedAt = presentedAt
+    }
+
+    /// Source-level retry markers are status, not receipt place rows.
+    ///
+    /// The stored value is optional so receipts persisted before scan status
+    /// was introduced continue to decode without a snapshot migration.
+    var sourceRetryCount: Int {
+        sourceRetryCountRaw ?? 0
+    }
+
+    var hasContent: Bool {
+        !entries.isEmpty || sourceRetryCount > 0
     }
 
     var addedCount: Int {
@@ -281,6 +313,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
     let socialCaptionHint: String?
+    var socialUnderstandingRequestID: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -293,7 +326,8 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         longitude: Double? = nil,
         sourceProvider: String? = nil,
         sourceProviderPlaceID: String? = nil,
-        socialCaptionHint: String? = nil
+        socialCaptionHint: String? = nil,
+        socialUnderstandingRequestID: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -306,6 +340,11 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.socialCaptionHint = socialCaptionHint
+        self.socialUnderstandingRequestID = socialUnderstandingRequestID
+    }
+
+    var effectiveSocialUnderstandingRequestID: String {
+        socialUnderstandingRequestID ?? id
     }
 }
 
@@ -370,11 +409,12 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 8
+    static let currentResolverVersion = 11
 
     let id: String
     let batchID: String
     let source: PlaceImportSource
+    var kind: PlaceImportItemKind?
     var seed: PlaceImportSeed
     var state: PlaceImportItemState
     var candidates: [PlaceCandidate]
@@ -396,6 +436,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         id: String = UUID().uuidString.lowercased(),
         batchID: String,
         source: PlaceImportSource,
+        kind: PlaceImportItemKind? = nil,
         seed: PlaceImportSeed,
         state: PlaceImportItemState = .queued,
         candidates: [PlaceCandidate] = [],
@@ -416,6 +457,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.id = id
         self.batchID = batchID
         self.source = source
+        self.kind = kind
         self.seed = seed
         self.state = state
         self.candidates = candidates
@@ -429,14 +471,30 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.stagedNote = stagedNote
         self.stagedRatingScore = stagedRatingScore
         self.stagedVisitedAt = stagedVisitedAt
-        self.isIncludedInImport = isIncludedInImport
+        self.isIncludedInImport = kind == .sourceRetry ? false : isIncludedInImport
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     var isSelectedForImport: Bool {
-        get { isIncludedInImport ?? true }
-        set { isIncludedInImport = newValue }
+        get { !isSourceRetry && (isIncludedInImport ?? true) }
+        set { isIncludedInImport = isSourceRetry ? false : newValue }
+    }
+
+    var isSourceRetry: Bool {
+        if kind == .sourceRetry {
+            return true
+        }
+        // Compatibility for a partial-import retry row persisted by an older
+        // build before `kind` was introduced.
+        guard kind == nil,
+              [.instagram, .tiktok].contains(source),
+              seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
+              candidates.isEmpty,
+              helpMessage?.localizedCaseInsensitiveContains("some media") == true,
+              helpMessage?.localizedCaseInsensitiveContains("retry automatic matching") == true
+        else { return false }
+        return true
     }
 
     var selectedCandidate: PlaceCandidate? {
@@ -545,6 +603,8 @@ struct PlaceImportSummary: Equatable {
     let needsHelpCount: Int
     let duplicateCount: Int
     let savedCount: Int
+    let sourceRetryCount: Int
+    let sourceRetryProcessingCount: Int
 
     static let empty = PlaceImportSummary(
         batchID: nil,
@@ -554,7 +614,9 @@ struct PlaceImportSummary: Equatable {
         readyCount: 0,
         needsHelpCount: 0,
         duplicateCount: 0,
-        savedCount: 0
+        savedCount: 0,
+        sourceRetryCount: 0,
+        sourceRetryProcessingCount: 0
     )
 
     var remainingCount: Int {
@@ -571,7 +633,7 @@ struct PlaceImportSummary: Equatable {
     }
 
     var hasPendingImports: Bool {
-        processingCount > 0 || remainingCount > 0
+        processingCount > 0 || remainingCount > 0 || sourceRetryCount > 0
     }
 }
 

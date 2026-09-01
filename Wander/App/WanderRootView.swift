@@ -358,7 +358,8 @@ struct WanderRootView: View {
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
-        parser: any LLMFilterParser = DeterministicFilterParser()
+        parser: any LLMFilterParser = DeterministicFilterParser(),
+        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -396,7 +397,11 @@ struct WanderRootView: View {
             store.isDarkMapEnabled = true
         }
         _store = StateObject(wrappedValue: store)
-        let importStore = PlaceImportStore()
+        let importStore = PlaceImportStore(
+            resolver: DevicePlaceImportResolver(
+                socialUnderstandingRepository: socialImportUnderstandingRepository
+            )
+        )
         _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
             wrappedValue: PlaceSaveDraftStore(
@@ -1283,7 +1288,8 @@ struct WanderRootView: View {
                         await pushNotifications.notifyImportFinished(
                             batchIDs: result.batchIDs,
                             savedCount: result.savedCount,
-                            needsReviewCount: result.needsReviewCount
+                            needsReviewCount: result.needsReviewCount,
+                            sourceRetryCount: result.sourceRetryCount
                         )
                     }
                 }
@@ -2384,6 +2390,9 @@ struct WanderRootView: View {
         usesSimulatorTestSession: Bool? = nil
     ) -> WanderFixtureMode {
         #if DEBUG
+        if arguments.contains("-WanderUseEphemeralEmptyFixtures") {
+            return .ephemeralEmpty
+        }
         if arguments.contains("-WanderUseStorefrontFixtures") {
             return .storefront
         }
@@ -2400,12 +2409,18 @@ struct WanderRootView: View {
     }
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {
-        resolvedFixtures(mode: resolvedFixtureMode(from: arguments))
+        let fixtures = resolvedFixtures(mode: resolvedFixtureMode(from: arguments))
+        #if DEBUG
+        if arguments.contains("-WanderREC386PhotoFixture") {
+            return rec386PhotoVisibilityFixtures(from: fixtures)
+        }
+        #endif
+        return fixtures
     }
 
     static func resolvedFixtures(mode: WanderFixtureMode) -> WanderFixtures {
         switch mode {
-        case .empty:
+        case .empty, .ephemeralEmpty:
             WanderFixtures.empty()
         case .demo:
             WanderFixtures.seed()
@@ -2416,6 +2431,74 @@ struct WanderRootView: View {
         }
     }
 
+    #if DEBUG
+    private static func rec386PhotoVisibilityFixtures(
+        from source: WanderFixtures
+    ) -> WanderFixtures {
+        var fixtures = source
+        guard let place = fixtures.places.first(where: { $0.localID == "local_place_bar_nido" }),
+              let joePlace = fixtures.userPlaces.first(where: { $0.localID == "local_up_joe_bar_nido" }),
+              let ryanPlace = fixtures.userPlaces.first(where: { $0.localID == "local_up_ryan_bar_nido" }),
+              let image = UIImage(named: "PlaceCarouselPhotos"),
+              let imageData = image.pngData(),
+              let photoUUID = UUID(uuidString: "55000000-0000-0000-0000-000000000386"),
+              let localAssetRef = VisitPhotoLocalFileStore.save(
+                data: imageData,
+                id: photoUUID,
+                contentType: "image/png"
+              )
+        else { return fixtures }
+
+        let previousPlaceIDs = Set([place.id, place.localID, place.serverID].compactMap { $0 })
+        place.serverID = "50000000-0000-0000-0000-000000000386"
+        place.canonicalName = "Dudley Market QA"
+        for userPlace in fixtures.userPlaces where previousPlaceIDs.contains(userPlace.placeID) {
+            userPlace.placeID = place.id
+        }
+
+        let joeVisit = LocalPlaceVisit(
+            localID: "local_visit_rec386_disposable",
+            serverID: "54000000-0000-0000-0000-000000000387",
+            userPlaceID: joePlace.id,
+            visitedAt: Date(timeIntervalSince1970: 1_777_682_100),
+            note: "QA disposable check-in — delete me",
+            ratingScore: 4,
+            tags: ["disposable QA"],
+            syncState: .pendingCreate
+        )
+        let ryanVisit = LocalPlaceVisit(
+            localID: "local_visit_rec386_ryan",
+            serverID: "54000000-0000-0000-0000-000000000386",
+            userPlaceID: ryanPlace.id,
+            visitedAt: Date(timeIntervalSince1970: 1_777_678_500),
+            note: "QA proof: Ryan's uploaded check-in photo",
+            ratingScore: 5,
+            tags: ["photo proof"],
+            syncState: .synced,
+            serverUpdatedAt: Date(timeIntervalSince1970: 1_777_678_500)
+        )
+        let ryanPhoto = LocalVisitPhoto(
+            localID: "local_photo_rec386_ryan",
+            serverID: photoUUID.uuidString.lowercased(),
+            visitID: ryanVisit.id,
+            storageBucket: "visit-photos",
+            storagePath: "user_ryan/54000000-0000-0000-0000-000000000386/photo.png",
+            localAssetRef: localAssetRef,
+            contentType: "image/png",
+            byteSize: imageData.count,
+            width: Int(image.size.width),
+            height: Int(image.size.height),
+            capturedAt: ryanVisit.visitedAt,
+            uploadState: .uploaded,
+            syncState: .synced,
+            serverUpdatedAt: ryanVisit.serverUpdatedAt
+        )
+        fixtures.placeVisits.append(contentsOf: [joeVisit, ryanVisit])
+        fixtures.visitPhotos.append(ryanPhoto)
+        return fixtures
+    }
+    #endif
+
     private static func makeStore(
         fixtureMode: WanderFixtureMode,
         parser: any LLMFilterParser,
@@ -2424,7 +2507,7 @@ struct WanderRootView: View {
         initialSession: AuthSession?
     ) -> WanderStore {
         let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
-        let fixtures = resolvedFixtures(mode: fixtureMode)
+        let fixtures = resolvedFixtures(from: ProcessInfo.processInfo.arguments)
         let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
         #if DEBUG
         let placeResolver: any PlaceCandidateResolving = fixtureMode == .storefront
@@ -2440,7 +2523,7 @@ struct WanderRootView: View {
             analytics: analytics,
             persistence: persistence
         )
-        if fixtureMode == .empty, let initialSession {
+        if (fixtureMode == .empty || fixtureMode == .ephemeralEmpty), let initialSession {
             store.apply(authState: .signedIn(initialSession))
         }
         let storeFinishedAt = CFAbsoluteTimeGetCurrent()
@@ -2642,6 +2725,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
 
 enum WanderFixtureMode: Equatable {
     case empty
+    case ephemeralEmpty
     case demo
     case storefront
     case performance

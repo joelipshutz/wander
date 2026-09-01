@@ -753,6 +753,72 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
         let warmInsightsElapsed = CFAbsoluteTimeGetCurrent() - warmInsightsStart
 
+        let profileProjectionStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            let projection = store.currentUserCalendarProjection
+            checksum += projection.visiblePlaces.count
+            checksum += projection.visits.count
+        }
+        let profileProjectionElapsed = CFAbsoluteTimeGetCurrent() - profileProjectionStart
+
+        let ownerProjection = store.currentUserCalendarProjection
+        let profilePresentationCache = ProfilePresentationCache()
+        let profilePresentationStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            let presentation = profilePresentationCache.present(
+                store: store,
+                profileID: store.currentUser.id
+            )
+            checksum += presentation.stats.checkIns
+            checksum += presentation.activityItems.count
+        }
+        let profilePresentationElapsed = CFAbsoluteTimeGetCurrent() - profilePresentationStart
+
+        let comparisonProfileID = fixtures.profiles[3].id
+        let inCommonStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<50 {
+            checksum += store.placesInCommon(with: comparisonProfileID).count
+        }
+        let inCommonElapsed = CFAbsoluteTimeGetCurrent() - inCommonStart
+
+        let yourMapDatasetStart = CFAbsoluteTimeGetCurrent()
+        var yourMapDataset = YourMapPrototypeDataset.make(
+            ownerID: store.currentUser.id,
+            userPlaces: ownerProjection.userPlaces,
+            visits: ownerProjection.visits,
+            places: ownerProjection.places,
+            visiblePlaces: ownerProjection.visiblePlaces,
+            now: Date(timeIntervalSince1970: 1_735_689_600)
+        )
+        for _ in 0..<9 {
+            yourMapDataset = YourMapPrototypeDataset.make(
+                ownerID: store.currentUser.id,
+                userPlaces: ownerProjection.userPlaces,
+                visits: ownerProjection.visits,
+                places: ownerProjection.places,
+                visiblePlaces: ownerProjection.visiblePlaces,
+                now: Date(timeIntervalSince1970: 1_735_689_600)
+            )
+        }
+        let yourMapDatasetElapsed = CFAbsoluteTimeGetCurrent() - yourMapDatasetStart
+
+        let yourMapInsightsStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += YourMapPrototypeInsights(
+                places: yourMapDataset.places,
+                now: yourMapDataset.now
+            ).totalCount
+        }
+        let yourMapInsightsElapsed = CFAbsoluteTimeGetCurrent() - yourMapInsightsStart
+
+        print(
+            "[REC391ProfilePerformance] profile_projection_20=\(profileProjectionElapsed) "
+                + "profile_presenters_20=\(profilePresentationElapsed) "
+                + "in_common_50=\(inCommonElapsed) "
+                + "your_map_dataset_10=\(yourMapDatasetElapsed) "
+                + "your_map_insights_20=\(yourMapInsightsElapsed)"
+        )
+
         let snapshotStart = CFAbsoluteTimeGetCurrent()
         let snapshot = WanderStoreSnapshot(store: store)
         let snapshotElapsed = CFAbsoluteTimeGetCurrent() - snapshotStart
@@ -772,7 +838,59 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertLessThan(warmGroupProjectionElapsed, 0.02, "Warm visible-place grouping took \(warmGroupProjectionElapsed)s")
         XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
         XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
+        XCTAssertLessThan(profileProjectionElapsed, 0.5, "Cached Profile projections took \(profileProjectionElapsed)s")
+        XCTAssertLessThan(profilePresentationElapsed, 0.75, "Cached Profile presentation took \(profilePresentationElapsed)s")
+        XCTAssertLessThan(inCommonElapsed, 1, "Cached In Common projection took \(inCommonElapsed)s")
+        XCTAssertLessThan(yourMapDatasetElapsed, 0.75, "Your Map dataset projection took \(yourMapDatasetElapsed)s")
         XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")
+    }
+
+    @MainActor
+    func testProfileProjectionCachesPreserveResultsAndInvalidateWithPresentationData() {
+        let store = WanderStore(fixtures: .performanceScale())
+        let comparisonProfileID = store.profiles.first { $0.id != store.currentUser.id }!.id
+        let presentationCache = ProfilePresentationCache()
+
+        let firstCalendarProjection = store.currentUserCalendarProjection
+        let calendarBuildCount = store.currentUserCalendarProjectionBuildCount
+        let secondCalendarProjection = store.currentUserCalendarProjection
+        XCTAssertEqual(firstCalendarProjection.visiblePlaces.map(\.id), secondCalendarProjection.visiblePlaces.map(\.id))
+        XCTAssertEqual(firstCalendarProjection.visits.map(\.id), secondCalendarProjection.visits.map(\.id))
+        XCTAssertEqual(store.currentUserCalendarProjectionBuildCount, calendarBuildCount)
+
+        let mine = VisiblePlaceGrouping.representativePlaces(
+            from: store.currentUserVisiblePlaces,
+            currentUserID: store.currentUser.id
+        )
+        let theirs = VisiblePlaceGrouping.representativePlaces(
+            from: store.visiblePlaces(for: comparisonProfileID),
+            currentUserID: store.currentUser.id
+        )
+        let expectedInCommon = theirs.filter { theirPlace in
+            mine.contains { VisiblePlaceGrouping.matches($0, theirPlace) }
+        }
+        let firstInCommon = store.placesInCommon(with: comparisonProfileID)
+        let inCommonBuildCount = store.placesInCommonProjectionBuildCount
+        let secondInCommon = store.placesInCommon(with: comparisonProfileID)
+        XCTAssertEqual(firstInCommon.map(\.id), expectedInCommon.map(\.id))
+        XCTAssertEqual(secondInCommon.map(\.id), expectedInCommon.map(\.id))
+        XCTAssertEqual(store.placesInCommonProjectionBuildCount, inCommonBuildCount)
+
+        let firstPresentation = presentationCache.present(store: store, profileID: store.currentUser.id)
+        let presentationBuildCount = presentationCache.buildCount
+        let secondPresentation = presentationCache.present(store: store, profileID: store.currentUser.id)
+        XCTAssertEqual(firstPresentation.stats, secondPresentation.stats)
+        XCTAssertEqual(firstPresentation.activityItems.map(\.id), secondPresentation.activityItems.map(\.id))
+        XCTAssertEqual(presentationCache.buildCount, presentationBuildCount)
+
+        store.defaultVisibility = store.defaultVisibility == .followers ? .mutuals : .followers
+        _ = store.currentUserCalendarProjection
+        _ = store.placesInCommon(with: comparisonProfileID)
+        _ = presentationCache.present(store: store, profileID: store.currentUser.id)
+
+        XCTAssertEqual(store.currentUserCalendarProjectionBuildCount, calendarBuildCount + 1)
+        XCTAssertEqual(store.placesInCommonProjectionBuildCount, inCommonBuildCount + 1)
+        XCTAssertEqual(presentationCache.buildCount, presentationBuildCount + 1)
     }
 
     @MainActor

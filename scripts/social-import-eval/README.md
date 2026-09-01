@@ -42,7 +42,9 @@ npm run eval:social-import -- --providers current,current-improved --resolve non
 ```
 
 After a scoring-only change, regenerate an existing run's `results.json` and
-summaries without reacquiring social media or rerunning understanding:
+summaries without reacquiring social media or rerunning understanding. Every
+invocation appends a `score-contract-v4` transform and chained input/output
+result hashes to the run manifest:
 
 ```bash
 npm run eval:social-import:rescore -- social-import-eval/runs/<run>
@@ -61,6 +63,22 @@ closed for resolver-none runs. Batch replays pace MapKit requests and retry only
 transient server/throttling errors so replay pressure is not counted as POI
 candidate-quality loss.
 
+To rebuild hints from saved Gemini structured candidates and rerun MapKit, with
+no new scraper or model request:
+
+```bash
+npm run eval:social-import:rescore -- \
+  social-import-eval/runs/<run> \
+  --rebuild-understanding-hints \
+  --reresolve-mapkit
+```
+
+For a MapKit-backed run, hint rebuilding requires re-resolution so stale POI
+results cannot be reported against changed extraction output. The run manifest
+records both replay operations, the exact applied transforms, chained input/output
+result hashes, the fallback-assisted case count, and that they made no paid
+acquisition or understanding calls.
+
 Add `--resolve mapkit` to use the same POI provider and a scoring mirror of
 `ManualPlaceSearchPlan` / `PlaceImportCandidateMatcher` from the iOS app. The
 first run compiles a credential-isolated Swift helper in a private temporary
@@ -74,11 +92,97 @@ Useful options:
 --understanders <deterministic,apple-vision,apple-vision-keyframes,gemini,google-video,
                  aws-rekognition-transcribe,azure-video-indexer>
 --resolve <none|mapkit>
+--corpus <path to corpus JSON; defaults to the committed corpus.json>
 --out <directory>
 --fixture-dir <directory of saved acquisition JSON; offline by default>
 --allow-network-after-fixture
                  explicitly allow media/model/MapKit network after fixture load
 ```
+
+Use a separate corpus for a private launch-gate or one-off live evaluation
+without editing the committed benchmark. The selected corpus path and SHA-256
+are recorded in the run manifest:
+
+```bash
+npm run eval:social-import -- \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --providers apify \
+  --understanders gemini \
+  --resolve mapkit \
+  --out /private/tmp/rec120-launch-gate-run
+```
+
+Keep private corpora and their live outputs outside the repository. The runner
+does not copy API credentials into the manifest, but source captions, provider
+payloads, and expiring media URLs remain sensitive run artifacts.
+
+### Production-parity diagnostic
+
+`production-parity.ts` is the narrow diagnostic for the current server pipeline.
+Unlike the historical provider comparator above, it directly composes the
+production source parser, Apify acquisition and profile enrichment, media
+ingestion, Gemini understanding, and grounding modules. Cases run serially and
+use the production 112-second per-case deadline.
+
+Supply credentials through the process environment, create a new private output
+directory, and run:
+
+```bash
+deno run \
+  --allow-env=APIFY_TOKEN,GEMINI_API_KEY,GEMINI_MODEL \
+  --allow-read \
+  --allow-write=/private/tmp/rec120-production-parity \
+  --allow-net \
+  scripts/social-import-eval/production-parity.ts \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --out /private/tmp/rec120-production-parity \
+  --fixture-dir /private/tmp/rec120-launch-gate.vUN2Dx
+```
+
+`--fixture-dir` accepts either an evaluator run directory or its `raw/`
+subdirectory. It reuses each case's validated `apify.json` acquisition envelope
+and passes the saved raw dataset through the current production Apify normalizer.
+It never falls back to a new post scrape when a fixture is missing or failed.
+Private Apify key-value-store media remains usable because the production media
+ingestor reconstructs its narrowly scoped authorization header from the
+in-memory `APIFY_TOKEN`; that header is never serialized. Profile-handle
+enrichment and Gemini are still live provider calls. Omit `--fixture-dir` only
+when a fresh main acquisition is intentionally wanted.
+
+The output directory must be new or already private to its owner. The runner
+refuses to overwrite an existing manifest or result set. It writes only:
+
+- `manifest.json`: corpus hash, bounded case IDs, and completion counts;
+- `results.json`: source kind, acquisition/media/profile stage summaries,
+  structured Gemini candidates and post context, grounded hints, and bounded
+  error codes.
+
+It deliberately omits source URLs, raw captions and titles, profile aliases,
+media URLs, media bytes, and provider responses. Candidate and hint strings that
+look like URLs are redacted, and every write fails closed if either provider
+credential appears in the serialized output. The diagnostic does not run
+MapKit; final POI resolution remains the iOS trust-boundary stage.
+
+Media or Gemini failures preserve the same deterministic fallback hints returned
+by the production handler. Score a completed diagnostic offline with:
+
+```bash
+node scripts/social-import-eval/score-production-parity.mjs \
+  --corpus /private/tmp/rec120-launch-gate.json \
+  --results /private/tmp/rec120-production-parity/results.json \
+  --manifest /private/tmp/rec120-production-parity/manifest.json \
+  --out /private/tmp/rec120-production-parity/score-summary.json
+```
+
+The scorer verifies the exact corpus SHA-256, requires the manifest and results
+to contain the complete corpus case-ID set, and refuses older media/Gemini
+failure records that omitted their production fallback hints. It joins cases by
+ID and applies the evaluator's existing name/alias and forbidden-label scoring
+contract to final `grounding.hints`. The new output file is owner-only and is
+never overwritten. It contains bounded per-case scores and aggregate macro,
+micro, post-success, forbidden-hit, and exact-set metrics, but no source URLs,
+raw evidence, prediction strings, provider payloads, or credentials. This is
+server hint accuracy only; it does not claim final MapKit POI identity accuracy.
 
 The committed corpus currently contains eight manually labeled public posts and
 121 required place mentions. Summary JSON includes both macro metrics (every
@@ -141,6 +245,28 @@ identity. One initial transport timeout and one initial HTTP 503 recovered via
 retry, while the three-503 case remained failed in the frozen benchmark.
 Neither run establishes launch readiness.
 
+A later no-paid-call replay, saved as
+`apify-gemini-grounded-replay-2026-08-28`, rebuilt hints from the frozen Gemini
+structured candidates, used bounded deterministic evidence only for the one
+failed Gemini case, required matching successful media ingestion for model-only
+image/video/speech claims, and reran MapKit with the v5 resolver mirror. The
+final rebuild is recorded as `grounded-hints-v3`. It measured:
+
+- 93.8%/100% macro and 97.7%/100% micro hint precision/recall;
+- 121/121 required mentions, 3 scored extras, and 6/8 exact hint sets;
+- 100% video-text and speech scenario-group recall, including the failed
+  multi-place TikTok request recovered from its numbered caption;
+- 64.8% MapKit lookup health and 17.2% candidate selection; and
+- 86.4%/14.0% micro selected-name precision/recall, with 17/121 required names
+  surviving selection and 4/8 exact selected-name sets.
+
+The three scored extras are `Castle Crags Wilderness`, `Shasta-Trinity National
+Forest`, and `Wind River Brewing`; all are plausible destinations present in
+the source evidence, so they also expose corpus-label ambiguity. This replay is
+strong evidence for grounded filtering and failure fallback, not a new live
+Gemini reliability result. Its 87.5% understanding-success rate and original
+model latency are unchanged, and the corpus still cannot verify branch identity.
+
 ## Provider environment variables
 
 Provider adapters fail closed with a structured `not_configured` result when
@@ -172,7 +298,10 @@ the repository and makes CI/provider injection explicit.
 The Apify adapter invokes actor runs through `/v2/actors`, disables the actor's
 AI video description, and does not request, fetch, ingest, or score vendor
 transcript artifacts. Apify STT remains a documented capability to evaluate
-separately, not a measured feature of this harness.
+separately, not a measured feature of this harness. If a vendor nevertheless
+returns an AI scene description, it is retained as separately typed vendor-model
+evidence and cannot feed deterministic extraction or independently ground
+Gemini output.
 
 Private Apify key-value-store media can require the same process token used for
 acquisition. The runner attaches that Bearer header only to the exact Apify API
@@ -188,10 +317,22 @@ cross-host redirects.
   Media parts precede the untrusted creator-text prompt.
 - Gemini uses the current nested JSON `responseFormat`. The schema intentionally
   omits `maxItems`: a synthetic A/B request changed from HTTP 400 with
-  `maxItems: 150` to HTTP 200 after removing it.
+  `maxItems: 150` to HTTP 200 after removing it. A JSON response that does not
+  match the required candidate schema is a recorded model failure and invokes
+  deterministic fallback.
 - Gemini retries transport failures and HTTP 408, 429, and 5xx responses with a
   bounded attempt count and jittered/`Retry-After`-aware backoff. Attempt
   metadata is preserved without credentials.
+- A successful Gemini response contributes only schema-validated destination or
+  itinerary candidates. Caption and tagged-location candidates must match
+  evidence that exists independently outside the model's own evidence sentence.
+  Image-, video-, and speech-only candidates may instead carry explicit
+  `model_attested_media_evidence` only when a matching image/video asset was
+  successfully ingested into the model request; the model's evidence text alone
+  is insufficient. Independent name matching uses token boundaries so `Park`
+  cannot be grounded by `parking`. Raw heuristic hints are not merged into a
+  successful model result. A failed Gemini response uses bounded deterministic
+  extraction from acquired evidence and records that fallback explicitly.
 - Google Video Intelligence attempts every acquired video child, issuing one
   annotation operation per successfully fetched video. It does not stop after
   the first video. Stills remain the responsibility of a still-image path.
@@ -213,14 +354,21 @@ cross-host redirects.
   a local, zero-API-cost comparator; it is evaluation code, not app code.
 - Deterministic hint extraction approximates the production evidence ordering
   and trust model in `SocialPlaceHintExtractor`.
-- The v4 MapKit benchmark mirror adds production-style provider-name query
+- The v5 MapKit benchmark mirror adds production-style provider-name query
   variants, coordinate/region hints, exact-country and area-conflict filters,
   production pre-limit result ranking, OCR-specific near-spelling handling,
-  and the candidate clear-lead threshold.
+  creator-qualified venue-name matching, and the candidate clear-lead threshold.
   It also ports the production LA/Georgia ambiguity rules and District of
   Columbia region handling, covered by executable parity fixtures. It remains
   copied evaluation logic; production Swift regression fixtures are the
   authoritative parity check.
 
-The benchmark does not mutate the iOS app, Supabase, provider accounts, or user
-place data.
+The evaluator does not mutate Supabase, provider accounts, or user place data.
+The production path is separate and feature-flagged: an authenticated iOS
+import may call the `social-import-understand` Supabase Edge Function, which
+acquires bounded Instagram or TikTok evidence with Apify and asks Gemini for
+grounded place hints. The app still resolves those hints through its existing
+MapKit trust boundary before presenting or saving a place. Missing
+configuration, quota admission, acquisition, media, model, or deadline failures
+fall back to the existing device-side parser instead of treating a provider
+guess as a canonical POI.

@@ -93,7 +93,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(provider.sessionChangesRequestCount, 0)
     }
 
-    func testNativeAuthAttemptSurvivesTransientProviderStatesAndClosesOnSuccess() async {
+    func testNativeAuthAttemptSurvivesTransientProviderStatesAndClosesOnSuccess() async throws {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true
@@ -116,6 +116,9 @@ final class AuthSessionTests: XCTestCase {
         await waitForState(.signedIn(session), in: store)
 
         XCTAssertFalse(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSessionValidated)
+
+        try await store.ensureSessionValidated(for: session.userID)
         XCTAssertTrue(store.isSessionValidated)
     }
 
@@ -723,6 +726,209 @@ final class AuthSessionTests: XCTestCase {
         }
     }
 
+    func testAuthoritativeRefreshWinsAfterObservedSignedOutSnapshot() async throws {
+        let session = AuthSession(
+            userID: "user_123",
+            displayName: "Joe",
+            handle: "joe"
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(session: session)
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        let refresh = Task { await store.refreshSession() }
+        while !provider.isRefreshSuspended { await Task.yield() }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertFalse(store.isSessionValidated)
+
+        provider.finishRefresh()
+        await refresh.value
+
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+        try await store.ensureSessionValidated(for: session.userID)
+
+        provider.yieldSnapshotWithoutChangingState(.signedOut)
+        try await Task.sleep(for: .milliseconds(10))
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+    }
+
+    func testObservedAccountSwitchInvalidatesPendingRefresh() async throws {
+        let firstSession = AuthSession(
+            userID: "user_a",
+            displayName: "A",
+            handle: "a"
+        )
+        let secondSession = AuthSession(
+            userID: "user_b",
+            displayName: "B",
+            handle: "b"
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(session: firstSession)
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        let firstRefresh = Task { await store.refreshSession() }
+        while !provider.isRefreshSuspended { await Task.yield() }
+
+        provider.shouldSuspendRefresh = false
+        provider.setObservedState(.signedIn(secondSession))
+        await waitForState(.signedIn(secondSession), in: store)
+        while !store.isSessionValidated { await Task.yield() }
+
+        provider.finishRefresh()
+        await firstRefresh.value
+
+        XCTAssertEqual(store.state, .signedIn(secondSession))
+        XCTAssertTrue(store.isSessionValidated)
+        try await store.ensureSessionValidated(for: secondSession.userID)
+    }
+
+    func testOriginalRefreshWaiterFollowsAccountSwitchReplacement() async throws {
+        let firstSession = AuthSession(
+            userID: "user_a",
+            displayName: "A",
+            handle: "a"
+        )
+        let secondSession = AuthSession(
+            userID: "user_b",
+            displayName: "B",
+            handle: "b"
+        )
+        let provider = TwoStageAccountSwitchAuthProvider(
+            firstSession: firstSession,
+            secondSession: secondSession
+        )
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        var originalWaiterFinished = false
+        let originalWaiter = Task { @MainActor in
+            await store.refreshSession()
+            originalWaiterFinished = true
+        }
+        while !provider.isFirstRefreshSuspended { await Task.yield() }
+
+        provider.switchToSecondAccount()
+        while !provider.isReplacementRefreshSuspended { await Task.yield() }
+        provider.finishFirstRefresh()
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertFalse(originalWaiterFinished)
+        XCTAssertFalse(store.isSessionValidated)
+
+        provider.finishReplacementRefresh()
+        await originalWaiter.value
+
+        XCTAssertTrue(originalWaiterFinished)
+        XCTAssertEqual(store.state, .signedIn(secondSession))
+        XCTAssertTrue(store.isSessionValidated)
+    }
+
+    func testObservedSignedInCannotBypassExplicitSessionValidation() async throws {
+        let session = AuthSession(
+            userID: "user_123",
+            displayName: "Cached",
+            handle: "joe"
+        )
+        let observedSession = AuthSession(
+            userID: session.userID,
+            displayName: "Observed",
+            handle: session.handle
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(session: session)
+        provider.shouldSuspendRefresh = false
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        store.beginSessionValidation()
+        provider.setObservedState(.signedIn(observedSession))
+        await waitForState(.signedIn(observedSession), in: store)
+
+        XCTAssertFalse(store.isSessionValidated)
+        XCTAssertEqual(provider.refreshCount, 0)
+
+        try await store.ensureSessionValidated(for: session.userID)
+
+        XCTAssertEqual(provider.refreshCount, 1)
+        XCTAssertTrue(store.isSessionValidated)
+    }
+
+    func testSignOutInvalidatesSuspendedSharedRefresh() async throws {
+        let session = AuthSession(
+            userID: "user_123",
+            displayName: "Joe",
+            handle: "joe"
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(session: session)
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        let refresh = Task { await store.refreshSession() }
+        while !provider.isRefreshSuspended { await Task.yield() }
+
+        try await store.signOut()
+        provider.finishRefresh()
+        await refresh.value
+
+        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertFalse(store.isSessionValidated)
+        do {
+            try await store.ensureSessionValidated(for: session.userID)
+            XCTFail("Expected the signed-out account to remain invalid")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notSignedIn)
+        }
+    }
+
+    func testOverlappingTerminalAuthMutationIsRejected() async throws {
+        let session = AuthSession(
+            userID: "user_123",
+            displayName: "Joe",
+            handle: "joe"
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(session: session)
+        provider.shouldSuspendSignOut = true
+        let store = AuthSessionStore(provider: provider)
+
+        let signOut = Task { try await store.signOut() }
+        while !provider.isSignOutSuspended { await Task.yield() }
+
+        do {
+            try await store.deleteAccount()
+            XCTFail("Expected the overlapping account deletion to be rejected")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .sessionUnavailable)
+        }
+
+        provider.finishSignOut()
+        try await signOut.value
+        XCTAssertEqual(store.state, .signedOut)
+    }
+
+    func testFailedDeleteAccountRevalidatesTheExistingSession() async throws {
+        let session = AuthSession(
+            userID: "user_123",
+            displayName: "Joe",
+            handle: "joe"
+        )
+        let provider = PreviewAuthSessionProvider(state: .signedIn(session), token: "token")
+        let store = AuthSessionStore(provider: provider)
+        await store.refreshSession()
+
+        do {
+            try await store.deleteAccount()
+            XCTFail("Expected the preview provider to reject account deletion")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notConfigured)
+        }
+
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+    }
+
     func testSignOutClearsSession() async throws {
         let provider = PreviewAuthSessionProvider(
             state: .signedIn(AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")),
@@ -1023,5 +1229,161 @@ private final class AuthSessionCacheHolder {
             load: { [weak self] in self?.session },
             save: { [weak self] session in self?.session = session }
         )
+    }
+}
+
+@MainActor
+private final class ObservedSnapshotDuringRefreshAuthProvider: AuthSessionProviding {
+    private(set) var state: AuthState
+    private(set) var sessionChangesRequestCount = 0
+    private(set) var isRefreshSuspended = false
+    private(set) var refreshCount = 0
+    var shouldSuspendRefresh = true
+    var shouldSuspendSignOut = false
+    private(set) var isSignOutSuspended = false
+
+    private let session: AuthSession
+    private let changes: AsyncStream<AuthState>
+    private let changesContinuation: AsyncStream<AuthState>.Continuation
+    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private var signOutContinuation: CheckedContinuation<Void, Never>?
+
+    init(session: AuthSession) {
+        self.session = session
+        state = .signedIn(session)
+        (changes, changesContinuation) = AsyncStream<AuthState>.makeStream()
+    }
+
+    var canPresentNativeAuth: Bool { false }
+
+    func sessionChanges() -> AsyncStream<AuthState> {
+        sessionChangesRequestCount += 1
+        return changes
+    }
+
+    func refreshSession() async {
+        refreshCount += 1
+        guard shouldSuspendRefresh else { return }
+        state = .signedOut
+        changesContinuation.yield(.signedOut)
+        isRefreshSuspended = true
+        await withCheckedContinuation { continuation in
+            refreshContinuation = continuation
+        }
+        isRefreshSuspended = false
+        guard !Task.isCancelled else { return }
+        state = .signedIn(session)
+    }
+
+    func finishRefresh() {
+        refreshContinuation?.resume()
+        refreshContinuation = nil
+    }
+
+    func yieldSnapshotWithoutChangingState(_ state: AuthState) {
+        changesContinuation.yield(state)
+    }
+
+    func setObservedState(_ state: AuthState) {
+        self.state = state
+        changesContinuation.yield(state)
+    }
+
+    func signOut() async throws {
+        if shouldSuspendSignOut {
+            isSignOutSuspended = true
+            await withCheckedContinuation { continuation in
+                signOutContinuation = continuation
+            }
+            isSignOutSuspended = false
+        }
+        state = .signedOut
+        changesContinuation.yield(.signedOut)
+    }
+
+    func finishSignOut() {
+        signOutContinuation?.resume()
+        signOutContinuation = nil
+    }
+
+    func supabaseAccessToken() async throws -> String {
+        guard case .signedIn = state else { throw AuthSessionError.notSignedIn }
+        return "test-token"
+    }
+}
+
+@MainActor
+private final class TwoStageAccountSwitchAuthProvider: AuthSessionProviding {
+    private(set) var state: AuthState
+    private(set) var sessionChangesRequestCount = 0
+    private(set) var isFirstRefreshSuspended = false
+    private(set) var isReplacementRefreshSuspended = false
+
+    private let firstSession: AuthSession
+    private let secondSession: AuthSession
+    private let changes: AsyncStream<AuthState>
+    private let changesContinuation: AsyncStream<AuthState>.Continuation
+    private var refreshCount = 0
+    private var firstContinuation: CheckedContinuation<Void, Never>?
+    private var replacementContinuation: CheckedContinuation<Void, Never>?
+
+    init(firstSession: AuthSession, secondSession: AuthSession) {
+        self.firstSession = firstSession
+        self.secondSession = secondSession
+        state = .signedIn(firstSession)
+        (changes, changesContinuation) = AsyncStream<AuthState>.makeStream()
+    }
+
+    var canPresentNativeAuth: Bool { false }
+
+    func sessionChanges() -> AsyncStream<AuthState> {
+        sessionChangesRequestCount += 1
+        return changes
+    }
+
+    func refreshSession() async {
+        refreshCount += 1
+        if refreshCount == 1 {
+            isFirstRefreshSuspended = true
+            await withCheckedContinuation { continuation in
+                firstContinuation = continuation
+            }
+            isFirstRefreshSuspended = false
+            guard !Task.isCancelled else { return }
+            state = .signedIn(firstSession)
+            return
+        }
+        isReplacementRefreshSuspended = true
+        await withCheckedContinuation { continuation in
+            replacementContinuation = continuation
+        }
+        isReplacementRefreshSuspended = false
+        guard !Task.isCancelled else { return }
+        state = .signedIn(secondSession)
+    }
+
+    func switchToSecondAccount() {
+        state = .signedIn(secondSession)
+        changesContinuation.yield(state)
+    }
+
+    func finishFirstRefresh() {
+        firstContinuation?.resume()
+        firstContinuation = nil
+    }
+
+    func finishReplacementRefresh() {
+        replacementContinuation?.resume()
+        replacementContinuation = nil
+    }
+
+    func signOut() async throws {
+        state = .signedOut
+        changesContinuation.yield(state)
+    }
+
+    func supabaseAccessToken() async throws -> String {
+        guard case .signedIn = state else { throw AuthSessionError.notSignedIn }
+        return "test-token"
     }
 }

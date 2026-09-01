@@ -1,6 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { extractDeterministicHints, normalizeEvidence } from "./lib.mjs";
+import {
+  extractDeterministicHints,
+  extractGroundedModelHints,
+  normalizeEvidence,
+} from "./lib.mjs";
 import { boundedMediaByteLimit, fetchAcquiredMediaBytes } from "./media.mjs";
 import { recognizeWithAppleVision } from "./vision.mjs";
 
@@ -725,6 +729,11 @@ function normalizeVendorRecord(record) {
       providerID: locationValue.id ? String(locationValue.id) : null,
     });
   }
+  const vendorSceneDescription = record.aiVideoDescription ?? videoMeta.aiVideoDescription
+    ?? record.videoDescription ?? null;
+  const vendorSceneText = normalizeEvidence({
+    sceneDescription: vendorSceneDescription,
+  }).sceneDescription;
   return normalizeEvidence({
     title: record.title ?? null,
     caption: record.description ?? record.caption ?? record.text ?? record.title ?? null,
@@ -738,8 +747,15 @@ function normalizeVendorRecord(record) {
     // neither requests nor scores vendor STT; speech must come from an explicit
     // understanding adapter with its own ingestion and cost diagnostics.
     transcript: null,
-    sceneDescription: record.aiVideoDescription ?? videoMeta.aiVideoDescription
-      ?? record.videoDescription ?? null,
+    sceneDescription: null,
+    vendorModelEvidence: vendorSceneText
+      ? [{
+        provider: "acquisition_vendor",
+        kind: "scene_description",
+        text: vendorSceneText,
+        independentlyGrounded: false,
+      }]
+      : [],
   });
 }
 
@@ -1178,6 +1194,14 @@ async function geminiUnderstanding(testCase, acquisition) {
     };
   }
   const evidence = normalizeEvidence(acquisition.evidence);
+  const deterministicFallback = (reason) => ({
+    hints: extractDeterministicHints(evidence),
+    fallback: {
+      used: true,
+      strategy: "deterministic_evidence",
+      reason,
+    },
+  });
   if (acquisition.status !== "ok") {
     return {
       status: "blocked_by_acquisition",
@@ -1297,6 +1321,7 @@ async function geminiUnderstanding(testCase, acquisition) {
   );
   const response = request.response;
   if (!response) {
+    const fallback = deterministicFallback("gemini_transport_error");
     return {
       status: "failed",
       error: {
@@ -1305,19 +1330,20 @@ async function geminiUnderstanding(testCase, acquisition) {
       },
       raw: null,
       evidence,
-      hints: [],
+      ...fallback,
       mediaIngestion,
       requestAttempts: request.attempts,
     };
   }
   const raw = await responseRecord(response);
   if (!response.ok) {
+    const fallback = deterministicFallback("gemini_http_error");
     return {
       status: "failed",
       error: { code: "gemini_http_error", message: "HTTP " + response.status },
       raw: raw.body,
       evidence,
-      hints: [],
+      ...fallback,
       mediaIngestion,
       requestAttempts: request.attempts,
     };
@@ -1330,12 +1356,48 @@ async function geminiUnderstanding(testCase, acquisition) {
   try {
     parsed = JSON.parse(text);
   } catch {
+    const fallback = deterministicFallback("gemini_invalid_json");
     return {
       status: "failed",
       error: { code: "gemini_invalid_json", message: "Model response was not JSON" },
       raw: raw.body,
       evidence,
-      hints: [],
+      ...fallback,
+      mediaIngestion,
+      requestAttempts: request.attempts,
+    };
+  }
+  const validClassifications = new Set([
+    "destination", "itinerary", "ambiguous", "incidental", "attribution", "not_a_place",
+  ]);
+  const validModalities = new Set([
+    "caption", "tagged_location", "image_text", "video_text", "speech", "visual_scene",
+  ]);
+  const hasValidSchema = parsed
+    && typeof parsed === "object"
+    && !Array.isArray(parsed)
+    && Array.isArray(parsed.candidates)
+    && parsed.candidates.every((candidate) => (
+      candidate
+      && typeof candidate === "object"
+      && !Array.isArray(candidate)
+      && typeof candidate.name === "string"
+      && typeof candidate.area === "string"
+      && validClassifications.has(candidate.classification)
+      && validModalities.has(candidate.modality)
+      && typeof candidate.evidence === "string"
+      && Number.isFinite(candidate.startMs)
+      && Number.isFinite(candidate.endMs)
+      && Number.isFinite(candidate.confidence)
+    ));
+  if (!hasValidSchema) {
+    const fallback = deterministicFallback("gemini_invalid_schema");
+    return {
+      status: "failed",
+      error: { code: "gemini_invalid_schema", message: "Model JSON did not match the required candidate schema" },
+      raw: raw.body,
+      evidence,
+      ...fallback,
       mediaIngestion,
       requestAttempts: request.attempts,
     };
@@ -1349,13 +1411,20 @@ async function geminiUnderstanding(testCase, acquisition) {
     }))
     : [];
   const understoodEvidence = { ...evidence, modelCandidates };
+  const modelSelection = extractGroundedModelHints(
+    understoodEvidence,
+    150,
+    { mediaIngestion },
+  );
   const ingestionError = mediaIngestionError(mediaIngestion);
   return {
     status: ingestionError ? "partial" : "ok",
     error: ingestionError,
     raw: raw.body,
     evidence: understoodEvidence,
-    hints: extractDeterministicHints(understoodEvidence),
+    hints: modelSelection.hints,
+    modelCandidateValidation: modelSelection.validation,
+    fallback: { used: false },
     mediaIngestion,
     requestAttempts: request.attempts,
     cost: {
