@@ -4738,6 +4738,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(glassSegmentedSwitch.contains(".padding(.horizontal, 4)"))
         XCTAssertTrue(glassSegmentedSwitch.contains(".contentShape(Rectangle())"))
         XCTAssertFalse(glassSegmentedSwitch.contains(".padding(4)"))
+        XCTAssertTrue(theme.contains(".glassEffectTransition(.identity)"))
+        XCTAssertFalse(theme.contains(".glassEffectTransition(.materialize)"))
         XCTAssertTrue(mapPicker.contains("WanderGlassButtonCluster"))
         XCTAssertFalse(mapPicker.contains("WanderGlassSegmentedSwitch("))
     }
