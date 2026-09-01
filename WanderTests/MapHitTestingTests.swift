@@ -179,26 +179,35 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
-    func testSearchRankingUsesCachedViewerLocationOrFallsBackToMapCenter() {
+    func testSearchRankingUsesMapCenterWhileDistanceUsesCachedViewerLocation() {
         let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
             span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
         )
         let viewerLocation = CLLocation(latitude: 40.71, longitude: -74.01)
 
-        let cachedOrigin = MapSearchPerformancePolicy.rankingOrigin(
+        let rankingOrigin = MapSearchPerformancePolicy.rankingOrigin(mapRegion: region)
+        let cachedDistanceOrigin = MapSearchPerformancePolicy.distanceOrigin(
             viewerLocation: viewerLocation,
             mapRegion: region
         )
-        let fallbackOrigin = MapSearchPerformancePolicy.rankingOrigin(
+        let fallbackDistanceOrigin = MapSearchPerformancePolicy.distanceOrigin(
             viewerLocation: nil,
             mapRegion: region
         )
 
-        XCTAssertEqual(cachedOrigin.coordinate.latitude, viewerLocation.coordinate.latitude)
-        XCTAssertEqual(cachedOrigin.coordinate.longitude, viewerLocation.coordinate.longitude)
-        XCTAssertEqual(fallbackOrigin.coordinate.latitude, region.center.latitude)
-        XCTAssertEqual(fallbackOrigin.coordinate.longitude, region.center.longitude)
+        XCTAssertEqual(rankingOrigin.coordinate.latitude, region.center.latitude)
+        XCTAssertEqual(rankingOrigin.coordinate.longitude, region.center.longitude)
+        XCTAssertEqual(
+            cachedDistanceOrigin.coordinate.latitude,
+            viewerLocation.coordinate.latitude
+        )
+        XCTAssertEqual(
+            cachedDistanceOrigin.coordinate.longitude,
+            viewerLocation.coordinate.longitude
+        )
+        XCTAssertEqual(fallbackDistanceOrigin.coordinate.latitude, region.center.latitude)
+        XCTAssertEqual(fallbackDistanceOrigin.coordinate.longitude, region.center.longitude)
     }
 
     func testMapSearchRetriesWithDistinctiveQueryWhenPrimaryResultsMissTheBusinessName() throws {
@@ -261,7 +270,7 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
-    func testMapSearchQueryPolicyOnlyRecoversMultiwordQueriesWithoutANearbyNameMatch() {
+    func testMapSearchQueryPolicyRecoversNamedPlacesButNeverGlobalizesCategories() {
         let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
             span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
@@ -306,13 +315,220 @@ final class MapHitTestingTests: XCTestCase {
                 searchRegion: region
             )
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             MapSearchQueryPolicy.shouldRecoverBeyondRegion(
                 for: "Sentimental",
                 evidence: [],
                 searchRegion: region
             )
         )
+        XCTAssertFalse(
+            MapSearchQueryPolicy.shouldRecoverBeyondRegion(
+                for: "coffee near me",
+                evidence: [],
+                searchRegion: region
+            )
+        )
+    }
+
+    func testMapSearchQueryPolicyClassifiesGenericCategoryPhrasesWithoutMistakingNames() {
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "coffee"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "coffee shops near me"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "nearby ramen"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "best coffee"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "quiet cafes"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "coffee in Pasadena"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "best coffee in Pasadena"), .category)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "Dayglow"), .namedPlace)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "Coffee Commissary"), .namedPlace)
+        XCTAssertEqual(MapSearchQueryPolicy.intent(for: "Blue Bottle Coffee"), .namedPlace)
+    }
+
+    func testCategoryProviderRankingIsDistanceFirstWhileNamedPlacesStayLexical() {
+        let nearbyCategoryScore = MapProviderSearchRankingPolicy.score(
+            name: "Dayglow",
+            query: "coffee",
+            isPointOfInterest: true,
+            distanceMeters: 800
+        )
+        let distantLexicalCategoryScore = MapProviderSearchRankingPolicy.score(
+            name: "Coffee Commissary",
+            query: "coffee",
+            isPointOfInterest: true,
+            distanceMeters: 30_000
+        )
+        XCTAssertGreaterThan(nearbyCategoryScore, distantLexicalCategoryScore)
+
+        let exactNamedScore = MapProviderSearchRankingPolicy.score(
+            name: "Coffee Commissary",
+            query: "Coffee Commissary",
+            isPointOfInterest: true,
+            distanceMeters: 30_000
+        )
+        let unrelatedNearbyScore = MapProviderSearchRankingPolicy.score(
+            name: "Dayglow",
+            query: "Coffee Commissary",
+            isPointOfInterest: true,
+            distanceMeters: 800
+        )
+        XCTAssertGreaterThan(exactNamedScore, unrelatedNearbyScore)
+    }
+
+    func testAdaptiveSearchStartsAtViewportRadiusAndStopsAtRegionalCap() {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+        )
+        let viewportRadius = MapAdaptiveSearchPolicy.viewportRadius(for: region)
+        let radii = MapAdaptiveSearchPolicy.radii(for: region)
+
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(radii.first), viewportRadius)
+        XCTAssertGreaterThanOrEqual(
+            try XCTUnwrap(radii.first),
+            MapAdaptiveSearchPolicy.minimumInitialRadius
+        )
+        XCTAssertEqual(radii.last, MapAdaptiveSearchPolicy.regionalRadiusCap)
+        XCTAssertLessThanOrEqual(radii.count, MapAdaptiveSearchPolicy.maximumPassCount)
+        XCTAssertEqual(radii, radii.sorted())
+    }
+
+    func testAdaptiveSearchKeepsAnAlreadyWideViewportAsItsOnlyRequiredRadius() {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 3, longitudeDelta: 3)
+        )
+        let radii = MapAdaptiveSearchPolicy.radii(for: region)
+
+        XCTAssertEqual(radii.count, 1)
+        XCTAssertEqual(
+            try XCTUnwrap(radii.first),
+            MapAdaptiveSearchPolicy.viewportRadius(for: region),
+            accuracy: 1
+        )
+    }
+
+    func testAdaptiveSearchRejectsProviderResultsOutsideRequestedRadius() {
+        let center = CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285)
+
+        XCTAssertTrue(
+            MapAdaptiveSearchPolicy.contains(
+                CLLocationCoordinate2D(latitude: 34.08, longitude: -118.28),
+                center: center,
+                radius: 2_000
+            )
+        )
+        XCTAssertFalse(
+            MapAdaptiveSearchPolicy.contains(
+                CLLocationCoordinate2D(latitude: 34.1478, longitude: -118.1445),
+                center: center,
+                radius: 2_000
+            )
+        )
+    }
+
+    func testAdaptiveSearchDeduplicatesProviderResultsAcrossRadiusPasses() {
+        var deduper = MapProviderResultDeduper()
+
+        XCTAssertEqual(
+            deduper.appendUnique(["dayglow", "dayglow", "jones"]) { $0 },
+            ["dayglow", "jones"]
+        )
+        XCTAssertEqual(
+            deduper.appendUnique(["jones", "maru"]) { $0 },
+            ["maru"]
+        )
+    }
+
+    func testExternalMapSearchCandidatesAllowAllAndCategoryORRefinements() {
+        let coffee = PlaceCandidate(
+            id: "coffee",
+            name: "Coffee",
+            category: "Cafe",
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            latitude: 34.05,
+            longitude: -118.25,
+            confidence: 1
+        )
+        let park = PlaceCandidate(
+            id: "park",
+            name: "Park",
+            category: "Park",
+            primaryCategory: WanderPlaceCategory.outdoorsNature,
+            latitude: 34.06,
+            longitude: -118.26,
+            confidence: 1
+        )
+        let shop = PlaceCandidate(
+            id: "shop",
+            name: "Shop",
+            category: "Store",
+            primaryCategory: WanderPlaceCategory.shopping,
+            latitude: 34.07,
+            longitude: -118.27,
+            confidence: 1
+        )
+
+        let all = MapMoreFilterSelection()
+        XCTAssertTrue(MapSearchExternalCandidatePolicy.allowsAnyExternalResults(refinements: all))
+        XCTAssertTrue(MapSearchExternalCandidatePolicy.allows(coffee, refinements: all))
+
+        let coffeeOrOutdoors = MapMoreFilterSelection(
+            categories: [
+                WanderPlaceCategory.coffeeTeaSweets,
+                WanderPlaceCategory.outdoorsNature
+            ]
+        )
+        XCTAssertTrue(
+            MapSearchExternalCandidatePolicy.allows(coffee, refinements: coffeeOrOutdoors)
+        )
+        XCTAssertTrue(
+            MapSearchExternalCandidatePolicy.allows(park, refinements: coffeeOrOutdoors)
+        )
+        XCTAssertFalse(
+            MapSearchExternalCandidatePolicy.allows(shop, refinements: coffeeOrOutdoors)
+        )
+    }
+
+    func testExternalMapSearchCandidatesAreExcludedByPeopleRefinements() {
+        let candidate = PlaceCandidate(
+            id: "coffee",
+            name: "Coffee",
+            category: "Cafe",
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            latitude: 34.05,
+            longitude: -118.25,
+            confidence: 1
+        )
+        let people = MapMoreFilterSelection(people: ["user-1"])
+
+        XCTAssertFalse(
+            MapSearchExternalCandidatePolicy.allowsAnyExternalResults(refinements: people)
+        )
+        XCTAssertFalse(MapSearchExternalCandidatePolicy.allows(candidate, refinements: people))
+    }
+
+    func testExternalMapSearchCandidatesAreExcludedByStatusRefinements() {
+        let candidate = PlaceCandidate(
+            id: "coffee",
+            name: "Coffee",
+            category: "Cafe",
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            latitude: 34.05,
+            longitude: -118.25,
+            confidence: 1
+        )
+
+        for status in [MapStatusFilter.checkIns, .wanna] {
+            let refinements = MapMoreFilterSelection(status: status)
+            XCTAssertFalse(
+                MapSearchExternalCandidatePolicy.allowsAnyExternalResults(
+                    refinements: refinements
+                )
+            )
+            XCTAssertFalse(
+                MapSearchExternalCandidatePolicy.allows(candidate, refinements: refinements)
+            )
+        }
     }
 
     func testMapSearchQueryPolicyCapsProviderDerivedCategoryFallbacksAtThree() {
@@ -398,7 +614,7 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
-    func testMapSearchTypeaheadOnlySuppressesTheAlreadyVisiblePhysicalLocation() throws {
+    func testMapSearchTypeaheadCapturesAndValidatesRefinementsWithQueryMatchedDedupe() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -408,14 +624,120 @@ final class MapHitTestingTests: XCTestCase {
         let scheduleStart = try XCTUnwrap(map.range(of: "private func scheduleTypeahead(for query: String)"))
         let scheduleEnd = try XCTUnwrap(
             map.range(
-                of: "private func savedTypeaheadSuggestions(",
+                of: "private func selectTypeaheadSuggestion(",
                 range: scheduleStart.upperBound..<map.endIndex
             )
         )
         let schedule = map[scheduleStart.lowerBound..<scheduleEnd.lowerBound]
 
-        XCTAssertTrue(schedule.contains(".filter { !isAlreadyVisible(candidate: $0) }"))
+        XCTAssertTrue(schedule.contains("let refinements = mapFilterState.more"))
+        XCTAssertTrue(schedule.contains("authorizationContext"))
+        XCTAssertTrue(schedule.contains("savedCandidates: savedCandidates"))
+        XCTAssertTrue(schedule.contains("refinements: refinements"))
+        XCTAssertTrue(schedule.contains("mapFilterState.more == refinements"))
+        XCTAssertTrue(
+            schedule.contains("!MapSearchCandidatePolicy.contains($0, in: savedCandidates)")
+        )
+        XCTAssertTrue(schedule.contains("MapSearchCandidatePolicy.orderedCandidates("))
+        XCTAssertTrue(schedule.contains("let searchRegion = currentSearchRegion"))
+        XCTAssertTrue(schedule.contains("searchRegion: searchRegion"))
+        XCTAssertFalse(schedule.contains("isAlreadyInMapSearchCorpus"))
+        XCTAssertFalse(schedule.contains("position ="))
+        XCTAssertFalse(schedule.contains("centerSearchSelection("))
         XCTAssertFalse(schedule.contains("seenTitles"))
+    }
+
+    func testMoreRefinementChangeInvalidatesClearsAndRerunsOriginalSubmittedRegion() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let changeStart = try XCTUnwrap(
+            map.range(of: "private func handleMapSearchRefinementChange()")
+        )
+        let changeEnd = try XCTUnwrap(
+            map.range(
+                of: "private func orderedVisiblePlaceGroups()",
+                range: changeStart.upperBound..<map.endIndex
+            )
+        )
+        let change = map[changeStart.lowerBound..<changeEnd.lowerBound]
+
+        let moreChangeStart = try XCTUnwrap(
+            map.range(of: ".onChange(of: mapFilterState.more) { _, _ in")
+        )
+        let moreChangeEnd = try XCTUnwrap(
+            map.range(
+                of: ".onChange(of: isPlaceProfilePresented)",
+                range: moreChangeStart.upperBound..<map.endIndex
+            )
+        )
+        let moreChange = map[moreChangeStart.lowerBound..<moreChangeEnd.lowerBound]
+        XCTAssertTrue(moreChange.contains("handleMapSearchRefinementChange()"))
+        XCTAssertTrue(change.contains("let submittedContext = mapSearchSubmissionContext"))
+        XCTAssertTrue(change.contains("invalidateMapSearchRequest()"))
+        XCTAssertTrue(change.contains("typeaheadTask?.cancel()"))
+        XCTAssertTrue(change.contains("typeaheadSuggestions = []"))
+        XCTAssertTrue(change.contains("mapSearchCandidates = []"))
+        XCTAssertTrue(change.contains("submittedSavedSearchGroups = []"))
+        XCTAssertTrue(change.contains("selectedPlaceGroupKey = nil"))
+        XCTAssertTrue(change.contains("selectedSearchCandidateID = nil"))
+        XCTAssertTrue(change.contains("mapSearchMessage = nil"))
+        XCTAssertTrue(change.contains("startSubmittedMapSearch("))
+        XCTAssertTrue(change.contains("searchRegion: submittedContext.region"))
+        XCTAssertFalse(change.contains("searchRegion: currentSearchRegion"))
+        XCTAssertTrue(change.contains("scheduleTypeahead(for: mapQuery)"))
+        XCTAssertLessThan(
+            try XCTUnwrap(
+                change.range(of: "let submittedContext = mapSearchSubmissionContext")
+            ).lowerBound,
+            try XCTUnwrap(change.range(of: "invalidateMapSearchRequest()")).lowerBound
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(change.range(of: "mapSearchCandidates = []")).lowerBound,
+            try XCTUnwrap(change.range(of: "startSubmittedMapSearch(")).lowerBound
+        )
+
+        let submissionStart = try XCTUnwrap(
+            map.range(of: "private func startSubmittedMapSearch(")
+        )
+        let submissionEnd = try XCTUnwrap(
+            map.range(
+                of: "private func cancelMapSearch()",
+                range: submissionStart.upperBound..<map.endIndex
+            )
+        )
+        let submission = map[submissionStart.lowerBound..<submissionEnd.lowerBound]
+        XCTAssertTrue(
+            submission.contains(
+                "MapSearchSubmissionContext(query: requestedQuery, region: searchRegion)"
+            )
+        )
+    }
+
+    @MainActor
+    func testExplicitMapSearchCorpusUsesAllAuthorizedSavesAndOnlyMoreFilters() {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let authorizedPlaces = store.visiblePlaces()
+
+        XCTAssertEqual(
+            Set(
+                MapSearchCorpusPolicy.savedPlaces(
+                    from: authorizedPlaces,
+                    refinements: MapMoreFilterSelection()
+                ).map(\.userPlace.id)
+            ),
+            Set(authorizedPlaces.map(\.userPlace.id))
+        )
+
+        let wannaOnly = MapSearchCorpusPolicy.savedPlaces(
+            from: authorizedPlaces,
+            refinements: MapMoreFilterSelection(status: .wanna)
+        )
+        XCTAssertFalse(wannaOnly.isEmpty)
+        XCTAssertTrue(wannaOnly.allSatisfy { $0.userPlace.status == .wannaGo })
     }
 
     func testFeaturedRefreshPolicyOnlyFetchesForFeaturedSource() {
@@ -524,9 +846,10 @@ final class MapHitTestingTests: XCTestCase {
 
         XCTAssertTrue(map.contains("viewerLocation: mapCardViewerLocation"))
         XCTAssertFalse(map.contains("searchOriginLocation"))
-        XCTAssertTrue(map.contains("from: searchVisiblePlaceGroups"))
-        XCTAssertTrue(map.contains("Task { @MainActor [immediateSavedSuggestions] in"))
-        XCTAssertFalse(map.contains("savedTypeaheadSuggestions(for:"))
+        XCTAssertTrue(map.contains("private var mapSearchSavedCorpus"))
+        XCTAssertTrue(map.contains("from: store.visiblePlaces()"))
+        XCTAssertTrue(map.contains("refinements: mapFilterState.more"))
+        XCTAssertTrue(map.contains("mapSearchAuthorizationContext == authorizationContext"))
 
         let searchStart = try XCTUnwrap(map.range(of: "private func runMapSearch("))
         let searchEnd = try XCTUnwrap(
@@ -536,10 +859,33 @@ final class MapHitTestingTests: XCTestCase {
             )
         )
         let submittedSearch = map[searchStart.lowerBound..<searchEnd.lowerBound]
-        XCTAssertTrue(submittedSearch.contains("queryMatchingPlaces: searchVisiblePlaces"))
-        XCTAssertTrue(submittedSearch.contains("searchVisiblePlaces.isEmpty"))
+        XCTAssertTrue(submittedSearch.contains("savedCandidates: [MapSearchSavedCandidate]"))
+        XCTAssertFalse(submittedSearch.contains("savedCandidates.first(where:"))
+        XCTAssertFalse(submittedSearch.contains("MapSearchCandidatePolicy.strength(of:"))
+        XCTAssertTrue(submittedSearch.contains("MapSearchCandidatePolicy.orderedCandidates("))
+        XCTAssertFalse(submittedSearch.contains("searchVisiblePlaces.isEmpty"))
         XCTAssertFalse(submittedSearch.contains("visiblePlaces.first"))
         XCTAssertFalse(submittedSearch.contains("visiblePlaces.isEmpty"))
+
+        let mapKitLookup = try XCTUnwrap(
+            submittedSearch.range(of: "let candidates = try await mapKitCandidates(")
+        )
+        let combinedOrdering = try XCTUnwrap(
+            submittedSearch.range(of: "MapSearchCandidatePolicy.orderedCandidates(")
+        )
+        XCTAssertLessThan(mapKitLookup.lowerBound, combinedOrdering.lowerBound)
+
+        let trustedMatchesStart = try XCTUnwrap(map.range(of: "private func savedMapSearchCandidates("))
+        let trustedMatchesEnd = try XCTUnwrap(
+            map.range(
+                of: "private func beginMapSearchRequest()",
+                range: trustedMatchesStart.upperBound..<map.endIndex
+            )
+        )
+        let trustedMatches = map[trustedMatchesStart.lowerBound..<trustedMatchesEnd.lowerBound]
+        XCTAssertTrue(trustedMatches.contains("TrustedPlaceSearchQuery(requestedQuery)"))
+        XCTAssertTrue(trustedMatches.contains("MapSearchCandidatePolicy.savedCandidates("))
+        XCTAssertTrue(trustedMatches.contains("in: mapSearchSavedCorpus"))
 
         let sourceStart = try XCTUnwrap(map.range(of: "private func selectMapSource("))
         let sourceEnd = try XCTUnwrap(
@@ -547,60 +893,87 @@ final class MapHitTestingTests: XCTestCase {
         )
         let sourceSelection = map[sourceStart.lowerBound..<sourceEnd.lowerBound]
         XCTAssertTrue(sourceSelection.contains("handleFeaturedCameraChange(currentSearchRegion)"))
+        XCTAssertTrue(sourceSelection.contains("if Self.normalized(mapQuery).isEmpty"))
+    }
+
+    func testMapSearchSubmissionUsesTheLatestVisibleDraftWithoutWaitingForDebounce() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let searchBar = try XCTUnwrap(
+            map.components(separatedBy: "private struct SearchBar: View {").last?
+                .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
+        )
+        let submission = try XCTUnwrap(
+            searchBar.components(separatedBy: ".onSubmit {").last?
+                .components(separatedBy: ".task(id: focusRequestID)").first
+        )
+
+        XCTAssertTrue(searchBar.contains("let onSubmit: (String) -> Void"))
+        XCTAssertTrue(submission.contains("let requestedQuery = draftQuery"))
+        XCTAssertTrue(submission.contains("commitDraftQuery(requestedQuery)"))
+        XCTAssertTrue(submission.contains("onSubmit(requestedQuery)"))
+        XCTAssertLessThan(
+            try XCTUnwrap(submission.range(of: "commitDraftQuery(requestedQuery)")).lowerBound,
+            try XCTUnwrap(submission.range(of: "onSubmit(requestedQuery)")).lowerBound
+        )
+
+        let submitStart = try XCTUnwrap(map.range(of: "private func submitMapSearch(_ requestedQuery: String)"))
+        let submitEnd = try XCTUnwrap(
+            map.range(of: "private func cancelMapSearch()", range: submitStart.upperBound..<map.endIndex)
+        )
+        let parentSubmission = map[submitStart.lowerBound..<submitEnd.lowerBound]
+        XCTAssertTrue(parentSubmission.contains("suppressedTypeaheadQuery = Self.normalized(requestedQuery)"))
+        XCTAssertTrue(parentSubmission.contains("let savedCandidates = savedMapSearchCandidates(for: requestedQuery)"))
+        XCTAssertFalse(parentSubmission.contains("let requestedQuery = mapQuery"))
     }
 
     @MainActor
-    func testSubmittedSearchDoesNotSelectAPlaceRetainedOnlyForPresentation() throws {
+    func testProviderSuggestionResolvesPhysicalDuplicateToAuthorizedSavedGroup() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
-        let retainedPlace = try XCTUnwrap(store.visiblePlaces().first)
-        let renderedPlaces = MapActivePinRetention.places(
-            from: [],
-            retaining: retainedPlace
-        )
+        let savedPlace = try XCTUnwrap(store.visiblePlaces().first)
         let candidate = PlaceCandidate(
-            id: "unrelated-mapkit-result",
-            name: "Unrelated Result",
-            category: "Cafe",
-            latitude: 34.05,
-            longitude: -118.25,
+            id: "provider-duplicate",
+            name: savedPlace.place.canonicalName,
+            category: savedPlace.place.category,
+            latitude: savedPlace.place.latitude,
+            longitude: savedPlace.place.longitude,
+            sourceProvider: savedPlace.place.sourceProvider,
+            sourceProviderPlaceID: savedPlace.place.sourceProviderPlaceID,
             confidence: 1
         )
 
-        XCTAssertEqual(renderedPlaces.map(\.id), [retainedPlace.id])
+        switch MapProviderSuggestionPolicy.destination(
+            for: candidate,
+            in: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        ) {
+        case .saved(let savedGroup):
+            XCTAssertTrue(savedGroup.places.contains {
+                $0.userPlace.id == savedPlace.userPlace.id
+            })
+        case .candidate:
+            XCTFail("A provider duplicate should open the authorized saved-memory group.")
+        }
 
-        switch MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [],
-            mapKitCandidates: [candidate]
+        switch MapProviderSuggestionPolicy.destination(
+            for: candidate,
+            in: [],
+            currentUserID: store.currentUser.id
         ) {
         case .candidate(let selectedCandidate):
             XCTAssertEqual(selectedCandidate, candidate)
-        case .saved, .none:
-            XCTFail("A presentation-only retained pin must not beat the MapKit result.")
-        }
-
-        switch MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [retainedPlace],
-            mapKitCandidates: [candidate]
-        ) {
-        case .saved(let selectedPlace):
-            XCTAssertEqual(selectedPlace.id, retainedPlace.id)
-        case .candidate, .none:
-            XCTFail("A genuine saved-place query match should remain preferred.")
-        }
-
-        if case .none = MapSubmittedSearchSelectionPolicy.selection(
-            queryMatchingPlaces: [],
-            mapKitCandidates: []
-        ) {
-            // Expected.
-        } else {
-            XCTFail("An empty search result set should remain empty.")
+        case .saved:
+            XCTFail("A provider result must not recover a save outside the authorized corpus.")
         }
     }
 }
 
 final class MapSelectionMotionTests: XCTestCase {
-    func testSubmittedMapSearchCentersEverySelectedResultInTheVisibleMapViewport() throws {
+    func testSubmittedSearchFitsCategoriesAndCentersNamedPlaces() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -616,8 +989,11 @@ final class MapSelectionMotionTests: XCTestCase {
             )
         )
         let submittedSearch = map[searchStart.lowerBound..<searchEnd.lowerBound]
-        XCTAssertTrue(submittedSearch.contains("center(on: firstVisiblePlace)"))
+        XCTAssertTrue(submittedSearch.contains("center(on: firstSavedCandidate.place)"))
         XCTAssertTrue(submittedSearch.contains("center(on: firstCandidate)"))
+        XCTAssertTrue(submittedSearch.contains("queryIntent == .namedPlace"))
+        XCTAssertTrue(submittedSearch.contains("queryIntent == .category"))
+        XCTAssertTrue(submittedSearch.contains("fitSubmittedSearchResults("))
 
         let centerStart = try XCTUnwrap(map.range(of: "private func centerSearchSelection("))
         let centerEnd = try XCTUnwrap(
@@ -892,6 +1268,147 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(
             MapActivePinRetention.groupKey(for: activePlace, in: retainedGroups),
             retainedGroup.key
+        )
+    }
+
+    @MainActor
+    func testActivePinRetentionKeepsTheFullSavedSearchGroupOutsideProjection() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let fullGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: store.visiblePlaces(),
+                currentUserID: currentUserID
+            ).first { $0.saveCount > 1 }
+        )
+        let projectedPlace = try XCTUnwrap(fullGroup.places.last)
+        let projectedGroups = VisiblePlaceGrouping.groups(
+            from: [projectedPlace],
+            currentUserID: currentUserID
+        )
+
+        let retainedPlaces = MapActivePinRetention.places(
+            from: [projectedPlace],
+            retaining: fullGroup.primary,
+            retainingGroup: fullGroup
+        )
+        let retainedGroups = MapActivePinRetention.groups(
+            from: projectedGroups,
+            retaining: fullGroup.primary,
+            retainingGroup: fullGroup,
+            currentUserID: currentUserID
+        )
+
+        XCTAssertEqual(
+            Set(retainedPlaces.map(\.userPlace.id)),
+            Set(fullGroup.places.map(\.userPlace.id))
+        )
+        XCTAssertEqual(retainedGroups.count, 1)
+        XCTAssertEqual(
+            Set(try XCTUnwrap(retainedGroups.first).places.map(\.userPlace.id)),
+            Set(fullGroup.places.map(\.userPlace.id))
+        )
+    }
+
+    @MainActor
+    func testSubmittedCategorySearchRetainsEveryReturnedSavedGroupOutsideProjection() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let submittedGroups = Array(
+            VisiblePlaceGrouping.groups(
+                from: store.visiblePlaces(),
+                currentUserID: currentUserID
+            ).prefix(3)
+        )
+        XCTAssertEqual(submittedGroups.count, 3)
+
+        let projectedGroup = try XCTUnwrap(submittedGroups.first)
+        let retainedPlaces = MapActivePinRetention.places(
+            from: projectedGroup.places,
+            retainingGroups: submittedGroups
+        )
+        let retainedGroups = MapActivePinRetention.groups(
+            from: [projectedGroup],
+            retainingGroups: submittedGroups,
+            currentUserID: currentUserID
+        )
+
+        let submittedUserPlaceIDs = Set(
+            submittedGroups.flatMap(\.places).map(\.userPlace.id)
+        )
+        XCTAssertTrue(
+            Set(retainedPlaces.map(\.userPlace.id)).isSuperset(of: submittedUserPlaceIDs)
+        )
+        XCTAssertTrue(
+            Set(retainedGroups.flatMap(\.places).map(\.userPlace.id))
+                .isSuperset(of: submittedUserPlaceIDs)
+        )
+    }
+
+    @MainActor
+    func testActivePinRetentionDropsAGroupAfterAuthorizationIsRevoked() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let authorizedPlaces = store.visiblePlaces()
+        let retainedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: authorizedPlaces,
+                currentUserID: currentUserID
+            ).first
+        )
+        let retainedIDs = Set(retainedGroup.places.map(\.userPlace.id))
+        let afterRevocation = authorizedPlaces.filter {
+            !retainedIDs.contains($0.userPlace.id)
+        }
+
+        let authorizedActive = MapActivePinRetention.authorizedPlace(
+            retainedGroup.primary,
+            within: afterRevocation
+        )
+        let authorizedGroup = MapActivePinRetention.authorizedGroup(
+            retainedGroup,
+            requiring: authorizedActive,
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
+            [retainedGroup],
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+
+        XCTAssertNil(authorizedActive)
+        XCTAssertNil(authorizedGroup)
+        XCTAssertTrue(authorizedSubmittedGroups.isEmpty)
+    }
+
+    @MainActor
+    func testSubmittedRetentionRebuildsGroupsFromCurrentAuthorizedRows() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let currentUserID = store.currentUser.id
+        let authorizedPlaces = store.visiblePlaces()
+        let retainedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: authorizedPlaces,
+                currentUserID: currentUserID
+            ).first { $0.saveCount > 1 }
+        )
+        let revokedID = try XCTUnwrap(retainedGroup.places.last?.userPlace.id)
+        let afterRevocation = authorizedPlaces.filter {
+            $0.userPlace.id != revokedID
+        }
+
+        let refreshedGroups = MapActivePinRetention.authorizedGroups(
+            [retainedGroup],
+            within: afterRevocation,
+            currentUserID: currentUserID
+        )
+        let refreshedIDs = Set(refreshedGroups.flatMap(\.places).map(\.userPlace.id))
+
+        XCTAssertFalse(refreshedIDs.contains(revokedID))
+        XCTAssertEqual(
+            refreshedIDs,
+            Set(retainedGroup.places.map(\.userPlace.id)).subtracting([revokedID])
         )
     }
 
@@ -1332,6 +1849,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertFalse(map.contains("replacementFadeOutDuration"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
+        XCTAssertTrue(map.contains("retainingGroup: routedVisiblePlaceGroup"))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
         XCTAssertTrue(map.contains("MapActivePinRetention.groupKey("))
         XCTAssertFalse(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))

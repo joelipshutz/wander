@@ -300,8 +300,11 @@ enum PlaceProfilePreviewPhotoPolicy {
     }
 }
 
+enum PlaceProfileMapLayout {
+    static let previewCardHeight: CGFloat = 232
+}
+
 private struct PlaceProfilePreviewCard: View {
-    private static let cardHeight: CGFloat = 232
 
     let place: PlaceSheetPlace
     let presentation: PlaceProfilePresentation
@@ -363,7 +366,7 @@ private struct PlaceProfilePreviewCard: View {
 
                 Color.clear
                     .frame(maxWidth: .infinity)
-                    .frame(height: Self.cardHeight)
+                    .frame(height: PlaceProfileMapLayout.previewCardHeight)
                     .contentShape(Rectangle())
                     .gesture(cardPressGesture)
                     .padding(.trailing, 74)
@@ -428,7 +431,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private var cardSurface: some View {
         cardPhoto
-            .frame(width: cardWidth, height: Self.cardHeight)
+            .frame(width: cardWidth, height: PlaceProfileMapLayout.previewCardHeight)
             .clipped()
             .overlay {
                 LinearGradient(

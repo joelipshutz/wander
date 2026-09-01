@@ -80,6 +80,470 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertGreaterThan(matches[0].score, matches[1].score)
     }
 
+    func testSupportingFieldsIncludeEveryFieldThatMatchesTheQuery() throws {
+        let place = makeVisiblePlace(
+            id: "all-fields",
+            name: "Coffee Counter",
+            ownerName: "Coffee Fan",
+            ownerHandle: "coffee-fan",
+            category: "Coffee shop",
+            locality: "Coffee District",
+            note: "Coffee before work",
+            attributes: [("personal_labels", #"["coffee"]"#)]
+        )
+
+        let match = try XCTUnwrap(
+            TrustedPlaceSearch.matches(query: "coffee been", in: [place]).first
+        )
+
+        XCTAssertEqual(Set(match.evidence.map(\.field)), [.name, .status])
+        XCTAssertEqual(
+            match.supportingFields,
+            [.name, .owner, .category, .area, .note, .attribute, .status]
+        )
+    }
+
+    func testMapSearchSavedStrengthSeparatesPlaceIdentityFromMemoryContext() throws {
+        let strong = makeVisiblePlace(
+            id: "strong",
+            name: "Long Tables Cafe",
+            category: "Restaurant"
+        )
+        let contextual = makeVisiblePlace(
+            id: "contextual",
+            name: "Fern Desk Coffee",
+            category: "Restaurant",
+            note: "Long tables for group work"
+        )
+
+        let candidates = MapSearchCandidatePolicy.savedCandidates(
+            query: "long tables",
+            in: [contextual, strong],
+            currentUserID: "viewer"
+        )
+        let strongCandidate = try XCTUnwrap(candidates.first { $0.place.id == strong.id })
+        let contextualCandidate = try XCTUnwrap(candidates.first { $0.place.id == contextual.id })
+
+        XCTAssertEqual(MapSearchCandidatePolicy.strength(of: strongCandidate), .strong)
+        XCTAssertEqual(MapSearchCandidatePolicy.strength(of: contextualCandidate), .contextual)
+        XCTAssertEqual(MapSearchCandidatePolicy.strongFields, [.name, .category, .area])
+        XCTAssertEqual(
+            MapSearchCandidatePolicy.contextualFields,
+            [.owner, .note, .attribute, .status]
+        )
+    }
+
+    func testMapSearchProviderSlotsCountOnlyStrongSavedMatches() {
+        let contextualPlaces = [
+            makeVisiblePlace(
+                id: "contextual-note-one",
+                name: "Harbor House",
+                category: "Restaurant",
+                note: "Coffee after the farmers market"
+            ),
+            makeVisiblePlace(
+                id: "contextual-tag-one",
+                name: "Fern Desk",
+                category: "Library",
+                attributes: [("personal_labels", #"["coffee"]"#)]
+            ),
+            makeVisiblePlace(
+                id: "contextual-note-two",
+                name: "Canyon Room",
+                category: "Restaurant",
+                note: "Good coffee nearby"
+            ),
+            makeVisiblePlace(
+                id: "contextual-tag-two",
+                name: "Sunset Steps",
+                category: "Park",
+                attributes: [("personal_labels", #"["coffee meetings"]"#)]
+            )
+        ]
+        let contextualCandidates = MapSearchCandidatePolicy.savedCandidates(
+            query: "coffee",
+            in: contextualPlaces,
+            currentUserID: "viewer"
+        )
+
+        XCTAssertEqual(contextualCandidates.count, 4)
+        XCTAssertTrue(
+            contextualCandidates.allSatisfy {
+                MapSearchCandidatePolicy.strength(of: $0) == .contextual
+            }
+        )
+        XCTAssertEqual(MapSearchCandidatePolicy.providerSlotCount(in: contextualCandidates), 0)
+
+        let categoryMatch = makeVisiblePlace(
+            id: "strong-category",
+            name: "Dayglow",
+            category: "Coffee shop"
+        )
+        let candidatesWithCategoryMatch = MapSearchCandidatePolicy.savedCandidates(
+            query: "coffee",
+            in: contextualPlaces + [categoryMatch],
+            currentUserID: "viewer"
+        )
+
+        XCTAssertEqual(MapSearchCandidatePolicy.providerSlotCount(in: candidatesWithCategoryMatch), 1)
+    }
+
+    func testMapSearchSavedCandidatesCollapseDuplicateSavesIntoOneGroup() throws {
+        let mine = makeVisiblePlace(
+            id: "mine",
+            name: "Larchmont Noodles",
+            ownerName: "Joe",
+            ownerHandle: "joe",
+            locality: "Los Angeles"
+        )
+        let friend = makeVisiblePlace(
+            id: "friend",
+            name: "Larchmont Noodles",
+            ownerName: "Ryan",
+            ownerHandle: "ryan",
+            locality: "Los Angeles"
+        )
+
+        let candidates = MapSearchCandidatePolicy.savedCandidates(
+            query: "larchmont noodles",
+            in: [friend, mine],
+            currentUserID: mine.owner.id
+        )
+
+        let candidate = try XCTUnwrap(candidates.first)
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidate.group.saveCount, 2)
+        XCTAssertEqual(candidate.place.id, mine.id)
+        XCTAssertEqual(Set(candidate.group.places.map(\.id)), [mine.id, friend.id])
+    }
+
+    func testMapSearchSavedGroupIsStrongWhenAnyDuplicateHasPlaceFieldEvidence() throws {
+        let contextualFirst = makeVisiblePlace(
+            id: "contextual-first",
+            name: "Harbor House",
+            ownerName: "Pasadena",
+            ownerHandle: "pasadena-fan",
+            locality: "Burbank",
+            sourceProviderPlaceID: "shared-harbor-house"
+        )
+        let strongDuplicate = makeVisiblePlace(
+            id: "strong-duplicate",
+            name: "Harbor House Annex",
+            ownerName: "Maya",
+            ownerHandle: "maya",
+            locality: "Pasadena",
+            sourceProviderPlaceID: "shared-harbor-house"
+        )
+
+        let candidate = try XCTUnwrap(
+            MapSearchCandidatePolicy.savedCandidates(
+                query: "pasadena",
+                in: [contextualFirst, strongDuplicate],
+                currentUserID: "viewer"
+            ).first
+        )
+
+        XCTAssertEqual(candidate.group.saveCount, 2)
+        XCTAssertEqual(candidate.match.place.id, contextualFirst.id)
+        XCTAssertEqual(candidate.match.supportingFields, [.owner, .area])
+        XCTAssertEqual(MapSearchCandidatePolicy.strength(of: candidate), .strong)
+    }
+
+    func testMapSearchCandidateOrderingIsSharedAcrossSavedAndMapKitResults() {
+        let strong = makeVisiblePlace(
+            id: "strong",
+            name: "Long Tables Cafe",
+            category: "Restaurant"
+        )
+        let contextual = makeVisiblePlace(
+            id: "contextual",
+            name: "Fern Desk Coffee",
+            category: "Restaurant",
+            note: "Long tables for group work"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "long tables",
+            in: [contextual, strong],
+            currentUserID: "viewer"
+        )
+        let credibleMapKit = makeCandidate("credible", name: "Long Tables Bakery")
+        let unrelatedMapKit = makeCandidate("unrelated", name: "Sunset Hotel")
+
+        let ordered = MapSearchCandidatePolicy.orderedCandidates(
+            query: "long tables",
+            saved: saved,
+            mapKit: [unrelatedMapKit, credibleMapKit]
+        )
+
+        XCTAssertEqual(
+            ordered.map { candidate in
+                switch candidate {
+                case .saved(let saved):
+                    return "saved:\(saved.place.id)"
+                case .mapKit(let mapKit):
+                    return "mapkit:\(mapKit.id)"
+                }
+            },
+            ["saved:strong", "mapkit:credible", "saved:contextual", "mapkit:unrelated"]
+        )
+    }
+
+    func testNamedSearchRanksExactProviderBeforeSavedPrefix() throws {
+        let savedPrefix = makeVisiblePlace(
+            id: "saved-prefix",
+            name: "Dayglow Coffee",
+            category: "Restaurant"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "Dayglow",
+            in: [savedPrefix],
+            currentUserID: "viewer"
+        )
+        let exactProvider = makeCandidate("exact-provider", name: "Dayglow")
+
+        let ordered = MapSearchCandidatePolicy.orderedCandidates(
+            query: "Dayglow",
+            saved: saved,
+            mapKit: [exactProvider]
+        )
+
+        guard case .mapKit(let first) = try XCTUnwrap(ordered.first) else {
+            return XCTFail("An exact provider match should beat a saved prefix match.")
+        }
+        XCTAssertEqual(first.id, exactProvider.id)
+        guard case .saved(let second) = try XCTUnwrap(ordered.dropFirst().first) else {
+            return XCTFail("The saved prefix match should remain directly after the exact provider.")
+        }
+        XCTAssertEqual(second.place.id, savedPrefix.id)
+    }
+
+    func testNamedSearchRanksExactSavedBeforeExactProvider() throws {
+        let exactSavedPlace = makeVisiblePlace(
+            id: "exact-saved",
+            name: "Dayglow",
+            category: "Restaurant"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "Dayglow",
+            in: [exactSavedPlace],
+            currentUserID: "viewer"
+        )
+        let exactProvider = makeCandidate("exact-provider", name: "Dayglow")
+
+        let ordered = MapSearchCandidatePolicy.orderedCandidates(
+            query: "Dayglow",
+            saved: saved,
+            mapKit: [exactProvider]
+        )
+
+        guard case .saved(let first) = try XCTUnwrap(ordered.first) else {
+            return XCTFail("An exact saved match should beat an exact provider match.")
+        }
+        XCTAssertEqual(first.place.id, exactSavedPlace.id)
+        guard case .mapKit(let second) = try XCTUnwrap(ordered.dropFirst().first) else {
+            return XCTFail("The exact provider match should remain after the exact saved match.")
+        }
+        XCTAssertEqual(second.id, exactProvider.id)
+    }
+
+    func testNamedSearchTreatsExactNameOnAnyDuplicateSaveAsExact() throws {
+        let currentUserVariant = makeVisiblePlace(
+            id: "current-user-variant",
+            name: "Dayglow Coffee",
+            ownerName: "Joe",
+            ownerHandle: "joe",
+            category: "Restaurant",
+            sourceProviderPlaceID: "shared-dayglow"
+        )
+        let friendExact = makeVisiblePlace(
+            id: "friend-exact",
+            name: "Dayglow",
+            ownerName: "Maya",
+            ownerHandle: "maya",
+            category: "Restaurant",
+            sourceProviderPlaceID: "shared-dayglow"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "Dayglow",
+            in: [friendExact, currentUserVariant],
+            currentUserID: currentUserVariant.owner.id
+        )
+        let savedGroup = try XCTUnwrap(saved.first)
+        let exactProvider = makeCandidate("other-dayglow", name: "Dayglow")
+
+        XCTAssertEqual(saved.count, 1)
+        XCTAssertEqual(savedGroup.place.id, currentUserVariant.id)
+        XCTAssertEqual(savedGroup.group.saveCount, 2)
+        XCTAssertEqual(
+            MapSearchCandidatePolicy.nameLexicalScore(
+                of: savedGroup,
+                query: "Dayglow"
+            ),
+            1_000
+        )
+
+        let ordered = MapSearchCandidatePolicy.orderedCandidates(
+            query: "Dayglow",
+            saved: saved,
+            mapKit: [exactProvider]
+        )
+        guard case .saved(let first) = try XCTUnwrap(ordered.first) else {
+            return XCTFail("An exact alias in the saved group should keep that group first.")
+        }
+        XCTAssertEqual(first.place.id, currentUserVariant.id)
+    }
+
+    func testMapSearchProviderDedupeOnlyUsesQueryMatchingSavedRows() {
+        let staleSavedPlace = makeVisiblePlace(
+            id: "stale-saved",
+            name: "Dayglow",
+            category: "Restaurant"
+        )
+        let queryMatchingSavedPlace = makeVisiblePlace(
+            id: "query-matching-saved",
+            name: "Dayglow",
+            category: "Coffee shop"
+        )
+        let provider = makeCandidate("provider-dayglow", name: "Dayglow")
+
+        XCTAssertTrue(VisiblePlaceGrouping.matches(staleSavedPlace, candidate: provider))
+
+        let staleMatches = MapSearchCandidatePolicy.savedCandidates(
+            query: "coffee",
+            in: [staleSavedPlace],
+            currentUserID: "viewer"
+        )
+        XCTAssertTrue(staleMatches.isEmpty)
+        XCTAssertFalse(MapSearchCandidatePolicy.contains(provider, in: staleMatches))
+
+        let queryMatches = MapSearchCandidatePolicy.savedCandidates(
+            query: "coffee",
+            in: [queryMatchingSavedPlace],
+            currentUserID: "viewer"
+        )
+        XCTAssertEqual(queryMatches.count, 1)
+        XCTAssertTrue(MapSearchCandidatePolicy.contains(provider, in: queryMatches))
+    }
+
+    func testCategorySearchTreatsProviderPOIsAsCredibleWithoutNameOverlap() {
+        let contextual = makeVisiblePlace(
+            id: "contextual-coffee-note",
+            name: "Harbor House",
+            category: "Restaurant",
+            note: "Coffee after the farmers market"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "coffee",
+            in: [contextual],
+            currentUserID: "viewer"
+        )
+        let providerCandidates = [
+            makeCandidate("dayglow", name: "Dayglow"),
+            makeCandidate("jones", name: "Jones Bench")
+        ]
+
+        let ordered = MapSearchCandidatePolicy.orderedCandidates(
+            query: "coffee",
+            saved: saved,
+            mapKit: providerCandidates
+        )
+
+        XCTAssertEqual(
+            ordered.map { candidate in
+                switch candidate {
+                case .saved(let saved):
+                    return "saved:\(saved.place.id)"
+                case .mapKit(let mapKit):
+                    return "mapkit:\(mapKit.id)"
+                }
+            },
+            ["mapkit:dayglow", "mapkit:jones", "saved:contextual-coffee-note"]
+        )
+    }
+
+    func testMapSearchPolicyPromotesStrongSavedCandidateAboveHigherScoringContextMatch() throws {
+        let contextual = makeVisiblePlace(
+            id: "contextual-high-score",
+            name: "Harbor House",
+            ownerName: "Pasadena",
+            ownerHandle: "pasadena-fan",
+            locality: "Burbank"
+        )
+        let strong = makeVisiblePlace(
+            id: "strong-lower-score",
+            name: "River Room",
+            ownerName: "Maya",
+            ownerHandle: "maya",
+            locality: "Pasadena"
+        )
+        let saved = MapSearchCandidatePolicy.savedCandidates(
+            query: "pasadena",
+            in: [contextual, strong],
+            currentUserID: "viewer"
+        )
+
+        XCTAssertEqual(saved.first?.place.id, contextual.id)
+        let first = try XCTUnwrap(
+            MapSearchCandidatePolicy.orderedCandidates(
+                query: "pasadena",
+                saved: saved,
+                mapKit: []
+            ).first
+        )
+        guard case .saved(let selected) = first else {
+            return XCTFail("Expected a saved search candidate")
+        }
+        XCTAssertEqual(selected.place.id, strong.id)
+        XCTAssertEqual(MapSearchCandidatePolicy.strength(of: selected), .strong)
+    }
+
+    func testActivePinRetentionUsesFullSearchGroupKeyWhenProjectionHasOnlyOneDuplicate() throws {
+        let currentUserSave = makeVisiblePlace(
+            id: "current-user-save",
+            name: "Harbor House",
+            ownerName: "Joe",
+            ownerHandle: "joe",
+            sourceProviderPlaceID: "shared-retention-place"
+        )
+        let projectedFriendSave = makeVisiblePlace(
+            id: "friend-save",
+            name: "Harbor House Cafe",
+            ownerName: "Ryan",
+            ownerHandle: "ryan",
+            sourceProviderPlaceID: "shared-retention-place"
+        )
+        let currentUserID = currentUserSave.owner.id
+        let fullGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: [projectedFriendSave, currentUserSave],
+                currentUserID: currentUserID
+            ).first
+        )
+        let projectedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: [projectedFriendSave],
+                currentUserID: currentUserID
+            ).first
+        )
+        XCTAssertNotEqual(fullGroup.key, projectedGroup.key)
+
+        let retainedGroup = try XCTUnwrap(
+            MapActivePinRetention.groups(
+                from: [projectedGroup],
+                retaining: fullGroup.primary,
+                retainingGroup: fullGroup,
+                currentUserID: currentUserID
+            ).first
+        )
+
+        XCTAssertEqual(retainedGroup.key, fullGroup.key)
+        XCTAssertEqual(retainedGroup.primary.userPlace.id, currentUserSave.userPlace.id)
+        XCTAssertEqual(
+            MapActivePinRetention.groupKey(for: fullGroup.primary, in: [retainedGroup]),
+            fullGroup.key
+        )
+    }
+
     func testMalformedAttributeJSONIsIgnored() {
         let place = makeVisiblePlace(
             id: "malformed",
@@ -337,9 +801,13 @@ final class TrustedPlaceSearchTests: XCTestCase {
     }
 
     private func makeCandidate(_ id: String) -> PlaceCandidate {
+        makeCandidate(id, name: nil)
+    }
+
+    private func makeCandidate(_ id: String, name: String?) -> PlaceCandidate {
         PlaceCandidate(
             id: id,
-            name: id,
+            name: name ?? id,
             category: WanderPlaceCategory.coffeeTeaSweets,
             primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
             subcategory: "coffee_shop",
@@ -363,7 +831,8 @@ final class TrustedPlaceSearchTests: XCTestCase {
         locality: String? = nil,
         note: String? = nil,
         savedAt: Date = Date(timeIntervalSince1970: 100),
-        attributes: [(key: String, json: String)] = []
+        attributes: [(key: String, json: String)] = [],
+        sourceProviderPlaceID: String? = nil
     ) -> VisiblePlace {
         let owner = LocalProfile(
             localID: "owner-\(id)",
@@ -379,7 +848,8 @@ final class TrustedPlaceSearchTests: XCTestCase {
             region: "California",
             country: "United States",
             latitude: 34,
-            longitude: -118
+            longitude: -118,
+            sourceProviderPlaceID: sourceProviderPlaceID
         )
         let userPlace = LocalUserPlace(
             localID: id,

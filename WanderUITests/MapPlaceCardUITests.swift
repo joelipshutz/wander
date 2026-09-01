@@ -2,6 +2,117 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testREC352AdaptiveCategorySearchEvidence() {
+        let app = launchREC352AdaptiveSearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("coffee")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        for resultName in ["Dayglow", "Jones Bench", "Harbor House", "Canyon Roasters"] {
+            XCTAssertTrue(
+                typeaheadPanel.staticTexts[resultName].firstMatch.waitForExistence(timeout: 5),
+                "Expected adaptive typeahead to include \(resultName)"
+            )
+        }
+        let renderedResultCount = app.descendants(matching: .any)["map.searchResultPinCount"]
+        XCTAssertTrue(renderedResultCount.waitForExistence(timeout: 2))
+        XCTAssertEqual(renderedResultCount.value as? String, "0")
+        capture("REC-352 adaptive coffee typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Dayglow"))
+        let fittedPins = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "4"),
+            object: renderedResultCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [fittedPins], timeout: 5),
+            .completed,
+            "Submitting should fit all four rendered search pins"
+        )
+        capture("REC-352 adaptive coffee submitted")
+    }
+
+    func testREC352LarchmontCorpusEvidence() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("larchmont noodles")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        let savedResult = typeaheadPanel.staticTexts["Larchmont Noodles"].firstMatch
+        let externalResult = typeaheadPanel.staticTexts["Larchmont Noodles & Ramen"].firstMatch
+        XCTAssertTrue(savedResult.waitForExistence(timeout: 5))
+        XCTAssertTrue(externalResult.waitForExistence(timeout: 5))
+        XCTAssertLessThan(savedResult.frame.minY, externalResult.frame.minY)
+        capture("REC-352 Larchmont typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Larchmont Noodles"))
+        XCTAssertFalse(card.label.contains("Larchmont Noodles & Ramen"))
+        capture("REC-352 Larchmont submitted")
+    }
+
+    func testREC352ContextualRankingEvidence() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        let externalResult = typeaheadPanel.staticTexts["Long Tables Cafe"].firstMatch
+        let contextualSavedResult = typeaheadPanel.staticTexts["Fern Desk Coffee"].firstMatch
+        XCTAssertTrue(externalResult.waitForExistence(timeout: 5))
+        XCTAssertTrue(contextualSavedResult.waitForExistence(timeout: 5))
+        XCTAssertLessThan(externalResult.frame.minY, contextualSavedResult.frame.minY)
+        capture("REC-352 contextual typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+        XCTAssertFalse(card.label.contains("Fern Desk Coffee"))
+        capture("REC-352 contextual submitted")
+    }
+
+    func testSubmittingMapSearchSelectsTheHighestRankedTrustedPlaceImmediately() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderResetWalkthroughs",
+        ]
+        app.launch()
+
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("Circuit Coffee\n")
+
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.label.contains("Circuit Coffee"))
+        XCTAssertFalse(app.staticTexts["map.searchMessage"].exists)
+    }
+
     func testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -177,6 +288,32 @@ final class MapPlaceCardUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func launchREC352SearchFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapSearchFixtures", "rec352",
+        ]
+        app.launch()
+        return app
+    }
+
+    private func launchREC352AdaptiveSearchFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderUseEphemeralEmptyFixtures",
+            "-WanderMapSearchFixtures", "rec352-adaptive",
+        ]
+        app.launch()
+        return app
     }
 
     private func scrollUp(in app: XCUIApplication, until element: XCUIElement) {

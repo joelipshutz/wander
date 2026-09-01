@@ -385,13 +385,19 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
     @MainActor
     func testMapSearchCompletionGateRejectsStaleChangedAndCancelledRequests() {
+        let authorization = MapSearchAuthorizationContext(
+            storeRevision: 9,
+            currentUserID: "viewer"
+        )
         XCTAssertTrue(
             MapScreen.shouldApplyMapSearchCompletion(
                 requestRevision: 4,
                 currentRevision: 4,
                 requestedQuery: "  Bar Nido ",
                 currentQuery: "bar nido",
-                isCancelled: false
+                isCancelled: false,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: authorization
             )
         )
         XCTAssertFalse(
@@ -400,7 +406,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
                 currentRevision: 4,
                 requestedQuery: "Bar Nido",
                 currentQuery: "Bar Nido",
-                isCancelled: false
+                isCancelled: false,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: authorization
             )
         )
         XCTAssertFalse(
@@ -409,7 +417,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
                 currentRevision: 4,
                 requestedQuery: "Old search",
                 currentQuery: "Widget search",
-                isCancelled: false
+                isCancelled: false,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: authorization
             )
         )
         XCTAssertFalse(
@@ -418,7 +428,37 @@ final class WanderWidgetIntegrationTests: XCTestCase {
                 currentRevision: 4,
                 requestedQuery: "Bar Nido",
                 currentQuery: "Bar Nido",
-                isCancelled: true
+                isCancelled: true,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: authorization
+            )
+        )
+        XCTAssertFalse(
+            MapScreen.shouldApplyMapSearchCompletion(
+                requestRevision: 4,
+                currentRevision: 4,
+                requestedQuery: "Bar Nido",
+                currentQuery: "Bar Nido",
+                isCancelled: false,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: MapSearchAuthorizationContext(
+                    storeRevision: 10,
+                    currentUserID: "viewer"
+                )
+            )
+        )
+        XCTAssertFalse(
+            MapScreen.shouldApplyMapSearchCompletion(
+                requestRevision: 4,
+                currentRevision: 4,
+                requestedQuery: "Bar Nido",
+                currentQuery: "Bar Nido",
+                isCancelled: false,
+                requestAuthorizationContext: authorization,
+                currentAuthorizationContext: MapSearchAuthorizationContext(
+                    storeRevision: 9,
+                    currentUserID: "different-viewer"
+                )
             )
         )
     }
@@ -537,22 +577,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(map.contains("shouldApplyMapSearchCompletion("))
         XCTAssertTrue(map.contains("requestRevision == mapSearchRevision"))
         XCTAssertTrue(map.contains("isCancelled: Task.isCancelled"))
-        XCTAssertTrue(
-            map.contains(
-                """
-                guard Self.shouldApplyMapSearchCompletion(
-                            requestRevision: requestRevision,
-                            currentRevision: mapSearchRevision,
-                            requestedQuery: requestedQuery,
-                            currentQuery: mapQuery,
-                            isCancelled: Task.isCancelled
-                        ) else {
-                            return
-                        }
-                        isSearchingMapKit = true
-                """
-            )
-        )
+        XCTAssertTrue(map.contains("requestAuthorizationContext: authorizationContext"))
+        XCTAssertTrue(map.contains("currentAuthorizationContext: mapSearchAuthorizationContext"))
         XCTAssertFalse(map.contains("await runMapSearch()"))
         XCTAssertTrue(map.contains(".focused(isFocused)"))
         XCTAssertTrue(map.contains("clearNativeMapFeatureSelection()"))
