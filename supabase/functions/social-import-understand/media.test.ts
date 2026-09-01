@@ -374,6 +374,7 @@ Deno.test("handler threads request cancellation through media and still finishes
         SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
         WANDER_APIFY_TOKEN: "apify-secret",
         WANDER_GEMINI_API_KEY: "gemini-secret",
+        WANDER_GOOGLE_PLACES_API_KEY: "google-secret",
       })[name],
   });
   const request = new Request("https://function.test", {

@@ -173,7 +173,7 @@ private struct SignedStorageURLResponse: Decodable {
 
 @MainActor
 final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteTableCalling {
-    private static let socialImportUnderstandingTimeout: TimeInterval = 125
+    private static let socialImportUnderstandingTimeout: TimeInterval = 145
 
     private struct RejectedTokenKey: Hashable {
         let userID: String
@@ -610,9 +610,9 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         if name == "social-import-understand" {
-            // The server caps the complete authenticated Apify + Gemini run at
-            // 112 seconds. URLSession's 60-second default would otherwise
-            // abandon paid work before the bounded server response arrives.
+            // The server caps the complete authenticated Apify + Gemini +
+            // Google Places run at 135 seconds. URLSession's 60-second default
+            // would otherwise abandon paid work before the bounded response.
             request.timeoutInterval = Self.socialImportUnderstandingTimeout
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

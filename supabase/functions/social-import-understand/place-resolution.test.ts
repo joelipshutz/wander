@@ -94,6 +94,87 @@ Deno.test("Google resolution keeps strong official-name variants and caps altern
   );
 });
 
+Deno.test("Google resolution returns coordinate-backed candidates for all 17 acceptance hotels", async () => {
+  const acceptanceHotels = [
+    ["Nayara Bocas del Toro", "Bocas del Toro, Panama"],
+    ["The Retreat at Blue Lagoon Iceland", "Reykjanes Peninsula, Iceland"],
+    ["Nimmo Bay Resort", "British Columbia, Canada"],
+    ["Jao Camp", "Okavango Delta, Botswana"],
+    ["The Brando", "Tetiaroa, French Polynesia"],
+    ["Shebara", "Sheybarah Island, Red Sea, Saudi Arabia"],
+    ["Joali Maldives", "Muravandhoo Island, Raa Atoll, Maldives"],
+    ["Shinta Mani Wild", "Cardamom Mountains, Cambodia"],
+    ["Bawah Reserve", "Anambas Archipelago, Indonesia"],
+    [
+      "Nujuma, a Ritz-Carlton Reserve",
+      "Ummahat Islands, Red Sea, Saudi Arabia",
+    ],
+    ["Song Saa Private Island", "Koh Rong Archipelago, Cambodia"],
+    ["Kudadoo Maldives Private Island", "Lhaviyani Atoll, Maldives"],
+    ["Arctic Bath", "Lule River, Swedish Lapland, Sweden"],
+    ["Pumphouse Point", "Lake St Clair, Tasmania, Australia"],
+    ["Misool Resort", "Raja Ampat, Indonesia"],
+    ["Brindos, Lac & Château", "Anglet, France"],
+    [
+      "Victoria Falls River Lodge: Island Treehouse Suites",
+      "Kandahar Island, Zambezi River, Zimbabwe",
+    ],
+  ] as const;
+  const expectedQueries = new Map(
+    acceptanceHotels.map(([name, area], index) => [
+      `${name}, ${area}`,
+      { name, id: `acceptance-hotel-${index + 1}` },
+    ]),
+  );
+  const receivedQueries: string[] = [];
+  const dependencies = runtime(async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    const query = String(body.textQuery);
+    receivedQueries.push(query);
+    const expected = expectedQueries.get(query);
+    if (!expected) throw new Error(`Unexpected Google query: ${query}`);
+    return Response.json({
+      places: [googlePlace({
+        id: expected.id,
+        name: expected.name,
+        primaryType: "resort_hotel",
+      })],
+    });
+  });
+  const hints = acceptanceHotels.map(([name, area], index): PlaceHint => ({
+    name,
+    area,
+    classification: "destination",
+    modality: "image_text",
+    evidence_ids: [`media:${index}`],
+    confidence: 0.99,
+    start_ms: null,
+    end_ms: null,
+  }));
+
+  const resolved = await resolvePlaceHintsWithGoogle(
+    hints,
+    "google-key",
+    new Deadline(30_000, dependencies.now),
+    dependencies,
+    new AbortController().signal,
+  );
+
+  assertEquals(receivedQueries, [...expectedQueries.keys()]);
+  assertEquals(resolved.length, 17);
+  assertEquals(
+    resolved.map((item) => item.resolved_places?.[0]?.provider_place_id),
+    acceptanceHotels.map((_, index) => `acceptance-hotel-${index + 1}`),
+  );
+  assertEquals(
+    resolved.every((item) =>
+      item.resolved_places?.[0]?.latitude === 9.35 &&
+      item.resolved_places?.[0]?.longitude === -82.25
+    ),
+    true,
+  );
+});
+
 Deno.test("Google resolution rejects natural features that share a resort brand", async () => {
   const resortHint: PlaceHint = {
     ...hint,
@@ -165,6 +246,36 @@ Deno.test("Google resolution preserves named natural destinations", async () => 
   assertEquals(
     resolved[0].resolved_places?.map((place) => place.provider_place_id),
     ["vetter-mountain"],
+  );
+});
+
+Deno.test("Google resolution retries a transient provider failure once", async () => {
+  let attemptCount = 0;
+  const dependencies = runtime(async () => {
+    attemptCount += 1;
+    if (attemptCount === 1) {
+      return Response.json({ error: "temporary" }, { status: 429 });
+    }
+    return Response.json({
+      places: [googlePlace({
+        id: "nayara-after-retry",
+        name: "Nayara Bocas del Toro",
+      })],
+    });
+  });
+
+  const resolved = await resolvePlaceHintsWithGoogle(
+    [hint],
+    "google-key",
+    new Deadline(10_000, dependencies.now),
+    dependencies,
+    new AbortController().signal,
+  );
+
+  assertEquals(attemptCount, 2);
+  assertEquals(
+    resolved[0].resolved_places?.[0]?.provider_place_id,
+    "nayara-after-retry",
   );
 });
 

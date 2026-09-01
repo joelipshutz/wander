@@ -16,6 +16,7 @@ import {
 import { parseGeminiCandidates, parseGeminiUnderstanding } from "./gemini.ts";
 import {
   handleRequest,
+  maximumExtractionDurationMilliseconds,
   maximumHandlerDurationMilliseconds,
 } from "./handler.ts";
 import {
@@ -161,7 +162,16 @@ Deno.test("actor selection and inputs preserve the evaluated canary contract", (
       aiVideoDescription: false,
     },
   });
-  assert(maximumHandlerDurationMilliseconds <= 115_000);
+  const observedSeventeenPlaceExtractionMilliseconds = 107_000;
+  assert(
+    maximumExtractionDurationMilliseconds -
+        observedSeventeenPlaceExtractionMilliseconds >= 10_000,
+  );
+  assert(
+    maximumHandlerDurationMilliseconds -
+        maximumExtractionDurationMilliseconds >= 15_000,
+  );
+  assert(maximumHandlerDurationMilliseconds <= 140_000);
 });
 
 Deno.test("successful handler run authenticates, caps Apify, and returns grounded hints only", async () => {
@@ -4339,6 +4349,7 @@ function runtime(
     SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
     WANDER_APIFY_TOKEN: "apify-secret",
     WANDER_GEMINI_API_KEY: "gemini-secret",
+    WANDER_GOOGLE_PLACES_API_KEY: "google-secret",
   };
   for (const [name, value] of Object.entries(options.environment ?? {})) {
     if (value === undefined) delete values[name];

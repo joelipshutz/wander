@@ -4387,6 +4387,103 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertTrue(placeResolver.manualInputs.isEmpty)
     }
 
+    func testExactSeventeenHotelCarouselUsesServerGoogleCandidatesWithoutMapKitOrSourceRetry() async throws {
+        let hotels: [(name: String, area: String, latitude: Double, longitude: Double)] = [
+            ("Nayara Bocas del Toro", "Bocas del Toro, Panama", 9.2794, -82.1619),
+            ("The Retreat at Blue Lagoon Iceland", "Reykjanes Peninsula, Iceland", 63.8814, -22.4495),
+            ("Nimmo Bay Resort", "British Columbia, Canada", 50.6014, -126.6812),
+            ("Jao Camp", "Okavango Delta, Botswana", -19.0511, 22.8357),
+            ("The Brando", "Tetiaroa, French Polynesia", -17.0056, -149.5878),
+            ("Shebara", "Sheybarah Island, Red Sea, Saudi Arabia", 24.4410, 37.1020),
+            ("Joali Maldives", "Muravandhoo Island, Raa Atoll, Maldives", 5.6086, 72.9527),
+            ("Shinta Mani Wild", "Cardamom Mountains, Cambodia", 11.2390, 103.6660),
+            ("Bawah Reserve", "Anambas Archipelago, Indonesia", 2.9314, 106.0415),
+            ("Nujuma, a Ritz-Carlton Reserve", "Ummahat Islands, Red Sea, Saudi Arabia", 25.6570, 36.8270),
+            ("Song Saa Private Island", "Koh Rong Archipelago, Cambodia", 10.6234, 103.5063),
+            ("Kudadoo Maldives Private Island", "Lhaviyani Atoll, Maldives", 5.3126, 73.4625),
+            ("Arctic Bath", "Lule River, Swedish Lapland, Sweden", 66.1674, 20.9362),
+            ("Pumphouse Point", "Lake St Clair, Tasmania, Australia", -42.1199, 146.1764),
+            ("Misool Resort", "Raja Ampat, Indonesia", -1.8900, 130.1050),
+            ("Brindos, Lac & Château", "Anglet, France", 43.4776, -1.5185),
+            ("Victoria Falls River Lodge: Island Treehouse Suites", "Kandahar Island, Zambezi River, Zimbabwe", -17.8510, 25.8330)
+        ]
+        let hints = hotels.enumerated().map { index, hotel in
+            let candidate = PlaceCandidate(
+                id: "google-place-\(index)",
+                name: hotel.name,
+                category: "hotel",
+                rawProviderType: "hotel",
+                address: hotel.area,
+                latitude: hotel.latitude,
+                longitude: hotel.longitude,
+                sourceProvider: "google_places",
+                sourceProviderPlaceID: "google-source-\(index)",
+                confidence: 1
+            )
+            return SocialPlaceSearchHint(
+                name: hotel.name,
+                area: hotel.area,
+                evidence: .imageText,
+                isServerGrounded: true,
+                resolvedCandidates: [candidate]
+            )
+        }
+        let placeResolver = RoutingDevicePlaceResolver(routes: [:])
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .partial,
+                hints: hints,
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 18,
+                    modelAttemptCount: 1,
+                    failureCategory: "media_incomplete",
+                    declaredCountComplete: true
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/Db--aE4DIh1/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                id: "exact-17-hotels-request",
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected exactly 17 resolved hotel rows, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, hotels.count)
+        XCTAssertEqual(entries.compactMap(\.seed.nameHint), hotels.map { $0.name })
+        XCTAssertTrue(entries.allSatisfy { $0.kind != .sourceRetry })
+        XCTAssertTrue(entries.allSatisfy { entry in
+            guard
+                let selectedCandidateID = entry.selectedCandidateID,
+                let selectedCandidate = entry.candidates.first(where: { $0.id == selectedCandidateID })
+            else {
+                return false
+            }
+            return selectedCandidate.sourceProvider == "google_places"
+                && selectedCandidate.sourceProviderPlaceID != nil
+                && selectedCandidate.latitude != nil
+                && selectedCandidate.longitude != nil
+        })
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+        XCTAssertEqual(understanding.requests.map(\.clientRequestID), ["exact-17-hotels-request"])
+    }
+
     func testSocialMatchingSelectsUniqueGroundedLocalityDefaultAndRetainsAlternatives() async throws {
         let expected = placeImportCandidate(
             name: "Summit Archive",

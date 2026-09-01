@@ -29,7 +29,14 @@ import type {
 } from "./types.ts";
 import { Deadline, SocialImportError } from "./types.ts";
 
-export const maximumHandlerDurationMilliseconds = 112_000;
+// Supabase requires an Edge Function response within 150 seconds. The exact
+// 17-place acceptance post has taken about 107 seconds to finish acquisition
+// and multimodal understanding, so the former 112-second cap left Google POI
+// enrichment with too little time to run. Keep enough headroom for the
+// reserved parallel Places wave and admission cleanup while remaining
+// comfortably below the platform response ceiling.
+export const maximumHandlerDurationMilliseconds = 135_000;
+export const maximumExtractionDurationMilliseconds = 120_000;
 const paidWorkAdmissionFinishTimeoutMilliseconds = 3_000;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -70,6 +77,12 @@ export async function handleRequest(
     maximumHandlerDurationMilliseconds,
     dependencies.now,
   );
+  // Keep the final 15 seconds unavailable to acquisition and Gemini so the
+  // bounded Google Places wave always has a real resolution window.
+  const extractionDeadline = new Deadline(
+    maximumExtractionDurationMilliseconds,
+    dependencies.now,
+  );
   if (request.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405);
   }
@@ -78,7 +91,9 @@ export async function handleRequest(
   if (!validBearerHeader(authorization)) {
     return json({ error: "missing_authorization" }, 401);
   }
-  if (!await hasCurrentProfile(authorization, deadline, dependencies)) {
+  if (
+    !await hasCurrentProfile(authorization, extractionDeadline, dependencies)
+  ) {
     return json({ error: "invalid_authorization" }, 401);
   }
   if (
@@ -125,11 +140,12 @@ export async function handleRequest(
 
   const apifyToken = secret(dependencies.env("WANDER_APIFY_TOKEN"));
   const geminiKey = secret(dependencies.env("WANDER_GEMINI_API_KEY"));
+  const googlePlacesKey = googlePlacesAPIKey(dependencies);
   // Paid work must never start unless this invocation can release its
   // admission with a server credential. The caller's short-lived user token
   // is intentionally used only for authentication and begin admission.
   if (
-    !apifyToken || !geminiKey ||
+    !apifyToken || !geminiKey || !googlePlacesKey ||
     !supabaseServiceRPCConfiguration(dependencies)
   ) {
     return finish(fallbackResponse(
@@ -146,7 +162,7 @@ export async function handleRequest(
     admission = await beginPaidWorkAdmission(
       authorization,
       clientRequestID,
-      deadline,
+      extractionDeadline,
       dependencies,
     );
   } catch {
@@ -174,6 +190,8 @@ export async function handleRequest(
       source,
       apifyToken,
       geminiKey,
+      googlePlacesKey,
+      extractionDeadline,
       deadline,
       dependencies,
       request.signal,
@@ -214,7 +232,9 @@ async function runAdmittedImport(
   source: SocialSource,
   apifyToken: string,
   geminiKey: string,
-  deadline: Deadline,
+  googlePlacesKey: string,
+  extractionDeadline: Deadline,
+  resolutionDeadline: Deadline,
   dependencies: RuntimeDependencies,
   signal: AbortSignal,
 ): Promise<UnderstandResponse> {
@@ -223,7 +243,7 @@ async function runAdmittedImport(
     evidence = await acquireWithApify(
       source,
       apifyToken,
-      deadline,
+      extractionDeadline,
       dependencies,
       signal,
     );
@@ -244,7 +264,7 @@ async function runAdmittedImport(
       ? acquireInstagramProfileAliases(
         profileUsernames,
         apifyToken,
-        deadline,
+        extractionDeadline,
         dependencies,
         signal,
       )
@@ -257,7 +277,7 @@ async function runAdmittedImport(
         evidence.media,
         source,
         apifyToken,
-        deadline,
+        extractionDeadline,
         dependencies,
         signal,
       ),
@@ -296,7 +316,7 @@ async function runAdmittedImport(
       ingestions,
       geminiKey,
       dependencies.env("WANDER_GEMINI_MODEL"),
-      deadline,
+      extractionDeadline,
       dependencies,
       signal,
       modelProfileAliases,
@@ -436,8 +456,8 @@ async function runAdmittedImport(
 
   const resolvedHints = await resolvePlaceHintsWithGoogle(
     grounded.hints,
-    googlePlacesAPIKey(dependencies),
-    deadline,
+    googlePlacesKey,
+    resolutionDeadline,
     dependencies,
     signal,
   );
@@ -756,8 +776,8 @@ function finish(payload: UnderstandResponse): Response {
       mediaCount: payload.media_count,
       modelAttemptCount: payload.model_attempt_count,
       hintCount: payload.hints.length,
-      resolvedPlaceCount: payload.hints.reduce(
-        (count, hint) => count + (hint.resolved_places?.length ?? 0),
+      resolvedHintCount: payload.hints.reduce(
+        (count, hint) => count + (hint.resolved_places?.length ? 1 : 0),
         0,
       ),
       failureCategory: payload.failure_category,

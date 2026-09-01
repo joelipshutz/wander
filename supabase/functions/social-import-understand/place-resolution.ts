@@ -8,10 +8,11 @@ const googlePlacesSearchURL =
 const maximumLookups = 30;
 const maximumCandidatesPerHint = 3;
 // Run the bounded set as one wave so candidate enrichment still completes
-// when acquisition and multimodal understanding consume most of the shared
-// Edge Function deadline.
+// inside the final deadline window reserved after acquisition and multimodal
+// understanding.
 const lookupConcurrency = maximumLookups;
-const lookupTimeoutMilliseconds = 7_000;
+const maximumLookupAttempts = 2;
+const lookupTimeoutMilliseconds = 4_000;
 const maximumResponseBytes = 192_000;
 const fieldMask = [
   "places.id",
@@ -90,40 +91,61 @@ async function resolveHint(
   signal: AbortSignal,
 ): Promise<ResolvedPlace[]> {
   const textQuery = [hint.name, hint.area].filter(Boolean).join(", ");
-  const result = await fetchJSON(
-    googlePlacesSearchURL,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": fieldMask,
-      },
-      body: JSON.stringify({ textQuery, pageSize: 5, languageCode: "en" }),
-      signal,
-    },
-    maximumResponseBytes,
-    lookupTimeoutMilliseconds,
-    deadline,
-    dependencies,
-  );
-  if (!result.response.ok) return [];
-  const body = asRecord(result.body);
-  const places = Array.isArray(body?.places) ? body.places : [];
-  return places
-    .map(parseGooglePlace)
-    .filter((place): place is ParsedGooglePlace => place !== null)
-    .map((place, index) => ({
-      place,
-      index,
-      score: candidateScore(place, hint),
-    }))
-    .filter((candidate) => candidate.score >= 0)
-    .sort((lhs, rhs) =>
-      lhs.score === rhs.score ? lhs.index - rhs.index : rhs.score - lhs.score
-    )
-    .slice(0, maximumCandidatesPerHint)
-    .map((candidate) => candidate.place.resolved);
+  for (let attempt = 1; attempt <= maximumLookupAttempts; attempt += 1) {
+    try {
+      const result = await fetchJSON(
+        googlePlacesSearchURL,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": fieldMask,
+          },
+          body: JSON.stringify({ textQuery, pageSize: 5, languageCode: "en" }),
+          signal,
+        },
+        maximumResponseBytes,
+        lookupTimeoutMilliseconds,
+        deadline,
+        dependencies,
+      );
+      if (!result.response.ok) {
+        if (
+          attempt < maximumLookupAttempts &&
+          retryableStatus(result.response.status)
+        ) {
+          continue;
+        }
+        return [];
+      }
+      const body = asRecord(result.body);
+      const places = Array.isArray(body?.places) ? body.places : [];
+      return places
+        .map(parseGooglePlace)
+        .filter((place): place is ParsedGooglePlace => place !== null)
+        .map((place, index) => ({
+          place,
+          index,
+          score: candidateScore(place, hint),
+        }))
+        .filter((candidate) => candidate.score >= 0)
+        .sort((lhs, rhs) =>
+          lhs.score === rhs.score
+            ? lhs.index - rhs.index
+            : rhs.score - lhs.score
+        )
+        .slice(0, maximumCandidatesPerHint)
+        .map((candidate) => candidate.place.resolved);
+    } catch (error) {
+      if (signal.aborted || attempt >= maximumLookupAttempts) throw error;
+    }
+  }
+  return [];
+}
+
+function retryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function parseGooglePlace(value: unknown): ParsedGooglePlace | null {
