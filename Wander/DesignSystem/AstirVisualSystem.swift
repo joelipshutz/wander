@@ -130,6 +130,8 @@ enum AstirTypography {
     static let screenTitle = Font.system(.largeTitle, design: .serif).weight(.semibold)
     static let sheetTitle = Font.system(.title2, design: .serif).weight(.semibold)
     static let sectionTitle = Font.system(.title3, design: .serif).weight(.semibold)
+    static let metricDisplay = Font.system(.title2, design: .serif, weight: .bold).monospacedDigit()
+    static let metricSuffix = Font.system(.caption, design: .serif, weight: .semibold).monospacedDigit()
     static let cardTitle = Font.custom("AvenirNext-DemiBold", size: 16, relativeTo: .body)
     static let body = Font.custom("AvenirNext-Regular", size: 16, relativeTo: .body)
     static let bodySmall = Font.custom("AvenirNext-Regular", size: 14, relativeTo: .subheadline)
@@ -143,6 +145,17 @@ enum AstirTypography {
     )
 }
 
+private struct AstirAdaptiveBrandModeModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.environment(
+            \.astirBrandMode,
+            colorScheme == .dark ? AstirBrandMode.editorial : .editorialLight
+        )
+    }
+}
+
 private struct AstirScreenSurface: ViewModifier {
     @Environment(\.astirBrandMode) private var brandMode
 
@@ -154,6 +167,10 @@ private struct AstirScreenSurface: ViewModifier {
 }
 
 extension View {
+    func astirAdaptiveBrandMode() -> some View {
+        modifier(AstirAdaptiveBrandModeModifier())
+    }
+
     func astirScreen() -> some View {
         modifier(AstirScreenSurface())
     }

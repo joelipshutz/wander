@@ -59,7 +59,7 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertTrue(map.contains("MapMoreFilterMotionStyle.panelTransition"))
     }
 
-    func testMorePanelUsesLiquidGlassAndOptionsUseIndependentAstirSurfaces() throws {
+    func testMorePanelUsesOpaqueAstirSurfaceAndOptionsUseUnderlineSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -76,8 +76,11 @@ final class MapMoreFilterResetTests: XCTestCase {
         let popover = String(map[popoverStart.lowerBound..<popoverEnd.lowerBound])
         let optionChip = String(map[popoverEnd.lowerBound..<optionEnd.lowerBound])
 
-        XCTAssertTrue(popover.contains(".wanderGlassPanel("))
-        XCTAssertTrue(popover.contains("tone: appearance.neutralGlassTone"))
+        XCTAssertFalse(popover.contains(".wanderGlassPanel("))
+        XCTAssertTrue(popover.contains(".background(appearance.raisedSurface)"))
+        XCTAssertTrue(
+            popover.contains(".overlay(Rectangle().stroke(appearance.border, lineWidth: 1))")
+        )
         XCTAssertFalse(popover.contains(".background(\n            WanderTheme.surfaceBone.color"))
         XCTAssertFalse(optionChip.contains(".wanderGlassPanel("))
         XCTAssertFalse(optionChip.contains(".background(astirBrandMode.raisedBackground"))
@@ -87,7 +90,7 @@ final class MapMoreFilterResetTests: XCTestCase {
                 "isSelected ? astirBrandMode.accent : astirBrandMode.border"
             )
         )
-        XCTAssertTrue(optionChip.contains(".overlay(alignment: .leading)"))
+        XCTAssertTrue(optionChip.contains(".overlay(alignment: .bottom)"))
         XCTAssertTrue(popover.contains("emoji: WanderPlaceCategory.broadEmoji(for: category)"))
     }
 

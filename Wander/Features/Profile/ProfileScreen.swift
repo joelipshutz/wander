@@ -2385,7 +2385,8 @@ private struct InCommonReleaseMapScreen: View {
                 )
 
                 Text("where you agree")
-                    .font(WanderTypography.editorialCardTitle)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .padding(.horizontal, WanderTheme.spacing4)
 
                 LazyVStack(spacing: WanderTheme.spacing2) {

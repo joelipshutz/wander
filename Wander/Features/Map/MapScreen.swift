@@ -9498,7 +9498,7 @@ private struct MapMoreFiltersPopover: View {
             }
             .padding(WanderTheme.spacing4)
         }
-        .frame(width: 330, height: 470)
+        .frame(width: 330, height: source == .featured ? 360 : 470)
         .wanderGlassPanel(
             cornerRadius: WanderTheme.radiusLarge,
             tone: appearance.neutralGlassTone
@@ -9580,21 +9580,13 @@ private struct MapMoreOptionChip: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(isSelected ? astirBrandMode.accent : astirBrandMode.primaryText)
-            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
-                        isSelected ? astirBrandMode.accent : astirBrandMode.border,
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-            }
-            .overlay(alignment: .leading) {
+            .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)
-                    .frame(width: 2, height: 22)
-                    .padding(.leading, 1)
+                    .frame(height: isSelected ? 2 : 1)
             }
         }
         .buttonStyle(.plain)

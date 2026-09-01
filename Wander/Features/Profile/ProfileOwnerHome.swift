@@ -777,8 +777,12 @@ private struct ProfileInCommonPlacesRow: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, WanderTheme.spacing3)
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .wanderGlassPanel(cornerRadius: 22)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(brandMode.border)
+                    .frame(height: 1)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(count) \(count == 1 ? "place" : "places") in common with \(profile.displayName)")
