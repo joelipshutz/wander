@@ -127,6 +127,9 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
       select
         begin_proc.prosecdef as begin_definer,
         finish_proc.prosecdef as finish_definer,
+        service_finish_proc.prosecdef as service_finish_definer,
+        pg_get_userbyid(service_finish_proc.proowner) = 'postgres'
+          as service_finish_postgres_owner,
         exists (
           select 1 from unnest(coalesce(begin_proc.proconfig, array[]::text[])) setting
           where setting in ('search_path=', 'search_path=""')
@@ -135,14 +138,27 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
           select 1 from unnest(coalesce(finish_proc.proconfig, array[]::text[])) setting
           where setting in ('search_path=', 'search_path=""')
         ) as finish_empty_path,
+        exists (
+          select 1
+          from unnest(coalesce(service_finish_proc.proconfig, array[]::text[])) setting
+          where setting in ('search_path=', 'search_path=""')
+        ) as service_finish_empty_path,
         has_function_privilege('authenticated', begin_proc.oid, 'execute')
           as begin_authenticated,
         has_function_privilege('authenticated', finish_proc.oid, 'execute')
           as finish_authenticated,
+        has_function_privilege('service_role', service_finish_proc.oid, 'execute')
+          as service_finish_service,
+        not has_function_privilege('authenticated', service_finish_proc.oid, 'execute')
+          as service_finish_authenticated_denied,
+        not has_function_privilege('anon', service_finish_proc.oid, 'execute')
+          as service_finish_anon_denied,
         not has_function_privilege('anon', begin_proc.oid, 'execute')
           as begin_anon_denied,
         not has_function_privilege('service_role', begin_proc.oid, 'execute')
           as begin_service_denied,
+        not has_function_privilege('service_role', finish_proc.oid, 'execute')
+          as finish_service_denied,
         not has_table_privilege(
           'authenticated',
           'app.social_import_paid_work_admissions',
@@ -155,13 +171,24 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
         ) as table_service_denied,
         pg_get_functiondef(begin_proc.oid)
           like '%pg_advisory_xact_lock%recme:social-import-paid-work:%'
-          as serialized_admission
+          as serialized_admission,
+        pg_get_function_arguments(service_finish_proc.oid) =
+          'input_client_request_id text, input_admission_id uuid'
+          as service_finish_has_no_user_argument,
+        pg_get_functiondef(service_finish_proc.oid)
+          like '%select admission.user_id%'
+          and pg_get_functiondef(service_finish_proc.oid)
+            like '%pg_advisory_xact_lock%recme:social-import-paid-work:%'
+          as service_finish_derives_serialized_owner
       from pg_proc begin_proc
       cross join pg_proc finish_proc
+      cross join pg_proc service_finish_proc
       where begin_proc.oid =
         'public.begin_social_import_paid_work(text)'::regprocedure
         and finish_proc.oid =
         'public.finish_social_import_paid_work(text,uuid)'::regprocedure
+        and service_finish_proc.oid =
+          'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
     `,
     [],
     (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
@@ -226,6 +253,32 @@ async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) 
     ["smoke-first"],
     (result) => result.rows[0]?.admitted === false
       && result.rows[0]?.decision === "replay_required",
+  );
+
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  const serviceAdmission = await client.query(
+    `
+      insert into app.social_import_paid_work_admissions (
+        user_id, client_request_id, state, started_at, finished_at
+      ) values ($1, 'smoke-service-finish', 'in_flight', clock_timestamp(), null)
+      returning id
+    `,
+    [smokeUserID],
+  );
+  await client.query("set local role service_role");
+  await client.query("select set_config('request.jwt.claim.sub', '', true)");
+  await expectQuery(
+    client,
+    "service cleanup finishes an exact admission after the user bearer is gone",
+    `
+      select public.finish_social_import_paid_work_service(
+        $1,
+        $2::uuid
+      ) as finished
+    `,
+    ["smoke-service-finish", serviceAdmission.rows[0].id],
+    (result) => result.rows[0]?.finished === true,
   );
 
   await client.query("reset role");

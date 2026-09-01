@@ -3,11 +3,15 @@ import {
   deterministicFallbackHints,
   evidenceCatalog,
   groundedHints,
+  maximumGroundingCandidateInputs,
+  mergeInstagramProfileAliases,
   minimumGroundedConfidence,
   primaryCaptionProfileAliasHints,
   prioritizedCaptionProfileUsernames,
+  prioritizedInstagramProfileUsernames,
   profileAliasCandidates,
   recommendedCaptionHandles,
+  taggedProfileCandidates,
 } from "./evidence.ts";
 import { parseGeminiCandidates, parseGeminiUnderstanding } from "./gemini.ts";
 import {
@@ -22,7 +26,9 @@ import {
 import { parseSocialSource } from "./source.ts";
 import type {
   AcquisitionEvidence,
+  MediaIngestion,
   ModelCandidate,
+  ModelMediaAssessment,
   ModelPostContext,
   RuntimeDependencies,
   SocialSource,
@@ -35,6 +41,25 @@ const tiktokURL = "https://www.tiktok.com/@creator/video/7451234567890123456";
 const mediaURL = "https://images.cdninstagram.com/media/photo.jpg";
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x01]);
 const admissionID = "10000000-0000-4000-8000-000000000001";
+const seventeenHotelProfiles = [
+  ["thebrandoresort", "The Brando"],
+  ["shebararesort", "Shebara"],
+  ["joalimaldives", "JOALI Maldives"],
+  ["shintamaniwild", "Shinta Mani Wild"],
+  ["bawahreserve", "Bawah Reserve"],
+  ["nujumareserve", "Nujuma, a Ritz-Carlton Reserve"],
+  ["songsaa", "Song Saa Private Island"],
+  ["nayarabocas", "Nayara Bocas del Toro"],
+  ["kudadoo", "Kudadoo Maldives Private Island"],
+  ["arcticbath", "Arctic Bath"],
+  ["pumphousepoint", "Pumphouse Point"],
+  ["misoolresort", "Misool Resort"],
+  ["bluelagoonretreat", "The Retreat at Blue Lagoon Iceland"],
+  ["brindoslac", "Brindos, Lac & Château"],
+  ["vfriverlodge", "Victoria Falls River Lodge"],
+  ["nimmobayresort", "Nimmo Bay Resort"],
+  ["jaocamp", "Jao Camp"],
+] as const;
 
 Deno.test("handler enforces method and explicit current-profile authorization", async () => {
   let fetchCount = 0;
@@ -185,7 +210,7 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
       );
       assertEquals(
         requestBody.generationConfig.responseFormat.text.schema.required,
-        ["postContext", "candidates"],
+        ["postContext", "candidates", "mediaAssessments"],
       );
       assertEquals(
         requestBody.generationConfig.responseFormat.text.schema.properties
@@ -201,6 +226,13 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
         requestBody.generationConfig.responseFormat.text.schema.properties
           .candidates.items.required.includes("sourceMention"),
         true,
+      );
+      assertEquals(
+        requestBody.generationConfig.responseFormat.text.schema.properties
+          .candidates.items.properties.modality.enum.includes(
+            "tagged_profile",
+          ),
+        false,
       );
       return geminiResponse([candidate({
         name: "Carbon Beach Club",
@@ -219,8 +251,9 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
     },
     onFinish: (headers, body) => {
       finishCount += 1;
-      assertEquals(headers.get("authorization"), "Bearer user-token");
-      assertEquals(headers.get("apikey"), "publishable-key");
+      assertEquals(headers.get("authorization"), "Bearer service-role-key");
+      assertEquals(headers.get("apikey"), "service-role-key");
+      assertEquals(headers.get("authorization")?.includes("user-token"), false);
       assertEquals(body, {
         input_client_request_id: "stable-request-id",
         input_admission_id: admissionID,
@@ -302,7 +335,7 @@ Deno.test("handler inventories every caption handle and safely synthesizes a ven
       const datasetURL = new URL(url);
       assertEquals(
         datasetURL.searchParams.get("fields"),
-        "username,fullName",
+        "username,fullName,businessCategoryName,isBusinessAccount",
       );
       return Response.json([{
         username: "hvojai",
@@ -355,6 +388,186 @@ Deno.test("handler inventories every caption handle and safely synthesizes a ven
     "Hip Vegan",
   ]);
   assertEquals(JSON.stringify(payload).includes("biography"), false);
+});
+
+Deno.test("handler enriches slide tags and recovers a complete declared venue list", async () => {
+  const imageURLs = [
+    "https://images.cdninstagram.com/media/tag-cover.jpg",
+    "https://images.cdninstagram.com/media/tag-alpha.jpg",
+    "https://images.cdninstagram.com/media/tag-bravo.jpg",
+  ];
+  const profileStarts: Array<Record<string, unknown>> = [];
+  let geminiCalls = 0;
+  const context = postContext({
+    intent: "place_list",
+    declaredCount: 2,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const assessments = [
+    {
+      mediaEvidenceId: "media:0",
+      disposition: "no_place_mentions",
+      candidateItemIndexes: [],
+    },
+    {
+      mediaEvidenceId: "media:1",
+      disposition: "place_mentions",
+      candidateItemIndexes: [0],
+    },
+    {
+      mediaEvidenceId: "media:2",
+      disposition: "place_mentions",
+      candidateItemIndexes: [1],
+    },
+  ];
+  const modelCandidates = [{
+    ...candidate({
+      name: "Alpha H0tel",
+      sourceMention: "Alpha H0tel",
+      itemIndex: 0,
+      modality: "image_text",
+      evidenceIds: ["media:1"],
+    }),
+  }, {
+    ...candidate({
+      name: "Bravo H0tel",
+      sourceMention: "Bravo H0tel",
+      itemIndex: 1,
+      modality: "image_text",
+      evidenceIds: ["media:2"],
+    }),
+  }];
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "tag-post-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "tag-post-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/tag-post-dataset/items")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        childPosts: [{
+          displayUrl: imageURLs[0],
+        }, {
+          displayUrl: imageURLs[1],
+          taggedUsers: [{ username: "alpha_hotel", fullName: "Alpha Hotel" }],
+        }, {
+          displayUrl: imageURLs[2],
+          taggedUsers: [{ username: "bravo_hotel", fullName: "Bravo Hotel" }],
+        }],
+      }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-profile-scraper/runs")) {
+      profileStarts.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        data: {
+          id: "tag-profile-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "tag-profile-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/tag-profile-dataset/items")) {
+      return Response.json([{
+        username: "alpha_hotel",
+        fullName: "Alpha Hotel",
+      }]);
+    }
+    if (imageURLs.includes(url)) {
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      geminiCalls += 1;
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      const parts = body.contents?.[0]?.parts as Array<Record<string, unknown>>;
+      const task = JSON.parse(String(parts?.at(-1)?.text ?? "{}"));
+      if (task.task === "extract_grounded_destinations") {
+        assertEquals(task.caption_handle_identity_aliases, []);
+        assertEquals(
+          task.text_evidence.filter((item: { modality: string }) =>
+            item.modality === "tagged_profile"
+          ).map((item: { id: string; media_id: string }) => ({
+            id: item.id,
+            media_id: item.media_id,
+          })),
+          [{ id: "profile_tag:1:0", media_id: "media:1" }, {
+            id: "profile_tag:2:0",
+            media_id: "media:2",
+          }],
+        );
+      } else {
+        assertEquals(task.task, "reconcile_grounded_destinations");
+      }
+      return Response.json(
+        geminiPayload(modelCandidates, context, assessments),
+      );
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+
+  const payload = await (await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  )).json();
+
+  assertEquals(profileStarts, [{
+    usernames: ["alpha_hotel", "bravo_hotel"],
+    includeAboutSection: false,
+  }]);
+  assertEquals(geminiCalls, 2);
+  assertEquals(payload.outcome, "ok");
+  assertEquals(payload.failure_category, null);
+  assertEquals(
+    payload.hints.map((hint: { name: string }) => hint.name),
+    ["Alpha Hotel", "Bravo Hotel"],
+  );
+  assertEquals(
+    payload.hints.map((hint: { evidence_ids: string[] }) => hint.evidence_ids),
+    [["profile_tag:1:0", "media:1"], ["profile_tag:2:0", "media:2"]],
+  );
+});
+
+Deno.test("tagged recovery never clears an incomplete media-assessment ledger", async () => {
+  const payload = await runTaggedRecoveryCoverageScenario({
+    assessments: [{
+      mediaEvidenceId: "media:0",
+      disposition: "no_place_mentions",
+      candidateItemIndexes: [],
+    }, {
+      mediaEvidenceId: "media:1",
+      disposition: "place_mentions",
+      candidateItemIndexes: [0],
+    }],
+  });
+
+  assertEquals(payload.outcome, "partial");
+  assertEquals(payload.failure_category, "grounding_incomplete");
+  assertEquals(
+    (payload.hints as Array<{ name: string }>).map((hint) => hint.name),
+    ["Alpha Hotel", "Bravo Hotel"],
+  );
+});
+
+Deno.test("tagged recovery never clears unassessed caption mentions", async () => {
+  const payload = await runTaggedRecoveryCoverageScenario({
+    caption: "Two hotels worth a trip. Photo by @creator.",
+    assessments: completeTaggedRecoveryAssessments(),
+  });
+
+  assertEquals(payload.outcome, "partial");
+  assertEquals(payload.failure_category, "grounding_incomplete");
+  assertEquals(
+    (payload.hints as Array<{ name: string }>).map((hint) => hint.name),
+    ["Alpha Hotel", "Bravo Hotel"],
+  );
 });
 
 Deno.test("profile enrichment failure is nonfatal to media and Gemini extraction", async () => {
@@ -772,6 +985,68 @@ Deno.test("admission RPC failure fails closed before paid provider work", async 
   assertEquals(finishCalls, 0);
 });
 
+Deno.test("missing service cleanup credentials fail closed before paid admission", async () => {
+  let admissionCalls = 0;
+  let providerCalls = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    providerCalls += 1;
+    throw new Error("paid provider must not run without cleanup credentials");
+  }, {
+    environment: { SUPABASE_SERVICE_ROLE_KEY: undefined },
+    onBegin: () => admissionCalls += 1,
+  });
+
+  const payload = await (await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  )).json();
+
+  assertEquals(payload.outcome, "fallback");
+  assertEquals(payload.failure_category, "configuration_unavailable");
+  assertEquals(admissionCalls, 0);
+  assertEquals(providerCalls, 0);
+});
+
+Deno.test("modern Supabase secret cleanup uses apikey without a bearer", async () => {
+  let finishCalls = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "secret-key-run",
+          status: "FAILED",
+        },
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }, {
+    environment: {
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      SUPABASE_SECRET_KEYS: JSON.stringify({ default: "sb_secret_server" }),
+    },
+    onFinish: (headers) => {
+      finishCalls += 1;
+      assertEquals(headers.get("apikey"), "sb_secret_server");
+      assertEquals(headers.has("authorization"), false);
+    },
+  });
+
+  await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  );
+
+  assertEquals(finishCalls, 1);
+});
+
 Deno.test("streamed request bodies are rejected as soon as they exceed the limit", async () => {
   let admissionCalls = 0;
   const bytes = new TextEncoder().encode("x".repeat(9_000));
@@ -805,6 +1080,18 @@ Deno.test("handler separates honest emptiness, uncertainty, and intentional excl
   const complete = await runOutcomeScenario([], true);
   assertEquals(complete.outcome, "no_places");
   assertEquals(complete.failure_category, null);
+
+  const unassessedCaption = await runOutcomeScenario(
+    [],
+    true,
+    { description: "Lunch at @hvojai." },
+  );
+  assertEquals(unassessedCaption.outcome, "partial");
+  assertEquals(unassessedCaption.hints, []);
+  assertEquals(
+    unassessedCaption.failure_category,
+    "grounding_incomplete",
+  );
 
   const rejected = await runOutcomeScenario([candidate({
     name: "Invented Place",
@@ -1903,6 +2190,447 @@ Deno.test("venue handles are prioritized ahead of early credits at the profile c
   assertEquals(usernames.includes("credit20"), false);
 });
 
+Deno.test("media profile tags stay scoped metadata and never become deterministic location fallbacks", () => {
+  const evidence = taggedCarouselEvidence(seventeenHotelProfiles.slice(0, 2));
+  const catalog = evidenceCatalog(evidence);
+  const profileTexts = catalog.texts.filter((text) =>
+    text.modality === "tagged_profile"
+  );
+
+  assertEquals(evidence.media[0].taggedProfiles, undefined);
+  assertEquals(
+    profileTexts.map((text) => ({
+      id: text.id,
+      text: text.text,
+      mediaID: text.mediaID,
+    })),
+    [{
+      id: "profile_tag:1:0",
+      text: "The Brando (@thebrandoresort)",
+      mediaID: "media:1",
+    }, {
+      id: "profile_tag:2:0",
+      text: "Shebara (@shebararesort)",
+      mediaID: "media:2",
+    }],
+  );
+  assertEquals(deterministicFallbackHints(catalog), []);
+});
+
+Deno.test("slide tags take profile-cap priority and fresh aliases tolerate display-name changes", () => {
+  const caption = [
+    "Lunch at @captionvenue",
+    "Photo by @creditone",
+    "Thanks to @credittwo",
+    "Partners: @creditthree",
+  ].join("\n");
+  const evidence = taggedCarouselEvidence(seventeenHotelProfiles, caption);
+  const usernames = prioritizedInstagramProfileUsernames(evidence);
+
+  assertEquals(
+    usernames.slice(0, 17),
+    seventeenHotelProfiles.map(([username]) => username),
+  );
+  assertEquals(usernames.length, 20);
+  assertEquals(usernames[17], "captionvenue");
+
+  const mergeEvidence = taggedCarouselEvidence([
+    ["alpha", "Alpha Café"],
+    ["bravo", "Bravo Hotel"],
+    ["conflict", "Embedded Identity"],
+  ]);
+  assertEquals(
+    mergeInstagramProfileAliases([{
+      username: "alpha",
+      fullName: "Alpha Cafe",
+    }, {
+      username: "conflict",
+      fullName: "Different Identity",
+    }], mergeEvidence),
+    [{
+      username: "alpha",
+      fullName: "Alpha Cafe",
+    }, {
+      username: "bravo",
+      fullName: "Bravo Hotel",
+    }, {
+      username: "conflict",
+      fullName: "Different Identity",
+    }],
+  );
+});
+
+Deno.test("a cover plus seventeen uniquely tagged hotel slides recovers seventeen ordered hints", () => {
+  const evidence = taggedCarouselEvidence(seventeenHotelProfiles);
+  const catalog = evidenceCatalog(evidence);
+  const ingestions = successfulCarouselIngestions(evidence);
+  const aliases = mergeInstagramProfileAliases([], evidence);
+  const context = postContext({
+    intent: "place_list",
+    declaredCount: 17,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const recovered = taggedProfileCandidates(
+    aliases,
+    catalog,
+    ingestions,
+    context,
+    ...taggedRecoveryModelConclusions(evidence),
+  );
+
+  assertEquals(recovered.length, 17);
+  assertEquals(
+    recovered.map((item) => item.name),
+    seventeenHotelProfiles.map(([, name]) => name),
+  );
+  assertEquals(
+    recovered.map((item) => item.itemIndex),
+    Array.from({ length: 17 }, (_, index) => index),
+  );
+  assertEquals(
+    recovered.map((item) => item.evidenceIds),
+    Array.from({ length: 17 }, (_, index) => [
+      `profile_tag:${index + 1}:0`,
+    ]),
+  );
+  assertEquals(
+    recovered.every((item) => item.modality === "tagged_profile"),
+    true,
+  );
+
+  const grounded = groundedHints(
+    recovered,
+    catalog,
+    ingestions,
+    150,
+    context,
+    aliases,
+  );
+  assertEquals(
+    grounded.hints.map((hint) => hint.name),
+    seventeenHotelProfiles.map(([, name]) => name),
+  );
+  assertEquals(
+    grounded.hints.every((hint) => hint.modality === "image_text"),
+    true,
+  );
+  assertEquals(grounded.expectedCount, 17);
+  assertEquals(grounded.missingExpectedCount, 0);
+});
+
+Deno.test("trusted hotel tags replace five bad model rows without duplicates or filler", () => {
+  const evidence = taggedCarouselEvidence(seventeenHotelProfiles);
+  const catalog = evidenceCatalog(evidence);
+  const ingestions = successfulCarouselIngestions(evidence);
+  const aliases = mergeInstagramProfileAliases([], evidence);
+  const context = postContext({
+    intent: "place_list",
+    declaredCount: 17,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const recovered = taggedProfileCandidates(
+    aliases,
+    catalog,
+    ingestions,
+    context,
+    ...taggedRecoveryModelConclusions(evidence),
+  );
+  const badModelRows = [
+    ["night", 0, "media:1"],
+    ["Lake St Clair", 10, "media:11"],
+    ["NIMMO BAY RESORT 1978 Broughton Blvd", 15, "media:16"],
+    ["NIMMO BAY RESORT British Columbia", 15, "media:16"],
+    ["Post Creator", 17, "media:17"],
+  ] as const;
+  const result = groundedHints(
+    [
+      ...recovered,
+      ...badModelRows.map(([name, itemIndex, evidenceID]) =>
+        candidate({
+          name,
+          sourceMention: name,
+          area: "",
+          itemIndex,
+          modality: "image_text",
+          evidenceIds: [evidenceID],
+        })
+      ),
+    ],
+    catalog,
+    ingestions,
+    150,
+    context,
+    aliases,
+  );
+
+  assertEquals(
+    result.hints.map((hint) => hint.name),
+    seventeenHotelProfiles.map(([, name]) => name),
+  );
+  assertEquals(
+    result.hints.filter((hint) => hint.name === "Nimmo Bay Resort").length,
+    1,
+  );
+  assertEquals(result.hints.some((hint) => hint.name === "night"), false);
+  assertEquals(
+    result.hints.some((hint) => hint.name === "Lake St Clair"),
+    false,
+  );
+  assertEquals(
+    result.hints.some((hint) => hint.name === "Pumphouse Point"),
+    true,
+  );
+});
+
+Deno.test("tagged recovery rejects an unrelated same-slide person tag", () => {
+  const evidence = taggedCarouselEvidence([
+    ["ava_stone", "Ava Stone"],
+    ["bravo_hotel", "Bravo Hotel"],
+  ]);
+  const aliases = mergeInstagramProfileAliases([], evidence);
+  const [candidates, assessments] = taggedRecoveryModelConclusions(evidence);
+  candidates[0] = {
+    ...candidates[0],
+    name: "Actual OCR Venue",
+    sourceMention: "Actual OCR Venue",
+  };
+
+  assertEquals(
+    taggedProfileCandidates(
+      aliases,
+      evidenceCatalog(evidence),
+      successfulCarouselIngestions(evidence),
+      postContext({
+        intent: "place_list",
+        declaredCount: 2,
+        declaredCountEvidenceIds: ["media:0"],
+      }),
+      candidates,
+      assessments,
+    ),
+    [],
+  );
+
+  const matchingCandidates = taggedRecoveryModelConclusions(evidence)[0];
+  const creatorAliases = aliases.map((alias, index) =>
+    index === 0
+      ? {
+        ...alias,
+        businessCategoryName: "Digital Creator",
+        isBusinessAccount: true,
+      }
+      : alias
+  );
+  assertEquals(
+    taggedProfileCandidates(
+      creatorAliases,
+      evidenceCatalog(evidence),
+      successfulCarouselIngestions(evidence),
+      postContext({
+        intent: "place_list",
+        declaredCount: 2,
+        declaredCountEvidenceIds: ["media:0"],
+      }),
+      matchingCandidates,
+      assessments,
+    ),
+    [],
+  );
+});
+
+Deno.test("tagged recovery accepts bounded OCR and profile-name corrections", () => {
+  const profiles = [
+    ["alpha_hotel", "Alpha Hotel"],
+    ["pumphousepoint", "Pumphouse Point"],
+  ] as const;
+  const evidence = taggedCarouselEvidence(profiles);
+  const [candidates, assessments] = taggedRecoveryModelConclusions(evidence);
+  candidates[0] = {
+    ...candidates[0],
+    name: "Alpha H0tel",
+    sourceMention: "Alpha H0tel",
+  };
+  candidates[1] = {
+    ...candidates[1],
+    name: "Pumphouse Pt.",
+    sourceMention: "Pumphouse Pt.",
+  };
+
+  const recovered = taggedProfileCandidates(
+    mergeInstagramProfileAliases([], evidence),
+    evidenceCatalog(evidence),
+    successfulCarouselIngestions(evidence),
+    postContext({
+      intent: "place_list",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["media:0"],
+    }),
+    candidates,
+    assessments,
+  );
+
+  assertEquals(recovered.map((item) => item.name), [
+    "Alpha Hotel",
+    "Pumphouse Point",
+  ]);
+});
+
+Deno.test("tagged-profile recovery fails closed outside the exact declared-list shape", () => {
+  const evidence = taggedCarouselEvidence(seventeenHotelProfiles);
+  const catalog = evidenceCatalog(evidence);
+  const ingestions = successfulCarouselIngestions(evidence);
+  const aliases = mergeInstagramProfileAliases([], evidence);
+  const validContext = postContext({
+    intent: "place_list",
+    declaredCount: 17,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const recover = (
+    testEvidence: AcquisitionEvidence,
+    testAliases = aliases,
+    testIngestions = ingestions,
+    context = validContext,
+  ) =>
+    taggedProfileCandidates(
+      testAliases,
+      evidenceCatalog(testEvidence),
+      testIngestions,
+      context,
+      ...taggedRecoveryModelConclusions(testEvidence),
+    );
+
+  assertEquals(
+    recover(
+      evidence,
+      aliases,
+      ingestions,
+      { ...validContext, intent: "unknown" },
+    ),
+    [],
+  );
+  assertEquals(
+    recover(
+      evidence,
+      aliases,
+      ingestions,
+      { ...validContext, declaredCount: 16 },
+    ),
+    [],
+  );
+  assertEquals(
+    recover(
+      evidence,
+      aliases,
+      ingestions,
+      { ...validContext, declaredCountEvidenceIds: ["profile_tag:1:0"] },
+    ),
+    [],
+  );
+  assertEquals(recover(evidence, aliases.slice(0, 16)), []);
+
+  const [acceptedCandidates, acceptedAssessments] =
+    taggedRecoveryModelConclusions(evidence);
+  const noPlaceAssessments = acceptedAssessments.map((assessment) =>
+    assessment.mediaEvidenceId === "media:1"
+      ? {
+        ...assessment,
+        disposition: "no_place_mentions" as const,
+        candidateItemIndexes: [],
+      }
+      : assessment
+  );
+  assertEquals(
+    taggedProfileCandidates(
+      aliases,
+      catalog,
+      ingestions,
+      validContext,
+      acceptedCandidates,
+      noPlaceAssessments,
+    ),
+    [],
+  );
+
+  const attributionCandidates = acceptedCandidates.map((item, index) =>
+    index === 0
+      ? {
+        ...item,
+        sourceMention: `@${seventeenHotelProfiles[0][0]}`,
+        evidenceIds: ["profile_tag:1:0"],
+        classification: "attribution" as const,
+      }
+      : item
+  );
+  assertEquals(
+    taggedProfileCandidates(
+      aliases,
+      catalog,
+      ingestions,
+      validContext,
+      attributionCandidates,
+      acceptedAssessments,
+    ),
+    [],
+  );
+
+  const photographerAliases = aliases.map((alias, index) =>
+    index === 0 ? { ...alias, businessCategoryName: "Photographer" } : alias
+  );
+  assertEquals(
+    taggedProfileCandidates(
+      photographerAliases,
+      catalog,
+      ingestions,
+      validContext,
+      acceptedCandidates,
+      acceptedAssessments,
+    ),
+    [],
+  );
+
+  const duplicateAliasNames = aliases.map((alias, index) =>
+    index === 1 ? { ...alias, fullName: aliases[0].fullName } : alias
+  );
+  assertEquals(recover(evidence, duplicateAliasNames), []);
+
+  const failedIngestions = ingestions.map((ingestion, index) =>
+    index === 4
+      ? { ...ingestion, status: "failed" as const, errorCode: "fetch_failed" }
+      : ingestion
+  );
+  assertEquals(recover(evidence, aliases, failedIngestions), []);
+
+  const multipleTags = structuredClone(evidence);
+  multipleTags.media[1].taggedProfiles?.push({
+    username: "second_profile",
+    fullName: "Second Profile",
+  });
+  assertEquals(recover(multipleTags), []);
+
+  const repeatedProfile = structuredClone(evidence);
+  repeatedProfile.media[17].taggedProfiles = [{
+    username: seventeenHotelProfiles[0][0],
+    fullName: seventeenHotelProfiles[0][1],
+  }];
+  assertEquals(recover(repeatedProfile), []);
+
+  const onePlace = taggedCarouselEvidence(seventeenHotelProfiles.slice(0, 1));
+  assertEquals(
+    taggedProfileCandidates(
+      mergeInstagramProfileAliases([], onePlace),
+      evidenceCatalog(onePlace),
+      successfulCarouselIngestions(onePlace),
+      postContext({
+        intent: "place_list",
+        declaredCount: 1,
+        declaredCountEvidenceIds: ["media:0"],
+      }),
+      ...taggedRecoveryModelConclusions(onePlace),
+    ),
+    [],
+  );
+});
+
 Deno.test("a profile alias and model venue dedupe across area and item-index differences", () => {
   const aliases = [{ username: "hvojai", fullName: "Hip Vegan" }];
   const catalog = evidenceCatalog({
@@ -2856,6 +3584,34 @@ Deno.test("declared primary counts exclude supporting itinerary rows", () => {
   assertEquals(result.excludedCount, 2);
 });
 
+Deno.test("grounding inspects the complete bounded handler candidate composition", () => {
+  const finalName = "Last Deterministic Alias";
+  const catalog = evidenceCatalog({
+    title: null,
+    caption: finalName,
+    taggedLocations: [],
+    media: [],
+  });
+  const candidates = Array.from(
+    { length: maximumGroundingCandidateInputs - 1 },
+    (_, index) =>
+      candidate({
+        name: `Rejected ${index}`,
+        sourceMention: `Rejected ${index}`,
+        evidenceIds: ["missing:evidence"],
+      }),
+  );
+  candidates.push(candidate({
+    name: finalName,
+    sourceMention: finalName,
+    evidenceIds: ["caption:0"],
+  }));
+
+  const result = groundedHints(candidates, catalog, [], 150);
+
+  assertEquals(result.hints.map((hint) => hint.name), [finalName]);
+});
+
 Deno.test("generic list titles ground counts but durations and slide counts do not", () => {
   const names = Array.from(
     { length: 11 },
@@ -3381,6 +4137,143 @@ async function runOutcomeScenario(
   )).json() as Record<string, unknown>;
 }
 
+function completeTaggedRecoveryAssessments(): Array<Record<string, unknown>> {
+  return [{
+    mediaEvidenceId: "media:0",
+    disposition: "no_place_mentions",
+    candidateItemIndexes: [],
+  }, {
+    mediaEvidenceId: "media:1",
+    disposition: "place_mentions",
+    candidateItemIndexes: [0],
+  }, {
+    mediaEvidenceId: "media:2",
+    disposition: "place_mentions",
+    candidateItemIndexes: [1],
+  }];
+}
+
+function taggedRecoveryModelConclusions(
+  evidence: AcquisitionEvidence,
+): [ModelCandidate[], ModelMediaAssessment[]] {
+  const candidates: ModelCandidate[] = [];
+  const assessments: ModelMediaAssessment[] = [];
+  for (const media of evidence.media) {
+    const profile = media.taggedProfiles?.length === 1
+      ? media.taggedProfiles[0]
+      : null;
+    if (!profile) {
+      assessments.push({
+        mediaEvidenceId: media.id,
+        disposition: "no_place_mentions",
+        candidateItemIndexes: [],
+      });
+      continue;
+    }
+    const itemIndex = candidates.length;
+    candidates.push(candidate({
+      name: profile.fullName ?? profile.username,
+      sourceMention: profile.fullName ?? `@${profile.username}`,
+      itemIndex,
+      modality: "image_text",
+      evidenceIds: [media.id],
+    }));
+    assessments.push({
+      mediaEvidenceId: media.id,
+      disposition: "place_mentions",
+      candidateItemIndexes: [itemIndex],
+    });
+  }
+  return [candidates, assessments];
+}
+
+async function runTaggedRecoveryCoverageScenario(options: {
+  assessments: Array<Record<string, unknown>>;
+  caption?: string;
+}): Promise<Record<string, unknown>> {
+  const imageURLs = [
+    "https://images.cdninstagram.com/media/coverage-cover.jpg",
+    "https://images.cdninstagram.com/media/coverage-alpha.jpg",
+    "https://images.cdninstagram.com/media/coverage-bravo.jpg",
+  ];
+  const context = postContext({
+    intent: "place_list",
+    declaredCount: 2,
+    declaredCountEvidenceIds: ["media:0"],
+  });
+  const modelCandidates = [
+    candidate({
+      name: "Alpha Hotel",
+      sourceMention: "Alpha Hotel",
+      itemIndex: 0,
+      modality: "image_text",
+      evidenceIds: ["media:1"],
+    }),
+    candidate({
+      name: "Bravo Hotel",
+      sourceMention: "Bravo Hotel",
+      itemIndex: 1,
+      modality: "image_text",
+      evidenceIds: ["media:2"],
+    }),
+  ];
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "coverage-post-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "coverage-post-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/coverage-post-dataset/items")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        ...(options.caption ? { description: options.caption } : {}),
+        childPosts: [{
+          displayUrl: imageURLs[0],
+        }, {
+          displayUrl: imageURLs[1],
+          taggedUsers: [{ username: "alpha_hotel", fullName: "Alpha Hotel" }],
+        }, {
+          displayUrl: imageURLs[2],
+          taggedUsers: [{ username: "bravo_hotel", fullName: "Bravo Hotel" }],
+        }],
+      }]);
+    }
+    if (url.includes("/v2/actors/apify~instagram-profile-scraper/runs")) {
+      return Response.json({
+        data: {
+          id: "coverage-profile-run",
+          status: "SUCCEEDED",
+          defaultDatasetId: "coverage-profile-dataset",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/coverage-profile-dataset/items")) {
+      return Response.json([]);
+    }
+    if (imageURLs.includes(url)) {
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      return Response.json(
+        geminiPayload(modelCandidates, context, options.assessments),
+      );
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  return await (await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  )).json() as Record<string, unknown>;
+}
+
 type TestFetcher = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -3400,6 +4293,7 @@ type RuntimeOptions = {
   };
   beginStatus?: number;
   finishStatus?: number;
+  environment?: Record<string, string | undefined>;
   onBegin?: (headers: Headers, body: unknown) => void;
   onFinish?: (headers: Headers, body: unknown) => void;
 };
@@ -3411,9 +4305,14 @@ function runtime(
   const values: Record<string, string> = {
     SUPABASE_URL: "https://project.supabase.co",
     SUPABASE_PUBLISHABLE_KEY: "publishable-key",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
     WANDER_APIFY_TOKEN: "apify-secret",
     WANDER_GEMINI_API_KEY: "gemini-secret",
   };
+  for (const [name, value] of Object.entries(options.environment ?? {})) {
+    if (value === undefined) delete values[name];
+    else values[name] = value;
+  }
   return {
     fetch: ((input, init) => {
       const url = String(input);
@@ -3434,7 +4333,9 @@ function runtime(
           },
         ]));
       }
-      if (url.endsWith("/rest/v1/rpc/finish_social_import_paid_work")) {
+      if (
+        url.endsWith("/rest/v1/rpc/finish_social_import_paid_work_service")
+      ) {
         const body = JSON.parse(String(init?.body ?? "{}"));
         options.onFinish?.(headers, body);
         if (options.finishStatus && options.finishStatus !== 200) {
@@ -3490,6 +4391,51 @@ function requiredSource(value: string): SocialSource {
   const source = parseSocialSource(value);
   if (!source) throw new Error(`invalid fixture source ${value}`);
   return source;
+}
+
+function taggedCarouselEvidence(
+  profiles: ReadonlyArray<readonly [string, string]>,
+  caption: string | null = null,
+): AcquisitionEvidence {
+  return {
+    title: null,
+    caption,
+    taggedLocations: [],
+    media: [
+      {
+        id: "media:0",
+        index: 0,
+        kind: "image",
+        url: "https://images.cdninstagram.com/media/hotel-cover.jpg",
+        thumbnailURL: null,
+        altText: "17 hotels worth traveling for",
+      },
+      ...profiles.map(([username, fullName], index) => ({
+        id: `media:${index + 1}`,
+        index: index + 1,
+        kind: "image" as const,
+        url: `https://images.cdninstagram.com/media/hotel-slide-${
+          index + 1
+        }.jpg`,
+        thumbnailURL: null,
+        altText: null,
+        taggedProfiles: [{ username, fullName }],
+      })),
+    ],
+  };
+}
+
+function successfulCarouselIngestions(
+  evidence: AcquisitionEvidence,
+): MediaIngestion[] {
+  return evidence.media.map((media) => ({
+    mediaID: media.id,
+    kind: media.kind,
+    status: "ok" as const,
+    byteCount: jpeg.byteLength,
+    mimeType: media.kind === "image" ? "image/jpeg" : "video/mp4",
+    errorCode: null,
+  }));
 }
 
 function candidate(overrides: Partial<ModelCandidate> = {}): ModelCandidate {
@@ -3548,16 +4494,27 @@ function geminiResponse(
   candidates: unknown[],
   context?: ModelPostContext,
 ): Response {
-  return Response.json(geminiPayload(candidates, context));
+  return Response.json(geminiPayload(
+    candidates,
+    context ?? postContext(),
+    [{
+      mediaEvidenceId: "media:0",
+      disposition: "no_place_mentions",
+      candidateItemIndexes: [],
+    }],
+  ));
 }
 
 function geminiPayload(
   candidates: unknown[],
   context?: ModelPostContext,
+  mediaAssessments?: unknown[],
 ): unknown {
   const payload = context === undefined
     ? { candidates }
-    : { postContext: context, candidates };
+    : mediaAssessments === undefined
+    ? { postContext: context, candidates }
+    : { postContext: context, candidates, mediaAssessments };
   return {
     candidates: [{
       content: { parts: [{ text: JSON.stringify(payload) }] },

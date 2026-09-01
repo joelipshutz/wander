@@ -776,6 +776,31 @@ final class PlaceImportParserTests: XCTestCase {
         XCTAssertEqual(seeds[0].areaHint, "Venice")
         XCTAssertEqual(seeds[0].sourceURLString, "https://www.instagram.com/reel/example/")
     }
+
+    func testPreservesInstagramShortcodeContainingDoubleHyphen() throws {
+        let sourceURL = "https://www.instagram.com/p/Db--aE4DIh1/"
+
+        let seeds = try PlaceImportParser.parse(source: .textNotes, text: sourceURL)
+
+        XCTAssertEqual(seeds.count, 1)
+        XCTAssertEqual(seeds[0].rawText, sourceURL)
+        XCTAssertEqual(seeds[0].sourceURLString, sourceURL)
+        XCTAssertNil(seeds[0].nameHint)
+        XCTAssertEqual(PlaceImportSourceDetector.source(for: seeds[0]), .instagram)
+    }
+
+    func testRepairsInstagramURLChangedBySmartTextInput() throws {
+        let seeds = try PlaceImportParser.parse(
+            source: .textNotes,
+            text: "Https://www.instagram.com/p/Db\u{2014}aE4DIh1/"
+        )
+
+        XCTAssertEqual(seeds.count, 1)
+        XCTAssertEqual(seeds[0].rawText, "https://www.instagram.com/p/Db--aE4DIh1/")
+        XCTAssertEqual(seeds[0].sourceURLString, "https://www.instagram.com/p/Db--aE4DIh1/")
+        XCTAssertNil(seeds[0].nameHint)
+        XCTAssertEqual(PlaceImportSourceDetector.source(for: seeds[0]), .instagram)
+    }
 }
 
 final class GoogleMapsSharedListParserTests: XCTestCase {

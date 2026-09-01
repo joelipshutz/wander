@@ -5,8 +5,10 @@ import type {
   EvidenceCatalog,
   EvidenceModality,
   InstagramProfileAlias,
+  InstagramTaggedProfile,
   MediaIngestion,
   ModelCandidate,
+  ModelMediaAssessment,
   ModelPostContext,
   PlaceHint,
 } from "./types.ts";
@@ -18,9 +20,11 @@ const intentionalExclusionClassifications = new Set([
   "not_a_place",
 ]);
 export const minimumGroundedConfidence = 0.55;
+export const maximumGroundingCandidateInputs = 340;
 const acceptedModalities = new Set<EvidenceModality>([
   "caption",
   "tagged_location",
+  "tagged_profile",
   "alt_text",
   "image_text",
   "video_text",
@@ -200,7 +204,22 @@ export function evidenceCatalog(
       mediaID: null,
     });
   }
-  for (const media of evidence.media) {
+  for (const [mediaPosition, media] of evidence.media.entries()) {
+    for (
+      const [profilePosition, profile] of normalizedTaggedProfiles(
+        media.taggedProfiles,
+      ).entries()
+    ) {
+      texts.push({
+        id: `profile_tag:${mediaPosition}:${profilePosition}`,
+        modality: "tagged_profile",
+        text: profile.fullName
+          ? `${profile.fullName} (@${profile.username})`
+          : `@${profile.username}`,
+        area: null,
+        mediaID: media.id,
+      });
+    }
     if (!media.altText) continue;
     texts.push({
       id: `alt_text:${media.index}`,
@@ -244,7 +263,9 @@ export function groundedHints(
   let excludedCount = 0;
   let intentionalExcludedCount = 0;
 
-  for (const candidate of candidates.slice(0, 320)) {
+  for (
+    const candidate of candidates.slice(0, maximumGroundingCandidateInputs)
+  ) {
     const sourceMention = cleanString(candidate.sourceMention, 200);
     const classification = promotedClassification(
       candidate.classification,
@@ -319,7 +340,8 @@ export function groundedHints(
       area: attestedArea ?? (usesGlobalArea ? context.globalArea : null),
       classification: classification as "destination" | "itinerary",
       // The iOS contract treats accessibility text as image-derived text.
-      modality: candidate.modality === "alt_text"
+      modality: candidate.modality === "alt_text" ||
+          candidate.modality === "tagged_profile"
         ? "image_text"
         : candidate.modality,
       evidence_ids: usesGlobalArea
@@ -938,7 +960,7 @@ export function deterministicFallbackHints(
 
   for (
     const text of catalog.texts.filter((item) =>
-      item.modality === "tagged_location"
+      item.modality === "tagged_location" && item.mediaID === null
     )
   ) {
     const name = cleanString(text.text, 160);
@@ -1152,7 +1174,8 @@ function removeHintIndexes(
 }
 
 function textualModality(modality: EvidenceModality): boolean {
-  return ["caption", "tagged_location", "alt_text"].includes(modality);
+  return ["caption", "tagged_location", "tagged_profile", "alt_text"]
+    .includes(modality);
 }
 
 function textAttestedArea(
@@ -1190,7 +1213,11 @@ function groundedCandidateName(
   profileAliasNames: Map<string, string>,
   requiresCaptionVenueGrammar: boolean,
 ): string | null {
-  if (["caption", "tagged_location", "alt_text"].includes(modality)) {
+  if (
+    ["caption", "tagged_location", "tagged_profile", "alt_text"].includes(
+      modality,
+    )
+  ) {
     const handle = exactHandle(sourceMention);
     const hasExactEvidence = evidenceIDs.some((id) => {
       const evidence = textByID.get(id);
@@ -1364,6 +1391,367 @@ export function prioritizedCaptionProfileUsernames(caption: string): string[] {
   return [...new Set([...preferred, ...all])].slice(0, 20);
 }
 
+export function prioritizedInstagramProfileUsernames(
+  evidence: AcquisitionEvidence,
+): string[] {
+  const tagged = evidence.media.flatMap((media) =>
+    normalizedTaggedProfiles(media.taggedProfiles).map((profile) =>
+      profile.username
+    )
+  );
+  const caption = evidence.caption
+    ? prioritizedCaptionProfileUsernames(evidence.caption)
+    : [];
+  return [...new Set([...tagged, ...caption])].slice(0, 20);
+}
+
+export function mergeInstagramProfileAliases(
+  providerAliases: InstagramProfileAlias[],
+  evidence: AcquisitionEvidence,
+): InstagramProfileAlias[] {
+  const providerNames = profileAliasNameMap(providerAliases);
+  const providerMetadata = profileAliasMetadataMap(providerAliases);
+  const taggedNames = trustedTaggedProfileNameMap(evidence);
+  return prioritizedInstagramProfileUsernames(evidence).flatMap((username) => {
+    const providerName = providerNames.get(username);
+    const taggedName = taggedNames.get(username);
+    // The bounded profile lookup requested this exact normalized username and
+    // is fresher than the embedded post snapshot. Prefer its current display
+    // name; the child name remains a safe fallback when enrichment is absent.
+    const fullName = providerName ?? taggedName;
+    const metadata = providerName ? providerMetadata.get(username) : undefined;
+    return fullName
+      ? [{
+        username,
+        fullName,
+        ...(metadata?.businessCategoryName !== undefined
+          ? { businessCategoryName: metadata.businessCategoryName }
+          : {}),
+        ...(metadata?.isBusinessAccount !== undefined
+          ? { isBusinessAccount: metadata.isBusinessAccount }
+          : {}),
+      }]
+      : [];
+  });
+}
+
+export function taggedProfileCandidates(
+  aliases: InstagramProfileAlias[],
+  catalog: EvidenceCatalog,
+  ingestions: MediaIngestion[],
+  postContext: ModelPostContext | undefined,
+  modelCandidates: ModelCandidate[] = [],
+  mediaAssessments: ModelMediaAssessment[] = [],
+): ModelCandidate[] {
+  const textByID = new Map(catalog.texts.map((item) => [item.id, item]));
+  const mediaByID = new Map(catalog.media.map((item) => [item.id, item]));
+  const ingestionByID = new Map(ingestions.map((item) => [item.mediaID, item]));
+  const context = groundedPostContext(
+    postContext,
+    textByID,
+    mediaByID,
+    ingestionByID,
+  );
+  if (
+    context.intent !== "place_list" || context.declaredCount === null ||
+    context.declaredCount < 2
+  ) return [];
+
+  const assessmentsByMedia = new Map<string, ModelMediaAssessment>();
+  const duplicatedAssessments = new Set<string>();
+  for (const assessment of mediaAssessments) {
+    if (assessmentsByMedia.has(assessment.mediaEvidenceId)) {
+      duplicatedAssessments.add(assessment.mediaEvidenceId);
+      continue;
+    }
+    assessmentsByMedia.set(assessment.mediaEvidenceId, assessment);
+  }
+  const aliasMetadata = profileAliasMetadataMap(aliases);
+  const aliasNames = profileAliasNameMap(aliases);
+
+  const taggedMedia: Array<{
+    username: string;
+    evidenceID: string;
+    resolvedName: string;
+  }> = [];
+  for (const media of catalog.media) {
+    const profiles = normalizedTaggedProfiles(media.taggedProfiles);
+    if (profiles.length === 0) continue;
+    if (profiles.length !== 1 || ingestionByID.get(media.id)?.status !== "ok") {
+      return [];
+    }
+    const profile = profiles[0];
+    const evidence = catalog.texts.find((item) =>
+      item.mediaID === media.id && item.modality === "tagged_profile" &&
+      item.id.startsWith("profile_tag:") &&
+      containsExactHandle(item.text, profile.username)
+    );
+    if (!evidence) return [];
+    const resolvedName = aliasNames.get(profile.username);
+    if (!resolvedName) return [];
+    const assessment = assessmentsByMedia.get(media.id);
+    if (
+      !assessment || duplicatedAssessments.has(media.id) ||
+      assessment.disposition !== "place_mentions" ||
+      profileCategoryRejectsPlace(aliasMetadata.get(profile.username)) ||
+      modelRejectsTaggedProfile(
+        profile.username,
+        evidence.id,
+        modelCandidates,
+      ) ||
+      !assessment.candidateItemIndexes.some((itemIndex) =>
+        modelCandidates.some((candidate) =>
+          candidate.itemIndex === itemIndex &&
+          acceptedClassifications.has(candidate.classification) &&
+          modelCandidateCitesMedia(candidate, media.id, catalog) &&
+          modelCandidateCorroboratesTaggedProfile(
+            candidate,
+            profile,
+            resolvedName,
+            evidence.id,
+          )
+        )
+      )
+    ) return [];
+    taggedMedia.push({
+      username: profile.username,
+      evidenceID: evidence.id,
+      resolvedName,
+    });
+  }
+  if (
+    taggedMedia.length !== context.declaredCount ||
+    new Set(taggedMedia.map((item) => item.username)).size !==
+      context.declaredCount
+  ) return [];
+
+  const resolvedNames = taggedMedia.map((item) => item.resolvedName);
+  if (
+    new Set(
+      resolvedNames.map((name) => normalizedValue(name)),
+    ).size !== context.declaredCount
+  ) return [];
+  return taggedMedia.map((item, itemIndex) => ({
+    name: resolvedNames[itemIndex],
+    sourceMention: `@${item.username}`,
+    area: "",
+    entityType: "poi",
+    itemIndex,
+    classification: "destination",
+    modality: "tagged_profile",
+    evidenceIds: [item.evidenceID],
+    confidence: 0.98,
+    startMs: -1,
+    endMs: -1,
+  }));
+}
+
+function modelCandidateCorroboratesTaggedProfile(
+  candidate: ModelCandidate,
+  profile: InstagramTaggedProfile,
+  resolvedName: string,
+  profileEvidenceID: string,
+): boolean {
+  if (
+    candidate.evidenceIds.includes(profileEvidenceID) ||
+    exactHandle(candidate.sourceMention)?.toLocaleLowerCase("en-US") ===
+      profile.username
+  ) return true;
+
+  const candidateNames = [candidate.name, candidate.sourceMention].filter(
+    (value, index, values) =>
+      exactHandle(value) === null && values.indexOf(value) === index,
+  );
+  const profileNames = [resolvedName, profile.fullName, profile.username]
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
+  return candidateNames.some((candidateName) =>
+    profileNames.some((profileName) =>
+      boundedSemanticNameMatch(candidateName, profileName)
+    )
+  );
+}
+
+function boundedSemanticNameMatch(left: string, right: string): boolean {
+  const leftWords = semanticNameWords(left);
+  const rightWords = semanticNameWords(right);
+  if (leftWords.length === 0 || rightWords.length === 0) return false;
+  const leftIdentity = leftWords.join("");
+  const rightIdentity = rightWords.join("");
+  if (leftIdentity === rightIdentity) return true;
+
+  const shorterWords = leftWords.length <= rightWords.length
+    ? leftWords
+    : rightWords;
+  const longerWords = leftWords.length <= rightWords.length
+    ? rightWords
+    : leftWords;
+  if (
+    // Containment is only identity-like for a sufficiently specific core.
+    // Two-word person/creator names are too easy to find inside an unrelated
+    // venue line (for example, "Ava Stone Cafe").
+    shorterWords.length >= 3 &&
+    longerWords.length - shorterWords.length <= 2 &&
+    containsWordSequence(longerWords, shorterWords)
+  ) return true;
+
+  const maximumLength = Math.max(leftIdentity.length, rightIdentity.length);
+  const maximumDistance = maximumLength <= 8 ? 1 : maximumLength <= 14 ? 2 : 3;
+  const distance = boundedEditDistance(
+    leftIdentity,
+    rightIdentity,
+    maximumDistance,
+  );
+  return distance <= maximumDistance &&
+    distance / maximumLength <= 0.2;
+}
+
+function semanticNameWords(value: string): string[] {
+  const omitted = new Set(["a", "an", "at", "the"]);
+  const equivalents = new Map([
+    ["pt", "point"],
+  ]);
+  return words(value)
+    .filter((word) => !omitted.has(word))
+    .map((word) => equivalents.get(word) ?? word);
+}
+
+function containsWordSequence(haystack: string[], needle: string[]): boolean {
+  if (needle.length > haystack.length) return false;
+  for (let start = 0; start <= haystack.length - needle.length; start += 1) {
+    if (needle.every((word, offset) => haystack[start + offset] === word)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function boundedEditDistance(
+  left: string,
+  right: string,
+  limit: number,
+): number {
+  if (Math.abs(left.length - right.length) > limit) return limit + 1;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitution = previous[rightIndex - 1] +
+        (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
+      const distance = Math.min(
+        previous[rightIndex] + 1,
+        current[rightIndex - 1] + 1,
+        substitution,
+      );
+      current.push(distance);
+      rowMinimum = Math.min(rowMinimum, distance);
+    }
+    if (rowMinimum > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+function modelRejectsTaggedProfile(
+  username: string,
+  profileEvidenceID: string,
+  candidates: ModelCandidate[],
+): boolean {
+  const explicit = candidates.filter((candidate) =>
+    candidate.evidenceIds.includes(profileEvidenceID) ||
+    exactHandle(candidate.sourceMention)?.toLocaleLowerCase("en-US") ===
+      username
+  );
+  return explicit.some((candidate) =>
+    !acceptedClassifications.has(candidate.classification)
+  );
+}
+
+function modelCandidateCitesMedia(
+  candidate: ModelCandidate,
+  mediaID: string,
+  catalog: EvidenceCatalog,
+): boolean {
+  return candidate.evidenceIds.some((evidenceID) => {
+    if (evidenceID === mediaID) return true;
+    const text = catalog.texts.find((item) => item.id === evidenceID);
+    if (text?.mediaID === mediaID) return true;
+    if (!evidenceID.startsWith(`${mediaID}.`)) return false;
+    return /^\.(?:\d{1,3}:){1,2}\d{1,3}(?:\.\d{1,3})?$/u.test(
+      evidenceID.slice(mediaID.length),
+    );
+  });
+}
+
+function profileCategoryRejectsPlace(
+  alias: InstagramProfileAlias | undefined,
+): boolean {
+  const category = cleanString(alias?.businessCategoryName, 120)
+    ?.normalize("NFKC")
+    .toLocaleLowerCase("en-US");
+  if (!category) return false;
+  return /(?:actor|artist|athlete|author|blogger|creator|entrepreneur|influencer|journalist|model|musician|personal\s+blog|photograph|public\s+figure)/u
+    .test(category);
+}
+
+function trustedTaggedProfileNameMap(
+  evidence: AcquisitionEvidence,
+): Map<string, string> {
+  const names = new Map<string, Map<string, string>>();
+  for (const media of evidence.media) {
+    for (const profile of normalizedTaggedProfiles(media.taggedProfiles)) {
+      if (!profile.fullName) continue;
+      const identity = normalizedValue(profile.fullName);
+      if (!identity) continue;
+      const values = names.get(profile.username) ?? new Map<string, string>();
+      if (!values.has(identity)) values.set(identity, profile.fullName);
+      names.set(profile.username, values);
+    }
+  }
+  return new Map(
+    [...names.entries()].flatMap(([username, values]) =>
+      values.size === 1
+        ? [[username, values.values().next().value as string] as const]
+        : []
+    ),
+  );
+}
+
+function normalizedTaggedProfiles(
+  values: InstagramTaggedProfile[] | undefined,
+): InstagramTaggedProfile[] {
+  const profiles = new Map<string, InstagramTaggedProfile>();
+  const conflictingNames = new Set<string>();
+  for (const value of values?.slice(0, 20) ?? []) {
+    const username = cleanString(value.username, 64)?.toLocaleLowerCase(
+      "en-US",
+    );
+    if (
+      !username ||
+      !/^[a-z0-9_](?:[a-z0-9_]|\.(?=[a-z0-9_])){0,29}$/u.test(username)
+    ) continue;
+    const fullName = cleanString(value.fullName, 160);
+    const existing = profiles.get(username);
+    if (!existing) {
+      profiles.set(username, { username, fullName });
+      continue;
+    }
+    if (!existing.fullName && fullName && !conflictingNames.has(username)) {
+      profiles.set(username, { username, fullName });
+      continue;
+    }
+    if (
+      existing.fullName && fullName &&
+      normalizedValue(existing.fullName) !== normalizedValue(fullName)
+    ) {
+      conflictingNames.add(username);
+      profiles.set(username, { username, fullName: null });
+    }
+  }
+  return [...profiles.values()];
+}
+
 export function profileAliasCandidates(
   aliases: InstagramProfileAlias[],
   catalog: EvidenceCatalog,
@@ -1442,6 +1830,38 @@ function profileAliasNameMap(
     names.set(username, fullName);
   }
   return names;
+}
+
+function profileAliasMetadataMap(
+  aliases: InstagramProfileAlias[],
+): Map<string, InstagramProfileAlias> {
+  const acceptedNames = profileAliasNameMap(aliases);
+  const metadata = new Map<string, InstagramProfileAlias>();
+  for (const alias of aliases.slice(0, 20)) {
+    const username = cleanString(alias.username, 64)?.toLocaleLowerCase(
+      "en-US",
+    );
+    const fullName = cleanString(alias.fullName, 160);
+    if (!username || !fullName || acceptedNames.get(username) !== fullName) {
+      continue;
+    }
+    metadata.set(username, {
+      username,
+      fullName,
+      ...(cleanString(alias.businessCategoryName, 120)
+        ? {
+          businessCategoryName: cleanString(
+            alias.businessCategoryName,
+            120,
+          ),
+        }
+        : {}),
+      ...(typeof alias.isBusinessAccount === "boolean"
+        ? { isBusinessAccount: alias.isBusinessAccount }
+        : {}),
+    });
+  }
+  return metadata;
 }
 
 function profileAliasSupportsName(

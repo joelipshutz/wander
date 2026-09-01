@@ -10,6 +10,7 @@ import type {
   AcquiredMedia,
   AcquisitionEvidence,
   InstagramProfileAlias,
+  InstagramTaggedProfile,
   RuntimeDependencies,
   SocialSource,
   TaggedLocation,
@@ -263,7 +264,10 @@ export async function acquireInstagramProfileAliases(
   );
   datasetURL.searchParams.set("clean", "true");
   datasetURL.searchParams.set("format", "json");
-  datasetURL.searchParams.set("fields", "username,fullName");
+  datasetURL.searchParams.set(
+    "fields",
+    "username,fullName,businessCategoryName,isBusinessAccount",
+  );
   datasetURL.searchParams.set(
     "limit",
     String(maximumInstagramProfileAliases),
@@ -304,7 +308,18 @@ export function normalizeInstagramProfileAliases(
       continue;
     }
     if (duplicated.has(username)) continue;
-    aliases.set(username, { username, fullName });
+    const businessCategoryName = cleanString(
+      record.businessCategoryName,
+      120,
+    );
+    aliases.set(username, {
+      username,
+      fullName,
+      ...(businessCategoryName ? { businessCategoryName } : {}),
+      ...(typeof record.isBusinessAccount === "boolean"
+        ? { isBusinessAccount: record.isBusinessAccount }
+        : {}),
+    });
   }
   return [...aliases.values()];
 }
@@ -665,6 +680,7 @@ function normalizeRecord(record: Record<string, unknown>): AcquisitionEvidence {
     );
   }
 
+  mergeChildMediaMetadata(pending, orderedChildren);
   pending.sort((left, right) => left.index - right.index);
   const media = pending.slice(0, 150).map((item, index) => ({
     ...item,
@@ -700,7 +716,9 @@ function topLevelMediaForRecord(
     });
   }
 
-  for (const values of [record.images, record.photos]) {
+  for (
+    const values of [record.carouselImages, record.images, record.photos]
+  ) {
     for (const [index, value] of arrayValue(values).entries()) {
       const item = asRecord(value);
       addMedia(pending, {
@@ -797,6 +815,7 @@ function orderedChildMedia(
         url: video ?? image,
         thumbnailURL: cleanString(video, 4_096) ? image : null,
         altText: item.alt ?? item.altText ?? item.accessibility_caption,
+        taggedProfiles: instagramTaggedProfiles(item),
       });
     }
     if (media.length > 0) return media;
@@ -807,18 +826,29 @@ function orderedChildMedia(
 function declaredChildMediaCount(
   record: Record<string, unknown>,
 ): number | null {
+  const counts = [
+    record.childPostsCount,
+    record.child_posts_count,
+    record.carouselImageCount,
+    record.carouselMediaCount,
+    record.carousel_media_count,
+  ].map(numberValue).filter((value): value is number =>
+    value !== null && Number.isInteger(value) && value > 0
+  );
   for (
-    const value of [
-      record.childPostsCount,
-      record.child_posts_count,
-      record.carouselMediaCount,
-      record.carousel_media_count,
+    const values of [
+      record.post_content,
+      record.postContent,
+      record.carouselImages,
+      record.images,
+      record.photos,
+      record.slideshowImageLinks,
     ]
   ) {
-    const count = numberValue(value);
-    if (count !== null && Number.isInteger(count) && count > 0) return count;
+    const length = arrayValue(values).length;
+    if (length > 0) counts.push(length);
   }
-  return null;
+  return counts.length > 0 ? Math.max(...counts) : null;
 }
 
 function taggedLocations(record: Record<string, unknown>): TaggedLocation[] {
@@ -846,6 +876,7 @@ function addMedia(
     url: unknown;
     thumbnailURL: unknown;
     altText: unknown;
+    taggedProfiles?: InstagramTaggedProfile[];
   },
 ): void {
   const url = mediaURL(value.url);
@@ -856,7 +887,79 @@ function addMedia(
     url,
     thumbnailURL: mediaURL(value.thumbnailURL),
     altText: cleanString(value.altText, 2_000),
+    ...(value.taggedProfiles && value.taggedProfiles.length > 0
+      ? { taggedProfiles: value.taggedProfiles }
+      : {}),
   });
+}
+
+function mergeChildMediaMetadata(
+  media: Array<Omit<AcquiredMedia, "id">>,
+  children: Array<Omit<AcquiredMedia, "id">>,
+): void {
+  const childrenByURL = new Map(children.map((item) => [item.url, item]));
+  for (const [index, item] of media.entries()) {
+    const child = childrenByURL.get(item.url);
+    if (!child) continue;
+    media[index] = {
+      ...item,
+      altText: item.altText ?? child.altText,
+      ...(child.taggedProfiles && child.taggedProfiles.length > 0
+        ? { taggedProfiles: child.taggedProfiles }
+        : {}),
+    };
+  }
+}
+
+function instagramTaggedProfiles(
+  record: Record<string, unknown>,
+): InstagramTaggedProfile[] {
+  const profiles = new Map<string, InstagramTaggedProfile>();
+  const conflictingNames = new Set<string>();
+  for (
+    const value of arrayValue(record.taggedUsers ?? record.tagged_users).slice(
+      0,
+      maximumInstagramProfileAliases,
+    )
+  ) {
+    const profile = asRecord(value);
+    const user = asRecord(profile?.user);
+    const username = normalizedInstagramUsername(
+      profile?.username ?? profile?.userName ?? profile?.user_name ??
+        user?.username ?? user?.userName ?? user?.user_name,
+    );
+    if (!username) continue;
+    const fullName = cleanString(
+      profile?.fullName ?? profile?.full_name ?? user?.fullName ??
+        user?.full_name,
+      160,
+    );
+    const existing = profiles.get(username);
+    if (!existing) {
+      profiles.set(username, { username, fullName });
+      continue;
+    }
+    if (!existing.fullName && fullName && !conflictingNames.has(username)) {
+      profiles.set(username, { username, fullName });
+      continue;
+    }
+    if (
+      existing.fullName && fullName &&
+      normalizedProfileName(existing.fullName) !==
+        normalizedProfileName(fullName)
+    ) {
+      conflictingNames.add(username);
+      profiles.set(username, { username, fullName: null });
+    }
+  }
+  return [...profiles.values()];
+}
+
+function normalizedProfileName(value: string): string {
+  return value.normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("en-US")
+    .match(/[\p{L}\p{N}]+/gu)?.join("") ?? "";
 }
 
 function sourceValues(record: Record<string, unknown>): string[] {

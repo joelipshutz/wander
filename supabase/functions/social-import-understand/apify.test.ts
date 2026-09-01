@@ -144,6 +144,97 @@ Deno.test("a partial childPosts tail does not suppress a complete declared carou
   );
 });
 
+Deno.test("official carousel aliases preserve a cover plus 17 slides", () => {
+  const slideURLs = Array.from(
+    { length: 18 },
+    (_, index) =>
+      `https://images.cdninstagram.com/media/official-carousel-${index}.jpg`,
+  );
+  const evidence = normalizeApifyDataset([{
+    inputUrl: instagramURL,
+    type: "Sidecar",
+    productType: "carousel_container",
+    displayUrl: slideURLs[0],
+    childPostsCount: 17,
+    carouselImageCount: 18,
+    carouselImages: slideURLs,
+    taggedUsers: [{ username: "cover_creator", fullName: "Cover Creator" }],
+    childPosts: slideURLs.slice(1).map((url, index) => ({
+      type: "Image",
+      displayUrl: url,
+      alt: `Hotel slide ${index + 1}`,
+      taggedUsers: [{
+        username: `hotel_${index + 1}`,
+        fullName: `Hotel ${index + 1}`,
+      }],
+    })),
+  }], source());
+
+  assertEquals(evidence.media.map((item) => item.url), slideURLs);
+  assertEquals(
+    evidence.media.map((item) => item.index),
+    Array.from({ length: 18 }, (_, index) => index),
+  );
+  assertEquals(
+    evidence.media.map((item) => item.id),
+    Array.from({ length: 18 }, (_, index) => `media:${index}`),
+  );
+  assertEquals(evidence.media[0].taggedProfiles, undefined);
+  assertEquals(
+    evidence.media.slice(1).map((item) => item.taggedProfiles),
+    Array.from({ length: 17 }, (_, index) => [{
+      username: `hotel_${index + 1}`,
+      fullName: `Hotel ${index + 1}`,
+    }]),
+  );
+  assertEquals(
+    evidence.media.slice(1).map((item) => item.altText),
+    Array.from({ length: 17 }, (_, index) => `Hotel slide ${index + 1}`),
+  );
+});
+
+Deno.test("child tagged profiles are cleaned deduplicated and never inherited from the post", () => {
+  const firstURL = "https://images.cdninstagram.com/media/tagged-first.jpg";
+  const secondURL = "https://images.cdninstagram.com/media/tagged-second.jpg";
+  const evidence = normalizeApifyDataset([{
+    inputUrl: instagramURL,
+    taggedUsers: [{ username: "post_creator", fullName: "Post Creator" }],
+    childPosts: [{
+      displayUrl: firstURL,
+      taggedUsers: [
+        { username: "Valid.Venue", fullName: "  Valid Venue  " },
+        { username: "valid.venue", full_name: "Valid Venue" },
+        { username: "missing_name" },
+        { username: "conflict", fullName: "First Identity" },
+        { username: "conflict", fullName: "Different Identity" },
+        { username: "@invalid", fullName: "Invalid" },
+        { username: "invalid..dots", fullName: "Invalid" },
+      ],
+    }, {
+      displayUrl: secondURL,
+      tagged_users: [{
+        user: { username: "nested_venue", full_name: "Nested Venue" },
+      }],
+    }],
+  }], source());
+
+  assertEquals(evidence.media.map((item) => item.taggedProfiles), [[
+    { username: "valid.venue", fullName: "Valid Venue" },
+    { username: "missing_name", fullName: null },
+    { username: "conflict", fullName: null },
+  ], [
+    { username: "nested_venue", fullName: "Nested Venue" },
+  ]]);
+  assertEquals(
+    evidence.media.some((item) =>
+      item.taggedProfiles?.some((profile) =>
+        profile.username === "post_creator"
+      )
+    ),
+    false,
+  );
+});
+
 Deno.test("top-level media remains a fallback for unusable children", () => {
   const evidence = normalizeApifyDataset([{
     inputUrl: instagramURL,
@@ -569,7 +660,7 @@ Deno.test("terminal success never aborts, including when dataset retrieval fails
   );
 });
 
-Deno.test("profile enrichment is capped, field-limited, and returns identity aliases only", async () => {
+Deno.test("profile enrichment is capped and retains bounded place-relevant metadata", async () => {
   const calls: ObservedCall[] = [];
   const dependencies = runtime((input, init) => {
     const call = observe(input, init);
@@ -590,6 +681,8 @@ Deno.test("profile enrichment is capped, field-limited, and returns identity ali
       return Response.json([{
         username: "hvojai",
         fullName: "Hip Vegan",
+        businessCategoryName: "Vegetarian/Vegan Restaurant",
+        isBusinessAccount: true,
         biography: "must not be retained",
         externalUrl: "https://private.example",
       }]);
@@ -604,7 +697,12 @@ Deno.test("profile enrichment is capped, field-limited, and returns identity ali
     dependencies,
   );
 
-  assertEquals(result, [{ username: "hvojai", fullName: "Hip Vegan" }]);
+  assertEquals(result, [{
+    username: "hvojai",
+    fullName: "Hip Vegan",
+    businessCategoryName: "Vegetarian/Vegan Restaurant",
+    isBusinessAccount: true,
+  }]);
   const start = calls[0];
   assertEquals(start.url.searchParams.get("waitForFinish"), "0");
   assertEquals(start.url.searchParams.get("timeout"), "18");
@@ -618,7 +716,10 @@ Deno.test("profile enrichment is capped, field-limited, and returns identity ali
     includeAboutSection: false,
   });
   const dataset = calls[1];
-  assertEquals(dataset.url.searchParams.get("fields"), "username,fullName");
+  assertEquals(
+    dataset.url.searchParams.get("fields"),
+    "username,fullName,businessCategoryName,isBusinessAccount",
+  );
   assertEquals(
     dataset.url.searchParams.get("limit"),
     String(maximumInstagramProfileAliases),

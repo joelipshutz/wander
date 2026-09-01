@@ -331,8 +331,13 @@ Deno.test("handler threads request cancellation through media and still finishes
         admission_id: "10000000-0000-4000-8000-000000000001",
       }]);
     }
-    if (url.endsWith("/rest/v1/rpc/finish_social_import_paid_work")) {
+    if (
+      url.endsWith("/rest/v1/rpc/finish_social_import_paid_work_service")
+    ) {
       finishCount += 1;
+      const headers = new Headers(init?.headers);
+      assertEquals(headers.get("apikey"), "service-role-key");
+      assertEquals(headers.get("authorization"), "Bearer service-role-key");
       return Response.json(true);
     }
     if (url.includes("/v2/actors/")) {
@@ -366,6 +371,7 @@ Deno.test("handler threads request cancellation through media and still finishes
       ({
         SUPABASE_URL: "https://project.supabase.co",
         SUPABASE_PUBLISHABLE_KEY: "publishable-key",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
         WANDER_APIFY_TOKEN: "apify-secret",
         WANDER_GEMINI_API_KEY: "gemini-secret",
       })[name],

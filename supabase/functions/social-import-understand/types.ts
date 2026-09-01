@@ -14,6 +14,11 @@ export type TaggedLocation = {
   area: string | null;
 };
 
+export type InstagramTaggedProfile = {
+  username: string;
+  fullName: string | null;
+};
+
 export type AcquiredMedia = {
   id: string;
   index: number;
@@ -21,6 +26,7 @@ export type AcquiredMedia = {
   url: string;
   thumbnailURL: string | null;
   altText: string | null;
+  taggedProfiles?: InstagramTaggedProfile[];
 };
 
 export type AcquisitionEvidence = {
@@ -33,14 +39,20 @@ export type AcquisitionEvidence = {
 export type EvidenceModality =
   | "caption"
   | "tagged_location"
+  | "tagged_profile"
   | "alt_text"
   | "image_text"
   | "video_text"
   | "speech";
 
+export type PublicEvidenceModality = Exclude<
+  EvidenceModality,
+  "tagged_profile"
+>;
+
 export type EvidenceText = {
   id: string;
-  modality: "caption" | "tagged_location" | "alt_text";
+  modality: "caption" | "tagged_location" | "tagged_profile" | "alt_text";
   text: string;
   area: string | null;
   mediaID: string | null;
@@ -54,6 +66,8 @@ export type EvidenceCatalog = {
 export type InstagramProfileAlias = {
   username: string;
   fullName: string;
+  businessCategoryName?: string | null;
+  isBusinessAccount?: boolean | null;
 };
 
 export type MediaIngestion = {
@@ -86,6 +100,12 @@ export type ModelCandidate = {
   endMs: number;
 };
 
+export type ModelMediaAssessment = {
+  mediaEvidenceId: string;
+  disposition: "place_mentions" | "no_place_mentions";
+  candidateItemIndexes: number[];
+};
+
 export type ModelPostContext = {
   intent: "place_list" | "geography_list" | "mixed" | "unknown";
   declaredCount: number;
@@ -98,7 +118,7 @@ export type PlaceHint = {
   name: string;
   area: string | null;
   classification: "destination" | "itinerary";
-  modality: EvidenceModality;
+  modality: PublicEvidenceModality;
   evidence_ids: string[];
   confidence: number;
   start_ms: number | null;

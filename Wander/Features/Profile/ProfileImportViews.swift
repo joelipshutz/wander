@@ -124,6 +124,8 @@ struct PlaceImportHubScreen: View {
 
                         TextEditor(text: $input)
                             .focused($isInputFocused)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .accessibilityLabel("Places and links")
                             .accessibilityIdentifier("import.input")
                             .font(.system(size: 15, weight: .medium))

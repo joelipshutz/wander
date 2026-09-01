@@ -3,8 +3,11 @@ import {
   deterministicFallbackHints,
   evidenceCatalog,
   groundedHints,
+  mergeInstagramProfileAliases,
   prioritizedCaptionProfileUsernames,
+  prioritizedInstagramProfileUsernames,
   profileAliasCandidates,
+  taggedProfileCandidates,
 } from "./evidence.ts";
 import { understandWithGemini } from "./gemini.ts";
 import { boundedRequestBody, fetchJSON } from "./http.ts";
@@ -118,7 +121,13 @@ export async function handleRequest(
 
   const apifyToken = secret(dependencies.env("WANDER_APIFY_TOKEN"));
   const geminiKey = secret(dependencies.env("WANDER_GEMINI_API_KEY"));
-  if (!apifyToken || !geminiKey) {
+  // Paid work must never start unless this invocation can release its
+  // admission with a server credential. The caller's short-lived user token
+  // is intentionally used only for authentication and begin admission.
+  if (
+    !apifyToken || !geminiKey ||
+    !supabaseServiceRPCConfiguration(dependencies)
+  ) {
     return finish(fallbackResponse(
       "configuration_unavailable",
       null,
@@ -176,7 +185,6 @@ export async function handleRequest(
   } finally {
     try {
       await finishPaidWorkAdmission(
-        authorization,
         clientRequestID,
         admission.admissionID,
         // Paid provider work remains bounded by the main handler deadline, but
@@ -226,10 +234,11 @@ async function runAdmittedImport(
   }
 
   const catalog = evidenceCatalog(evidence);
+  const profileUsernames = prioritizedInstagramProfileUsernames(evidence);
   const profileAliasesPromise: Promise<InstagramProfileAlias[]> =
-    source.platform === "instagram" && evidence.caption
+    source.platform === "instagram" && profileUsernames.length > 0
       ? acquireInstagramProfileAliases(
-        prioritizedCaptionProfileUsernames(evidence.caption),
+        profileUsernames,
         apifyToken,
         deadline,
         dependencies,
@@ -250,9 +259,10 @@ async function runAdmittedImport(
       ),
       profileAliasesPromise,
     ]);
-    profileAliases = profileResult.status === "fulfilled"
+    const providerAliases = profileResult.status === "fulfilled"
       ? profileResult.value
       : [];
+    profileAliases = mergeInstagramProfileAliases(providerAliases, evidence);
     if (mediaResult.status === "rejected") throw mediaResult.reason;
     ingestions = mediaResult.value;
   } catch (error) {
@@ -266,6 +276,14 @@ async function runAdmittedImport(
     );
   }
 
+  const captionProfileUsernames = new Set(
+    evidence.caption
+      ? prioritizedCaptionProfileUsernames(evidence.caption)
+      : [],
+  );
+  const modelProfileAliases = profileAliases.filter((alias) =>
+    captionProfileUsernames.has(alias.username)
+  );
   let understanding;
   try {
     understanding = await understandWithGemini(
@@ -277,7 +295,7 @@ async function runAdmittedImport(
       deadline,
       dependencies,
       signal,
-      profileAliases,
+      modelProfileAliases,
     );
   } catch (error) {
     const attempts = error instanceof SocialImportError
@@ -294,8 +312,17 @@ async function runAdmittedImport(
     );
   }
 
+  const recoveredTaggedProfileCandidates = taggedProfileCandidates(
+    profileAliases,
+    catalog,
+    ingestions,
+    understanding.postContext,
+    understanding.candidates,
+    understanding.mediaAssessments,
+  );
   const grounded = groundedHints(
     [
+      ...recoveredTaggedProfileCandidates,
       ...understanding.candidates,
       ...profileAliasCandidates(profileAliases, catalog),
     ],
@@ -308,9 +335,24 @@ async function runAdmittedImport(
   const ingestedCount =
     ingestions.filter((item) => item.status === "ok").length;
   const failedCount = ingestions.length - ingestedCount;
+  const taggedRecoveryCompletesDeclaredCount =
+    recoveredTaggedProfileCandidates.length >= 2 &&
+    grounded.expectedCount === recoveredTaggedProfileCandidates.length &&
+    grounded.missingExpectedCount === 0;
+  const hasExplicitCoverageDimension =
+    understanding.mediaCoverageIncomplete === true ||
+    understanding.captionCoverageIncomplete === true ||
+    understanding.declaredCountCoverageIncomplete === true;
+  const unresolvedUnderstandingCoverage =
+    understanding.mediaCoverageIncomplete === true ||
+    understanding.captionCoverageIncomplete === true ||
+    (understanding.declaredCountCoverageIncomplete === true &&
+      !taggedRecoveryCompletesDeclaredCount) ||
+    (understanding.coverageIncomplete === true &&
+      !hasExplicitCoverageDimension);
   const failureCategory = failedCount > 0
     ? "media_incomplete"
-    : understanding.coverageIncomplete === true ||
+    : unresolvedUnderstandingCoverage ||
         grounded.missingExpectedCount > 0
     ? "grounding_incomplete"
     : grounded.rejectedCount > 0
@@ -328,6 +370,17 @@ async function runAdmittedImport(
         media_count: evidence.media.length,
         model_attempt_count: understanding.attemptCount,
         failure_category: "media_incomplete",
+      };
+    }
+    if (unresolvedUnderstandingCoverage) {
+      return {
+        schema_version: 1,
+        outcome: "partial",
+        provider_path: "apify_gemini",
+        hints: [],
+        media_count: evidence.media.length,
+        model_attempt_count: understanding.attemptCount,
+        failure_category: "grounding_incomplete",
       };
     }
     if (grounded.missingExpectedCount > 0) {
@@ -480,25 +533,27 @@ export async function beginPaidWorkAdmission(
 }
 
 export async function finishPaidWorkAdmission(
-  authorization: string,
   clientRequestID: string,
   admissionID: string,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
 ): Promise<boolean> {
-  const configuration = supabaseRPCConfiguration(dependencies);
+  const configuration = supabaseServiceRPCConfiguration(dependencies);
   if (!configuration) {
     throw new SocialImportError("admission_configuration_unavailable");
   }
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    apikey: configuration.serviceRoleKey,
+  };
+  if (configuration.authorization) {
+    headers.authorization = configuration.authorization;
+  }
   const result = await fetchJSON(
-    `${configuration.url}/rest/v1/rpc/finish_social_import_paid_work`,
+    `${configuration.url}/rest/v1/rpc/finish_social_import_paid_work_service`,
     {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        apikey: configuration.publishableKey,
-        authorization,
-      },
+      headers,
       body: JSON.stringify({
         input_client_request_id: clientRequestID,
         input_admission_id: admissionID,
@@ -591,6 +646,51 @@ function supabaseRPCConfiguration(
   return url && publishableKey
     ? { url: url.replace(/\/$/, ""), publishableKey }
     : null;
+}
+
+function supabaseServiceRPCConfiguration(
+  dependencies: RuntimeDependencies,
+): {
+  url: string;
+  serviceRoleKey: string;
+  authorization: string | null;
+} | null {
+  const url = cleanString(
+    dependencies.env("SUPABASE_URL") ?? dependencies.env("WANDER_SUPABASE_URL"),
+    500,
+  );
+  const serviceRoleKey = serviceRoleKeyFromEnvironment(dependencies);
+  if (!url || !serviceRoleKey) return null;
+  return {
+    url: url.replace(/\/$/, ""),
+    serviceRoleKey,
+    // Modern sb_secret keys belong only in `apikey`. Legacy service-role JWTs
+    // must also be presented as the bearer so PostgREST assumes service_role.
+    authorization: serviceRoleKey.startsWith("sb_secret_")
+      ? null
+      : `Bearer ${serviceRoleKey}`,
+  };
+}
+
+function serviceRoleKeyFromEnvironment(
+  dependencies: RuntimeDependencies,
+): string | null {
+  const direct = secret(
+    dependencies.env("WANDER_SUPABASE_SERVICE_ROLE_KEY") ??
+      dependencies.env("SUPABASE_SERVICE_ROLE_KEY"),
+  );
+  if (direct) return direct;
+  const named = dependencies.env("SUPABASE_SECRET_KEYS");
+  if (!named) return null;
+  try {
+    const parsed = asRecord(JSON.parse(named));
+    return secret(parsed?.default) ?? Object.values(parsed ?? {})
+      .map(secret)
+      .find((value) => value !== null) ??
+      null;
+  } catch {
+    return null;
+  }
 }
 
 function publishableKeyFromEnvironment(

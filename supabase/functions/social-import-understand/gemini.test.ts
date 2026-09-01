@@ -10,6 +10,7 @@ import {
 import type {
   EvidenceCatalog,
   MediaIngestion,
+  ModelMediaAssessment,
   RuntimeDependencies,
   SocialSource,
 } from "./types.ts";
@@ -74,13 +75,17 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
       calls.push("generate");
       assertEquals(init?.redirect, "error");
       generatedBodies.push(JSON.parse(String(init?.body)));
-      return geminiUnderstandingResponse({
-        intent: "unknown",
-        declaredCount: -1,
-        declaredCountEvidenceIds: [],
-        globalArea: "",
-        globalAreaEvidenceIds: [],
-      }, []);
+      return geminiUnderstandingResponse(
+        {
+          intent: "unknown",
+          declaredCount: -1,
+          declaredCountEvidenceIds: [],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        [],
+        [mediaAssessment("media:0")],
+      );
     }
     if (url === fileURI && method === "DELETE") {
       calls.push("delete");
@@ -104,6 +109,7 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
 
   assertEquals(result, {
     candidates: [],
+    mediaAssessments: [mediaAssessment("media:0")],
     postContext: {
       intent: "unknown",
       declaredCount: -1,
@@ -386,6 +392,9 @@ Deno.test("Gemini marks a still-underfilled reconciliation as incomplete", async
     "Alpha Cafe",
   ]);
   assertEquals(result.coverageIncomplete, true);
+  assertEquals(result.mediaCoverageIncomplete, undefined);
+  assertEquals(result.captionCoverageIncomplete, true);
+  assertEquals(result.declaredCountCoverageIncomplete, true);
   assertEquals(generateCount, 2);
 });
 
@@ -441,6 +450,168 @@ Deno.test("Gemini reconciliation cannot drop a distinct first-pass venue", async
     "Bravo Books",
     "Alpha Cafe",
   ]);
+  assertEquals(result.coverageIncomplete, undefined);
+  assertEquals(generateCount, 2);
+});
+
+Deno.test("Gemini reconciliation explicit non-destinations suppress the same evidenced first-pass destination", async () => {
+  const reclassifications = [
+    "itinerary",
+    "ambiguous",
+    "incidental",
+    "attribution",
+    "not_a_place",
+  ] as const;
+
+  for (const classification of reclassifications) {
+    let generateCount = 0;
+    const stale = {
+      ...modelCandidate("Alpha Cafe", "Alpha Cafe", 0),
+      classification: "destination",
+    };
+    const explicitReclassification = {
+      ...modelCandidate("Alpha Cafe", "Alpha Cafe", 0),
+      classification,
+    };
+    const bravo = {
+      ...modelCandidate("Bravo Books", "Bravo Books", 1),
+      classification: "destination",
+    };
+    const context = {
+      intent: "place_list",
+      declaredCount: 2,
+      declaredCountEvidenceIds: ["caption:0"],
+      globalArea: "",
+      globalAreaEvidenceIds: [],
+    };
+    const dependencies = runtime((input) => {
+      const url = String(input);
+      if (!url.includes(":generateContent")) {
+        throw new Error(`unexpected fetch ${url}`);
+      }
+      generateCount += 1;
+      return geminiUnderstandingResponse(
+        context,
+        generateCount === 1 ? [stale] : [explicitReclassification, bravo],
+      );
+    });
+
+    const result = await understandWithGemini(
+      source,
+      {
+        texts: [{
+          id: "caption:0",
+          modality: "caption",
+          text: "Top 2: Alpha Cafe and Bravo Books",
+          area: null,
+          mediaID: null,
+        }],
+        media: [],
+      },
+      [],
+      "gemini-secret",
+      "gemini-3.5-flash",
+      new Deadline(100_000, dependencies.now),
+      dependencies,
+    );
+
+    assertEquals(
+      result.candidates.map((candidate) => [
+        candidate.name,
+        candidate.classification,
+      ]),
+      [
+        ["Alpha Cafe", classification],
+        ["Bravo Books", "destination"],
+      ],
+    );
+    assertEquals(
+      result.candidates.some((candidate) =>
+        candidate.itemIndex === 0 &&
+        candidate.classification === "destination"
+      ),
+      false,
+    );
+    assertEquals(result.coverageIncomplete, true);
+    assertEquals(
+      result.declaredCountCoverageIncomplete,
+      true,
+    );
+    assertEquals(generateCount, 2);
+  }
+});
+
+Deno.test("Gemini reconciliation keeps an omitted first-pass destination when a same-index negative cites different evidence", async () => {
+  let generateCount = 0;
+  const alpha = {
+    ...modelCandidate("Alpha Cafe", "Alpha Cafe", 0),
+    classification: "destination",
+  };
+  const unrelatedNegative = {
+    ...modelCandidate("Alpha Cafe", "Photo credit: Alpha Cafe", 0),
+    classification: "attribution",
+    evidenceIds: ["caption:1"],
+  };
+  const bravo = {
+    ...modelCandidate("Bravo Books", "Bravo Books", 1),
+    classification: "destination",
+  };
+  const context = {
+    intent: "place_list",
+    declaredCount: 2,
+    declaredCountEvidenceIds: ["caption:0"],
+    globalArea: "",
+    globalAreaEvidenceIds: [],
+  };
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (!url.includes(":generateContent")) {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    generateCount += 1;
+    return geminiUnderstandingResponse(
+      context,
+      generateCount === 1 ? [alpha] : [unrelatedNegative, bravo],
+    );
+  });
+
+  const result = await understandWithGemini(
+    source,
+    {
+      texts: [{
+        id: "caption:0",
+        modality: "caption",
+        text: "Top 2: Alpha Cafe and Bravo Books",
+        area: null,
+        mediaID: null,
+      }, {
+        id: "caption:1",
+        modality: "caption",
+        text: "Photo credit: Alpha Cafe",
+        area: null,
+        mediaID: null,
+      }],
+      media: [],
+    },
+    [],
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(
+    result.candidates.map((candidate) => [
+      candidate.sourceMention,
+      candidate.classification,
+      candidate.evidenceIds,
+    ]),
+    [
+      ["Photo credit: Alpha Cafe", "attribution", ["caption:1"]],
+      ["Bravo Books", "destination", ["caption:0"]],
+      ["Alpha Cafe", "destination", ["caption:0"]],
+    ],
+  );
   assertEquals(result.coverageIncomplete, undefined);
   assertEquals(generateCount, 2);
 });
@@ -766,6 +937,11 @@ Deno.test("Gemini uses a provider-compatible schema while runtime validation kee
   const textFormat = asRecord(responseFormat?.text);
   const schema = asRecord(textFormat?.schema);
   const rootProperties = asRecord(schema?.properties);
+  assertEquals(schema?.required, [
+    "postContext",
+    "candidates",
+    "mediaAssessments",
+  ]);
   const postContext = asRecord(rootProperties?.postContext);
   const postContextProperties = asRecord(postContext?.properties);
   assertEquals(postContextProperties?.declaredCount, { type: "integer" });
@@ -786,6 +962,18 @@ Deno.test("Gemini uses a provider-compatible schema while runtime validation kee
   assertEquals(candidateProperties?.evidenceIds, {
     type: "array",
     items: { type: "string" },
+  });
+  const mediaAssessments = asRecord(rootProperties?.mediaAssessments);
+  const mediaAssessmentItems = asRecord(mediaAssessments?.items);
+  const mediaAssessmentProperties = asRecord(mediaAssessmentItems?.properties);
+  assertEquals(mediaAssessmentProperties?.mediaEvidenceId, { type: "string" });
+  assertEquals(mediaAssessmentProperties?.disposition, {
+    type: "string",
+    enum: ["place_mentions", "no_place_mentions"],
+  });
+  assertEquals(mediaAssessmentProperties?.candidateItemIndexes, {
+    type: "array",
+    items: { type: "integer" },
   });
 });
 
@@ -1035,13 +1223,17 @@ Deno.test("Gemini uploads a realistic seventeen-image overflow with bounded conc
     }
     if (url.includes(":generateContent")) {
       generatedBodies.push(JSON.parse(String(init?.body)));
-      return geminiUnderstandingResponse({
-        intent: "unknown",
-        declaredCount: -1,
-        declaredCountEvidenceIds: [],
-        globalArea: "",
-        globalAreaEvidenceIds: [],
-      }, []);
+      return geminiUnderstandingResponse(
+        {
+          intent: "unknown",
+          declaredCount: -1,
+          declaredCountEvidenceIds: [],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        [],
+        completeMediaAssessments(17),
+      );
     }
     if (
       method === "DELETE" && url.startsWith(`${geminiOrigin}/v1beta/files/`)
@@ -1096,6 +1288,261 @@ Deno.test("Gemini uploads a realistic seventeen-image overflow with bounded conc
   );
 });
 
+Deno.test("Gemini marks a seventeen-image response incomplete when only five media are assessed", async () => {
+  const generatedBodies: Record<string, unknown>[] = [];
+  const ingestions = Array.from(
+    { length: 17 },
+    (_, index) => imageIngestion(`media:${index}`, 1),
+  );
+  const candidates = Array.from({ length: 5 }, (_, index) => ({
+    ...modelCandidate(`Hotel ${index + 1}`, `Hotel ${index + 1}`, index),
+    classification: "destination",
+    modality: "image_text",
+    evidenceIds: [`media:${index}`],
+  }));
+  const assessments = Array.from(
+    { length: 5 },
+    (_, index) => mediaAssessment(`media:${index}`, [index]),
+  );
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    if (!url.includes(":generateContent")) {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    generatedBodies.push(JSON.parse(String(init?.body)));
+    return geminiUnderstandingResponse(
+      {
+        intent: "place_list",
+        declaredCount: -1,
+        declaredCountEvidenceIds: [],
+        globalArea: "",
+        globalAreaEvidenceIds: [],
+      },
+      candidates,
+      assessments,
+    );
+  });
+
+  const result = await understandWithGemini(
+    source,
+    emptyCatalog,
+    ingestions,
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result.attemptCount, 2);
+  assertEquals(result.candidates.length, 5);
+  assertEquals(result.coverageIncomplete, true);
+  assertEquals(result.mediaCoverageIncomplete, true);
+  assertEquals(result.captionCoverageIncomplete, undefined);
+  assertEquals(result.declaredCountCoverageIncomplete, undefined);
+  const reconciliation = JSON.parse(
+    String(asRecord(requestParts(generatedBodies[1]).at(-1))?.text),
+  );
+  assertEquals(
+    reconciliation.coverage_requirements.missing_media_assessment_ids,
+    Array.from({ length: 12 }, (_, index) => `media:${index + 5}`),
+  );
+  assertEquals(
+    reconciliation.coverage_requirements.audit_every_media_asset,
+    true,
+  );
+});
+
+Deno.test("Gemini accepts complete ordered assessments for all seventeen images", async () => {
+  const ingestions = Array.from(
+    { length: 17 },
+    (_, index) => imageIngestion(`media:${index}`, 1),
+  );
+  const candidates = Array.from({ length: 17 }, (_, index) => ({
+    ...modelCandidate(`Hotel ${index + 1}`, `Hotel ${index + 1}`, index),
+    classification: "destination",
+    modality: "image_text",
+    evidenceIds: [`media:${index}`],
+  }));
+  const assessments = Array.from(
+    { length: 17 },
+    (_, index) => mediaAssessment(`media:${index}`, [index]),
+  );
+  let generateCount = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (!url.includes(":generateContent")) {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    generateCount += 1;
+    return geminiUnderstandingResponse(
+      {
+        intent: "place_list",
+        declaredCount: 17,
+        declaredCountEvidenceIds: ["media:0"],
+        globalArea: "",
+        globalAreaEvidenceIds: [],
+      },
+      candidates,
+      assessments,
+    );
+  });
+
+  const result = await understandWithGemini(
+    source,
+    emptyCatalog,
+    ingestions,
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(generateCount, 2);
+  assertEquals(result.attemptCount, 2);
+  assertEquals(result.candidates.length, 17);
+  assertEquals(result.coverageIncomplete, undefined);
+  assertEquals(result.mediaCoverageIncomplete, undefined);
+  assertEquals(result.captionCoverageIncomplete, undefined);
+  assertEquals(result.declaredCountCoverageIncomplete, undefined);
+});
+
+Deno.test("Gemini treats missing duplicate unknown and reordered media assessments as incomplete", async () => {
+  const cases: Array<{ name: string; assessments: ModelMediaAssessment[] }> = [
+    {
+      name: "missing",
+      assessments: [mediaAssessment("media:0")],
+    },
+    {
+      name: "duplicate",
+      assessments: [
+        mediaAssessment("media:0"),
+        mediaAssessment("media:0"),
+        mediaAssessment("media:1"),
+      ],
+    },
+    {
+      name: "unknown",
+      assessments: [
+        mediaAssessment("media:0"),
+        mediaAssessment("media:1"),
+        mediaAssessment("media:99"),
+      ],
+    },
+    {
+      name: "reordered",
+      assessments: [
+        mediaAssessment("media:1"),
+        mediaAssessment("media:0"),
+      ],
+    },
+  ];
+
+  for (const testCase of cases) {
+    const ingestions = [
+      imageIngestion("media:0", 1),
+      imageIngestion("media:1", 1),
+    ];
+    const dependencies = runtime((input) => {
+      const url = String(input);
+      if (!url.includes(":generateContent")) {
+        throw new Error(`unexpected fetch ${url}`);
+      }
+      return geminiUnderstandingResponse(
+        {
+          intent: "unknown",
+          declaredCount: -1,
+          declaredCountEvidenceIds: [],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        [],
+        testCase.assessments,
+      );
+    });
+
+    const result = await understandWithGemini(
+      source,
+      emptyCatalog,
+      ingestions,
+      "gemini-secret",
+      "gemini-3.5-flash",
+      new Deadline(100_000, dependencies.now),
+      dependencies,
+    );
+    assert(
+      result.coverageIncomplete === true,
+      `${testCase.name} assessment ledger must stay incomplete`,
+    );
+    assertEquals(result.mediaCoverageIncomplete, true);
+  }
+});
+
+Deno.test("Gemini treats assessment-to-candidate contradictions as incomplete", async () => {
+  const citedCandidate = {
+    ...modelCandidate("Alpha Hotel", "Alpha Hotel", 0),
+    classification: "destination",
+    modality: "image_text",
+    evidenceIds: ["media:0"],
+  };
+  const cases = [{
+    name: "assessment references a missing candidate index",
+    candidates: [],
+    assessment: mediaAssessment("media:0", [0]),
+  }, {
+    name: "assessment says no place despite a media-cited candidate",
+    candidates: [citedCandidate],
+    assessment: mediaAssessment("media:0"),
+  }];
+
+  for (const testCase of cases) {
+    const generatedBodies: Record<string, unknown>[] = [];
+    const dependencies = runtime((input, init) => {
+      const url = String(input);
+      if (!url.includes(":generateContent")) {
+        throw new Error(`unexpected fetch ${url}`);
+      }
+      generatedBodies.push(JSON.parse(String(init?.body)));
+      return geminiUnderstandingResponse(
+        {
+          intent: "unknown",
+          declaredCount: -1,
+          declaredCountEvidenceIds: [],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        testCase.candidates,
+        [testCase.assessment],
+      );
+    });
+
+    const result = await understandWithGemini(
+      source,
+      emptyCatalog,
+      [imageIngestion("media:0", 1)],
+      "gemini-secret",
+      "gemini-3.5-flash",
+      new Deadline(100_000, dependencies.now),
+      dependencies,
+    );
+
+    if (generatedBodies.length !== 2) {
+      throw new Error(
+        `${testCase.name} must receive a reconciliation pass; got ${generatedBodies.length}`,
+      );
+    }
+    assertEquals(result.coverageIncomplete, true);
+    assertEquals(result.mediaCoverageIncomplete, true);
+    const reconciliation = JSON.parse(
+      String(asRecord(requestParts(generatedBodies[1]).at(-1))?.text),
+    );
+    assertEquals(
+      reconciliation.coverage_requirements
+        .referentially_invalid_media_assessment_ids,
+      ["media:0"],
+    );
+  }
+});
+
 Deno.test("a genuine overflow image upload failure remains an honest per-media failure", async () => {
   const first = imageIngestion("media:0", 10 * 1_024 * 1_024);
   const overflow = imageIngestion("media:1", 3 * 1_024 * 1_024);
@@ -1107,13 +1554,17 @@ Deno.test("a genuine overflow image upload failure remains an honest per-media f
     }
     if (url.includes(":generateContent")) {
       generateCount += 1;
-      return geminiUnderstandingResponse({
-        intent: "unknown",
-        declaredCount: -1,
-        declaredCountEvidenceIds: [],
-        globalArea: "",
-        globalAreaEvidenceIds: [],
-      }, []);
+      return geminiUnderstandingResponse(
+        {
+          intent: "unknown",
+          declaredCount: -1,
+          declaredCountEvidenceIds: [],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        [],
+        [mediaAssessment("media:0")],
+      );
     }
     throw new Error(`unexpected fetch ${url}`);
   });
@@ -1209,14 +1660,41 @@ function geminiResponse(candidates: unknown[]): Response {
 function geminiUnderstandingResponse(
   postContext: Record<string, unknown>,
   candidates: unknown[],
+  mediaAssessments: unknown[] = [],
 ): Response {
   return Response.json({
     candidates: [{
       content: {
-        parts: [{ text: JSON.stringify({ postContext, candidates }) }],
+        parts: [{
+          text: JSON.stringify({
+            postContext,
+            candidates,
+            mediaAssessments,
+          }),
+        }],
       },
     }],
   });
+}
+
+function mediaAssessment(
+  mediaEvidenceId: string,
+  candidateItemIndexes: number[] = [],
+): ModelMediaAssessment {
+  return {
+    mediaEvidenceId,
+    disposition: candidateItemIndexes.length > 0
+      ? "place_mentions"
+      : "no_place_mentions",
+    candidateItemIndexes,
+  };
+}
+
+function completeMediaAssessments(count: number): ModelMediaAssessment[] {
+  return Array.from(
+    { length: count },
+    (_, index) => mediaAssessment(`media:${index}`),
+  );
 }
 
 function modelCandidate(

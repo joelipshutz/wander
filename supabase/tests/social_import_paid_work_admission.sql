@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(41);
+select plan(55);
 
 select has_table(
   'app',
@@ -53,6 +53,11 @@ select has_function(
   'finish_social_import_paid_work',
   array['text', 'uuid']::text[]
 );
+select has_function(
+  'public',
+  'finish_social_import_paid_work_service',
+  array['text', 'uuid']::text[]
+);
 select function_privs_are(
   'public',
   'begin_social_import_paid_work',
@@ -84,6 +89,27 @@ select function_privs_are(
 select function_privs_are(
   'public',
   'finish_social_import_paid_work',
+  array['text', 'uuid']::text[],
+  'anon',
+  array[]::text[]
+);
+select function_privs_are(
+  'public',
+  'finish_social_import_paid_work_service',
+  array['text', 'uuid']::text[],
+  'service_role',
+  array['EXECUTE']
+);
+select function_privs_are(
+  'public',
+  'finish_social_import_paid_work_service',
+  array['text', 'uuid']::text[],
+  'authenticated',
+  array[]::text[]
+);
+select function_privs_are(
+  'public',
+  'finish_social_import_paid_work_service',
   array['text', 'uuid']::text[],
   'anon',
   array[]::text[]
@@ -114,6 +140,26 @@ select is(
   true,
   'finish admission is a narrow security-definer RPC'
 );
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid =
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+  ),
+  true,
+  'service finish is a narrow security-definer RPC'
+);
+select is(
+  (
+    select pg_get_userbyid(proowner)
+    from pg_proc
+    where oid =
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+  ),
+  'postgres',
+  'service finish preserves the trusted postgres definer owner'
+);
 select ok(
   (
     select exists (
@@ -139,6 +185,19 @@ select ok(
   'finish admission pins an empty search path'
 );
 select ok(
+  (
+    select exists (
+      select 1
+      from unnest(coalesce(proconfig, array[]::text[])) as setting
+      where setting in ('search_path=', 'search_path=""')
+    )
+    from pg_proc
+    where oid =
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+  ),
+  'service finish pins an empty search path'
+);
+select ok(
   obj_description('app.social_import_paid_work_admissions'::regclass, 'pg_class')
     like '%never stores URLs, captions, media, or provider payloads%',
   'table metadata documents the no-content boundary'
@@ -148,8 +207,38 @@ select ok(
     and obj_description(
       'public.finish_social_import_paid_work(text,uuid)'::regprocedure,
       'pg_proc'
+    ) is not null
+    and obj_description(
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure,
+      'pg_proc'
     ) is not null,
-  'both RPCs document their narrow admission lifecycle purpose'
+  'all RPCs document their narrow admission lifecycle purpose'
+);
+select ok(
+  (
+    select provolatile = 'v'
+      and pg_get_function_arguments(oid) =
+        'input_client_request_id text, input_admission_id uuid'
+    from pg_proc
+    where oid =
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+  ),
+  'service finish stays volatile and accepts no caller-selected user ID'
+);
+select ok(
+  pg_get_functiondef(
+    'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+  ) like '%select admission.user_id%'
+    and pg_get_functiondef(
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+    ) like '%pg_advisory_xact_lock%recme:social-import-paid-work:%'
+    and pg_get_functiondef(
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+    ) like '%interval ''5 minutes''%'
+    and pg_get_functiondef(
+      'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+    ) not like '%input_user_id%',
+  'service finish derives ownership and preserves serialized stale cleanup'
 );
 select ok(
   pg_get_functiondef('public.begin_social_import_paid_work(text)'::regprocedure)
@@ -193,10 +282,97 @@ select throws_ok(
   '42501',
   'not_authenticated'
 );
+select throws_ok(
+  $$select public.finish_social_import_paid_work_service(
+    'anonymous-request',
+    '00000000-0000-0000-0000-000000000000'::uuid
+  )$$,
+  '42501',
+  'permission denied for function finish_social_import_paid_work_service'
+);
 
 reset role;
 insert into public.profiles (id, handle, display_name)
 values ('user_social_import_admission_test', 'socialimportadmission', 'Social Import Admission');
+truncate table app.social_import_paid_work_admissions;
+
+insert into app.social_import_paid_work_admissions (
+  user_id, client_request_id, state, started_at, finished_at
+) values (
+  'user_social_import_admission_test',
+  'service-finish',
+  'in_flight',
+  clock_timestamp(),
+  null
+);
+select set_config(
+  'test.social_import_service_admission_id',
+  (
+    select id::text
+    from app.social_import_paid_work_admissions
+    where user_id = 'user_social_import_admission_test'
+      and client_request_id = 'service-finish'
+  ),
+  true
+);
+set local role service_role;
+select set_config('request.jwt.claim.sub', '', true);
+select ok(
+  public.finish_social_import_paid_work_service(
+    'service-finish',
+    current_setting('test.social_import_service_admission_id')::uuid
+  ),
+  'service finish releases the exact admission without a user bearer'
+);
+select is(
+  public.finish_social_import_paid_work_service(
+    'service-finish',
+    current_setting('test.social_import_service_admission_id')::uuid
+  ),
+  false,
+  'service finish is idempotent after cleanup'
+);
+
+reset role;
+truncate table app.social_import_paid_work_admissions;
+insert into app.social_import_paid_work_admissions (
+  user_id, client_request_id, state, started_at, finished_at
+) values (
+  'user_social_import_admission_test',
+  'service-exact-pair',
+  'in_flight',
+  clock_timestamp(),
+  null
+);
+select set_config(
+  'test.social_import_service_admission_id',
+  (
+    select id::text
+    from app.social_import_paid_work_admissions
+    where user_id = 'user_social_import_admission_test'
+      and client_request_id = 'service-exact-pair'
+  ),
+  true
+);
+set local role service_role;
+select is(
+  public.finish_social_import_paid_work_service(
+    'service-wrong-pair',
+    current_setting('test.social_import_service_admission_id')::uuid
+  ),
+  false,
+  'service finish rejects a mismatched opaque request identity'
+);
+reset role;
+select results_eq(
+  $$
+    select state
+    from app.social_import_paid_work_admissions
+    where id = current_setting('test.social_import_service_admission_id')::uuid
+  $$,
+  $$values ('in_flight'::text)$$,
+  'a mismatched service cleanup leaves the admission untouched'
+);
 truncate table app.social_import_paid_work_admissions;
 
 set local role authenticated;
