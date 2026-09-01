@@ -316,10 +316,10 @@ struct ProfileOwnerHome: View {
                     allActivityAction: allActivityAction
                 )
                 .id(ProfileHomeScrollAnchor.activity)
-                #if DEBUG
-                if mode.isOwner, let yourMapAction {
+                if let yourMapAction {
                     ProfileYourMapPreview(
                         insights: insights,
+                        title: "\(ownerLabel) map",
                         action: yourMapAction
                     )
                     .id(ProfileHomeScrollAnchor.map)
@@ -332,15 +332,6 @@ struct ProfileOwnerHome: View {
                     )
                     .id(ProfileHomeScrollAnchor.map)
                 }
-                #else
-                ProfileMapSection(
-                    profile: profile,
-                    insights: insights,
-                    ownerLabel: ownerLabel,
-                    summaryAction: mapSummaryAction
-                )
-                .id(ProfileHomeScrollAnchor.map)
-                #endif
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -1519,9 +1510,9 @@ private struct ProfileCalendarLegend: View {
     }
 }
 
-#if DEBUG
 private struct ProfileYourMapPreview: View {
     let insights: ProfileInsights
+    let title: String
     let action: () -> Void
 
     var body: some View {
@@ -1529,7 +1520,7 @@ private struct ProfileYourMapPreview: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("your map")
+                        Text(title)
                             .font(WanderTypography.editorialSectionTitle)
                         Text(countSummary)
                             .font(.system(size: 14, weight: .bold))
@@ -1570,8 +1561,8 @@ private struct ProfileYourMapPreview: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Your Map, \(countSummary)")
-        .accessibilityHint("Opens your full interactive place diary")
+        .accessibilityLabel("\(title), \(countSummary)")
+        .accessibilityHint("Opens this full interactive place diary")
         .accessibilityIdentifier("profile.yourMap.preview")
         .walkthroughTarget(.profileMap)
         .walkthroughEmphasis(.profileMap)
@@ -1583,7 +1574,6 @@ private struct ProfileYourMapPreview: View {
         return "\(insights.mapPlaceCount) \(placeLabel) across \(insights.mapCityCount) \(cityLabel)"
     }
 }
-#endif
 
 enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
     case places

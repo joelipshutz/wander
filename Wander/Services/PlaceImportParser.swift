@@ -130,10 +130,10 @@ enum PlaceImportParser {
         if links.count > 1 {
             return links.map { link in
                 PlaceImportSeed(
-                    rawText: link,
+                    rawText: link.normalized,
                     nameHint: nil,
                     areaHint: nil,
-                    sourceURLString: link,
+                    sourceURLString: link.normalized,
                     sourceLine: lineNumber
                 )
             }
@@ -142,7 +142,7 @@ enum PlaceImportParser {
         let link = links.first
         var hintText = line
         if let link {
-            hintText = hintText.replacingOccurrences(of: link, with: "")
+            hintText = hintText.replacingOccurrences(of: link.original, with: "")
             hintText = hintText.trimmingCharacters(in: CharacterSet(charactersIn: " |-"))
         }
         let hint = splitNameAndArea(hintText)
@@ -150,10 +150,10 @@ enum PlaceImportParser {
         guard link != nil || hint.name != nil else { return [] }
         return [
             PlaceImportSeed(
-                rawText: line,
+                rawText: link != nil && hint.name == nil ? link?.normalized ?? line : line,
                 nameHint: hint.name,
                 areaHint: hint.area,
-                sourceURLString: link,
+                sourceURLString: link?.normalized,
                 sourceLine: lineNumber
             )
         ]
@@ -285,14 +285,55 @@ enum PlaceImportParser {
         return (cleaned, nil)
     }
 
-    private static func urls(in value: String) -> [String] {
-        guard let expression = try? NSRegularExpression(pattern: #"https?://[^\s]+"#) else { return [] }
+    private struct DetectedURL {
+        let original: String
+        let normalized: String
+    }
+
+    private static func urls(in value: String) -> [DetectedURL] {
+        guard let expression = try? NSRegularExpression(
+            pattern: #"https?://[^\s]+"#,
+            options: [.caseInsensitive]
+        ) else { return [] }
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
         return expression.matches(in: value, range: range).compactMap { match in
             guard let swiftRange = Range(match.range, in: value) else { return nil }
-            return String(value[swiftRange])
-                .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}"))
+            let original = String(value[swiftRange])
+            return DetectedURL(
+                original: original,
+                normalized: normalizedURLCandidate(original)
+            )
         }
+    }
+
+    /// iOS text input can capitalize the first character and turn a typed
+    /// double hyphen into an em dash. Instagram shortcodes are ASCII and may
+    /// legitimately contain `--`, so repair only known social-link paths while
+    /// leaving ordinary notes and non-social URLs untouched.
+    private static func normalizedURLCandidate(_ value: String) -> String {
+        var candidate = value.trimmingCharacters(
+            in: CharacterSet(charactersIn: ".,;:!?)]}\"'\u{201C}\u{201D}\u{2018}\u{2019}")
+        )
+        if let schemeRange = candidate.range(
+            of: #"^https?://"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) {
+            candidate.replaceSubrange(schemeRange, with: candidate[schemeRange].lowercased())
+        }
+
+        guard let host = URL(string: candidate)?.host?.lowercased(),
+              host == "instagram.com"
+                || host.hasSuffix(".instagram.com")
+                || host == "instagr.am"
+                || host == "tiktok.com"
+                || host.hasSuffix(".tiktok.com")
+        else {
+            return candidate
+        }
+
+        return candidate
+            .replacingOccurrences(of: "\u{2014}", with: "--")
+            .replacingOccurrences(of: "\u{2013}", with: "-")
     }
 
     private static func deduplicate(_ seeds: [PlaceImportSeed]) -> [PlaceImportSeed] {

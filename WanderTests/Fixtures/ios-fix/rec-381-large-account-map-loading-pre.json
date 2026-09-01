@@ -1,0 +1,25 @@
+{
+  "issue": "REC-381",
+  "capture_source": "Joe's physical-device report after signing into a populated internal account",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the physical-device report is the pre-fix source of truth",
+  "branch": "codex/rec-381-map-loading",
+  "reported_commit": "becdcb17",
+  "privacy": "No account email, place content, coordinates, or private backend payloads are recorded.",
+  "precondition": {
+    "authenticated_session": true,
+    "large_account": true,
+    "selected_tab": "map",
+    "initial_map_sources_loading": true
+  },
+  "buggy_results": {
+    "unfinished_black_map_canvas_visible": true,
+    "mapkit_compass_visible_without_rendered_map": true,
+    "deliberate_loading_surface_visible": false
+  },
+  "expected_results": {
+    "warm_recme_loading_surface_covers_initial_map_hydration": true,
+    "mapkit_chrome_hidden_until_map_is_usable": true,
+    "map_and_controls_reveal_together": true,
+    "mapkit_remains_mounted_and_warms_behind_loading_surface": true
+  }
+}

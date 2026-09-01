@@ -1454,23 +1454,11 @@ struct DiscoverScreen: View {
                 return nil
             }
 
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: sourceType,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-            await persistVisitPhotoAttachments(
-                submission.photoAttachments,
-                to: targetVisit,
+            guard let result = await persistNewPlaceSaveSubmission(
+                submission,
                 store: store,
                 backend: visitBackend
-            )
+            ) else { return nil }
             await refreshPlaces(query: placesQuery)
             await refreshMembers(query: memberQuery)
             savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."

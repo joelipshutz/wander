@@ -877,7 +877,7 @@ struct PlaceVisitDraft: Equatable {
     let backfilledFromUserPlace: Bool
 }
 
-struct PlaceVisitResult: Equatable {
+struct PlaceVisitResult: Equatable, Sendable {
     let visitID: String
     let userPlaceID: String
     let visitedAt: Date
@@ -932,7 +932,7 @@ struct VisitPhotoDraft: Equatable {
     let uploadState: VisitPhotoUploadState
 }
 
-struct VisitPhotoResult: Equatable {
+struct VisitPhotoResult: Equatable, Sendable {
     let photoID: String
     let visitID: String
     let storageBucket: String
@@ -2000,7 +2000,7 @@ protocol PlacePhotoRepository {
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage
@@ -2056,7 +2056,7 @@ extension PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
@@ -2070,9 +2070,16 @@ protocol VisitRepository {
     func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult
     func deleteVisit(visitID: String) async throws
     func photos(for visitID: String) async throws -> [VisitPhotoResult]
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult]
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL
     func deletePhoto(photoID: String, bucket: String, path: String) async throws
+}
+
+extension VisitRepository {
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        try await photos(for: visitID).filter { $0.uploadState == .uploaded }
+    }
 }
 
 @MainActor
@@ -2080,6 +2087,58 @@ protocol ExtractionRepository {
     func enqueue(_ draft: ExtractionJobDraft) async throws -> ExtractionJobEnqueueResult
     func process(jobID: String) async throws -> ExtractionJobResult
     func result(jobID: String) async throws -> ExtractionJobResult
+}
+
+enum SocialImportUnderstandingOutcome: String, Equatable {
+    case ok
+    case partial
+    case noPlaces
+    case fallback
+}
+
+struct SocialImportUnderstandingDiagnostics: Equatable {
+    let providerPath: String
+    let mediaCount: Int
+    let modelAttemptCount: Int
+    let failureCategory: String?
+    let declaredCountComplete: Bool
+
+    init(
+        providerPath: String,
+        mediaCount: Int,
+        modelAttemptCount: Int,
+        failureCategory: String?,
+        declaredCountComplete: Bool = false
+    ) {
+        self.providerPath = providerPath
+        self.mediaCount = mediaCount
+        self.modelAttemptCount = modelAttemptCount
+        self.failureCategory = failureCategory
+        self.declaredCountComplete = declaredCountComplete
+    }
+
+    static let localFallback = SocialImportUnderstandingDiagnostics(
+        providerPath: "local_fallback",
+        mediaCount: 0,
+        modelAttemptCount: 0,
+        failureCategory: nil,
+        declaredCountComplete: false
+    )
+}
+
+struct SocialImportUnderstandingResult: Equatable {
+    let outcome: SocialImportUnderstandingOutcome
+    let hints: [SocialPlaceSearchHint]
+    let diagnostics: SocialImportUnderstandingDiagnostics
+}
+
+@MainActor
+protocol SocialImportUnderstandingRepository {
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult
 }
 
 @MainActor

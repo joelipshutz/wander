@@ -899,26 +899,18 @@ final class PushNotificationManager: ObservableObject {
         batchIDs: [String],
         savedCount: Int,
         needsReviewCount: Int,
+        sourceRetryCount: Int = 0,
         backend: WanderBackend
     ) async {
         guard !batchIDs.isEmpty else { return }
         await refreshAuthorizationStatus()
         guard canRegisterForRemoteNotifications else { return }
 
-        let title: String
-        if savedCount == 0 {
-            title = "Your import needs a quick review"
-        } else {
-            title = savedCount == 1
-                ? "1 place saved"
-                : "\(savedCount) places saved"
-        }
-        let body: String
-        if needsReviewCount > 0 {
-            body = "Open rec.me to verify what was saved and review \(needsReviewCount) more."
-        } else {
-            body = "Open rec.me to verify the places from your import."
-        }
+        let copy = PlaceImportFinishedNotificationCopy.make(
+            savedCount: savedCount,
+            needsReviewCount: needsReviewCount,
+            sourceRetryCount: sourceRetryCount
+        )
         let requestedAt = Date.now
         do {
             _ = try await backend.reconcileClientNotificationIntents(
@@ -926,8 +918,8 @@ final class PushNotificationManager: ObservableObject {
                 intents: [
                     ClientNotificationIntent(
                         intentKey: UUID().uuidString.lowercased(),
-                        title: title,
-                        body: body,
+                        title: copy.title,
+                        body: copy.body,
                         deeplinkURL: nil,
                         data: ["batch_ids": .array(batchIDs.map(JSONValue.string))],
                         earliestAt: requestedAt,

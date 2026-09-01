@@ -5,6 +5,37 @@ import XCTest
 final class CalendarReservationTests: XCTestCase {
     private let startAt = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @MainActor
+    func testReservationPromptDraftUsesReservationStartInsteadOfTapTime() throws {
+        let reservationStart = Date(timeIntervalSince1970: 1_750_000_000)
+        let tapTime = reservationStart.addingTimeInterval(24 * 60 * 60)
+        let candidate = PlaceCandidate(
+            id: "calendar-elephante",
+            name: "Elephante",
+            category: "Restaurant",
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            latitude: 34.0195,
+            longitude: -118.4912,
+            confidence: 1
+        )
+        let context = MapPlaceSaveContext.calendarReservation(
+            candidate,
+            reservationID: "90000000-0000-0000-0000-000000000001",
+            visitedAt: reservationStart,
+            defaultVisibility: .followers
+        )
+
+        let draft = try XCTUnwrap(PlaceSaveDraft.addFlow(
+            ownerUserID: "user-calendar-test",
+            context: context,
+            now: tapTime
+        ))
+
+        XCTAssertEqual(context.initialVisitedAt, reservationStart)
+        XCTAssertEqual(draft.form.visitedAt, reservationStart)
+        XCTAssertNotEqual(draft.form.visitedAt, tapTime)
+    }
+
     func testDetectsProviderReservationWithoutPersistingRawEventIdentity() throws {
         let event = snapshot(
             identifier: "private-calendar-event-id",

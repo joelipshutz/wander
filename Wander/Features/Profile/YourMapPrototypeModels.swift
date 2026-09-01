@@ -1,6 +1,5 @@
 import Foundation
 
-#if DEBUG
 enum YourMapPrototypeMode: String, CaseIterable, Identifiable {
     case map
     case patterns
@@ -369,6 +368,11 @@ struct YourMapPrototypeDataset {
             latestSaveByPlaceID[place.id] = (userPlace, place)
         }
 
+        let activeVisitsByUserPlaceID = Dictionary(
+            grouping: visits.lazy.filter { $0.deletedAt == nil },
+            by: \.userPlaceID
+        )
+
         let mappedPlaces = latestSaveByPlaceID.values.compactMap { saved -> YourMapPrototypePlace? in
             let userPlace = saved.userPlace
             let place = saved.place
@@ -376,10 +380,17 @@ struct YourMapPrototypeDataset {
             if let serverID = userPlace.serverID {
                 savedReferenceIDs.append(serverID)
             }
-            let referenceIDs = Set(savedReferenceIDs)
-            let matchingVisits = visits.filter {
-                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
-            }
+            let matchingVisits = savedReferenceIDs
+                .flatMap { activeVisitsByUserPlaceID[$0, default: []] }
+                .reduce(into: [String: LocalPlaceVisit]()) { result, visit in
+                    guard let existing = result[visit.id],
+                          existing.updatedAt >= visit.updatedAt
+                    else {
+                        result[visit.id] = visit
+                        return
+                    }
+                }
+                .values
             let latestRatedVisit = matchingVisits
                 .filter { $0.ratingScore != nil }
                 .max { $0.visitedAt < $1.visitedAt }
@@ -578,4 +589,3 @@ struct YourMapPrototypeInsights: Equatable {
             }
     }
 }
-#endif

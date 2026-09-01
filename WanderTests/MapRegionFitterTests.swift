@@ -146,6 +146,102 @@ final class MapRegionFitterTests: XCTestCase {
         XCTAssertEqual(region?.span.longitudeDelta, 0.025)
     }
 
+    func testSubmittedCategorySearchOnlyZoomsOutToFitExpandedResults() throws {
+        let viewportHeight: CGFloat = 844
+        let obscuredTopHeight: CGFloat = 128
+        let obscuredBottomHeight: CGFloat = 320
+        let submittedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+        )
+        let resultCoordinates = [
+            CLLocationCoordinate2D(latitude: 34.076, longitude: -118.283),
+            CLLocationCoordinate2D(latitude: 34.1478, longitude: -118.1445),
+            CLLocationCoordinate2D(latitude: 33.7701, longitude: -118.1937),
+            CLLocationCoordinate2D(latitude: 33.5427, longitude: -117.7854)
+        ]
+
+        let region = try XCTUnwrap(
+            MapSubmittedSearchCameraPolicy.region(
+                fitting: resultCoordinates,
+                submittedRegion: submittedRegion,
+                viewportHeight: viewportHeight,
+                obscuredTopHeight: obscuredTopHeight,
+                obscuredBottomHeight: obscuredBottomHeight
+            )
+        )
+
+        XCTAssertGreaterThanOrEqual(
+            region.span.latitudeDelta,
+            submittedRegion.span.latitudeDelta
+        )
+        XCTAssertGreaterThanOrEqual(
+            region.span.longitudeDelta,
+            submittedRegion.span.longitudeDelta
+        )
+        assert(region: region, contains: resultCoordinates)
+        for coordinate in resultCoordinates {
+            XCTAssertGreaterThanOrEqual(projectedY(
+                latitude: coordinate.latitude,
+                in: region,
+                viewportHeight: viewportHeight
+            ), obscuredTopHeight)
+            XCTAssertLessThanOrEqual(projectedY(
+                latitude: coordinate.latitude,
+                in: region,
+                viewportHeight: viewportHeight
+            ), viewportHeight - obscuredBottomHeight)
+        }
+    }
+
+    func testSubmittedCategorySearchNeedsAtLeastOneResultToMoveCamera() {
+        let submittedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+        )
+
+        XCTAssertNil(
+            MapSubmittedSearchCameraPolicy.region(
+                fitting: [],
+                submittedRegion: submittedRegion,
+                viewportHeight: 800,
+                obscuredTopHeight: 80,
+                obscuredBottomHeight: 240
+            )
+        )
+    }
+
+    func testSubmittedCategorySearchDoesNotZoomOutForResultsAlreadyInsideViewport() throws {
+        let submittedRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+        )
+
+        let region = try XCTUnwrap(
+            MapSubmittedSearchCameraPolicy.region(
+                fitting: [
+                    CLLocationCoordinate2D(latitude: 34.076, longitude: -118.283),
+                    CLLocationCoordinate2D(latitude: 34.074, longitude: -118.287)
+                ],
+                submittedRegion: submittedRegion,
+                viewportHeight: 800,
+                obscuredTopHeight: 0,
+                obscuredBottomHeight: 218
+            )
+        )
+
+        XCTAssertEqual(
+            region.span.latitudeDelta,
+            submittedRegion.span.latitudeDelta,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            region.span.longitudeDelta,
+            submittedRegion.span.longitudeDelta,
+            accuracy: 0.000_001
+        )
+    }
+
     private func assert(
         region: MKCoordinateRegion,
         contains coordinates: [CLLocationCoordinate2D],

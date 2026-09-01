@@ -832,6 +832,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
         XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(mapCaptureRoot.contains("initialSession: auth.state.session"))
         XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
         XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
         XCTAssertTrue(app.contains("provider: \"google_places\""))
@@ -1216,6 +1217,55 @@ final class NavigationContractTests: XCTestCase {
                 viewerID: "user_joe"
             )
         )
+    }
+
+    func testInCommonOverlapScoreUsesTheVisiblePlaceUnion() {
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 4,
+                viewerCount: 10,
+                profileCount: 8
+            ),
+            29
+        )
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 5,
+                viewerCount: 5,
+                profileCount: 5
+            ),
+            100
+        )
+        XCTAssertEqual(
+            InCommonReleaseProjection.overlapScore(
+                sharedCount: 0,
+                viewerCount: 0,
+                profileCount: 0
+            ),
+            0
+        )
+    }
+
+    func testInCommonProductionSurfaceIsReleaseVisibleAndUsesRealData() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let releaseSurfaceRange = try XCTUnwrap(source.range(of: "enum InCommonReleaseProjection"))
+        let sourceBeforeReleaseSurface = String(source[..<releaseSurfaceRange.lowerBound])
+        let releaseSurface = String(source[releaseSurfaceRange.lowerBound...])
+
+        if let lastDebugStart = sourceBeforeReleaseSurface.range(of: "#if DEBUG", options: .backwards) {
+            let lastDebugEnd = try XCTUnwrap(
+                sourceBeforeReleaseSurface.range(of: "#endif", options: .backwards)
+            )
+            XCTAssertGreaterThan(lastDebugEnd.lowerBound, lastDebugStart.lowerBound)
+        }
+        XCTAssertTrue(releaseSurface.contains("store.placesInCommon(with: profileID)"))
+        XCTAssertTrue(releaseSurface.contains("InCommonReleaseHero("))
+        XCTAssertTrue(releaseSurface.contains("TextField(\"search \\(navigationTitle.lowercased())\""))
+        XCTAssertTrue(releaseSurface.contains("Label(\"Open your shared map\", systemImage: \"map.fill\")"))
+        XCTAssertTrue(releaseSurface.contains("InCommonReleaseMapScreen("))
+        XCTAssertTrue(releaseSurface.contains("ProfilePlaceCollectionMap("))
     }
 
     func testSharedProfileHomeHidesUnusedNavigationBar() throws {
@@ -2070,8 +2120,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(adaptiveReview.contains("systemImage: \"checkmark\""))
         XCTAssertTrue(adaptiveReview.contains("action: onDone"))
         XCTAssertFalse(adaptiveReview.contains("View on map"))
-        XCTAssertTrue(adaptiveReview.contains("let excludedItems = activeItems.filter { !$0.isSelectedForImport }"))
-        XCTAssertTrue(adaptiveReview.contains("let items = activeItems.filter(\\.isSelectedForImport)"))
+        XCTAssertTrue(adaptiveReview.contains("let placeItems = activeItems.filter { !$0.isSourceRetry }"))
+        XCTAssertTrue(adaptiveReview.contains("let excludedItems = placeItems.filter { !$0.isSelectedForImport }"))
+        XCTAssertTrue(adaptiveReview.contains("let items = placeItems.filter(\\.isSelectedForImport)"))
         XCTAssertTrue(adaptiveReview.contains("importStore.dismiss(itemID: item.id)"))
         XCTAssertFalse(adaptiveReview.contains("PlaceImportStatusSelector("))
     }
@@ -2848,6 +2899,16 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertEqual(
             WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderAuthenticatedUITest", "-WanderUseEphemeralEmptyFixtures"],
+                usesSimulatorTestSession: true
+            ),
+            .ephemeralEmpty
+        )
+        let ephemeralEmptyFixtures = WanderRootView.resolvedFixtures(mode: .ephemeralEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.places.isEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.userPlaces.isEmpty)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
                 from: ["Wander"],
                 usesSimulatorTestSession: false
             ),
@@ -3101,6 +3162,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(fullScreen.contains("saves: []"))
         XCTAssertFalse(fullScreen.contains("currentUserID: \"you\""))
         XCTAssertTrue(fullScreen.contains("focus(place)"), "A pin should focus its rail tile")
+        XCTAssertTrue(fullScreen.contains("focusFromRail(place)"), "A rail swipe should focus the map camera")
+        XCTAssertTrue(rail.contains("let onFocus: (ListPlaceMock) -> Void"))
+        XCTAssertTrue(rail.contains(".scrollPosition(id: railScrollPositionBinding, anchor: .center)"))
+        XCTAssertTrue(rail.contains("onFocus(place)"), "Only rail scroll-position changes should focus the camera")
         XCTAssertTrue(rail.contains("let onSelect: (ListPlaceMock) -> Void"))
         XCTAssertTrue(rail.contains("onSelect(place)"), "Rail selection should open the place directly")
         XCTAssertTrue(rail.contains("let onOpen: () -> Void"))

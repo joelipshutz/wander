@@ -2,9 +2,11 @@ import MapKit
 import SwiftUI
 import UIKit
 
-#if DEBUG
 struct YourMapPrototypeScreen: View {
     let dataset: YourMapPrototypeDataset
+    let viewerID: String?
+    let mapTitle: String
+    let pinOwnership: MapPinSaveOwnership
 
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
@@ -17,10 +19,16 @@ struct YourMapPrototypeScreen: View {
 
     init(
         dataset: YourMapPrototypeDataset,
+        viewerID: String? = nil,
+        mapTitle: String = "Your Map",
+        pinOwnership: MapPinSaveOwnership = .currentUser,
         initialMode: YourMapPrototypeMode = .map,
         initialShowsSharePreview: Bool = false
     ) {
         self.dataset = dataset
+        self.viewerID = viewerID
+        self.mapTitle = mapTitle
+        self.pinOwnership = pinOwnership
         _mode = State(initialValue: initialMode)
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
@@ -66,10 +74,11 @@ struct YourMapPrototypeScreen: View {
                 places: filteredPlaces,
                 lens: lens,
                 now: dataset.now,
+                pinOwnership: pinOwnership,
                 dismiss: { showsSharePreview = false }
             )
         }
-        .navigationTitle(mode == .map ? "Your Map" : "Patterns")
+        .navigationTitle(mode == .map ? mapTitle : "Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -122,7 +131,8 @@ struct YourMapPrototypeScreen: View {
                     Annotation(place.name, coordinate: place.coordinate) {
                         YourMapPrototypeSelectablePin(
                             place: place,
-                            isSelected: selectedPlaceID == place.id
+                            isSelected: selectedPlaceID == place.id,
+                            pinOwnership: pinOwnership
                         ) {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 selectedPlaceID = place.id
@@ -171,7 +181,7 @@ struct YourMapPrototypeScreen: View {
                     )
                 ],
                 tasteSaves: [],
-                currentUserID: selectedVisiblePlace.owner.id,
+                currentUserID: viewerID ?? selectedVisiblePlace.owner.id,
                 viewerLocation: nil,
                 action: .none,
                 onOpen: {},
@@ -447,10 +457,10 @@ struct YourMapPrototypeScreen: View {
             Image(systemName: dataset.places.isEmpty ? "mappin.and.ellipse" : "line.3.horizontal.decrease.circle")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(WanderTheme.terracotta.color)
-            Text(dataset.places.isEmpty ? "Your map starts with one place" : "No places match this lens")
+            Text(dataset.places.isEmpty ? "\(mapTitle) has no places you can see yet" : "No places match this lens")
                 .font(WanderTypography.editorialCardTitle)
                 .multilineTextAlignment(.center)
-            Text(dataset.places.isEmpty ? "Add a place worth remembering and it will appear here." : "Keep the lens or loosen one filter. Your choices stay intact until you reset them.")
+            Text(dataset.places.isEmpty ? emptyMapDetail : "Keep the lens or loosen one filter. Your choices stay intact until you reset them.")
                 .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .multilineTextAlignment(.center)
@@ -472,6 +482,12 @@ struct YourMapPrototypeScreen: View {
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
         .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, y: 6)
         .padding(.bottom, 84)
+    }
+
+    private var emptyMapDetail: String {
+        mapTitle == "Your Map"
+            ? "Add a place worth remembering and it will appear here."
+            : "Places they choose to share with you will appear here."
     }
 
     private var patternsEmptyState: some View {
@@ -839,6 +855,7 @@ private struct YourMapPrototypeSharePreview: View {
     let places: [YourMapPrototypePlace]
     let lens: YourMapPrototypeLens
     let now: Date
+    let pinOwnership: MapPinSaveOwnership
     let dismiss: () -> Void
 
     @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
@@ -931,7 +948,7 @@ private struct YourMapPrototypeSharePreview: View {
             Text(lensTitle)
                 .font(WanderTypography.editorialDisplay)
                 .fixedSize(horizontal: false, vertical: true)
-            YourMapPrototypeMiniMap(places: places)
+            YourMapPrototypeMiniMap(places: places, pinOwnership: pinOwnership)
                 .frame(height: 210)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             HStack(spacing: WanderTheme.spacing3) {
@@ -1052,12 +1069,13 @@ private struct YourMapPrototypeSharePreview: View {
 
 private struct YourMapPrototypeMiniMap: View {
     let places: [YourMapPrototypePlace]
+    let pinOwnership: MapPinSaveOwnership
 
     var body: some View {
         Map(position: .constant(.region(region)), interactionModes: []) {
             ForEach(Array(places.prefix(28))) { place in
                 Annotation(place.name, coordinate: place.coordinate) {
-                    YourMapPrototypePin(place: place)
+                    YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
                         .scaleEffect(0.58)
                 }
                 .annotationTitles(.hidden)
@@ -1085,6 +1103,7 @@ private struct YourMapPrototypeMiniMap: View {
 
 private struct YourMapPrototypePin: View {
     let place: YourMapPrototypePlace
+    let pinOwnership: MapPinSaveOwnership
 
     var body: some View {
         WanderCategoryEmoji(
@@ -1098,7 +1117,7 @@ private struct YourMapPrototypePin: View {
         .overlay(
             MapPinOutlineStroke(
                 outline: MapPinOutline(
-                    ownership: .currentUser,
+                    ownership: pinOwnership,
                     status: place.status == .been ? .been : .wannaGo
                 ),
                 lineWidth: MapPinVisualMetrics.outlineWidth
@@ -1112,12 +1131,13 @@ private struct YourMapPrototypePin: View {
 private struct YourMapPrototypeSelectablePin: View {
     let place: YourMapPrototypePlace
     let isSelected: Bool
+    let pinOwnership: MapPinSaveOwnership
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                YourMapPrototypePin(place: place)
+                YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
 
                 if isSelected {
                     Text(place.name)
@@ -1378,4 +1398,3 @@ private func categoryColor(_ category: String) -> Color {
         YourMapPrototypeScreen(volume: .empty)
     }
 }
-#endif

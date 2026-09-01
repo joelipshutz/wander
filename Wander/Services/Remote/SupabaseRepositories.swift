@@ -672,9 +672,11 @@ private struct PublicSharedPlacePreview: Decodable {
 
 struct SupabaseFeedRepository: FeedRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
         self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
@@ -682,7 +684,28 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try await response.followedFeedPage()
+        let activityIDs = Array(
+            Set(response.activity.compactMap { item in
+                UUID(uuidString: item.id)?.uuidString.lowercased()
+            })
+        ).sorted()
+        let mediaRows: [RemoteActivityMediaDTO]
+        if activityIDs.isEmpty {
+            mediaRows = []
+        } else {
+            mediaRows = (try? await rpc.call(
+                "activity_media",
+                params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+            )) ?? []
+        }
+        let mediaByActivityID = Dictionary(
+            mediaRows.map { ($0.activityID.lowercased(), $0.media) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        return try await response.followedFeedPage(
+            storage: storage,
+            mediaByActivityID: mediaByActivityID
+        )
     }
 }
 
@@ -941,6 +964,39 @@ struct SupabaseVisitRepository: VisitRepository {
                 expiresIn: 3600
             )
             results.append(row.result(remoteURLString: remoteURL.absoluteString))
+        }
+        return results
+    }
+
+    func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
+        let rows: [VisitPhotoRow] = try await table.select(
+            table: "visit_photos",
+            queryItems: [
+                URLQueryItem(name: "select", value: VisitPhotoRow.selectColumns),
+                URLQueryItem(name: "visit_id", value: "eq.\(visitID)"),
+                URLQueryItem(name: "deleted_at", value: "is.null"),
+                URLQueryItem(name: "upload_state", value: "eq.uploaded"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ]
+        )
+        var results: [VisitPhotoResult] = []
+        results.reserveCapacity(rows.count)
+        for row in rows {
+            do {
+                let remoteURL = try await storage.signedObjectURL(
+                    bucket: row.storageBucket,
+                    path: row.storagePath,
+                    expiresIn: 3600
+                )
+                results.append(row.result(remoteURLString: remoteURL.absoluteString))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // One missing object must not suppress the visit's other
+                // uploaded photos. The store preserves a cached URL when a
+                // fresh signature is temporarily unavailable.
+                results.append(row.result(remoteURLString: nil))
+            }
         }
         return results
     }
@@ -1974,6 +2030,254 @@ struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
     }
 }
 
+private struct SocialImportUnderstandingBody: Encodable {
+    let schemaVersion = 1
+    let platform: String
+    let url: String
+    let clientRequestID: String
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case platform
+        case url
+        case clientRequestID = "client_request_id"
+    }
+}
+
+private struct SocialImportUnderstandingFunctionResponse: Decodable {
+    struct Hint: Decodable {
+        struct ResolvedPlace: Decodable {
+            let provider: String
+            let providerPlaceID: String
+            let name: String
+            let formattedAddress: String?
+            let locality: String?
+            let region: String?
+            let country: String?
+            let latitude: Double
+            let longitude: Double
+            let primaryType: String?
+            let types: [String]?
+
+            enum CodingKeys: String, CodingKey {
+                case provider
+                case providerPlaceID = "provider_place_id"
+                case name
+                case formattedAddress = "formatted_address"
+                case locality
+                case region
+                case country
+                case latitude
+                case longitude
+                case primaryType = "primary_type"
+                case types
+            }
+        }
+
+        let name: String
+        let area: String?
+        let modality: String
+        let classification: String
+        let resolvedPlaces: [ResolvedPlace]?
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case area
+            case modality
+            case classification
+            case resolvedPlaces = "resolved_places"
+        }
+    }
+
+    let schemaVersion: Int
+    let outcome: String
+    let providerPath: String?
+    let hints: [Hint]
+    let mediaCount: Int?
+    let modelAttemptCount: Int?
+    let failureCategory: String?
+    let declaredCountComplete: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case outcome
+        case providerPath = "provider_path"
+        case hints
+        case mediaCount = "media_count"
+        case modelAttemptCount = "model_attempt_count"
+        case failureCategory = "failure_category"
+        case declaredCountComplete = "declared_count_complete"
+    }
+}
+
+struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    private static let maximumHints = 150
+    private let functions: RemoteFunctionCalling
+
+    init(functions: RemoteFunctionCalling) {
+        self.functions = functions
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        guard [.instagram, .tiktok].contains(source),
+              url.scheme?.lowercased() == "https"
+        else {
+            throw WanderRemoteError.invalidResponse("Unsupported social import source")
+        }
+
+        let response: SocialImportUnderstandingFunctionResponse = try await functions.invoke(
+            "social-import-understand",
+            body: SocialImportUnderstandingBody(
+                platform: source.rawValue,
+                url: url.absoluteString,
+                clientRequestID: clientRequestID
+            )
+        )
+        guard response.schemaVersion == 1 else {
+            throw WanderRemoteError.invalidResponse("Unsupported social import response schema")
+        }
+
+        let decodedOutcome: SocialImportUnderstandingOutcome
+        switch response.outcome {
+        case "ok":
+            decodedOutcome = .ok
+        case "partial":
+            decodedOutcome = .partial
+        case "no_places":
+            decodedOutcome = .noPlaces
+        case "fallback":
+            decodedOutcome = .fallback
+        default:
+            throw WanderRemoteError.invalidResponse("Unknown social import response outcome")
+        }
+
+        let providerPath = Self.providerPath(response.providerPath)
+        let serverReasoningIsAuthoritative = providerPath == "apify_gemini"
+        var seen = Set<String>()
+        let hints = response.hints.prefix(Self.maximumHints).compactMap { hint -> SocialPlaceSearchHint? in
+            guard ["destination", "itinerary"].contains(hint.classification),
+                  let name = Self.cleaned(hint.name, maximumLength: 160)
+            else { return nil }
+            let area = Self.cleaned(hint.area, maximumLength: 160)
+            let evidence: SocialPlaceSearchHint.Evidence
+            switch hint.modality {
+            case "tagged_location":
+                evidence = .explicitLocation
+            case "image_text", "video_text":
+                evidence = .imageText
+            case "caption", "speech":
+                evidence = .itineraryPhrase
+            default:
+                return nil
+            }
+            let identity = [name, area ?? ""]
+                .joined(separator: "|")
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seen.insert(identity).inserted else { return nil }
+            return SocialPlaceSearchHint(
+                name: name,
+                area: area,
+                evidence: evidence,
+                isServerGrounded: serverReasoningIsAuthoritative,
+                resolvedCandidates: serverReasoningIsAuthoritative
+                    ? Self.resolvedCandidates(from: hint.resolvedPlaces)
+                    : []
+            )
+        }
+
+        let outcome: SocialImportUnderstandingOutcome
+        switch decodedOutcome {
+        case .ok where hints.isEmpty:
+            // A complete, honestly empty model result is distinct from a
+            // malformed hint set and may authoritatively report no places.
+            outcome = response.hints.isEmpty ? .noPlaces : .fallback
+        case .partial where hints.isEmpty:
+            // An incomplete scan cannot authoritatively say there are no
+            // places. Preserve both the on-device caption/Vision rescue path
+            // and the incomplete signal so recovered rows remain retryable.
+            outcome = .partial
+        default:
+            outcome = decodedOutcome
+        }
+
+        return SocialImportUnderstandingResult(
+            outcome: outcome,
+            hints: hints,
+            diagnostics: SocialImportUnderstandingDiagnostics(
+                providerPath: providerPath,
+                mediaCount: Self.clamped(response.mediaCount, maximum: Self.maximumHints),
+                modelAttemptCount: Self.clamped(response.modelAttemptCount, maximum: 6),
+                failureCategory: Self.cleaned(response.failureCategory, maximumLength: 64),
+                declaredCountComplete: response.declaredCountComplete == true
+            )
+        )
+    }
+
+    private static func providerPath(_ value: String?) -> String {
+        switch value {
+        case "apify_gemini", "apify_deterministic":
+            value ?? "unknown"
+        default:
+            "unknown"
+        }
+    }
+
+    private static func resolvedCandidates(
+        from values: [SocialImportUnderstandingFunctionResponse.Hint.ResolvedPlace]?
+    ) -> [PlaceCandidate] {
+        var seen = Set<String>()
+        return (values ?? []).prefix(3).compactMap { value in
+            guard value.provider == "google_places",
+                  let providerPlaceID = cleaned(value.providerPlaceID, maximumLength: 300),
+                  seen.insert(providerPlaceID).inserted,
+                  let name = cleaned(value.name, maximumLength: 200),
+                  value.latitude.isFinite,
+                  (-90...90).contains(value.latitude),
+                  value.longitude.isFinite,
+                  (-180...180).contains(value.longitude)
+            else { return nil }
+            let rawProviderType = cleaned(value.primaryType, maximumLength: 100)
+                ?? value.types?.compactMap { cleaned($0, maximumLength: 100) }.first
+            return PlaceCandidate(
+                id: "google-places-\(providerPlaceID)",
+                name: name,
+                category: rawProviderType ?? WanderPlaceCategory.fallbackPlace,
+                rawProviderType: rawProviderType,
+                address: cleaned(value.formattedAddress, maximumLength: 500),
+                locality: cleaned(value.locality, maximumLength: 160),
+                region: cleaned(value.region, maximumLength: 160),
+                country: cleaned(value.country, maximumLength: 160),
+                latitude: value.latitude,
+                longitude: value.longitude,
+                sourceProvider: "google_places",
+                sourceProviderPlaceID: providerPlaceID,
+                confidence: 1
+            )
+        }
+    }
+
+    private static func clamped(_ value: Int?, maximum: Int) -> Int {
+        max(0, min(maximum, value ?? 0))
+    }
+
+    private static func cleaned(_ value: String?, maximumLength: Int) -> String? {
+        guard let value else { return nil }
+        let withoutControls = value.unicodeScalars.map { scalar in
+            CharacterSet.controlCharacters.contains(scalar) ? " " : String(scalar)
+        }.joined()
+        let cleaned = withoutControls
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, cleaned.count <= maximumLength else { return nil }
+        return cleaned
+    }
+}
+
 @MainActor
 final class RemoteDiscoverFilterParser: LLMFilterParser {
     private enum ParseError: Error {
@@ -2042,6 +2346,7 @@ enum PlacePhotoNetworkSession {
 }
 
 struct SupabasePlacePhotoRepository: PlacePhotoRepository {
+    private static let maximumGalleryPlaceCount = 64
     private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
     private let storage: (any RemoteStorageCalling)?
@@ -2223,19 +2528,28 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        guard let rpc, UUID(uuidString: placeID) != nil else {
+        guard let rpc else {
+            throw WanderRemoteError.notConfigured
+        }
+        let canonicalPlaceIDs = Array(
+            Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
+        )
+            .sorted()
+            .prefix(Self.maximumGalleryPlaceCount)
+            .map { $0 }
+        guard !canonicalPlaceIDs.isEmpty else {
             throw WanderRemoteError.invalidResponse("Place photo gallery requires a canonical place id")
         }
 
         let pageSize = min(max(limit, 1), 100)
         let rows: [VisiblePlacePhotoGalleryRow] = try await rpc.call(
-            "visible_place_photos",
+            "visible_place_photos_for_places",
             params: VisiblePlacePhotoGalleryParams(
-                inputPlaceID: placeID,
+                inputPlaceIDs: canonicalPlaceIDs,
                 inputAfterCreatedAt: cursor?.createdAt,
                 inputAfterSortOrder: cursor?.sortOrder,
                 inputAfterPhotoID: cursor?.photoID,
@@ -2426,14 +2740,14 @@ private struct FirstVisiblePlacePhotoByUsersParams: Encodable {
 }
 
 private struct VisiblePlacePhotoGalleryParams: Encodable {
-    let inputPlaceID: String
+    let inputPlaceIDs: [String]
     let inputAfterCreatedAt: Date?
     let inputAfterSortOrder: Int?
     let inputAfterPhotoID: String?
     let inputLimit: Int
 
     enum CodingKeys: String, CodingKey {
-        case inputPlaceID = "input_place_id"
+        case inputPlaceIDs = "input_place_ids"
         case inputAfterCreatedAt = "input_after_created_at"
         case inputAfterSortOrder = "input_after_sort_order"
         case inputAfterPhotoID = "input_after_photo_id"

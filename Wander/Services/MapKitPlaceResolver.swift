@@ -564,13 +564,29 @@ struct ManualPlaceSearchPlan {
         }
 
         let names = Self.providerNameVariants(for: name)
-        let resolvedQueries = names.map { searchName in
-            [searchName, queryAreaHint]
+        let allowsRegionOnlyFallback = PlaceImportGeography.isDistinctiveLandmarkFeatureName(name)
+        var resolvedQueries: [String] = []
+        var seenQueries = Set<String>()
+        for searchName in names {
+            let localizedQuery = [searchName, queryAreaHint]
                 .compactMap { value -> String? in
                     guard let value, !value.isEmpty else { return nil }
                     return value
                 }
                 .joined(separator: " ")
+            if seenQueries.insert(localizedQuery).inserted {
+                resolvedQueries.append(localizedQuery)
+            }
+            // City labels can over-constrain broad metro landmarks. Only
+            // recognized geographic-feature names get a state-bounded retry;
+            // ordinary businesses remain tied to the requested locality so a
+            // same-state branch cannot become a misleading exact match.
+            if allowsRegionOnlyFallback,
+               resolvedRegionHint != nil,
+               queryAreaHint != nil,
+               seenQueries.insert(searchName).inserted {
+                resolvedQueries.append(searchName)
+            }
         }
         coordinateHint = resolvedCoordinateHint
         regionHint = resolvedRegionHint
@@ -581,15 +597,64 @@ struct ManualPlaceSearchPlan {
     private static func providerNameVariants(for name: String) -> [String] {
         let folded = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .lowercased()
-        var variants = [name]
+        var variants: [String] = []
+        var seen = Set<String>()
+        let append = { (candidate: String) in
+            let identity = candidate.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+            .filter { $0.isLetter || $0.isNumber }
+            guard !identity.isEmpty, seen.insert(identity).inserted else { return }
+            variants.append(candidate)
+        }
+
+        append(name)
+        if let featureCore = providerFeatureCoreVariant(for: name) {
+            append(featureCore)
+        }
         if folded.contains("gorge"), !folded.contains("reservoir") {
-            variants.append("\(name) Reservoir")
+            append("\(name) Reservoir")
         }
         if folded.contains("overlook"), !folded.contains("interpretive site") {
-            variants.append("\(name) Interpretive Site")
+            append("\(name) Interpretive Site")
         }
         return variants
     }
+
+    private static func providerFeatureCoreVariant(for name: String) -> String? {
+        let components = name.split(whereSeparator: { $0.isWhitespace })
+        guard components.count >= 3,
+              let suffix = components.last.map(normalizedFeatureToken),
+              removableFeatureSuffixes.contains(suffix)
+        else { return nil }
+
+        let base = components.dropLast()
+        let normalizedBase = base.map(normalizedFeatureToken)
+        guard normalizedBase.count >= 2,
+              normalizedBase.contains(where: { token in
+                  token.count >= 3
+                      && !featureCoreConnectorTokens.contains(token)
+                      && !removableFeatureSuffixes.contains(token)
+              })
+        else { return nil }
+        return base.map(String.init).joined(separator: " ")
+    }
+
+    private static func normalizedFeatureToken(_ value: Substring) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static let removableFeatureSuffixes: Set<String> = [
+        "bluff", "bluffs", "mountain", "mountains", "observatories", "observatory",
+        "overlook", "overlooks", "peak", "peaks", "summit", "summits"
+    ]
+
+    private static let featureCoreConnectorTokens: Set<String> = [
+        "a", "an", "and", "at", "by", "for", "in", "near", "of", "on", "the", "to"
+    ]
 }
 
 enum LinkPlaceResolutionHeuristics {

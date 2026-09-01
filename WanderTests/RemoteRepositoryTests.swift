@@ -3,6 +3,251 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testSocialImportUnderstandingInvokesAuthenticatedFunctionAndKeepsOnlyGroundedPlaceHints() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "Carbon Beach Club",
+                  "area": "Malibu",
+                  "modality": "image_text",
+                  "classification": "destination",
+                  "resolved_places": [
+                    {
+                      "provider": "google_places",
+                      "provider_place_id": "carbon-google-id",
+                      "name": "Carbon Beach Club Restaurant",
+                      "formatted_address": "22878 Pacific Coast Hwy, Malibu, CA 90265, USA",
+                      "locality": "Malibu",
+                      "region": "CA",
+                      "country": "US",
+                      "latitude": 34.0391,
+                      "longitude": -118.6776,
+                      "primary_type": "restaurant",
+                      "types": ["restaurant", "food"]
+                    }
+                  ]
+                },
+                {
+                  "name": "Los Angeles, California",
+                  "area": null,
+                  "modality": "caption",
+                  "classification": "ambiguous"
+                },
+                {
+                  "name": "Hotel Bel-Air",
+                  "area": "Los Angeles",
+                  "modality": "tagged_location",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 9,
+              "model_attempt_count": 99,
+              "failure_category": null,
+              "declared_count_complete": true
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+        let url = try XCTUnwrap(URL(string: "https://www.instagram.com/p/DcAU9e5DYcH/"))
+
+        let result = try await repository.understand(
+            url: url,
+            source: .instagram,
+            clientRequestID: "stable-request-id"
+        )
+
+        XCTAssertEqual(result.outcome, .ok)
+        XCTAssertEqual(result.hints, [
+            SocialPlaceSearchHint(
+                name: "Carbon Beach Club",
+                area: "Malibu",
+                evidence: .imageText,
+                isServerGrounded: true,
+                resolvedCandidates: [
+                    PlaceCandidate(
+                        id: "google-places-carbon-google-id",
+                        name: "Carbon Beach Club Restaurant",
+                        category: "restaurant",
+                        rawProviderType: "restaurant",
+                        address: "22878 Pacific Coast Hwy, Malibu, CA 90265, USA",
+                        locality: "Malibu",
+                        region: "CA",
+                        country: "US",
+                        latitude: 34.0391,
+                        longitude: -118.6776,
+                        sourceProvider: "google_places",
+                        sourceProviderPlaceID: "carbon-google-id",
+                        confidence: 1
+                    )
+                ]
+            ),
+            SocialPlaceSearchHint(
+                name: "Hotel Bel-Air",
+                area: "Los Angeles",
+                evidence: .explicitLocation,
+                isServerGrounded: true
+            )
+        ])
+        XCTAssertEqual(result.diagnostics.mediaCount, 9)
+        XCTAssertEqual(result.diagnostics.modelAttemptCount, 6)
+        XCTAssertTrue(result.diagnostics.declaredCountComplete)
+        XCTAssertEqual(functions.calls.map(\.name), ["function:social-import-understand"])
+        XCTAssertEqual(functions.rawBodies.first?["schema_version"] as? Int, 1)
+        XCTAssertEqual(functions.rawBodies.first?["platform"] as? String, "instagram")
+        XCTAssertEqual(functions.rawBodies.first?["url"] as? String, url.absoluteString)
+        XCTAssertEqual(functions.rawBodies.first?["client_request_id"] as? String, "stable-request-id")
+    }
+
+    func testGeminiDecodedRoryVenuesRemainDistinctThroughEvidencePlanning() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "Rory's Place",
+                  "area": "Ojai",
+                  "modality": "video_text",
+                  "classification": "itinerary"
+                },
+                {
+                  "name": "Rory's Other Place",
+                  "area": "Ojai",
+                  "modality": "video_text",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 1,
+              "model_attempt_count": 2,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/reel/rorys-distinct-venues/")),
+            source: .instagram,
+            clientRequestID: "rorys-request"
+        )
+        let planned = SocialImportEvidencePlanner.reviewHints(result.hints)
+
+        XCTAssertTrue(result.hints.allSatisfy(\.isServerGrounded))
+        XCTAssertEqual(planned.map(\.name), ["Rory's Place", "Rory's Other Place"])
+    }
+
+    func testDeterministicDecodedContextCityIsStillRemovedByEvidencePlanning() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "partial",
+              "provider_path": "apify_deterministic",
+              "hints": [
+                {
+                  "name": "Westlake Village",
+                  "area": "California",
+                  "modality": "caption",
+                  "classification": "itinerary"
+                },
+                {
+                  "name": "The Stonehaus",
+                  "area": "Westlake Village",
+                  "modality": "caption",
+                  "classification": "itinerary"
+                }
+              ],
+              "media_count": 0,
+              "model_attempt_count": 3,
+              "failure_category": "understanding_unavailable"
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/deterministic-context-city/")),
+            source: .instagram,
+            clientRequestID: "deterministic-request"
+        )
+        let planned = SocialImportEvidencePlanner.reviewHints(result.hints)
+
+        XCTAssertTrue(result.hints.allSatisfy { !$0.isServerGrounded })
+        XCTAssertEqual(planned.map(\.name), ["The Stonehaus"])
+        XCTAssertEqual(planned.first?.area, "Westlake Village")
+    }
+
+    func testSocialImportUnderstandingFailsClosedToFallbackWhenAllReturnedHintsAreInvalid() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "ok",
+              "provider_path": "apify_gemini",
+              "hints": [
+                {
+                  "name": "A Venue",
+                  "area": null,
+                  "modality": "visual_scene",
+                  "classification": "destination"
+                }
+              ],
+              "media_count": 1,
+              "model_attempt_count": 1,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.tiktok.com/@creator/video/1234567890123")),
+            source: .tiktok,
+            clientRequestID: "request"
+        )
+
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertTrue(result.hints.isEmpty)
+    }
+
+    func testSocialImportUnderstandingPreservesAnEmptyPartialScan() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1,
+              "outcome": "partial",
+              "provider_path": "apify_gemini",
+              "hints": [],
+              "media_count": 4,
+              "model_attempt_count": 1,
+              "failure_category": null
+            }
+            """.utf8
+        )
+        let repository = SupabaseSocialImportUnderstandingRepository(functions: functions)
+
+        let result = try await repository.understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/reel/partial-example/")),
+            source: .instagram,
+            clientRequestID: "partial-request"
+        )
+
+        XCTAssertEqual(result.outcome, .partial)
+        XCTAssertTrue(result.hints.isEmpty)
+    }
+
     func testVisiblePlaceDecodesDuplicatePrivateViewerTaxonomyEnvelopeWithoutPersistingItAsSaveContent() throws {
         let data = """
         {
@@ -213,6 +458,71 @@ final class RemoteRepositoryTests: XCTestCase {
             JSONSerialization.jsonObject(with: firstRequestBody) as? [String: String]
         )
         XCTAssertEqual(decodedBody["marker"], "photo-retry-probe")
+    }
+
+    func testSocialImportFunctionAllowsTheBoundedServerRunToFinish() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [(200, #"{"value":"understood"}"#.data(using: .utf8)!)]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: FeedTokenAuthSession(),
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "social-import-understand",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "understood")
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125])
+    }
+
+    func testSocialImportFunctionRefreshesTheClerkTokenAfterForbiddenResponse() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (403, #"{"message":"JWT rejected"}"#.data(using: .utf8)!),
+                (200, #"{"value":"understood"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "social-import-understand",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "understood")
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.requestPaths,
+            [
+                "/functions/v1/social-import-understand",
+                "/functions/v1/social-import-understand"
+            ]
+        )
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125, 125])
     }
 
     func testEdgeFunctionStopsAfterOneFreshTokenRetry() async throws {
@@ -796,6 +1106,59 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        let activityID = "40000000-0000-0000-0000-000000000386"
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [{
+            "id": "\(activityID)",
+            "event_type": "place_been",
+            "occurred_at": "2026-08-30T20:00:00Z",
+            "actor": {
+              "id": "user_ryan",
+              "handle": "ryan",
+              "display_name": "Ryan",
+              "avatar_url": null,
+              "relationship": "follower"
+            },
+            "place": null,
+            "list": null,
+            "note": "Dudley Market",
+            "rating": null,
+            "media": []
+          }],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-08-30T20:01:00Z"
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [{
+          "activity_id": "\(activityID)",
+          "media": [{
+            "id": "55000000-0000-0000-0000-000000000386",
+            "url": null,
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_dudley/photo.jpg",
+            "accessibility_label": "Activity photo"
+          }]
+        }]
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc, storage: storage)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25)
+
+        XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
+        )
+    }
+
     func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -1332,6 +1695,53 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(storage.deletes, [RecordingStorage.Delete(bucket: "visit-photos", path: "user_123/visit_123/photo_123.jpg")])
         XCTAssertEqual(table.calls.map(\.key), ["DELETE:visit_photos"])
         XCTAssertEqual(table.calls[0].queryItems, [URLQueryItem(name: "id", value: "eq.photo_123")])
+    }
+
+    func testVisitRepositoryLoadsOnlyVisibleUploadedPhotosAndIsolatesSigningFailures() async throws {
+        let table = RecordingTable()
+        let storage = RecordingStorage()
+        storage.signedURLFailurePaths = ["user_ryan/visit_386/missing.jpg"]
+        table.responses["GET:visit_photos"] = """
+        [
+          {
+            "id": "photo_visible",
+            "visit_id": "visit_386",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_386/visible.jpg",
+            "content_type": "image/jpeg",
+            "byte_size": 1024,
+            "width": 1200,
+            "height": 900,
+            "captured_at": "2026-08-30T20:00:00Z",
+            "sort_order": 0,
+            "upload_state": "uploaded"
+          },
+          {
+            "id": "photo_missing",
+            "visit_id": "visit_386",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_386/missing.jpg",
+            "content_type": "image/jpeg",
+            "byte_size": 1024,
+            "width": 1200,
+            "height": 900,
+            "captured_at": "2026-08-30T20:01:00Z",
+            "sort_order": 1,
+            "upload_state": "uploaded"
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: storage)
+
+        let photos = try await repository.visibleUploadedPhotos(for: "visit_386")
+
+        XCTAssertEqual(photos.map(\.photoID), ["photo_visible", "photo_missing"])
+        XCTAssertNotNil(photos[0].remoteURLString)
+        XCTAssertNil(photos[1].remoteURLString)
+        XCTAssertEqual(
+            table.calls[0].queryItems.first { $0.name == "upload_state" }?.value,
+            "eq.uploaded"
+        )
     }
 
     func testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows() async throws {
@@ -2883,7 +3293,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testPlacePhotoRepositoryMapsPaginatedVisibleGalleryWithContributorIdentity() async throws {
         let rpc = RecordingRPC()
-        rpc.responses["visible_place_photos"] = """
+        rpc.responses["visible_place_photos_for_places"] = """
         [{
           "photo_id": "55000000-0000-0000-0000-000000000133",
           "storage_bucket": "visit-photos",
@@ -2914,7 +3324,11 @@ final class RemoteRepositoryTests: XCTestCase {
         )
 
         let page = try await repository.visiblePhotoGalleryPage(
-            placeID: "50000000-0000-0000-0000-000000000133",
+            placeIDs: [
+                "50000000-0000-0000-0000-000000000134",
+                "50000000-0000-0000-0000-000000000133",
+                "50000000-0000-0000-0000-000000000134"
+            ],
             after: cursor,
             limit: 1
         )
@@ -2927,10 +3341,13 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(page.nextCursor?.photoID, "55000000-0000-0000-0000-000000000133")
         XCTAssertEqual(page.nextCursor?.sortOrder, 2)
         XCTAssertTrue(page.hasMore)
-        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_photos"])
+        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_photos_for_places"])
         XCTAssertEqual(
-            rpc.rawBodies[0]["input_place_id"] as? String,
-            "50000000-0000-0000-0000-000000000133"
+            rpc.rawBodies[0]["input_place_ids"] as? [String],
+            [
+                "50000000-0000-0000-0000-000000000133",
+                "50000000-0000-0000-0000-000000000134"
+            ]
         )
         XCTAssertEqual(rpc.rawBodies[0]["input_after_sort_order"] as? Int, 1)
         XCTAssertEqual(
@@ -2939,6 +3356,31 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 1)
         XCTAssertNotNil(rpc.rawBodies[0]["input_after_created_at"] as? String)
+    }
+
+    func testPlacePhotoRepositoryCapsGroupedGalleryPlaceIDsDeterministically() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["visible_place_photos_for_places"] = "[]".data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: RecordingStorage()
+        )
+        let placeIDs = (0..<70).map {
+            String(format: "50000000-0000-0000-0000-%012d", $0)
+        }.reversed()
+
+        _ = try await repository.visiblePhotoGalleryPage(
+            placeIDs: Array(placeIDs),
+            after: nil,
+            limit: 40
+        )
+
+        let sentPlaceIDs = try XCTUnwrap(rpc.rawBodies[0]["input_place_ids"] as? [String])
+        XCTAssertEqual(sentPlaceIDs.count, 64)
+        XCTAssertEqual(sentPlaceIDs, sentPlaceIDs.sorted())
+        XCTAssertEqual(sentPlaceIDs.first, "50000000-0000-0000-0000-000000000000")
+        XCTAssertEqual(sentPlaceIDs.last, "50000000-0000-0000-0000-000000000063")
     }
 
     func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
@@ -3726,7 +4168,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testFeatureFlagRepositoryAppliesSupportedOverridesAndKeepsSemanticGlobal() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"social_import_apify_gemini_v1","user_id":null,"enabled":false},{"key":"social_import_apify_gemini_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -3751,6 +4193,10 @@ final class RemoteRepositoryTests: XCTestCase {
                     isEnabled: false,
                     source: .globalDefault
                 ),
+                .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                ),
                 .placeProfileActionVariant: ResolvedFeatureFlagValue(
                     value: .integer(2),
                     source: .accountOverride
@@ -3769,7 +4215,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,place_profile_action_variant)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant)"
                 )
             ]
         )
@@ -3902,13 +4348,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_without_row"))
     }
 
-    func testBackendIgnoresAnOlderFeatureFlagSuccessThatFinishesLast() async {
-        let disabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
-            .firstVisitNUX: ResolvedFeatureFlagValue(
-                isEnabled: false,
-                source: .accountOverride
-            )
-        ]
+    func testBackendCoalescesConcurrentFeatureFlagRefreshesForTheSameAccount() async {
         let enabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
             .firstVisitNUX: ResolvedFeatureFlagValue(
                 isEnabled: true,
@@ -3916,21 +4356,18 @@ final class RemoteRepositoryTests: XCTestCase {
             )
         ]
         let repository = ControlledFeatureFlagRepository(
-            responses: [
-                .success(disabled),
-                .success(enabled)
-            ]
+            responses: [.success(enabled)]
         )
         let backend = WanderBackend(featureFlagRepository: repository)
 
-        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        let first = Task { await backend.refreshFeatureFlags(for: "user") }
         while repository.startedRequestCount < 1 { await Task.yield() }
-        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
-        while repository.startedRequestCount < 2 { await Task.yield() }
-        repository.completeRequest(at: 1)
-        await newer.value
+        let second = Task { await backend.refreshFeatureFlags(for: "user") }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(repository.startedRequestCount, 1)
         repository.completeRequest(at: 0)
-        await older.value
+        await first.value
+        await second.value
 
         XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
     }
@@ -3950,17 +4387,17 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         let backend = WanderBackend(featureFlagRepository: repository)
 
-        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        let older = Task { await backend.refreshFeatureFlags(for: "user_a") }
         while repository.startedRequestCount < 1 { await Task.yield() }
-        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
+        let newer = Task { await backend.refreshFeatureFlags(for: "user_b") }
         while repository.startedRequestCount < 2 { await Task.yield() }
         repository.completeRequest(at: 1)
         await newer.value
         repository.completeRequest(at: 0)
         await older.value
 
-        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
-        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user"))
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_b"), true)
+        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_b"))
     }
 
     func testBackendClearFeatureFlagsInvalidatesAnInFlightRefresh() async {
@@ -4198,6 +4635,12 @@ private final class FeedRPCURLProtocol: URLProtocol {
         return bodies.compactMap { $0 }
     }
 
+    static var requestTimeoutIntervals: [TimeInterval] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.map(\.timeoutInterval)
+    }
+
     static var requestCount: Int {
         lock.lock()
         defer { lock.unlock() }
@@ -4305,6 +4748,7 @@ private final class RecordingStorage: RemoteStorageCalling {
     private(set) var downloads: [Delete] = []
     private(set) var signedURLs: [Delete] = []
     var downloadData = Data()
+    var signedURLFailurePaths = Set<String>()
 
     func uploadObject(
         bucket: String,
@@ -4335,6 +4779,9 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
         signedURLs.append(Delete(bucket: bucket, path: path))
+        if signedURLFailurePaths.contains(path) {
+            throw TestStorageError.unavailable
+        }
         return URL(string: "https://example.supabase.co/storage/v1/object/sign/\(bucket)/\(path)?token=test")!
     }
 

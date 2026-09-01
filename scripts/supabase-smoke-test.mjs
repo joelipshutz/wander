@@ -34,9 +34,6 @@ async function main() {
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
   const migrationPreviews = options.migrationPreviews ?? [];
-  if (options.migrationTest && migrationPreviews.length === 0) {
-    throw new Error("--migration-test requires --migration-preview.");
-  }
   if (options.linked) {
     runLinkedSmokeChecks(
       smokeUserID,
@@ -81,7 +78,10 @@ async function main() {
         if (failures.length > 0) {
           throw new Error(`pgTAP smoke failures:\n${failures.join("\n")}`);
         }
-        console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
+        const target = migrationPreviews.length > 0
+          ? "migration preview"
+          : "hosted schema";
+        console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
@@ -109,7 +109,8 @@ async function main() {
         await runFeaturedCommunitySmokeChecks(client, smokeUserID, strangerUserID);
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
         await runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, private taxonomy snapshots, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
+        await runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID);
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, private taxonomy snapshots, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, global rec.me place search, and paid social-import admission are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -325,6 +326,251 @@ async function runCalendarReservationNotificationSmokeChecks(
     }])],
     (result) => result.rows[0]?.result?.queued_count === 1,
   );
+}
+
+async function runSocialImportPaidWorkAdmissionSmokeChecks(client, smokeUserID) {
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  await expectQuery(
+    client,
+    "paid social-import admission metadata stays narrow and authenticated-only",
+    `
+      select
+        begin_proc.prosecdef as begin_definer,
+        finish_proc.prosecdef as finish_definer,
+        service_finish_proc.prosecdef as service_finish_definer,
+        pg_get_userbyid(service_finish_proc.proowner) = 'postgres'
+          as service_finish_postgres_owner,
+        exists (
+          select 1 from unnest(coalesce(begin_proc.proconfig, array[]::text[])) setting
+          where setting in ('search_path=', 'search_path=""')
+        ) as begin_empty_path,
+        exists (
+          select 1 from unnest(coalesce(finish_proc.proconfig, array[]::text[])) setting
+          where setting in ('search_path=', 'search_path=""')
+        ) as finish_empty_path,
+        exists (
+          select 1
+          from unnest(coalesce(service_finish_proc.proconfig, array[]::text[])) setting
+          where setting in ('search_path=', 'search_path=""')
+        ) as service_finish_empty_path,
+        has_function_privilege('authenticated', begin_proc.oid, 'execute')
+          as begin_authenticated,
+        has_function_privilege('authenticated', finish_proc.oid, 'execute')
+          as finish_authenticated,
+        has_function_privilege('service_role', service_finish_proc.oid, 'execute')
+          as service_finish_service,
+        not has_function_privilege('authenticated', service_finish_proc.oid, 'execute')
+          as service_finish_authenticated_denied,
+        not has_function_privilege('anon', service_finish_proc.oid, 'execute')
+          as service_finish_anon_denied,
+        not has_function_privilege('anon', begin_proc.oid, 'execute')
+          as begin_anon_denied,
+        not has_function_privilege('service_role', begin_proc.oid, 'execute')
+          as begin_service_denied,
+        not has_function_privilege('service_role', finish_proc.oid, 'execute')
+          as finish_service_denied,
+        not has_table_privilege(
+          'authenticated',
+          'app.social_import_paid_work_admissions',
+          'select,insert,update,delete'
+        ) as table_authenticated_denied,
+        not has_table_privilege(
+          'service_role',
+          'app.social_import_paid_work_admissions',
+          'select,insert,update,delete'
+        ) as table_service_denied,
+        pg_get_functiondef(begin_proc.oid)
+          like '%pg_advisory_xact_lock%recme:social-import-paid-work:%'
+          as serialized_admission,
+        pg_get_function_arguments(service_finish_proc.oid) =
+          'input_client_request_id text, input_admission_id uuid'
+          as service_finish_has_no_user_argument,
+        pg_get_functiondef(service_finish_proc.oid)
+          like '%select admission.user_id%'
+          and pg_get_functiondef(service_finish_proc.oid)
+            like '%pg_advisory_xact_lock%recme:social-import-paid-work:%'
+          as service_finish_derives_serialized_owner
+      from pg_proc begin_proc
+      cross join pg_proc finish_proc
+      cross join pg_proc service_finish_proc
+      where begin_proc.oid =
+        'public.begin_social_import_paid_work(text)'::regprocedure
+        and finish_proc.oid =
+        'public.finish_social_import_paid_work(text,uuid)'::regprocedure
+        and service_finish_proc.oid =
+          'public.finish_social_import_paid_work_service(text,uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "globally disabled social import fails closed before paid admission",
+    `select admitted, decision from public.begin_social_import_paid_work($1)`,
+    ["smoke-flag-off"],
+    (result) => result.rows[0]?.admitted === false
+      && result.rows[0]?.decision === "disabled",
+  );
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.feature_flags (
+        key, user_id, enabled, value_type, integer_value
+      ) values (
+        'social_import_apify_gemini_v1', $1, true, 'boolean', null
+      )
+      on conflict (key, user_id) where user_id is not null
+      do update set enabled = excluded.enabled,
+                    value_type = excluded.value_type,
+                    integer_value = excluded.integer_value
+    `,
+    [smokeUserID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  const started = await expectQuery(
+    client,
+    "first paid social-import request receives an opaque admission token",
+    `select * from public.begin_social_import_paid_work($1)`,
+    ["smoke-first"],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.admitted === true
+      && result.rows[0]?.decision === "started"
+      && Boolean(result.rows[0]?.admission_id),
+  );
+  const admissionID = started.rows[0].admission_id;
+  await expectQuery(
+    client,
+    "in-flight paid social-import requests are deduplicated",
+    `select * from public.begin_social_import_paid_work($1)`,
+    ["smoke-first"],
+    (result) => result.rows[0]?.admitted === false
+      && result.rows[0]?.decision === "duplicate"
+      && result.rows[0]?.admission_id === null,
+  );
+  await expectQuery(
+    client,
+    "paid social-import finish releases the exact owner slot",
+    `select public.finish_social_import_paid_work($1, $2::uuid) as finished`,
+    ["smoke-first", admissionID],
+    (result) => result.rows[0]?.finished === true,
+  );
+  await expectQuery(
+    client,
+    "finished paid social-import requests request a content-free replay",
+    `select * from public.begin_social_import_paid_work($1)`,
+    ["smoke-first"],
+    (result) => result.rows[0]?.admitted === false
+      && result.rows[0]?.decision === "replay_required",
+  );
+
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  const serviceAdmission = await client.query(
+    `
+      insert into app.social_import_paid_work_admissions (
+        user_id, client_request_id, state, started_at, finished_at
+      ) values ($1, 'smoke-service-finish', 'in_flight', clock_timestamp(), null)
+      returning id
+    `,
+    [smokeUserID],
+  );
+  await client.query("set local role service_role");
+  await client.query("select set_config('request.jwt.claim.sub', '', true)");
+  await expectQuery(
+    client,
+    "service cleanup finishes an exact admission after the user bearer is gone",
+    `
+      select public.finish_social_import_paid_work_service(
+        $1,
+        $2::uuid
+      ) as finished
+    `,
+    ["smoke-service-finish", serviceAdmission.rows[0].id],
+    (result) => result.rows[0]?.finished === true,
+  );
+
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  await setAuthenticatedUser(client, smokeUserID);
+  for (const suffix of ["one", "two", "three"]) {
+    await expectQuery(
+      client,
+      `paid social-import concurrency slot ${suffix}`,
+      `select admitted, decision from public.begin_social_import_paid_work($1)`,
+      [`smoke-concurrent-${suffix}`],
+      (result) => result.rows[0]?.admitted === true
+        && result.rows[0]?.decision === "started",
+    );
+  }
+  await expectQuery(
+    client,
+    "fourth paid social-import request is capacity limited",
+    `select admitted, decision from public.begin_social_import_paid_work($1)`,
+    ["smoke-concurrent-four"],
+    (result) => result.rows[0]?.admitted === false
+      && result.rows[0]?.decision === "busy",
+  );
+
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  await client.query(
+    `
+      insert into app.social_import_paid_work_admissions (
+        user_id, client_request_id, state, started_at, finished_at
+      ) values ($1, 'smoke-stale', 'in_flight', clock_timestamp() - interval '10 minutes', null)
+    `,
+    [smokeUserID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "stale paid social-import attempts expire and can retry",
+    `select admitted, decision from public.begin_social_import_paid_work($1)`,
+    ["smoke-stale"],
+    (result) => result.rows[0]?.admitted === true
+      && result.rows[0]?.decision === "started",
+  );
+
+  await client.query("reset role");
+  await client.query("truncate table app.social_import_paid_work_admissions");
+  await client.query(
+    `
+      insert into app.social_import_paid_work_admissions (
+        user_id, client_request_id, state, started_at, finished_at
+      )
+      select
+        $1,
+        'smoke-quota-' || ordinal::text,
+        'finished',
+        clock_timestamp() - interval '1 hour',
+        clock_timestamp() - interval '59 minutes'
+      from generate_series(1, 20) ordinal
+    `,
+    [smokeUserID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "twenty-first paid social-import start is quota limited",
+    `select admitted, decision from public.begin_social_import_paid_work($1)`,
+    ["smoke-quota-blocked"],
+    (result) => result.rows[0]?.admitted === false
+      && result.rows[0]?.decision === "quota",
+  );
+
+  await client.query("reset role");
+  await client.query("set local role anon");
+  await expectQueryFailure(
+    client,
+    "anonymous callers cannot invoke paid social-import admission",
+    `select * from public.begin_social_import_paid_work($1)`,
+    ["smoke-anonymous"],
+    /permission denied for function begin_social_import_paid_work/,
+  );
+  await client.query("reset role");
 }
 
 async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID) {
@@ -733,7 +979,7 @@ Options:
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
   --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
-  --migration-test <path>          With --migration-preview, run one strict pgTAP file in the same rollback-only transaction.
+  --migration-test <path>          Run one strict rollback-only pgTAP file against the current schema and any supplied previews.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
@@ -795,6 +1041,11 @@ function runLinkedSmokeChecks(
   const discoverSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
   );
+  const socialImportAdmissionSmokeSQL = migrationPreviewPaths.length === 0
+    ? loadStrictPgTapSQL(
+      new URL("../supabase/tests/social_import_paid_work_admission.sql", import.meta.url),
+    )
+    : "";
   try {
     const linkedSQL = migrationTestPath
       ? `begin;\n${migrationPreviewSQL}\n${migrationPreviewTestSQL}\nrollback;`
@@ -804,7 +1055,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}`;
     writeFileSync(filePath, linkedSQL, {
       encoding: "utf8",
       mode: 0o600,
@@ -836,9 +1087,12 @@ function runLinkedSmokeChecks(
       console.log(result.stdout.trim());
     }
     if (migrationTestPath) {
-      console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${migrationTestPath}`);
+      const target = migrationPreviewPaths.length > 0
+        ? "migration preview"
+        : "hosted schema";
+      console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${migrationTestPath}`);
     } else {
-      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, paid social-import admission, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -1149,6 +1403,28 @@ begin
   end if;
 end
 $photo_gallery_metadata$;
+
+do $grouped_photo_gallery_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=pg_catalog, public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'visible_place_photos_for_places'
+    and pg_get_function_identity_arguments(p.oid)
+      = 'input_place_ids uuid[], input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer';
+  if valid is distinct from true then
+    raise exception 'grouped place-photo gallery metadata contract failed';
+  end if;
+end
+$grouped_photo_gallery_metadata$;
 
 do $quota_metadata$
 declare
@@ -1638,6 +1914,7 @@ $owner_scoped_photos$;
 do $owner_photo_gallery$
 declare
   visible_count integer;
+  grouped_visible_count integer;
   attributed_count integer;
   ranked_contributors text[];
   rank_cursors integer[];
@@ -1656,6 +1933,15 @@ begin
      or ranked_contributors is distinct from array[${smokeUser}, ${collaboratorUser}]::text[]
      or rank_cursors is distinct from array[0, 1]::integer[] then
     raise exception 'owner place-photo gallery ranking/attribution fixture failed';
+  end if;
+
+  select count(*)::integer into grouped_visible_count
+  from public.visible_place_photos_for_places(array[(
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  )]::uuid[]);
+  if grouped_visible_count <> 2 then
+    raise exception 'owner grouped place-photo gallery fixture failed';
   end if;
 end
 $owner_photo_gallery$;
@@ -4532,6 +4818,32 @@ async function runFirstVisiblePlacePhotoChecks(
     },
   );
 
+  await expectQuery(
+    client,
+    "grouped place photo gallery RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=pg_catalog, public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'visible_place_photos_for_places'
+        and pg_get_function_identity_arguments(p.oid)
+          = 'input_place_ids uuid[], input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
   await client.query(
     `
       insert into public.follows (follower_user_id, followed_user_id, source)
@@ -4683,6 +4995,18 @@ async function runFirstVisiblePlacePhotoChecks(
       && result.rows[0]?.sort_order === 0
       && result.rows[0]?.contributor_user_id === smokeUserID
       && result.rows[0]?.contributor_handle,
+  );
+  await expectQuery(
+    client,
+    "owner grouped place-photo gallery accepts the production place-id array",
+    `
+      select *
+      from public.visible_place_photos_for_places(array[$1::uuid, $1::uuid])
+    `,
+    [smokePlaceID],
+    (result) => result.rows.length === 2
+      && result.rows[0]?.photo_id === expectedPhotoID
+      && result.rows[1]?.photo_id === expectedCollaboratorPhotoID,
   );
   await expectQuery(
     client,

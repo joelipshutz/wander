@@ -2,6 +2,119 @@ import Foundation
 import MapKit
 import SwiftUI
 
+struct ProfilePresentation {
+    let visiblePlaces: [VisiblePlace]
+    let visits: [LocalPlaceVisit]
+    let stats: ProfileStats
+    let activityItems: [ProfileActivityItem]
+    let followerCount: Int
+    let followingCount: Int
+    let inCommonCount: Int
+    let relationship: ViewerRelationship
+    let isMuted: Bool
+}
+
+@MainActor
+final class ProfilePresentationCache {
+    private var cached: (
+        revision: UInt64,
+        profileID: String,
+        currentUserID: String,
+        presentation: ProfilePresentation
+    )?
+    #if DEBUG
+    private(set) var buildCount = 0
+    #endif
+
+    func present(store: WanderStore, profileID: String) -> ProfilePresentation {
+        if let cached,
+           cached.revision == store.presentationRevision,
+           cached.profileID == profileID,
+           cached.currentUserID == store.currentUser.id {
+            return cached.presentation
+        }
+
+        #if DEBUG
+        buildCount += 1
+        #endif
+
+        let isOwner = profileID == store.currentUser.id
+        let visiblePlaces: [VisiblePlace]
+        let visits: [LocalPlaceVisit]
+        if isOwner {
+            let projection = store.currentUserCalendarProjection
+            visiblePlaces = projection.visiblePlaces
+            visits = projection.visits
+        } else {
+            visiblePlaces = store.visiblePlaces(for: profileID)
+            visits = store.placeVisits
+        }
+
+        let friends = store.friends(of: profileID).count
+        let stats: ProfileStats
+        if isOwner {
+            stats = store.currentUserCalendarProjection.profileStats(
+                currentUserID: profileID,
+                friends: friends
+            )
+        } else {
+            stats = Self.profileStats(
+                visiblePlaces: visiblePlaces,
+                visits: visits,
+                currentUserID: store.currentUser.id,
+                friends: friends
+            )
+        }
+
+        let presentation = ProfilePresentation(
+            visiblePlaces: visiblePlaces,
+            visits: visits,
+            stats: stats,
+            activityItems: ProfileActivityPresenter.items(
+                visiblePlaces: visiblePlaces,
+                visits: visits,
+                currentUserID: profileID
+            ),
+            followerCount: store.followers(of: profileID).count,
+            followingCount: store.following(of: profileID).count,
+            inCommonCount: isOwner ? 0 : store.placesInCommon(with: profileID).count,
+            relationship: store.relationship(to: profileID),
+            isMuted: !isOwner && store.isMuted(userID: profileID)
+        )
+        cached = (store.presentationRevision, profileID, store.currentUser.id, presentation)
+        return presentation
+    }
+
+    func activityItems(store: WanderStore, currentUserID: String) -> [ProfileActivityItem] {
+        present(store: store, profileID: currentUserID).activityItems
+    }
+
+    private static func profileStats(
+        visiblePlaces: [VisiblePlace],
+        visits: [LocalPlaceVisit],
+        currentUserID: String,
+        friends: Int
+    ) -> ProfileStats {
+        let places = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let uniqueCheckedInPlaces = places.filter { $0.userPlace.status == .been }.count
+        let activeIDs = Set(places.flatMap {
+            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
+        })
+        let checkInCount = visits.filter {
+            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
+        }.count
+        return ProfileStats(
+            been: uniqueCheckedInPlaces,
+            checkIns: max(checkInCount, uniqueCheckedInPlaces),
+            wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
+            friends: friends
+        )
+    }
+}
+
 struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -21,12 +134,11 @@ struct ProfileScreen: View {
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var profilePresentationCache = ProfilePresentationCache()
     @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
-    #if DEBUG
     @State private var showsYourMapPrototype = false
-    #endif
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -58,15 +170,16 @@ struct ProfileScreen: View {
     }
 
     var body: some View {
+        let presentation = profilePresentation
         NavigationStack {
             ProfileOwnerHome(
                 profile: store.currentUser,
                 viewerProfile: store.currentUser,
                 mode: .owner,
-                stats: profileStats,
+                stats: presentation.stats,
                 saveStreak: store.saveStreakSummary,
-                followerCount: store.followers(of: store.currentUser.id).count,
-                followingCount: store.following(of: store.currentUser.id).count,
+                followerCount: presentation.followerCount,
+                followingCount: presentation.followingCount,
                 sharedVisitInvitationCount: store.sharedVisitInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
@@ -104,9 +217,7 @@ struct ProfileScreen: View {
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
                 },
                 yourMapAction: {
-                    #if DEBUG
                     showsYourMapPrototype = true
-                    #endif
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
@@ -126,12 +237,10 @@ struct ProfileScreen: View {
                     }
                 }
                 .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
-                #if DEBUG
                 .toolbar(
                     showsSettings || showsYourMapPrototype ? .hidden : .visible,
                     for: .tabBar
                 )
-                #endif
                 .sheet(item: $socialGraphTab, onDismiss: {
                     walkthroughs.activate(.profile)
                 }) { tab in
@@ -173,8 +282,8 @@ struct ProfileScreen: View {
                     ProfileActivityHistoryScreen(
                         items: profileActivityItems,
                         initialFilter: filter,
-                        checkInCount: profileStats.checkIns,
-                        wannaCount: profileStats.wanna,
+                        checkInCount: presentation.stats.checkIns,
+                        wannaCount: presentation.stats.wanna,
                         itemAction: { item in
                             selectedActivityItemID = item.id
                         }
@@ -189,12 +298,10 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
-                #if DEBUG
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
                     YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
                     .toolbar(.hidden, for: .tabBar)
                 }
-                #endif
                 .navigationDestination(isPresented: $showsVisitInvitations) {
                     SharedVisitInvitationInboxScreen { invitation in
                         showsVisitInvitations = false
@@ -329,18 +436,17 @@ struct ProfileScreen: View {
     }
 
     private var profileInsights: ProfileInsights {
-        let projection = store.currentUserCalendarProjection
+        let presentation = profilePresentation
         return profileInsightsCache.present(
             ownerID: store.currentUser.id,
-            userPlaces: projection.userPlaces,
-            visits: projection.visits,
-            places: projection.places,
+            userPlaces: presentation.visiblePlaces.map(\.userPlace),
+            visits: presentation.visits,
+            places: presentation.visiblePlaces.map(\.place),
             month: selectedMonth,
             dataRevision: store.presentationRevision
         )
     }
 
-    #if DEBUG
     private var yourMapPrototypeDataset: YourMapPrototypeDataset {
         let projection = store.currentUserCalendarProjection
         return YourMapPrototypeDataset.make(
@@ -351,27 +457,21 @@ struct ProfileScreen: View {
             visiblePlaces: projection.visiblePlaces
         )
     }
-    #endif
 
-    private var profileStats: ProfileStats {
-        store.currentUserCalendarProjection.profileStats(
-            currentUserID: store.currentUser.id,
-            friends: store.friends(of: store.currentUser.id).count
-        )
+    private var profilePresentation: ProfilePresentation {
+        profilePresentationCache.present(store: store, profileID: store.currentUser.id)
     }
 
     private var profileActivityItems: [ProfileActivityItem] {
-        let projection = store.currentUserCalendarProjection
-        return ProfileActivityPresenter.items(
-            visiblePlaces: projection.visiblePlaces,
-            visits: projection.visits,
+        profilePresentationCache.activityItems(
+            store: store,
             currentUserID: store.currentUser.id
         )
     }
 
     private var selectedActivityItem: ProfileActivityItem? {
         guard let selectedActivityItemID else { return nil }
-        return profileActivityItems.first { $0.id == selectedActivityItemID }
+        return profilePresentation.activityItems.first { $0.id == selectedActivityItemID }
     }
 
     private var activityPlaceDestinationBinding: Binding<Bool> {
@@ -660,11 +760,13 @@ struct ProfileDetailView: View {
     @State private var activityListFilter: ProfileActivityFilter?
     @State private var selectedActivityItemID: String?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
+    @State private var showsYourMapPrototype = false
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
     @State private var reportSubject: CommunityReportSubject?
     @State private var isLoading = true
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var profilePresentationCache = ProfilePresentationCache()
     @State private var backSwipeOffset: CGFloat = 0
     @State private var isCompletingBackSwipe = false
 
@@ -688,7 +790,8 @@ struct ProfileDetailView: View {
     }
 
     private var profileNavigationStack: some View {
-        NavigationStack {
+        let presentation = profilePresentation
+        return NavigationStack {
             ZStack(alignment: .topLeading) {
                 Group {
                     if let profile {
@@ -696,13 +799,13 @@ struct ProfileDetailView: View {
                             profile: profile,
                             viewerProfile: store.currentUser,
                             mode: .member(
-                                relationship: store.relationship(to: profileID),
-                                inCommonCount: inCommonPlaces.count
+                                relationship: presentation.relationship,
+                                inCommonCount: presentation.inCommonCount
                             ),
-                            stats: profileStats,
+                            stats: presentation.stats,
                             saveStreak: nil,
-                            followerCount: store.followers(of: profileID).count,
-                            followingCount: store.following(of: profileID).count,
+                            followerCount: presentation.followerCount,
+                            followingCount: presentation.followingCount,
                             sharedVisitInvitationCount: 0,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
@@ -713,8 +816,8 @@ struct ProfileDetailView: View {
                             relationshipAction: handleRelationshipAction,
                             backAction: { dismiss() },
                             memberActions: ProfileMemberActions(
-                                canUnfollow: store.relationship(to: profileID) == .follower || store.relationship(to: profileID) == .mutual,
-                                isMuted: store.isMuted(userID: profileID),
+                                canUnfollow: presentation.relationship == .follower || presentation.relationship == .mutual,
+                                isMuted: presentation.isMuted,
                                 unfollowAction: { showUnfollowConfirm = true },
                                 toggleMuteAction: toggleMute,
                                 reportAction: presentProfileReport,
@@ -736,7 +839,9 @@ struct ProfileDetailView: View {
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
                             },
-                            yourMapAction: nil,
+                            yourMapAction: {
+                                showsYourMapPrototype = true
+                            },
                             calendarScrollRequestID: nil,
                             onCalendarScrollRequestHandled: { _ in }
                         )
@@ -775,8 +880,8 @@ struct ProfileDetailView: View {
                 ProfileActivityHistoryScreen(
                     items: profileActivityItems,
                     initialFilter: filter,
-                    checkInCount: profileStats.checkIns,
-                    wannaCount: profileStats.wanna,
+                    checkInCount: presentation.stats.checkIns,
+                    wannaCount: presentation.stats.wanna,
                     itemAction: { item in
                         selectedActivityItemID = item.id
                     }
@@ -790,6 +895,14 @@ struct ProfileDetailView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+            }
+            .navigationDestination(isPresented: $showsYourMapPrototype) {
+                YourMapPrototypeScreen(
+                    dataset: yourMapPrototypeDataset,
+                    viewerID: store.currentUser.id,
+                    mapTitle: profileMapTitle,
+                    pinOwnership: .social
+                )
             }
             .sheet(item: $socialGraphTab) { tab in
                 ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
@@ -835,6 +948,7 @@ struct ProfileDetailView: View {
             || activityListFilter != nil
             || selectedActivityItem != nil
             || placeCollectionRoute != nil
+            || showsYourMapPrototype
     }
 
     private func interactiveBackSwipeGesture(containerWidth: CGFloat) -> some Gesture {
@@ -879,56 +993,51 @@ struct ProfileDetailView: View {
             }
     }
 
+    private var profilePresentation: ProfilePresentation {
+        profilePresentationCache.present(store: store, profileID: profileID)
+    }
+
     private var profileVisiblePlaces: [VisiblePlace] {
-        store.visiblePlaces(for: profileID)
+        profilePresentation.visiblePlaces
     }
 
-    private var inCommonPlaces: [VisiblePlace] {
-        store.placesInCommon(with: profileID)
+    private var yourMapPrototypeDataset: YourMapPrototypeDataset {
+        let presentation = profilePresentation
+        return YourMapPrototypeDataset.make(
+            ownerID: profileID,
+            userPlaces: profileVisiblePlaces.map(\.userPlace),
+            visits: presentation.visits,
+            places: profileVisiblePlaces.map(\.place),
+            visiblePlaces: profileVisiblePlaces
+        )
     }
 
-    private var profileStats: ProfileStats {
-        let places = VisiblePlaceGrouping.representativePlaces(
-            from: profileVisiblePlaces,
-            currentUserID: store.currentUser.id
-        )
-        let uniqueCheckedInPlaces = places.filter { $0.userPlace.status == .been }.count
-        let activeIDs = Set(places.flatMap {
-            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
-        })
-        let checkInCount = store.placeVisits.filter {
-            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
-            friends: store.friends(of: profileID).count
-        )
+    private var profileMapTitle: String {
+        guard let displayName = profile?.displayName.split(separator: " ").first else {
+            return "Their Map"
+        }
+        return "\(displayName)'s Map"
     }
 
     private var profileInsights: ProfileInsights {
-        profileInsightsCache.present(
+        let presentation = profilePresentation
+        return profileInsightsCache.present(
             ownerID: profileID,
-            userPlaces: profileVisiblePlaces.map(\.userPlace),
-            visits: store.placeVisits,
-            places: profileVisiblePlaces.map(\.place),
+            userPlaces: presentation.visiblePlaces.map(\.userPlace),
+            visits: presentation.visits,
+            places: presentation.visiblePlaces.map(\.place),
             month: selectedMonth,
             dataRevision: store.presentationRevision
         )
     }
 
     private var profileActivityItems: [ProfileActivityItem] {
-        ProfileActivityPresenter.items(
-            visiblePlaces: profileVisiblePlaces,
-            visits: store.placeVisits,
-            currentUserID: profileID
-        )
+        profilePresentationCache.activityItems(store: store, currentUserID: profileID)
     }
 
     private var selectedActivityItem: ProfileActivityItem? {
         guard let selectedActivityItemID else { return nil }
-        return profileActivityItems.first { $0.id == selectedActivityItemID }
+        return profilePresentation.activityItems.first { $0.id == selectedActivityItemID }
     }
 
     private var activityPlaceDestinationBinding: Binding<Bool> {
@@ -2070,6 +2179,213 @@ private struct ProfilePlaceCollectionClusterMarker: View {
     }
 }
 
+enum InCommonReleaseProjection {
+    static func overlapScore(sharedCount: Int, viewerCount: Int, profileCount: Int) -> Int {
+        let safeViewerCount = max(0, viewerCount)
+        let safeProfileCount = max(0, profileCount)
+        let safeSharedCount = min(
+            max(0, sharedCount),
+            min(safeViewerCount, safeProfileCount)
+        )
+        let unionCount = safeViewerCount + safeProfileCount - safeSharedCount
+        guard unionCount > 0 else { return 0 }
+        return Int((Double(safeSharedCount) / Double(unionCount) * 100).rounded())
+    }
+
+    static func prefersRightGroup<Element>(
+        _ lhs: (key: String, value: [Element]),
+        _ rhs: (key: String, value: [Element])
+    ) -> Bool {
+        if lhs.value.count != rhs.value.count {
+            return lhs.value.count < rhs.value.count
+        }
+        return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedDescending
+    }
+}
+
+private struct InCommonReleaseSignal: Identifiable {
+    let emoji: String
+    let title: String
+    let detail: String
+
+    var id: String { "\(title)-\(detail)" }
+}
+
+private struct InCommonReleaseHero: View {
+    let score: Int
+    let sharedPlaceCount: Int
+    let viewerName: String
+    let profileName: String
+    let signals: [InCommonReleaseSignal]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing4) {
+                scoreRing
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    avatarPair
+                    Text(score >= 80 ? "Your maps really click ✨" : "You’ve got common ground")
+                        .font(WanderTypography.editorialCardTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text(
+                        "\(sharedPlaceCount) shared \(sharedPlaceCount == 1 ? "place" : "places") with \(profileName)."
+                    )
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+
+            if !signals.isEmpty {
+                Text("you both keep coming back for")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(signals) { signal in
+                            InCommonReleaseSignalChip(signal: signal)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var scoreRing: some View {
+        ZStack {
+            Circle()
+                .stroke(WanderTheme.surfaceSand.color, lineWidth: 9)
+            Circle()
+                .trim(from: 0, to: CGFloat(score) / 100)
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            WanderTheme.terracotta.color,
+                            WanderTheme.categorySun.color,
+                            WanderTheme.pinSocial.color
+                        ],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            VStack(spacing: 0) {
+                Text("\(score)%")
+                    .font(.system(size: 25, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                Text("overlap")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .frame(width: 102, height: 102)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(score) percent map overlap")
+    }
+
+    private var avatarPair: some View {
+        HStack(spacing: -8) {
+            WanderAvatar(
+                initials: initials(for: viewerName),
+                size: 34,
+                color: WanderTheme.terracotta.color
+            )
+            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+            WanderAvatar(
+                initials: initials(for: profileName),
+                size: 34,
+                color: WanderTheme.pinSocial.color
+            )
+            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
+        let value = parts.compactMap(\.first).map(String.init).joined()
+        return value.isEmpty ? "?" : value.uppercased()
+    }
+}
+
+private struct InCommonReleaseSignalChip: View {
+    let signal: InCommonReleaseSignal
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Text(signal.emoji)
+                .font(.system(size: 20))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(signal.title)
+                    .font(.system(size: 13, weight: .black))
+                Text(signal.detail)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 54)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct InCommonReleaseMapScreen: View {
+    let places: [VisiblePlace]
+    let currentUserID: String
+    let onSelect: (VisiblePlace) -> Void
+
+    var body: some View {
+        let presentation = ProfilePlaceCollectionMapProjection.presentation(
+            for: places,
+            currentUserID: currentUserID
+        )
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                ProfilePlaceCollectionMap(
+                    presentation: presentation,
+                    overviewRegion: presentation.fittedRegion,
+                    overviewTotalCount: presentation.totalCount,
+                    onSelect: onSelect
+                )
+
+                Text("where you agree")
+                    .font(WanderTypography.editorialCardTitle)
+                    .padding(.horizontal, WanderTheme.spacing4)
+
+                LazyVStack(spacing: WanderTheme.spacing2) {
+                    ForEach(places) { visiblePlace in
+                        Button {
+                            onSelect(visiblePlace)
+                        } label: {
+                            ProfilePlaceRow(visiblePlace: visiblePlace)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows saved place details")
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+        }
+        .wanderScreen()
+        .navigationTitle("Shared map")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct SavedPlacesListScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -2085,6 +2401,7 @@ private struct SavedPlacesListScreen: View {
     @State private var tagFilterQuery = ""
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
+    @State private var showsInCommonMap = false
 
     init(mode: SavedPlacesListMode, profileID: String) {
         self.mode = mode
@@ -2167,7 +2484,17 @@ private struct SavedPlacesListScreen: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    if isInCommonRoot {
+                        inCommonPrivacyNotice
+                        InCommonReleaseHero(
+                            score: inCommonOverlapScore,
+                            sharedPlaceCount: allModePlaces.count,
+                            viewerName: store.currentUser.displayName,
+                            profileName: inCommonProfile?.displayName ?? "their",
+                            signals: inCommonSignals
+                        )
+                    }
                     if let calendarDay = collection?.calendarDay {
                         ProfileCalendarDayDetailHeader(summary: calendarDay)
                     }
@@ -2180,7 +2507,12 @@ private struct SavedPlacesListScreen: View {
                     }
 
                     if filteredPlaces.isEmpty {
-                        if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
+                        if isInCommonRoot, allModePlaces.isEmpty {
+                            SmallEmptyRow(
+                                title: "Your maps haven’t crossed yet",
+                                subtitle: "When you both save the same place, it’ll show up here"
+                            )
+                        } else if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
                                 subtitle: "check-ins will show up here"
@@ -2211,6 +2543,32 @@ private struct SavedPlacesListScreen: View {
                 inlineNavigationHeader
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isInCommonRoot, !allModePlaces.isEmpty {
+                Button {
+                    showsInCommonMap = true
+                } label: {
+                    Label("Open your shared map", systemImage: "map.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(WanderTheme.textInk.color)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing2)
+                .background(WanderTheme.canvasWarm.color.opacity(0.96))
+                .accessibilityHint("Shows every place you have in common on a map")
+            }
+        }
+        .navigationDestination(isPresented: $showsInCommonMap) {
+            InCommonReleaseMapScreen(
+                places: allModePlaces,
+                currentUserID: store.currentUser.id,
+                onSelect: { selectedPlace = $0 }
+            )
+        }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
         }
@@ -2231,6 +2589,81 @@ private struct SavedPlacesListScreen: View {
 
     private var navigationTitle: String {
         collection?.title ?? mode.title
+    }
+
+    private var isInCommonRoot: Bool {
+        mode == .inCommon && collection == nil
+    }
+
+    private var inCommonProfile: LocalProfile? {
+        store.profile(for: profileID)
+    }
+
+    private var inCommonOverlapScore: Int {
+        let viewerPlaces = store.representativeVisiblePlaces(for: store.currentUser.id)
+        let profilePlaces = store.representativeVisiblePlaces(for: profileID)
+        return InCommonReleaseProjection.overlapScore(
+            sharedCount: allModePlaces.count,
+            viewerCount: viewerPlaces.count,
+            profileCount: profilePlaces.count
+        )
+    }
+
+    private var inCommonSignals: [InCommonReleaseSignal] {
+        var signals: [InCommonReleaseSignal] = []
+        let categoryGroups = Dictionary(grouping: allModePlaces) {
+            WanderPlaceCategory.broadCategory(for: $0.effectiveCategory)
+        }
+        if let category = categoryGroups.max(by: InCommonReleaseProjection.prefersRightGroup) {
+            signals.append(
+                InCommonReleaseSignal(
+                    emoji: category.value.first?.categoryEmoji ?? "📍",
+                    title: category.key,
+                    detail: "\(category.value.count) shared \(category.value.count == 1 ? "place" : "places")"
+                )
+            )
+        }
+
+        let localityGroups = Dictionary(
+            grouping: allModePlaces.compactMap { visiblePlace -> (String, VisiblePlace)? in
+                guard let locality = visiblePlace.place.locality?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !locality.isEmpty else { return nil }
+                return (locality, visiblePlace)
+            },
+            by: \.0
+        )
+        if let locality = localityGroups.max(by: InCommonReleaseProjection.prefersRightGroup) {
+            signals.append(
+                InCommonReleaseSignal(
+                    emoji: "📌",
+                    title: locality.key,
+                    detail: "\(locality.value.count) shared \(locality.value.count == 1 ? "place" : "places")"
+                )
+            )
+        }
+        return signals
+    }
+
+    @ViewBuilder
+    private var inCommonPrivacyNotice: some View {
+        if store.relationship(to: profileID) != .mutual {
+            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateInfo.color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Based on places visible to you")
+                        .font(.system(size: 13, weight: .black))
+                    Text("Friends-only and private saves stay out of this comparison.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WanderTheme.skyTint.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        }
     }
 
     private var usesInlineNavigationHeader: Bool {
@@ -2571,7 +3004,7 @@ private struct SavedPlacesListScreen: View {
     }
 
     private func metadataTags(for visiblePlace: VisiblePlace) -> [String] {
-        store.attributes(for: visiblePlace.userPlace.id)
+        visiblePlace.attributes
             .flatMap { ProfileMetadataTagParser.tags(from: $0.valueJSON) }
     }
 
@@ -2630,24 +3063,12 @@ private struct SavedPlacesListScreen: View {
         switch submission.context.mode {
         case .sharedVisit:
             return nil
-        case .add(let sourceType):
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: sourceType,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-            await persistVisitPhotoAttachments(
-                submission.photoAttachments,
-                to: targetVisit,
+        case .add:
+            guard let result = await persistNewPlaceSaveSubmission(
+                submission,
                 store: store,
                 backend: visitBackend
-            )
+            ) else { return nil }
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }

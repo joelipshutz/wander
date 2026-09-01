@@ -9,6 +9,7 @@ import {
   collectCommits,
   reconcileManifest,
   resolveCommit,
+  resolveMarketingVersion,
   runGit,
   sha256,
   writeArtifacts,
@@ -569,7 +570,12 @@ export async function createReleaseSnapshot({
   });
   if (!report.ok) fail(report.errors.join("\n"));
 
-  const artifacts = buildReleaseArtifacts({ report, buildNumber, status });
+  const artifacts = buildReleaseArtifacts({
+    report,
+    buildNumber,
+    marketingVersion: resolveMarketingVersion(headRef, cwd),
+    status,
+  });
   const directory = resolve(writeDirectory);
   const manifestPath = resolve(directory, `testflight-build-${buildNumber}-manifest.json`);
   const manifestSource = {

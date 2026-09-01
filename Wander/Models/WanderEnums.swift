@@ -177,7 +177,7 @@ enum PlaceAttributeValuePresentation {
     }
 }
 
-enum VisitPhotoUploadState: String, Codable, CaseIterable, Equatable {
+enum VisitPhotoUploadState: String, Codable, CaseIterable, Equatable, Sendable {
     case pendingUpload = "pending_upload"
     case uploading
     case uploaded

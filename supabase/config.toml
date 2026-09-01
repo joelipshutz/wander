@@ -453,6 +453,13 @@ verify_jwt = false
 import_map = "./functions/semantic-place-search/deno.json"
 entrypoint = "./functions/semantic-place-search/index.ts"
 
+[functions.social-import-understand]
+enabled = true
+# Clerk third-party JWTs are verified through PostgREST inside the function.
+verify_jwt = false
+import_map = "./functions/social-import-understand/deno.json"
+entrypoint = "./functions/social-import-understand/index.ts"
+
 [functions.refresh-place-embeddings]
 enabled = true
 # Scheduled workers authenticate with the existing shared worker secret.

@@ -1,0 +1,23 @@
+{
+  "issue": "REC-380",
+  "captured_at": "2026-08-28T20:26:21Z",
+  "capture_source": "Joe's build 165 physical-device report plus privacy-filtered production Clerk session evidence",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "device": "iPhone 16 Pro",
+  "os": "iOS 26.6",
+  "build": "165",
+  "reported_path": "signed out -> Sign in with Apple -> complete Apple authorization",
+  "reported_problem": "the first attempt returned to rec.me and showed Apple sign-in didn’t finish; an immediate retry succeeded",
+  "server_evidence": "the verified Apple identity produced an active production Clerk session in the failure/retry window and refreshed the client about 2.7 seconds later",
+  "pre_fix_dependency": "Clerk iOS 1.1.4",
+  "reproducing_state_sequence": [
+    "Apple authorization completes and Clerk creates the server session",
+    "the app observes auth completion before the authoritative Clerk client adopts that session",
+    "ClerkAuthService's single immediate refresh does not expose an active local session",
+    "rec.me maps sessionUnavailable to the generic Apple sign-in didn’t finish message",
+    "retrying after the Clerk client settles succeeds"
+  ],
+  "expected_behavior": "a successful Apple authorization is accepted only after Clerk adopts the matching active session, so the first attempt enters rec.me without a false failure",
+  "upstream_fix_floor": "Clerk iOS 1.3.3 added startup sign-up race handling and the corrected public Apple sign-up flow; 1.5.0 adds accepted-auth completion ordering",
+  "privacy": "no email, token, Apple subject, or private backend payload is stored in this fixture"
+}
