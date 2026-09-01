@@ -3892,6 +3892,317 @@ enum PlaceImportAdaptiveMockupPage {
     }
 }
 
+enum PlaceImportManualReviewMockupPage {
+    static var isPresented: Bool {
+        ProcessInfo.processInfo.arguments.contains("-WanderPlaceImportManualReviewMockup")
+    }
+}
+
+struct PlaceImportManualReviewMockupRoot: View {
+    @State private var selectedStatus = PlaceStatus.wannaGo.rawValue
+    @State private var suggestedMatchConfirmed = false
+    @State private var skippedUnmatchedPlace = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    reviewSummary
+                    suggestedMatchCard
+
+                    if !skippedUnmatchedPlace {
+                        unmatchedPlaceCard
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.top, WanderTheme.spacing2)
+                .padding(.bottom, 112)
+            }
+            .scrollIndicators(.hidden)
+            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+            .navigationTitle("Review places")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: {}) {
+                        Label("Import complete", systemImage: "chevron.left")
+                    }
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                bottomAction
+            }
+        }
+        .preferredColorScheme(.light)
+    }
+
+    private var readyCount: Int {
+        4 + (suggestedMatchConfirmed ? 1 : 0)
+    }
+
+    private var remainingCount: Int {
+        6 - readyCount - (skippedUnmatchedPlace ? 1 : 0)
+    }
+
+    private var reviewSummary: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image("BrandInstagram")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+
+                Text("Instagram import")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Spacer()
+
+                Text("\(readyCount) of 6 ready")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.stateSuccess.color)
+            }
+
+            Text(remainingCount == 1 ? "1 place needs your help" : "2 places need your help")
+                .font(WanderTypography.editorialMajorSectionTitle)
+                .foregroundStyle(WanderTheme.textInk.color)
+
+            Text("Confirm the right place or leave it for later. Nothing uncertain gets added to your map.")
+                .font(WanderTypography.body)
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(WanderTheme.surfaceSand.color)
+                    Capsule()
+                        .fill(WanderTheme.stateSuccess.color)
+                        .frame(width: proxy.size.width * CGFloat(readyCount) / 6)
+                }
+            }
+            .frame(height: 7)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+
+    private var suggestedMatchCard: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            attentionLabel(
+                suggestedMatchConfirmed ? "MATCH CONFIRMED" : "CONFIRM THIS MATCH",
+                systemImage: suggestedMatchConfirmed ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                color: suggestedMatchConfirmed ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color
+            )
+
+            Text("The video called it “Chelou in Pasadena.”")
+                .font(WanderTypography.metadata)
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            HStack(spacing: WanderTheme.spacing3) {
+                PlaceImportReviewMockPhoto(tileIndex: 0)
+                    .frame(width: 66, height: 66)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Bar Chelou")
+                        .font(WanderTypography.editorialCardTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("37 S El Molino Ave · Pasadena")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button("Change") {}
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text("Add it as")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                WanderGlassSegmentedSwitch(
+                    options: [
+                        WanderSegmentOption(id: PlaceStatus.wannaGo.rawValue, title: "Wanna"),
+                        WanderSegmentOption(id: PlaceStatus.been.rawValue, title: "Check In")
+                    ],
+                    selection: $selectedStatus
+                )
+                .accessibilityLabel("Status for Bar Chelou")
+            }
+
+            if suggestedMatchConfirmed {
+                Label("Ready to add", systemImage: "checkmark")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.stateSuccess.color)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(WanderTheme.stateSuccess.color.opacity(0.11))
+                    .clipShape(Capsule())
+            } else {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        suggestedMatchConfirmed = true
+                    }
+                } label: {
+                    Label("Confirm match", systemImage: "checkmark")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(WanderTheme.textInk.color)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+
+    private var unmatchedPlaceCard: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            attentionLabel(
+                "SEARCH NEEDED",
+                systemImage: "magnifyingglass.circle.fill",
+                color: WanderTheme.terracotta.color
+            )
+
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderCategoryEmoji(emoji: "📍", size: 28)
+                    .frame(width: 58, height: 58)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("“Little lunch spot”")
+                        .font(WanderTypography.editorialNamedContent)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("Los Angeles · name missing")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text("We couldn’t identify this one from the post.")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.stateError.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                Button(action: {}) {
+                    Label("Search for place", systemImage: "magnifyingglass")
+                        .font(WanderTypography.label)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button("Skip") {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        skippedUnmatchedPlace = true
+                    }
+                }
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .frame(minWidth: 72, minHeight: 46)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+
+    private var bottomAction: some View {
+        VStack(spacing: 5) {
+            Button(action: {}) {
+                Label("Add \(readyCount) ready places", systemImage: "plus")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(WanderTheme.textInk.color)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            if remainingCount > 0 {
+                Text("\(remainingCount) unresolved place\(remainingCount == 1 ? "" : "s") will stay in Import review")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.top, WanderTheme.spacing2)
+        .padding(.bottom, WanderTheme.spacing2)
+        .background(WanderTheme.canvasWarm.color.opacity(0.97))
+    }
+
+    private func attentionLabel(_ title: String, systemImage: String, color: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 11, weight: .black))
+            .foregroundStyle(color)
+    }
+}
+
+private struct PlaceImportReviewMockPhoto: View {
+    let tileIndex: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let croppedImage {
+                Image(uiImage: croppedImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            } else {
+                WanderCategoryEmoji(emoji: "🍽️", size: 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(WanderTheme.terracottaTint.color)
+            }
+        }
+    }
+
+    private var croppedImage: UIImage? {
+        guard let sourceImage = UIImage(named: "PlaceCarouselPhotos"),
+              let sourceCGImage = sourceImage.cgImage
+        else { return nil }
+
+        let index = max(0, min(tileIndex, 3))
+        let width = sourceCGImage.width / 2
+        let height = sourceCGImage.height / 2
+        let cropRect = CGRect(
+            x: (index % 2) * width,
+            y: (index / 2) * height,
+            width: width,
+            height: height
+        )
+        guard let crop = sourceCGImage.cropping(to: cropRect) else { return nil }
+        return UIImage(cgImage: crop, scale: sourceImage.scale, orientation: sourceImage.imageOrientation)
+    }
+}
+
 @MainActor
 struct PlaceImportAdaptiveMockupRoot: View {
     @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
