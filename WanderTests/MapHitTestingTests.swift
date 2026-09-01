@@ -3356,6 +3356,42 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         XCTAssertEqual(groups[0].primary.owner.id, currentUser.id)
     }
 
+    func testGroupingNormalizationPreservesPunctuationDiacriticsAndWhitespaceSemantics() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let accented = visiblePlace(
+            owner: currentUser,
+            name: "Café Déjà-Vu!",
+            category: "coffee",
+            address: "42  Rue-de l’Été",
+            latitude: 34.050,
+            longitude: -118.250,
+            sourceProvider: "  GOOGLE   PLACES  ",
+            providerID: "  Café-ID  ",
+            status: .wannaGo
+        )
+        let normalized = visiblePlace(
+            owner: ryan,
+            name: "cafe deja vu",
+            category: "coffee",
+            address: "42 rue de l ete",
+            latitude: 34.056,
+            longitude: -118.257,
+            sourceProvider: "google places",
+            providerID: "café-id",
+            status: .been
+        )
+
+        XCTAssertTrue(VisiblePlaceGrouping.matches(accented, normalized))
+        XCTAssertEqual(
+            VisiblePlaceGrouping.groups(
+                from: [accented, normalized],
+                currentUserID: currentUser.id
+            ).count,
+            1
+        )
+    }
+
     func testGroupsLegacyAndCanonicalHotchkissAddressesIntoOnePin() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

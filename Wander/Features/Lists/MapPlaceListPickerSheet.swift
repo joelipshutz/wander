@@ -77,7 +77,7 @@ enum MapPlaceListTarget: Identifiable {
 }
 
 struct MapPlaceListPickerSelection: Equatable {
-    let existingListIDs: Set<String>
+    private(set) var existingListIDs: Set<String>
     private(set) var pendingListIDs: Set<String> = []
 
     mutating func togglePending(listID: String) {
@@ -86,6 +86,27 @@ struct MapPlaceListPickerSelection: Equatable {
             pendingListIDs.remove(listID)
         }
     }
+
+    mutating func replaceExistingListIDs(_ listIDs: Set<String>) {
+        existingListIDs = listIDs
+        pendingListIDs.subtract(listIDs)
+    }
+}
+
+private struct MapPlaceListPickerPresentation {
+    let eligibleLists: [LocalPlaceList]
+    let yourLists: [LocalPlaceList]
+    let collaborationLists: [LocalPlaceList]
+    let detailByListID: [String: String]
+    let needsCompanionWanna: Bool
+
+    static let empty = MapPlaceListPickerPresentation(
+        eligibleLists: [],
+        yourLists: [],
+        collaborationLists: [],
+        detailByListID: [:],
+        needsCompanionWanna: false
+    )
 }
 
 struct MapPlaceListPickerResult: Equatable {
@@ -158,6 +179,7 @@ struct MapPlaceListPickerSheet: View {
     @State private var isApplying = false
     @State private var isCreatingList = false
     @State private var errorMessage: String?
+    @State private var presentation = MapPlaceListPickerPresentation.empty
 
     var body: some View {
         NavigationStack {
@@ -186,7 +208,7 @@ struct MapPlaceListPickerSheet: View {
                         }
                     }
 
-                    if target.needsCompanionWanna(in: store) {
+                    if presentation.needsCompanionWanna {
                         companionSaveNotice
                     }
 
@@ -230,23 +252,23 @@ struct MapPlaceListPickerSheet: View {
             .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .onAppear(perform: loadMembershipOnce)
+        .onChange(of: store.presentationRevision) { _, _ in
+            guard didLoadMembership, !isApplying else { return }
+            refreshPresentation()
+        }
         .accessibilityIdentifier("map-list-picker.sheet")
     }
 
-    private var eligibleLists: [LocalPlaceList] {
-        store.visiblePlaceLists.filter(store.canAddPlaces)
-    }
-
     private var yourLists: [LocalPlaceList] {
-        eligibleLists.filter { $0.ownerUserID == store.currentUser.id }
+        presentation.yourLists
     }
 
     private var collaborationLists: [LocalPlaceList] {
-        eligibleLists.filter { $0.ownerUserID != store.currentUser.id }
+        presentation.collaborationLists
     }
 
     private var pendingLists: [LocalPlaceList] {
-        eligibleLists.filter { selection.pendingListIDs.contains($0.id) }
+        presentation.eligibleLists.filter { selection.pendingListIDs.contains($0.id) }
     }
 
     private var newListButton: some View {
@@ -373,7 +395,7 @@ struct MapPlaceListPickerSheet: View {
                 .textCase(.uppercase)
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(Array(lists.enumerated()), id: \.element.id) { index, list in
                     listRow(list)
 
@@ -394,8 +416,7 @@ struct MapPlaceListPickerSheet: View {
     }
 
     private func listRow(_ list: LocalPlaceList) -> some View {
-        let isExisting = target.isAlreadyInList(list, store: store)
-            || selection.existingListIDs.contains(list.id)
+        let isExisting = selection.existingListIDs.contains(list.id)
         let isPending = selection.pendingListIDs.contains(list.id)
 
         return Button {
@@ -449,6 +470,10 @@ struct MapPlaceListPickerSheet: View {
     }
 
     private func listDetail(_ list: LocalPlaceList) -> String {
+        presentation.detailByListID[list.id] ?? "List"
+    }
+
+    private func makeListDetail(_ list: LocalPlaceList) -> String {
         let count = list.cachedItemCount ?? store.visiblePlaces(in: list).count
         let places = count == 1 ? "1 place" : "\(count) places"
         let collaboratorCount = store.collaborators(for: list).count
@@ -468,13 +493,39 @@ struct MapPlaceListPickerSheet: View {
     private func loadMembershipOnce() {
         guard !didLoadMembership else { return }
         didLoadMembership = true
-        selection = MapPlaceListPickerSelection(
-            existingListIDs: Set(
-                eligibleLists
-                    .filter { target.isAlreadyInList($0, store: store) }
-                    .map(\.id)
-            )
+        refreshPresentation()
+    }
+
+    private func refreshPresentation() {
+        let eligibleLists = store.visiblePlaceLists.filter(store.canAddPlaces)
+        var yourLists: [LocalPlaceList] = []
+        var collaborationLists: [LocalPlaceList] = []
+        var detailByListID: [String: String] = [:]
+        var existingListIDs: Set<String> = []
+        yourLists.reserveCapacity(eligibleLists.count)
+        collaborationLists.reserveCapacity(eligibleLists.count)
+        detailByListID.reserveCapacity(eligibleLists.count)
+
+        for list in eligibleLists {
+            if list.ownerUserID == store.currentUser.id {
+                yourLists.append(list)
+            } else {
+                collaborationLists.append(list)
+            }
+            detailByListID[list.id] = makeListDetail(list)
+            if target.isAlreadyInList(list, store: store) {
+                existingListIDs.insert(list.id)
+            }
+        }
+
+        presentation = MapPlaceListPickerPresentation(
+            eligibleLists: eligibleLists,
+            yourLists: yourLists,
+            collaborationLists: collaborationLists,
+            detailByListID: detailByListID,
+            needsCompanionWanna: target.needsCompanionWanna(in: store)
         )
+        selection.replaceExistingListIDs(existingListIDs)
     }
 
     @MainActor
@@ -495,6 +546,7 @@ struct MapPlaceListPickerSheet: View {
             )
         }
         isApplying = false
+        refreshPresentation()
 
         let summary = MapPlaceListPickerResult.summarize(results)
         guard summary.addedCount > 0 || summary.alreadyInListCount > 0 else {
@@ -524,6 +576,7 @@ struct MapPlaceListPickerSheet: View {
             let result = await target.add(to: list, store: store, backend: backend)
             _ = await store.syncPendingPlaceLists(backend: backend)
             isApplying = false
+            refreshPresentation()
             let summary = MapPlaceListPickerResult.summarize([result])
             guard summary.addedCount > 0 || summary.alreadyInListCount > 0 else {
                 errorMessage = summary.message

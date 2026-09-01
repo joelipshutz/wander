@@ -37,13 +37,14 @@ private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
     private struct Entry {
         let image: PlacePhotoDecodedImage
         let byteCost: Int
+        var lastAccess: UInt64
     }
 
     private let countLimit: Int
     private let totalCostLimit: Int
     private let lock = NSLock()
     private var entries: [PlacePhotoImageCacheKey: Entry] = [:]
-    private var recency: [PlacePhotoImageCacheKey] = []
+    private var accessCounter: UInt64 = 0
     private var totalByteCost = 0
     private var hits = 0
     private var misses = 0
@@ -63,7 +64,8 @@ private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
             return nil
         }
         hits += 1
-        markRecentlyUsed(key)
+        accessCounter &+= 1
+        entries[key]?.lastAccess = accessCounter
         return entry.image
     }
 
@@ -74,16 +76,20 @@ private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
         if let previous = entries.removeValue(forKey: key) {
             totalByteCost -= previous.byteCost
         }
-        recency.removeAll { $0 == key }
 
-        let entry = Entry(image: image, byteCost: max(1, image.estimatedByteCost))
+        accessCounter &+= 1
+        let entry = Entry(
+            image: image,
+            byteCost: max(1, image.estimatedByteCost),
+            lastAccess: accessCounter
+        )
         entries[key] = entry
-        recency.append(key)
         totalByteCost += entry.byteCost
 
         while entries.count > countLimit || totalByteCost > totalCostLimit {
-            guard let oldestKey = recency.first else { break }
-            recency.removeFirst()
+            guard let oldestKey = entries.min(by: {
+                $0.value.lastAccess < $1.value.lastAccess
+            })?.key else { break }
             if let removed = entries.removeValue(forKey: oldestKey) {
                 totalByteCost -= removed.byteCost
             }
@@ -108,10 +114,6 @@ private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
         )
     }
 
-    private func markRecentlyUsed(_ key: PlacePhotoImageCacheKey) {
-        recency.removeAll { $0 == key }
-        recency.append(key)
-    }
 }
 
 actor PlacePhotoImagePipeline {
@@ -278,6 +280,11 @@ enum ListPreviewPlaceSelector {
 
 @MainActor
 final class ListPlacePhotoSelectionCache {
+    private struct Entry {
+        let photo: PlacePhoto
+        var lastAccess: UInt64
+    }
+
     struct Key: Hashable {
         let backendScopeID: UUID
         let canonicalPlaceKey: String
@@ -289,37 +296,37 @@ final class ListPlacePhotoSelectionCache {
     static let shared = ListPlacePhotoSelectionCache()
 
     private let countLimit: Int
-    private var photos: [Key: PlacePhoto] = [:]
-    private var recency: [Key] = []
+    private var entries: [Key: Entry] = [:]
+    private var accessCounter: UInt64 = 0
 
     init(countLimit: Int = 256) {
         self.countLimit = max(1, countLimit)
     }
 
     func photo(for key: Key) -> PlacePhoto? {
-        guard let photo = photos[key] else { return nil }
-        recency.removeAll { $0 == key }
-        recency.append(key)
-        return photo
+        guard let entry = entries[key] else { return nil }
+        accessCounter &+= 1
+        entries[key]?.lastAccess = accessCounter
+        return entry.photo
     }
 
     func insert(_ photo: PlacePhoto, for key: Key) {
-        photos[key] = photo
-        recency.removeAll { $0 == key }
-        recency.append(key)
+        accessCounter &+= 1
+        entries[key] = Entry(photo: photo, lastAccess: accessCounter)
 
-        while photos.count > countLimit, let oldestKey = recency.first {
-            recency.removeFirst()
-            photos.removeValue(forKey: oldestKey)
+        while entries.count > countLimit,
+              let oldestKey = entries.min(by: {
+                  $0.value.lastAccess < $1.value.lastAccess
+              })?.key {
+            entries.removeValue(forKey: oldestKey)
         }
     }
 
     func removePhoto(for key: Key) {
-        photos.removeValue(forKey: key)
-        recency.removeAll { $0 == key }
+        entries.removeValue(forKey: key)
     }
 
-    var entryCount: Int { photos.count }
+    var entryCount: Int { entries.count }
 }
 
 @MainActor

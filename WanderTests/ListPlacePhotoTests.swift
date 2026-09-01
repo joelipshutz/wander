@@ -446,6 +446,93 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectionCacheEvictsLeastRecentlyUsedPhoto() {
+        let cache = ListPlacePhotoSelectionCache(countLimit: 2)
+        let scopeID = UUID()
+        let firstKey = selectionCacheKey("first", scopeID: scopeID)
+        let secondKey = selectionCacheKey("second", scopeID: scopeID)
+        let thirdKey = selectionCacheKey("third", scopeID: scopeID)
+        let firstPhoto = photo(provider: "visit_photo", id: "first-photo")
+        let secondPhoto = photo(provider: "visit_photo", id: "second-photo")
+        let thirdPhoto = photo(provider: "visit_photo", id: "third-photo")
+
+        cache.insert(firstPhoto, for: firstKey)
+        cache.insert(secondPhoto, for: secondKey)
+        XCTAssertEqual(cache.photo(for: firstKey), firstPhoto)
+        cache.insert(thirdPhoto, for: thirdKey)
+
+        XCTAssertEqual(cache.photo(for: firstKey), firstPhoto)
+        XCTAssertNil(cache.photo(for: secondKey))
+        XCTAssertEqual(cache.photo(for: thirdKey), thirdPhoto)
+        XCTAssertEqual(cache.entryCount, 2)
+    }
+
+    @MainActor
+    func testDecodedImageCacheEvictsLeastRecentlyUsedImage() async throws {
+        let pipeline = PlacePhotoImagePipeline(
+            countLimit: 2,
+            totalCostLimit: 1_024 * 1_024
+        )
+        let data = try imageData()
+
+        for key in ["first", "second"] {
+            let decoded = await pipeline.image(
+                from: data,
+                canonicalPlaceKey: "place:\(key)",
+                photoKey: "photo:\(key)",
+                targetPixelSize: 128
+            )
+            XCTAssertNotNil(decoded)
+        }
+        XCTAssertNotNil(
+            pipeline.cachedImage(
+                canonicalPlaceKey: "place:first",
+                photoKey: "photo:first",
+                targetPixelSize: 128
+            )
+        )
+        let third = await pipeline.image(
+            from: data,
+            canonicalPlaceKey: "place:third",
+            photoKey: "photo:third",
+            targetPixelSize: 128
+        )
+        XCTAssertNotNil(third)
+
+        XCTAssertNotNil(
+            pipeline.cachedImage(
+                canonicalPlaceKey: "place:first",
+                photoKey: "photo:first",
+                targetPixelSize: 128
+            )
+        )
+        XCTAssertNil(
+            pipeline.cachedImage(
+                canonicalPlaceKey: "place:second",
+                photoKey: "photo:second",
+                targetPixelSize: 128
+            )
+        )
+        XCTAssertNotNil(
+            pipeline.cachedImage(
+                canonicalPlaceKey: "place:third",
+                photoKey: "photo:third",
+                targetPixelSize: 128
+            )
+        )
+    }
+
+    func testProjectionCacheBuildsOncePerStableRevisionKey() {
+        let cache = ListsProjectionCache<String, Int>()
+
+        XCTAssertEqual(cache.value(for: "revision-1") { 10 }, 10)
+        XCTAssertEqual(cache.value(for: "revision-1") { 20 }, 10)
+        XCTAssertEqual(cache.buildCount, 1)
+        XCTAssertEqual(cache.value(for: "revision-2") { 30 }, 30)
+        XCTAssertEqual(cache.buildCount, 2)
+    }
+
+    @MainActor
     func testPreviewSelectorReturnsAtMostFourDistinctPlacesInListOrder() {
         let owner = LocalProfile(localID: "owner", handle: "owner", displayName: "Owner")
         let placeA = place(id: "place-a")
@@ -543,6 +630,19 @@ final class ListPlacePhotoTests: XCTestCase {
             context.fill(CGRect(origin: .zero, size: size))
         }
         return try XCTUnwrap(image.pngData())
+    }
+
+    private func selectionCacheKey(
+        _ placeKey: String,
+        scopeID: UUID
+    ) -> ListPlacePhotoSelectionCache.Key {
+        ListPlacePhotoSelectionCache.Key(
+            backendScopeID: scopeID,
+            canonicalPlaceKey: placeKey,
+            preferredPhotoKey: "none",
+            eligibleUserIDs: nil,
+            authorizationScopeKey: "authorization"
+        )
     }
 
     @MainActor

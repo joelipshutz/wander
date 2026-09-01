@@ -17,6 +17,17 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertTrue(selection.pendingListIDs.isEmpty)
     }
 
+    func testRefreshingExistingMembershipPreservesOnlyStillPendingSelections() {
+        var selection = MapPlaceListPickerSelection(existingListIDs: ["already-there"])
+        selection.togglePending(listID: "weekend")
+        selection.togglePending(listID: "newly-added")
+
+        selection.replaceExistingListIDs(["already-there", "newly-added"])
+
+        XCTAssertEqual(selection.existingListIDs, ["already-there", "newly-added"])
+        XCTAssertEqual(selection.pendingListIDs, ["weekend"])
+    }
+
     func testCancelledSelectionDoesNotCreateSaveOrListMembership() throws {
         let store = makeStore()
         let list = try XCTUnwrap(

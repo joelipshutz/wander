@@ -928,19 +928,34 @@ enum VisiblePlaceGrouping {
     }
 
     private static func normalizedText(_ value: String?) -> String {
-        (value ?? "")
+        let folded = (value ?? "")
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var normalized = String()
+        normalized.reserveCapacity(folded.utf8.count)
+        var needsSeparator = false
+
+        for scalar in folded.unicodeScalars {
+            let value = scalar.value
+            let isASCIIAlphaNumeric = (48...57).contains(value) || (97...122).contains(value)
+            if isASCIIAlphaNumeric {
+                if needsSeparator, !normalized.isEmpty {
+                    normalized.append(" ")
+                }
+                normalized.unicodeScalars.append(scalar)
+                needsSeparator = false
+            } else if !normalized.isEmpty {
+                needsSeparator = true
+            }
+        }
+        return normalized
     }
 
     private static func normalizedIdentifier(_ value: String?) -> String {
         (value ?? "")
             .lowercased()
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
     }
 
     private static func normalizedAddressText(_ value: String?) -> String {
