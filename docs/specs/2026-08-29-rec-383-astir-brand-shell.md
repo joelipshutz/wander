@@ -1,13 +1,15 @@
 # REC-383 Astir brand shell
 
-Status: exploratory prototype
+Status: first production visual tranche, with a retained debug comparison shell
 
 ## Purpose
 
 Make the Astir name tangible across the product that exists today before the
-production rec.me product or design system is renamed. The shell is entered only
-through the debug launch argument `-AstirBrandShell [page]` and has no backend,
-authentication, or analytics dependency.
+public rec.me name is changed. The first tranche applies the editorial visual
+language to production Feed, Map, Lists, place-profile, check-in, and shared
+activity surfaces while preserving copy, navigation, feature order, backend
+boundaries, authentication, and analytics. A debug-only shell remains available
+through `-AstirBrandShell [page]` for deterministic visual comparison.
 
 ## Brand thesis
 
@@ -39,14 +41,13 @@ adopting any board as a source of truth:
 
 | Role | Value | Use |
 |---|---|---|
-| Paper | `#F2E9DB` | Daylight canvas and memory surfaces |
-| Raised paper | `#FFF9EF` | Cards and notes |
-| Ink | `#141714` | Primary text, controls, and contrast |
+| Paper | `#F2E9DB` | Light Mode canvas and memory surfaces |
+| Raised paper | `#FFF9EF` | Light Mode cards and notes |
+| Ink | `#141714` | Dark Mode canvas and high-contrast controls |
 | Deep ocean | `#0E3033` | Place and list accents |
-| Clay | `#C65A3C` | Warm action and editorial emphasis |
-| Signal | `#F05A3C` | High-energy emphasis |
+| Signal | `#F05A3C` | Astir actions, selections, and editorial emphasis |
 | Pool | `#3D6A78` | Places, people, and coastal context |
-| Gold | `#C99B3E` | Rituals and secondary highlights |
+| Cinema brass | `#C7A45D` | Explicit exploration override only |
 
 ### Typography
 
@@ -57,6 +58,8 @@ adopting any board as a source of truth:
 ### Motion
 
 - Fast native navigation and native sheet presentation.
+- Feed's floating header hides after sustained downward scrolling and returns
+  quickly on reverse scrolling, with a Reduce Motion-safe transition.
 - No cinematic delays, decorative loading sequences, or disorienting map motion.
 
 ## Safe choices
@@ -74,7 +77,29 @@ adopting any board as a source of truth:
 - Feed and profile are treated as records of trusted place behavior rather than
   content-creator surfaces.
 
-## Prototype pages
+## Production surfaces in the first tranche
+
+1. Map — Astir wordmark, search, floating controls, pins, and selected-place
+   presentation.
+2. Feed — independently floating header controls, adaptive blur field, Places /
+   People tabs, real place photography, and scroll-aware hide/reveal behavior.
+3. Lists — editorial hierarchy, adaptive surfaces, and existing list behavior.
+4. Place profile — real place photography, editorial information hierarchy,
+   floating controls, and existing save/check-in actions.
+5. Shared check-in and activity surfaces — initial palette and component bridge.
+
+The production palette follows system appearance automatically: warm paper in
+Light Mode and ink-black in Dark Mode. Cinema/brass remains available only via
+the explicit `-AstirBrandMode cinemaGold` exploration override.
+
+## Remaining consistency pass
+
+Add, Profile, Settings, and nested check-in/save editors still contain legacy
+typography, terracotta references, or fixed warm-paper surfaces. The next tranche
+will migrate those screens to shared semantic Astir typography, the signal coral,
+and adaptive Light/Dark surfaces without changing copy, order, or functionality.
+
+## Debug comparison pages
 
 1. Map — search, filters, trusted-person signals, selected-place actions, and
    the entry point to Add.
@@ -84,10 +109,10 @@ adopting any board as a source of truth:
 5. Add sheet — current location, link, manual search, photo, and unresolved
    drafts.
 
-The bottom tabs are exactly `Map`, `Feed`, `Lists`, and `Profile`. Add is a sheet,
-not a fifth tab. Event discovery, event details, arrival, at-event presence, and
-post-event memory are intentionally excluded from this pass. They remain future
-product directions rather than current navigation.
+The bottom tabs remain exactly `Map`, `Feed`, `Lists`, and `Profile`. Add remains
+a sheet, not a fifth tab. Event discovery, event details, arrival, at-event
+presence, and post-event memory remain future product directions rather than
+current production navigation.
 
 ## Asset note
 
