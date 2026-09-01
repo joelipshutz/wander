@@ -948,6 +948,7 @@ private struct ListDetailScreen: View {
     @State private var isAddingPlaces = false
     @State private var suggestionBatch = ListSuggestionBatch()
     @State private var isLoadingSuggestions = false
+    @State private var hasLoadedSuggestions = false
     @State private var saveToast: ListSaveToastPresentation?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
@@ -988,7 +989,6 @@ private struct ListDetailScreen: View {
                 detailHeader(for: renderedList)
                 mapPreview(for: renderedList)
                 placeRows(for: renderedList)
-                suggestionsSection
             }
             .padding(WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing16)
@@ -1079,7 +1079,6 @@ private struct ListDetailScreen: View {
             if let sourceList {
                 await store.refreshRemotePlaceList(sourceList, backend: backend)
             }
-            await loadSuggestions()
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
@@ -1094,7 +1093,7 @@ private struct ListDetailScreen: View {
             }
         }
         .onChange(of: isAddingPlaces) { wasAddingPlaces, isAddingPlaces in
-            guard wasAddingPlaces, !isAddingPlaces else { return }
+            guard wasAddingPlaces, !isAddingPlaces, hasLoadedSuggestions else { return }
             Task {
                 await loadSuggestions()
             }
@@ -1307,6 +1306,8 @@ private struct ListDetailScreen: View {
                     )
                 }
             }
+
+            suggestionsSection
         }
     }
 
@@ -1333,6 +1334,12 @@ private struct ListDetailScreen: View {
                     )
                 }
             )
+            .task(id: sourceList?.id ?? list.id) {
+                guard !hasLoadedSuggestions, !isLoadingSuggestions else { return }
+                await loadSuggestions()
+                guard !Task.isCancelled else { return }
+                hasLoadedSuggestions = true
+            }
         }
     }
 
@@ -1435,10 +1442,10 @@ private struct ListDetailScreen: View {
         }
 
         isLoadingSuggestions = true
+        defer { isLoadingSuggestions = false }
         let suggestions = await store.listSuggestions(for: sourceList, limit: 5, backend: backend)
         guard !Task.isCancelled else { return }
         suggestionBatch.replace(with: suggestions)
-        isLoadingSuggestions = false
     }
 
     @MainActor

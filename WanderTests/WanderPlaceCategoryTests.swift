@@ -698,6 +698,15 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let warmListProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmListProjectionStart
         XCTAssertEqual(store.placeGroupingIndexBuildCount, 1)
 
+        guard let suggestionList = visibleLists.first(where: { $0.name == "Realistic list 000" }) else {
+            return XCTFail("Performance fixture should include the first realistic list")
+        }
+        let listSuggestionStart = CFAbsoluteTimeGetCurrent()
+        let listSuggestions = store.listSuggestions(for: suggestionList, limit: 5)
+        let listSuggestionElapsed = CFAbsoluteTimeGetCurrent() - listSuggestionStart
+        XCTAssertFalse(listSuggestions.isEmpty)
+        checksum += listSuggestions.count
+
         let collaboratorProjectionStart = CFAbsoluteTimeGetCurrent()
         for list in visibleLists {
             checksum += store.collaborators(for: list).count
@@ -757,6 +766,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
         XCTAssertLessThan(listProjectionElapsed, 0.12, "High-data list projection took \(listProjectionElapsed)s")
         XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")
+        XCTAssertLessThan(listSuggestionElapsed, 0.75, "High-data list suggestions took \(listSuggestionElapsed)s")
         XCTAssertLessThan(collaboratorProjectionElapsed, 0.1, "List collaborator projection took \(collaboratorProjectionElapsed)s")
         XCTAssertLessThan(groupProjectionElapsed, 0.15, "Visible-place grouping took \(groupProjectionElapsed)s")
         XCTAssertLessThan(warmGroupProjectionElapsed, 0.02, "Warm visible-place grouping took \(warmGroupProjectionElapsed)s")

@@ -2456,7 +2456,7 @@ final class WanderStore: ObservableObject {
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5, backend: WanderBackend?) async -> [ListPlaceSuggestion] {
         let fallback = listSuggestions(for: list, limit: limit)
-        guard let backend else { return fallback }
+        guard let backend, backend.listSuggestionRepository != nil else { return fallback }
 
         do {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
@@ -3857,9 +3857,32 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {
-        let addablePlaces = visiblePlaces().filter {
-            !hasPlace($0, in: list)
-                && !wasRemovedFromList($0.place, list: list)
+        let listIDs = listReferenceIDs(for: list)
+        let groupingKeyByReferenceID = placeGroupingKeyByReferenceID()
+        var excludedReferenceIDs = Set<String>()
+        var excludedGroupingKeys = Set<String>()
+
+        for item in placeListItems where listIDs.contains(item.listID) {
+            excludedReferenceIDs.insert(item.placeID)
+            if let groupingKey = groupingKeyByReferenceID[item.placeID] {
+                excludedGroupingKeys.insert(groupingKey)
+            }
+        }
+
+        let addablePlaces = visiblePlaces().filter { visiblePlace in
+            let placeReferenceIDs = [
+                visiblePlace.place.id,
+                visiblePlace.place.localID,
+            ] + [visiblePlace.place.serverID].compactMap { $0 }
+            guard excludedReferenceIDs.isDisjoint(with: placeReferenceIDs) else {
+                return false
+            }
+            guard let groupingKey = placeReferenceIDs.lazy.compactMap({
+                groupingKeyByReferenceID[$0]
+            }).first else {
+                return true
+            }
+            return !excludedGroupingKeys.contains(groupingKey)
         }
         return VisiblePlaceGrouping.representativePlaces(
             from: addablePlaces,

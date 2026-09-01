@@ -132,6 +132,73 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["28 places"].exists)
     }
 
+    func testPerformanceFixtureColdListDetailIsImmediatelyScrollable() {
+        let app = performanceListsApp()
+        app.launch()
+
+        let firstList = app.buttons["Open Realistic list 000, collaborative list"]
+        XCTAssertTrue(firstList.waitForExistence(timeout: 12))
+        let openStartedAt = Date()
+        firstList.tap()
+
+        let mapButton = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "View map for Realistic list 000")
+        ).firstMatch
+        XCTAssertTrue(mapButton.waitForExistence(timeout: 8))
+        XCTAssertLessThan(
+            Date().timeIntervalSince(openStartedAt),
+            8,
+            "Cold list detail should not block interaction while suggestions are prepared."
+        )
+
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 3))
+        let initialMapY = mapButton.frame.minY
+        var didMeasureColdSwipe = false
+
+        if #available(iOS 19.0, *) {
+            var invocationCount = 0
+            let options = XCTMeasureOptions()
+            options.iterationCount = 1
+            options.invocationOptions = [.manuallyStart, .manuallyStop]
+
+            measure(metrics: [XCTHitchMetric(application: app)], options: options) {
+                invocationCount += 1
+                startMeasuring()
+                defer { stopMeasuring() }
+                guard invocationCount > 1 else { return }
+                scrollView.swipeUp(velocity: .fast)
+                didMeasureColdSwipe = true
+            }
+        } else {
+            scrollView.swipeUp(velocity: .fast)
+            didMeasureColdSwipe = true
+        }
+
+        XCTAssertTrue(didMeasureColdSwipe)
+        XCTAssertTrue(
+            !mapButton.isHittable || mapButton.frame.minY < initialMapY - 20,
+            "The measured first swipe should move list-detail content."
+        )
+
+        let suggestionsHeader = app.staticTexts["suggested places"]
+        reveal(suggestionsHeader, in: app)
+        XCTAssertTrue(suggestionsHeader.waitForExistence(timeout: 8))
+
+        let addSuggestion = app.buttons.matching(
+            NSPredicate(
+                format: "label BEGINSWITH %@ AND label ENDSWITH %@ AND label != %@",
+                "Add ",
+                " to list",
+                "Add places to list"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            addSuggestion.waitForExistence(timeout: 8),
+            "Lazy suggestion loading should preserve the inline add flow."
+        )
+    }
+
     private func performanceListsApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
