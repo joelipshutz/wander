@@ -832,6 +832,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
         XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(mapCaptureRoot.contains("initialSession: auth.state.session"))
         XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
         XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
         XCTAssertTrue(app.contains("provider: \"google_places\""))
@@ -2863,6 +2864,16 @@ final class NavigationContractTests: XCTestCase {
             ),
             .demo
         )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderAuthenticatedUITest", "-WanderUseEphemeralEmptyFixtures"],
+                usesSimulatorTestSession: true
+            ),
+            .ephemeralEmpty
+        )
+        let ephemeralEmptyFixtures = WanderRootView.resolvedFixtures(mode: .ephemeralEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.places.isEmpty)
+        XCTAssertTrue(ephemeralEmptyFixtures.userPlaces.isEmpty)
         XCTAssertEqual(
             WanderRootView.resolvedFixtureMode(
                 from: ["Wander"],

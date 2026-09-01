@@ -179,7 +179,11 @@ struct WanderApp: App {
 
     #if DEBUG
     private var mapCaptureRoot: some View {
-        WanderRootView(analytics: NoopAnalyticsClient(), parser: DeterministicFilterParser())
+        WanderRootView(
+            initialSession: auth.state.session,
+            analytics: NoopAnalyticsClient(),
+            parser: DeterministicFilterParser()
+        )
             .environmentObject(auth)
             .environmentObject(mapCaptureBackend)
             .environmentObject(pushNotifications)

@@ -2,6 +2,44 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testREC352AdaptiveCategorySearchEvidence() {
+        let app = launchREC352AdaptiveSearchFixture()
+        let searchField = app.textFields["map.searchField"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("coffee")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        for resultName in ["Dayglow", "Jones Bench", "Harbor House", "Canyon Roasters"] {
+            XCTAssertTrue(
+                typeaheadPanel.staticTexts[resultName].firstMatch.waitForExistence(timeout: 5),
+                "Expected adaptive typeahead to include \(resultName)"
+            )
+        }
+        let renderedResultCount = app.descendants(matching: .any)["map.searchResultPinCount"]
+        XCTAssertTrue(renderedResultCount.waitForExistence(timeout: 2))
+        XCTAssertEqual(renderedResultCount.value as? String, "0")
+        capture("REC-352 adaptive coffee typeahead")
+
+        searchField.typeText("\n")
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Dayglow"))
+        let fittedPins = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "4"),
+            object: renderedResultCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [fittedPins], timeout: 5),
+            .completed,
+            "Submitting should fit all four rendered search pins"
+        )
+        capture("REC-352 adaptive coffee submitted")
+    }
+
     func testREC352LarchmontCorpusEvidence() {
         let app = launchREC352SearchFixture()
         let searchField = app.textFields["map.searchField"]
@@ -260,6 +298,19 @@ final class MapPlaceCardUITests: XCTestCase {
             "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
             "-WanderMapSearchFixtures", "rec352",
+        ]
+        app.launch()
+        return app
+    }
+
+    private func launchREC352AdaptiveSearchFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderUseEphemeralEmptyFixtures",
+            "-WanderMapSearchFixtures", "rec352-adaptive",
         ]
         app.launch()
         return app

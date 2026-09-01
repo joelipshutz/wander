@@ -290,16 +290,33 @@ enum MapSearchCandidatePolicy {
         saved: [MapSearchSavedCandidate],
         mapKit: [PlaceCandidate]
     ) -> [MapSearchCandidate] {
-        let strongSaved = saved
-            .filter { strength(of: $0) == .strong }
-            .map(MapSearchCandidate.saved)
+        let queryIntent = MapSearchQueryPolicy.intent(for: query)
+        let strongSavedCandidates = saved.filter { strength(of: $0) == .strong }
         let contextualSaved = saved
             .filter { strength(of: $0) == .contextual }
             .map(MapSearchCandidate.saved)
 
-        let credibleMapKit = mapKit
+        if queryIntent == .category {
+            return strongSavedCandidates.map(MapSearchCandidate.saved)
+                + mapKit.map(MapSearchCandidate.mapKit)
+                + contextualSaved
+        }
+
+        let exactSaved = strongSavedCandidates
+            .filter { nameLexicalScore(of: $0, query: query) == 1_000 }
+            .map(MapSearchCandidate.saved)
+        let otherStrongSaved = strongSavedCandidates
+            .filter { nameLexicalScore(of: $0, query: query) != 1_000 }
+            .map(MapSearchCandidate.saved)
+        let exactMapKit = mapKit
             .filter {
-                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) > 0
+                MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query) == 1_000
+            }
+            .map(MapSearchCandidate.mapKit)
+        let partialMapKit = mapKit
+            .filter {
+                let score = MapSearchQueryPolicy.lexicalScore(forName: $0.name, query: query)
+                return score > 0 && score < 1_000
             }
             .map(MapSearchCandidate.mapKit)
         let unrelatedMapKit = mapKit
@@ -308,7 +325,26 @@ enum MapSearchCandidatePolicy {
             }
             .map(MapSearchCandidate.mapKit)
 
-        return strongSaved + credibleMapKit + contextualSaved + unrelatedMapKit
+        return exactSaved
+            + exactMapKit
+            + otherStrongSaved
+            + partialMapKit
+            + contextualSaved
+            + unrelatedMapKit
+    }
+
+    static func nameLexicalScore(
+        of candidate: MapSearchSavedCandidate,
+        query: String
+    ) -> Double {
+        candidate.group.places
+            .map {
+                MapSearchQueryPolicy.lexicalScore(
+                    forName: $0.place.canonicalName,
+                    query: query
+                )
+            }
+            .max() ?? 0
     }
 
     static func strength(of candidate: MapSearchSavedCandidate) -> SavedStrength {
@@ -317,6 +353,25 @@ enum MapSearchCandidatePolicy {
 
     static func strength(of match: TrustedPlaceSearchMatch) -> SavedStrength {
         match.supportingFields.isDisjoint(with: strongFields) ? .contextual : .strong
+    }
+
+    static func providerSlotCount(in saved: [MapSearchSavedCandidate]) -> Int {
+        saved.reduce(into: 0) { count, candidate in
+            if strength(of: candidate) == .strong {
+                count += 1
+            }
+        }
+    }
+
+    static func contains(
+        _ candidate: PlaceCandidate,
+        in saved: [MapSearchSavedCandidate]
+    ) -> Bool {
+        saved.contains { savedCandidate in
+            savedCandidate.group.places.contains {
+                VisiblePlaceGrouping.matches($0, candidate: candidate)
+            }
+        }
     }
 }
 
