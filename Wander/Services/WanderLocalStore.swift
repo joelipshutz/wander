@@ -1122,6 +1122,9 @@ final class WanderStore: ObservableObject {
             || placeVisits.contains {
                 Self.isSyntheticRemoteProfileVisit($0) && $0.syncState == .synced
             }
+            || visitPhotos.contains {
+                Self.isSyntheticRemoteProfilePhoto($0) && $0.syncState == .synced
+            }
             || placeAttributes.contains { $0.localID.hasPrefix("remote_attr_") }
             || followedFeedPage != nil
             || feedLoadState != .idle
@@ -1140,6 +1143,9 @@ final class WanderStore: ObservableObject {
             remoteVisiblePlaceCache = []
             placeVisits.removeAll {
                 Self.isSyntheticRemoteProfileVisit($0) && $0.syncState == .synced
+            }
+            visitPhotos.removeAll {
+                Self.isSyntheticRemoteProfilePhoto($0) && $0.syncState == .synced
             }
             placeAttributes.removeAll {
                 $0.localID.hasPrefix("remote_attr_")
@@ -4088,6 +4094,10 @@ final class WanderStore: ObservableObject {
 
     private static func isSyntheticRemoteProfileVisit(_ visit: LocalPlaceVisit) -> Bool {
         visit.localID.hasPrefix("remote_profile_visit_")
+    }
+
+    private static func isSyntheticRemoteProfilePhoto(_ photo: LocalVisitPhoto) -> Bool {
+        photo.localID.hasPrefix("remote_profile_photo_")
     }
 
     private static func referenceIDs(for userPlace: LocalUserPlace) -> Set<String> {
@@ -7782,22 +7792,149 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    private func refreshRemoteProfileVisits(profileID: String, backend: WanderBackend) async -> Bool {
-        guard backend.visitRepository != nil else { return true }
+    func refreshRemotePlaceActivity(
+        userPlaceIDs: [String],
+        backend: WanderBackend?
+    ) async -> Bool {
+        guard let backend, backend.visitRepository != nil else { return true }
 
-        let remoteUserPlaces = remoteVisiblePlaceCache
-            .filter { $0.owner.id == profileID && $0.userPlace.deletedAt == nil }
-        let remoteUserPlaceIDs = Set(remoteUserPlaces.map(\.userPlace.id))
-        guard !remoteUserPlaceIDs.isEmpty else { return true }
+        let requestedUserPlaceIDs = Array(
+            Set(
+                userPlaceIDs
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        ).sorted()
+        guard !requestedUserPlaceIDs.isEmpty else { return true }
 
-        var hydrated: [LocalPlaceVisit] = []
-        var refreshedUserPlaceIDs: Set<String> = []
-        var firstError: Error?
-        for userPlaceID in remoteUserPlaceIDs.sorted() {
-            do {
-                let results = try await backend.visits(for: userPlaceID)
-                refreshedUserPlaceIDs.insert(userPlaceID)
-                hydrated.append(contentsOf: results.map { result in
+        var hydratedVisits: [PlaceVisitResult] = []
+        var hydratedPhotos: [VisitPhotoResult] = []
+        var refreshedUserPlaceIDs = Set<String>()
+        var refreshedPhotoVisitIDs = Set<String>()
+        var firstErrorMessage: String?
+        var wasCancelled = false
+
+        for batchStart in stride(from: 0, to: requestedUserPlaceIDs.count, by: 6) {
+            guard !Task.isCancelled else { return false }
+            let batchEnd = min(batchStart + 6, requestedUserPlaceIDs.count)
+            let batch = Array(requestedUserPlaceIDs[batchStart..<batchEnd])
+            let tasks = batch.map { userPlaceID in
+                Task { @MainActor in
+                    do {
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: try await backend.visits(for: userPlaceID),
+                            errorMessage: nil,
+                            wasCancelled: false
+                        )
+                    } catch is CancellationError {
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: [],
+                            errorMessage: nil,
+                            wasCancelled: true
+                        )
+                    } catch {
+                        return RemoteVisitFetchOutcome(
+                            userPlaceID: userPlaceID,
+                            visits: [],
+                            errorMessage: self.remoteErrorMessage(error),
+                            wasCancelled: false
+                        )
+                    }
+                }
+            }
+            for task in tasks {
+                guard !Task.isCancelled else {
+                    tasks.forEach { $0.cancel() }
+                    return false
+                }
+                let outcome = await task.value
+                if outcome.wasCancelled {
+                    wasCancelled = true
+                    tasks.forEach { $0.cancel() }
+                } else if outcome.errorMessage == nil {
+                    refreshedUserPlaceIDs.insert(outcome.userPlaceID)
+                    hydratedVisits.append(contentsOf: outcome.visits)
+                } else {
+                    firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
+                }
+            }
+            guard !wasCancelled else { return false }
+        }
+
+        let requestedVisitIDs = Array(Set(hydratedVisits.map(\.visitID))).sorted()
+        for batchStart in stride(from: 0, to: requestedVisitIDs.count, by: 6) {
+            guard !Task.isCancelled else { return false }
+            let batchEnd = min(batchStart + 6, requestedVisitIDs.count)
+            let batch = Array(requestedVisitIDs[batchStart..<batchEnd])
+            let tasks = batch.map { visitID in
+                Task { @MainActor in
+                    do {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: try await backend.visibleUploadedPhotos(for: visitID),
+                            errorMessage: nil,
+                            wasCancelled: false
+                        )
+                    } catch is CancellationError {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: [],
+                            errorMessage: nil,
+                            wasCancelled: true
+                        )
+                    } catch {
+                        return RemotePhotoFetchOutcome(
+                            visitID: visitID,
+                            photos: [],
+                            errorMessage: self.remoteErrorMessage(error),
+                            wasCancelled: false
+                        )
+                    }
+                }
+            }
+            for task in tasks {
+                guard !Task.isCancelled else {
+                    tasks.forEach { $0.cancel() }
+                    return false
+                }
+                let outcome = await task.value
+                if outcome.wasCancelled {
+                    wasCancelled = true
+                    tasks.forEach { $0.cancel() }
+                } else if outcome.errorMessage == nil {
+                    refreshedPhotoVisitIDs.insert(outcome.visitID)
+                    hydratedPhotos.append(contentsOf: outcome.photos)
+                } else {
+                    firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
+                }
+            }
+            guard !wasCancelled else { return false }
+        }
+
+        let hydratedVisitIDs = Set(hydratedVisits.map(\.visitID))
+        let staleVisitIDs = Set<String>(
+            placeVisits.compactMap { visit in
+                guard Self.isSyntheticRemoteProfileVisit(visit),
+                      visit.syncState == .synced,
+                      refreshedUserPlaceIDs.contains(visit.userPlaceID),
+                      !hydratedVisitIDs.contains(visit.id)
+                else { return nil }
+                return visit.id
+            }
+        )
+        placeVisits.removeAll { staleVisitIDs.contains($0.id) }
+
+        for result in hydratedVisits {
+            if let existing = placeVisits.first(where: {
+                Self.isSyntheticRemoteProfileVisit($0)
+                    && $0.syncState == .synced
+                    && Self.referenceIDs(for: $0).contains(result.visitID)
+            }) {
+                applyRemoteVisitResult(result, to: existing)
+            } else if !placeVisits.contains(where: { Self.referenceIDs(for: $0).contains(result.visitID) }) {
+                placeVisits.append(
                     LocalPlaceVisit(
                         localID: "remote_profile_visit_\(result.visitID)",
                         serverID: result.visitID,
@@ -7809,30 +7946,107 @@ final class WanderStore: ObservableObject {
                         backfilledFromUserPlace: result.backfilledFromUserPlace,
                         syncState: .synced
                     )
-                })
-            } catch {
-                firstError = firstError ?? error
+                )
             }
         }
 
-        let hydratedIDs = Set(hydrated.map(\.id))
-        placeVisits.removeAll { visit in
-            Self.isSyntheticRemoteProfileVisit(visit)
-                && visit.syncState == .synced
-                && refreshedUserPlaceIDs.contains(visit.userPlaceID)
-                && !hydratedIDs.contains(visit.id)
+        let hydratedPhotoIDs = Set(hydratedPhotos.map(\.photoID))
+        visitPhotos.removeAll { photo in
+            Self.isSyntheticRemoteProfilePhoto(photo)
+                && photo.syncState == .synced
+                && (staleVisitIDs.contains(photo.visitID)
+                    || (refreshedPhotoVisitIDs.contains(photo.visitID)
+                        && !hydratedPhotoIDs.contains(photo.id)))
         }
-        for remoteVisit in hydrated where !placeVisits.contains(where: { $0.id == remoteVisit.id }) {
-            placeVisits.append(remoteVisit)
+
+        for result in hydratedPhotos {
+            if let existing = visitPhotos.first(where: {
+                Self.isSyntheticRemoteProfilePhoto($0)
+                    && $0.syncState == .synced
+                    && ($0.id == result.photoID || $0.localID == result.photoID || $0.serverID == result.photoID)
+            }) {
+                applyRemotePhotoResult(result, to: existing)
+            } else if !visitPhotos.contains(where: {
+                $0.id == result.photoID || $0.localID == result.photoID || $0.serverID == result.photoID
+            }) {
+                visitPhotos.append(
+                    LocalVisitPhoto(
+                        localID: "remote_profile_photo_\(result.photoID)",
+                        serverID: result.photoID,
+                        visitID: result.visitID,
+                        storageBucket: result.storageBucket,
+                        storagePath: result.storagePath,
+                        remoteURLString: result.remoteURLString,
+                        contentType: result.contentType,
+                        byteSize: result.byteSize,
+                        width: result.width,
+                        height: result.height,
+                        capturedAt: result.capturedAt,
+                        sortOrder: result.sortOrder,
+                        uploadState: result.uploadState,
+                        syncState: .synced
+                    )
+                )
+            }
         }
+
         objectWillChange.send()
         persist()
-        if let firstError {
-            lastRemoteError = remoteErrorMessage(firstError)
+        if let firstErrorMessage {
+            lastRemoteError = firstErrorMessage
             return false
         }
         lastRemoteError = nil
         return true
+    }
+
+    private struct RemoteVisitFetchOutcome: Sendable {
+        let userPlaceID: String
+        let visits: [PlaceVisitResult]
+        let errorMessage: String?
+        let wasCancelled: Bool
+    }
+
+    private struct RemotePhotoFetchOutcome: Sendable {
+        let visitID: String
+        let photos: [VisitPhotoResult]
+        let errorMessage: String?
+        let wasCancelled: Bool
+    }
+
+    private func applyRemotePhotoResult(_ result: VisitPhotoResult, to photo: LocalVisitPhoto) {
+        let now = Date.now
+        photo.serverID = result.photoID
+        photo.visitID = result.visitID
+        photo.storageBucket = result.storageBucket
+        photo.storagePath = result.storagePath
+        if let remoteURLString = result.remoteURLString {
+            photo.remoteURLString = remoteURLString
+        }
+        photo.contentType = result.contentType
+        photo.byteSize = result.byteSize
+        photo.width = result.width
+        photo.height = result.height
+        photo.capturedAt = result.capturedAt
+        photo.sortOrder = result.sortOrder
+        photo.uploadStateRaw = result.uploadState.rawValue
+        photo.syncStateRaw = SyncState.synced.rawValue
+        photo.localUpdatedAt = now
+        photo.serverUpdatedAt = now
+        photo.lastSyncError = nil
+        photo.updatedAt = now
+        photo.deletedAt = nil
+    }
+
+    @discardableResult
+    private func refreshRemoteProfileVisits(profileID: String, backend: WanderBackend) async -> Bool {
+        let remoteUserPlaceIDs = remoteVisiblePlaceCache
+            .filter { $0.owner.id == profileID && $0.userPlace.deletedAt == nil }
+            .map(\.userPlace.id)
+        return await refreshRemotePlaceActivity(
+            userPlaceIDs: remoteUserPlaceIDs,
+            backend: backend
+        )
     }
 
     func refreshRemoteSocialGraph(userID: String? = nil, backend: WanderBackend?) async {

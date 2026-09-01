@@ -179,7 +179,11 @@ struct WanderApp: App {
 
     #if DEBUG
     private var mapCaptureRoot: some View {
-        WanderRootView(analytics: NoopAnalyticsClient(), parser: DeterministicFilterParser())
+        WanderRootView(
+            initialSession: auth.state.session,
+            analytics: NoopAnalyticsClient(),
+            parser: DeterministicFilterParser()
+        )
             .environmentObject(auth)
             .environmentObject(mapCaptureBackend)
             .environmentObject(pushNotifications)
@@ -244,11 +248,42 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visiblePhotoGalleryPage(
-        placeID: String,
+        placeIDs: [String],
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        PlacePhotoGalleryPage(items: [], nextCursor: nil, hasMore: false)
+        if ProcessInfo.processInfo.arguments.contains("-WanderREC386PhotoFixture"),
+           cursor == nil,
+           placeIDs.contains("50000000-0000-0000-0000-000000000386") {
+            let photo = PlacePhoto(
+                provider: "visit_photo",
+                providerPlaceID: "55000000-0000-0000-0000-000000000386",
+                photoURLString: "capture://place-carousel/3",
+                width: 1_200,
+                height: 1_200,
+                authorName: nil,
+                authorProfileURLString: nil,
+                authorAvatarURLString: nil,
+                sourcePhotoURLString: nil,
+                flagContentURLString: nil,
+                storageBucket: "visit-photos",
+                storagePath: "user_ryan/54000000-0000-0000-0000-000000000386/photo.png",
+                localAssetRef: nil
+            )
+            let item = PlacePhotoGalleryItem(
+                photo: photo,
+                contributor: PlacePhotoContributor(
+                    userID: "user_ryan",
+                    displayName: "Ryan",
+                    handle: "ryan",
+                    avatarURLString: nil
+                ),
+                capturedAt: Date(timeIntervalSince1970: 1_777_678_500),
+                status: .been
+            )
+            return PlacePhotoGalleryPage(items: [item], nextCursor: nil, hasMore: false)
+        }
+        return PlacePhotoGalleryPage(items: [], nextCursor: nil, hasMore: false)
     }
 
     func imageData(for photo: PlacePhoto) async throws -> Data {

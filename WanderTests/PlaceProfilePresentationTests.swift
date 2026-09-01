@@ -1486,6 +1486,11 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertTrue(presentation.commonTags.isEmpty)
     }
 
+    func testFitRatingDisplayUsesFivePointScale() {
+        XCTAssertEqual(PlaceFitRating(score: 8.6, reasons: []).displayScore, "4.3")
+        XCTAssertEqual(PlaceFitRating(score: 10, reasons: []).displayScore, "5")
+    }
+
     func testFitRatingUsesTrustedRatingsCategoryAndTagHistory() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")

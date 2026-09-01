@@ -300,8 +300,11 @@ enum PlaceProfilePreviewPhotoPolicy {
     }
 }
 
+enum PlaceProfileMapLayout {
+    static let previewCardHeight: CGFloat = 232
+}
+
 private struct PlaceProfilePreviewCard: View {
-    private static let cardHeight: CGFloat = 232
 
     let place: PlaceSheetPlace
     let presentation: PlaceProfilePresentation
@@ -363,7 +366,7 @@ private struct PlaceProfilePreviewCard: View {
 
                 Color.clear
                     .frame(maxWidth: .infinity)
-                    .frame(height: Self.cardHeight)
+                    .frame(height: PlaceProfileMapLayout.previewCardHeight)
                     .contentShape(Rectangle())
                     .gesture(cardPressGesture)
                     .padding(.trailing, 74)
@@ -428,7 +431,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private var cardSurface: some View {
         cardPhoto
-            .frame(width: cardWidth, height: Self.cardHeight)
+            .frame(width: cardWidth, height: PlaceProfileMapLayout.previewCardHeight)
             .clipped()
             .overlay {
                 LinearGradient(
@@ -1286,7 +1289,7 @@ private struct PlaceProfileFullView: View {
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
         }
-        .task(id: place.id) {
+        .task(id: photoPlaceIDs) {
             await reloadVisibleUserPhotos()
         }
         .task(id: businessActionLookupKey) {
@@ -1405,6 +1408,16 @@ private struct PlaceProfileFullView: View {
         )
     }
 
+    private var photoPlaceIDs: [String] {
+        Array(
+            Set(
+                ([place.id] + saves.map { $0.visiblePlace.place.id })
+                    .compactMap { UUID(uuidString: $0)?.uuidString.lowercased() }
+            )
+        )
+        .sorted()
+    }
+
     private func reloadProviderPhoto() async {
         if place.id.hasPrefix("walkthrough_place_") {
             providerPhoto = nil
@@ -1473,10 +1486,10 @@ private struct PlaceProfileFullView: View {
     private func resolvedUserPhotoPage(
         after cursor: PlacePhotoGalleryCursor?
     ) async -> PlacePhotoGalleryPage? {
-        guard UUID(uuidString: place.id) != nil else { return nil }
+        guard !photoPlaceIDs.isEmpty else { return nil }
         do {
             return try await backend.visiblePlacePhotoGalleryPage(
-                placeID: place.id,
+                placeIDs: photoPlaceIDs,
                 after: cursor
             )
         } catch is CancellationError {
