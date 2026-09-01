@@ -113,7 +113,8 @@ struct AppEntryView: View {
                     analytics: analytics,
                     parser: parser,
                     socialImportUnderstandingRepository: backend.socialImportUnderstandingProvider(
-                        for: session.userID
+                        for: session.userID,
+                        authSession: auth
                     )
                 )
                 .id(session.userID)

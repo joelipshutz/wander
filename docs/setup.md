@@ -364,8 +364,13 @@ understanding. A signed-in iOS client sends only the supported social URL,
 platform, schema version, and stable client request id to the authenticated
 `social-import-understand` Edge Function. The function acquires bounded source
 evidence through Apify, sends only that evidence and bounded media to Gemini,
-and returns grounded place-name hints. MapKit remains the authoritative POI
-resolver in the app; provider output is never saved directly as a place.
+and returns grounded place-name hints. For each grounded hint, the function
+also performs a bounded Google Places Text Search and returns up to three real
+POI candidates with a Google Place ID, structured address, and coordinates.
+The app ranks those candidates and keeps alternatives for review; MapKit is a
+fallback only when Google returns no usable candidate. Provider output is never
+saved until the normal import review and commit path accepts a coordinate-backed
+candidate.
 
 For Instagram captions, the function can also batch up to 20 public account
 handles through Apify's Instagram Profile Scraper while media is being
@@ -380,7 +385,7 @@ the operational kill switch. On Apify's free plan as of 2026-08-30, the profile
 actor is $2.60 per 1,000 profiles, so the bounded 20-handle maximum is about
 $0.052 before any plan discount.
 
-Keep both paid-provider credentials server-side. Never add either value to an
+Keep all paid-provider credentials server-side. Never add any value to an
 xcconfig, the app bundle, logs, fixtures, PR text, or tracked evaluator runs:
 
 ```bash
@@ -388,6 +393,7 @@ npx supabase secrets set \
   WANDER_APIFY_TOKEN=<server-token> \
   WANDER_GEMINI_API_KEY=<server-key> \
   WANDER_GEMINI_MODEL=gemini-3.5-flash \
+  WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> \
   --project-ref "$WANDER_SUPABASE_PROJECT_REF"
 npx supabase functions deploy social-import-understand \
   --project-ref "$WANDER_SUPABASE_PROJECT_REF" \

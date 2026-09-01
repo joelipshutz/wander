@@ -12,6 +12,10 @@ import {
 import { understandWithGemini } from "./gemini.ts";
 import { boundedRequestBody, fetchJSON } from "./http.ts";
 import { ingestAcquiredMedia } from "./media.ts";
+import {
+  googlePlacesAPIKey,
+  resolvePlaceHintsWithGoogle,
+} from "./place-resolution.ts";
 import { asRecord, cleanString, parseSocialSource } from "./source.ts";
 import type {
   AcquisitionEvidence,
@@ -339,6 +343,11 @@ async function runAdmittedImport(
     recoveredTaggedProfileCandidates.length >= 2 &&
     grounded.expectedCount === recoveredTaggedProfileCandidates.length &&
     grounded.missingExpectedCount === 0;
+  const declaredPlaceCountIsComplete =
+    typeof grounded.expectedCount === "number" &&
+    grounded.expectedCount > 0 &&
+    grounded.hints.length === grounded.expectedCount &&
+    grounded.missingExpectedCount === 0;
   const hasExplicitCoverageDimension =
     understanding.mediaCoverageIncomplete === true ||
     understanding.captionCoverageIncomplete === true ||
@@ -350,7 +359,7 @@ async function runAdmittedImport(
       !taggedRecoveryCompletesDeclaredCount) ||
     (understanding.coverageIncomplete === true &&
       !hasExplicitCoverageDimension);
-  const failureCategory = failedCount > 0
+  const failureCategory = failedCount > 0 && !declaredPlaceCountIsComplete
     ? "media_incomplete"
     : unresolvedUnderstandingCoverage ||
         grounded.missingExpectedCount > 0
@@ -425,14 +434,23 @@ async function runAdmittedImport(
     };
   }
 
+  const resolvedHints = await resolvePlaceHintsWithGoogle(
+    grounded.hints,
+    googlePlacesAPIKey(dependencies),
+    deadline,
+    dependencies,
+    signal,
+  );
+
   return {
     schema_version: 1,
     outcome: failureCategory === null ? "ok" : "partial",
     provider_path: "apify_gemini",
-    hints: grounded.hints,
+    hints: resolvedHints,
     media_count: evidence.media.length,
     model_attempt_count: understanding.attemptCount,
     failure_category: failureCategory,
+    declared_count_complete: declaredPlaceCountIsComplete,
   };
 }
 
@@ -738,6 +756,10 @@ function finish(payload: UnderstandResponse): Response {
       mediaCount: payload.media_count,
       modelAttemptCount: payload.model_attempt_count,
       hintCount: payload.hints.length,
+      resolvedPlaceCount: payload.hints.reduce(
+        (count, hint) => count + (hint.resolved_places?.length ?? 0),
+        0,
+      ),
       failureCategory: payload.failure_category,
     }),
   );

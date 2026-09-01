@@ -936,17 +936,20 @@ struct SocialPlaceSearchHint: Equatable {
     let area: String?
     let evidence: Evidence
     let isServerGrounded: Bool
+    let resolvedCandidates: [PlaceCandidate]
 
     init(
         name: String,
         area: String?,
         evidence: Evidence,
-        isServerGrounded: Bool = false
+        isServerGrounded: Bool = false,
+        resolvedCandidates: [PlaceCandidate] = []
     ) {
         self.name = name
         self.area = area
         self.evidence = evidence
         self.isServerGrounded = isServerGrounded
+        self.resolvedCandidates = resolvedCandidates
     }
 }
 

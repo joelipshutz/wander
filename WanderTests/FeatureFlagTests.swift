@@ -158,6 +158,212 @@ final class FeatureFlagTests: XCTestCase {
         XCTAssertEqual(backend.featureFlag(.socialImportApifyGeminiV1, for: "user_a"), true)
     }
 
+    func testSocialImportProviderWaitsForForegroundRetryAfterEarlierFlagFailure() async throws {
+        let understanding = FeatureFlagUnderstandingRepository()
+        let flags = RecoveringGatedFeatureFlagTestRepository(values: [
+            .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                isEnabled: true,
+                source: .accountOverride
+            )
+        ])
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: flags
+        )
+        let provider = backend.socialImportUnderstandingProvider(for: "user_a")
+
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.featureFlagResolution, .failed(userID: "user_a"))
+        XCTAssertEqual(backend.featureFlag(.socialImportApifyGeminiV1, for: "user_a"), false)
+
+        let foregroundRefresh = Task { await backend.refreshFeatureFlags(for: "user_a") }
+        while flags.startedRequestCount < 2 { await Task.yield() }
+        let importRequest = Task {
+            try await provider.understand(
+                url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/foreground-retry/")),
+                source: .instagram,
+                clientRequestID: "foreground-retry-request"
+            )
+        }
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(flags.startedRequestCount, 2)
+        XCTAssertEqual(understanding.requestCount, 0)
+
+        flags.completeRecovery()
+        await foregroundRefresh.value
+        let result = try await importRequest.value
+
+        XCTAssertEqual(result.outcome, .ok)
+        XCTAssertEqual(understanding.requestCount, 1)
+        XCTAssertEqual(backend.featureFlag(.socialImportApifyGeminiV1, for: "user_a"), true)
+    }
+
+    func testSocialImportProviderRetriesFailedFlagStateBeforeUsingBundledDefault() async throws {
+        let understanding = FeatureFlagUnderstandingRepository()
+        let flags = FailOnceFeatureFlagTestRepository(values: [
+            .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                isEnabled: true,
+                source: .accountOverride
+            )
+        ])
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: flags
+        )
+
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.featureFlagResolution, .failed(userID: "user_a"))
+
+        let result = try await backend.socialImportUnderstandingProvider(for: "user_a").understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/retry-failed-flag/")),
+            source: .instagram,
+            clientRequestID: "retry-failed-flag-request"
+        )
+
+        XCTAssertEqual(flags.requestCount, 2)
+        XCTAssertEqual(result.outcome, .ok)
+        XCTAssertEqual(understanding.requestCount, 1)
+        XCTAssertEqual(backend.featureFlag(.socialImportApifyGeminiV1, for: "user_a"), true)
+    }
+
+    func testSocialImportProviderDoesNotTreatFailedFlagRefreshAsDisabled() async throws {
+        let understanding = FeatureFlagUnderstandingRepository()
+        let flags = AlwaysFailingFeatureFlagTestRepository()
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: flags
+        )
+
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.featureFlagResolution, .failed(userID: "user_a"))
+
+        let result = try await backend.socialImportUnderstandingProvider(for: "user_a").understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/flag-unavailable/")),
+            source: .instagram,
+            clientRequestID: "flag-unavailable-request"
+        )
+
+        XCTAssertEqual(flags.requestCount, 2)
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertEqual(result.diagnostics.failureCategory, "feature_flag_unavailable")
+        XCTAssertEqual(understanding.requestCount, 0)
+    }
+
+    func testSocialImportProviderWaitsForForegroundSessionValidationBeforeHostedCall() async throws {
+        let session = AuthSession(userID: "user_a", displayName: nil, handle: nil)
+        let authProvider = GatedSocialImportAuthProvider(state: .signedIn(session))
+        let auth = AuthSessionStore(provider: authProvider)
+        await auth.refreshSession()
+        authProvider.shouldSuspendRefresh = true
+        auth.beginSessionValidation()
+
+        let understanding = FeatureFlagUnderstandingRepository()
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: FeatureFlagTestRepository(values: [
+                .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                )
+            ])
+        )
+        let provider = backend.socialImportUnderstandingProvider(
+            for: session.userID,
+            authSession: auth
+        )
+
+        let foregroundRefresh = Task { await auth.refreshSession() }
+        while !authProvider.isRefreshSuspended { await Task.yield() }
+        let observedSession = AuthSession(
+            userID: session.userID,
+            displayName: "Observed snapshot",
+            handle: session.handle
+        )
+        authProvider.setObservedState(.signedIn(observedSession))
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(auth.state, .signedIn(session))
+        XCTAssertFalse(auth.isSessionValidated)
+        let importRequest = Task {
+            try await provider.understand(
+                url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/foreground-auth/")),
+                source: .instagram,
+                clientRequestID: "foreground-auth-request"
+            )
+        }
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(authProvider.refreshCount, 2)
+        XCTAssertEqual(understanding.requestCount, 0)
+
+        authProvider.resumeRefresh()
+        await foregroundRefresh.value
+        let result = try await importRequest.value
+
+        XCTAssertEqual(result.outcome, .ok)
+        XCTAssertEqual(authProvider.refreshCount, 2)
+        XCTAssertEqual(understanding.requestCount, 1)
+    }
+
+    func testSocialImportProviderReportsAuthUnavailableWithoutCallingHostedRepository() async throws {
+        let session = AuthSession(userID: "user_a", displayName: nil, handle: nil)
+        let authProvider = GatedSocialImportAuthProvider(state: .offline(session, message: "Offline"))
+        let auth = AuthSessionStore(provider: authProvider)
+        let understanding = FeatureFlagUnderstandingRepository()
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: FeatureFlagTestRepository(values: [
+                .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                )
+            ])
+        )
+
+        let result = try await backend.socialImportUnderstandingProvider(
+            for: session.userID,
+            authSession: auth
+        ).understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/offline-auth/")),
+            source: .instagram,
+            clientRequestID: "offline-auth-request"
+        )
+
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertEqual(result.diagnostics.failureCategory, "auth_unavailable")
+        XCTAssertEqual(understanding.requestCount, 0)
+    }
+
+    func testSocialImportProviderTranslatesAuthFailureAfterAdmission() async throws {
+        let session = AuthSession(userID: "user_a", displayName: nil, handle: nil)
+        let authProvider = GatedSocialImportAuthProvider(state: .signedIn(session))
+        let auth = AuthSessionStore(provider: authProvider)
+        await auth.refreshSession()
+        let understanding = InvalidatingAuthUnderstandingRepository(auth: auth)
+        let backend = WanderBackend(
+            socialImportUnderstandingRepository: understanding,
+            featureFlagRepository: FeatureFlagTestRepository(values: [
+                .socialImportApifyGeminiV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                )
+            ])
+        )
+
+        let result = try await backend.socialImportUnderstandingProvider(
+            for: session.userID,
+            authSession: auth
+        ).understand(
+            url: try XCTUnwrap(URL(string: "https://www.instagram.com/p/auth-use-race/")),
+            source: .instagram,
+            clientRequestID: "auth-use-race-request"
+        )
+
+        XCTAssertEqual(understanding.requestCount, 1)
+        XCTAssertEqual(result.outcome, .fallback)
+        XCTAssertEqual(result.diagnostics.failureCategory, "auth_unavailable")
+    }
+
     func testDeviceOffOverrideNeverCallsThePaidSocialImportRepository() async throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -231,6 +437,128 @@ private final class GatedFeatureFlagTestRepository: FeatureFlagRepository {
 }
 
 @MainActor
+private final class RecoveringGatedFeatureFlagTestRepository: FeatureFlagRepository {
+    private enum TestError: Error {
+        case firstRequestFailed
+    }
+
+    let values: [FeatureFlagKey: ResolvedFeatureFlagValue]
+    private var recoveryContinuation: CheckedContinuation<
+        [FeatureFlagKey: ResolvedFeatureFlagValue],
+        Never
+    >?
+    private(set) var startedRequestCount = 0
+
+    init(values: [FeatureFlagKey: ResolvedFeatureFlagValue]) {
+        self.values = values
+    }
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
+        startedRequestCount += 1
+        if startedRequestCount == 1 {
+            throw TestError.firstRequestFailed
+        }
+        return await withCheckedContinuation { continuation in
+            recoveryContinuation = continuation
+        }
+    }
+
+    func completeRecovery() {
+        recoveryContinuation?.resume(returning: values)
+        recoveryContinuation = nil
+    }
+}
+
+@MainActor
+private final class FailOnceFeatureFlagTestRepository: FeatureFlagRepository {
+    private enum TestError: Error {
+        case firstRequestFailed
+    }
+
+    let values: [FeatureFlagKey: ResolvedFeatureFlagValue]
+    private(set) var requestCount = 0
+
+    init(values: [FeatureFlagKey: ResolvedFeatureFlagValue]) {
+        self.values = values
+    }
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
+        requestCount += 1
+        if requestCount == 1 {
+            throw TestError.firstRequestFailed
+        }
+        return values
+    }
+}
+
+@MainActor
+private final class AlwaysFailingFeatureFlagTestRepository: FeatureFlagRepository {
+    private enum TestError: Error {
+        case unavailable
+    }
+
+    private(set) var requestCount = 0
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
+        requestCount += 1
+        throw TestError.unavailable
+    }
+}
+
+@MainActor
+private final class GatedSocialImportAuthProvider: AuthSessionProviding {
+    private(set) var state: AuthState
+    var shouldSuspendRefresh = false
+    private(set) var isRefreshSuspended = false
+    private(set) var refreshCount = 0
+    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private let changes: AsyncStream<AuthState>
+    private let changesContinuation: AsyncStream<AuthState>.Continuation
+
+    init(state: AuthState) {
+        self.state = state
+        (changes, changesContinuation) = AsyncStream<AuthState>.makeStream()
+    }
+
+    var canPresentNativeAuth: Bool { false }
+
+    func sessionChanges() -> AsyncStream<AuthState> { changes }
+
+    func refreshSession() async {
+        refreshCount += 1
+        guard shouldSuspendRefresh else { return }
+        isRefreshSuspended = true
+        await withCheckedContinuation { continuation in
+            refreshContinuation = continuation
+        }
+        isRefreshSuspended = false
+    }
+
+    func resumeRefresh() {
+        refreshContinuation?.resume()
+        refreshContinuation = nil
+    }
+
+    func setObservedState(_ state: AuthState) {
+        self.state = state
+        changesContinuation.yield(state)
+    }
+
+    func signOut() async throws {
+        state = .signedOut
+    }
+
+    func deleteAccount() async throws {
+        state = .signedOut
+    }
+
+    func supabaseAccessToken() async throws -> String {
+        guard case .signedIn = state else { throw AuthSessionError.notSignedIn }
+        return "test-token"
+    }
+}
+
+@MainActor
 private final class FeatureFlagUnderstandingRepository: SocialImportUnderstandingRepository {
     private(set) var requestCount = 0
 
@@ -256,5 +584,25 @@ private final class FeatureFlagUnderstandingRepository: SocialImportUnderstandin
                 failureCategory: nil
             )
         )
+    }
+}
+
+@MainActor
+private final class InvalidatingAuthUnderstandingRepository: SocialImportUnderstandingRepository {
+    private weak var auth: AuthSessionStore?
+    private(set) var requestCount = 0
+
+    init(auth: AuthSessionStore) {
+        self.auth = auth
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        requestCount += 1
+        auth?.beginSessionValidation()
+        throw AuthSessionError.notSignedIn
     }
 }

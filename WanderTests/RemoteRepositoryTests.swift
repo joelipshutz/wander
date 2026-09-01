@@ -16,7 +16,22 @@ final class RemoteRepositoryTests: XCTestCase {
                   "name": "Carbon Beach Club",
                   "area": "Malibu",
                   "modality": "image_text",
-                  "classification": "destination"
+                  "classification": "destination",
+                  "resolved_places": [
+                    {
+                      "provider": "google_places",
+                      "provider_place_id": "carbon-google-id",
+                      "name": "Carbon Beach Club Restaurant",
+                      "formatted_address": "22878 Pacific Coast Hwy, Malibu, CA 90265, USA",
+                      "locality": "Malibu",
+                      "region": "CA",
+                      "country": "US",
+                      "latitude": 34.0391,
+                      "longitude": -118.6776,
+                      "primary_type": "restaurant",
+                      "types": ["restaurant", "food"]
+                    }
+                  ]
                 },
                 {
                   "name": "Los Angeles, California",
@@ -33,7 +48,8 @@ final class RemoteRepositoryTests: XCTestCase {
               ],
               "media_count": 9,
               "model_attempt_count": 99,
-              "failure_category": null
+              "failure_category": null,
+              "declared_count_complete": true
             }
             """.utf8
         )
@@ -52,7 +68,24 @@ final class RemoteRepositoryTests: XCTestCase {
                 name: "Carbon Beach Club",
                 area: "Malibu",
                 evidence: .imageText,
-                isServerGrounded: true
+                isServerGrounded: true,
+                resolvedCandidates: [
+                    PlaceCandidate(
+                        id: "google-places-carbon-google-id",
+                        name: "Carbon Beach Club Restaurant",
+                        category: "restaurant",
+                        rawProviderType: "restaurant",
+                        address: "22878 Pacific Coast Hwy, Malibu, CA 90265, USA",
+                        locality: "Malibu",
+                        region: "CA",
+                        country: "US",
+                        latitude: 34.0391,
+                        longitude: -118.6776,
+                        sourceProvider: "google_places",
+                        sourceProviderPlaceID: "carbon-google-id",
+                        confidence: 1
+                    )
+                ]
             ),
             SocialPlaceSearchHint(
                 name: "Hotel Bel-Air",
@@ -63,6 +96,7 @@ final class RemoteRepositoryTests: XCTestCase {
         ])
         XCTAssertEqual(result.diagnostics.mediaCount, 9)
         XCTAssertEqual(result.diagnostics.modelAttemptCount, 6)
+        XCTAssertTrue(result.diagnostics.declaredCountComplete)
         XCTAssertEqual(functions.calls.map(\.name), ["function:social-import-understand"])
         XCTAssertEqual(functions.rawBodies.first?["schema_version"] as? Int, 1)
         XCTAssertEqual(functions.rawBodies.first?["platform"] as? String, "instagram")

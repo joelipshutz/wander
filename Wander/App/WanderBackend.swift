@@ -57,11 +57,13 @@ enum SemanticPlaceSearchAccessPolicy {
 @MainActor
 private final class FeatureGatedSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
     private weak var backend: WanderBackend?
+    private weak var authSession: AuthSessionStore?
     private let userID: String
 
-    init(backend: WanderBackend, userID: String) {
+    init(backend: WanderBackend, userID: String, authSession: AuthSessionStore?) {
         self.backend = backend
         self.userID = userID
+        self.authSession = authSession
     }
 
     func understand(
@@ -69,16 +71,54 @@ private final class FeatureGatedSocialImportUnderstandingRepository: SocialImpor
         source: PlaceImportSource,
         clientRequestID: String
     ) async throws -> SocialImportUnderstandingResult {
-        if backend?.resolvedFeatureFlag(.socialImportApifyGeminiV1, for: userID) == nil {
-            // Import resumption can race the root view's first flag refresh on
-            // cold launch. Resolve the account-scoped flag here so a queued
-            // link is not permanently stamped by the local fallback first.
-            await backend?.refreshFeatureFlags(for: userID)
+        if let authSession {
+            do {
+                try await authSession.ensureSessionValidated(for: userID)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                return Self.authUnavailableResult
+            }
+        }
+        if let backend {
+            // Import resumption can race both the cold-launch flag load and a
+            // foreground retry after an earlier load failed. Join or perform
+            // that refresh before choosing a provider so a stale bundled Off
+            // value cannot permanently route this import to the local fallback.
+            await backend.ensureFeatureFlagsCurrentForUse(
+                .socialImportApifyGeminiV1,
+                for: userID
+            )
             try Task.checkCancellation()
         }
-        guard let backend,
-              backend.featureFlag(.socialImportApifyGeminiV1, for: userID) == true
-        else {
+        guard let backend else {
+            return SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "local_fallback",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "not_configured"
+                )
+            )
+        }
+        guard backend.hasAuthoritativeFeatureFlagResolution(
+            .socialImportApifyGeminiV1,
+            for: userID
+        ) else {
+            return SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "local_fallback",
+                    mediaCount: 0,
+                    modelAttemptCount: 0,
+                    failureCategory: "feature_flag_unavailable"
+                )
+            )
+        }
+        guard backend.featureFlag(.socialImportApifyGeminiV1, for: userID) == true else {
             return SocialImportUnderstandingResult(
                 outcome: .fallback,
                 hints: [],
@@ -102,12 +142,41 @@ private final class FeatureGatedSocialImportUnderstandingRepository: SocialImpor
                 )
             )
         }
-        return try await repository.understand(
-            url: url,
-            source: source,
-            clientRequestID: clientRequestID
-        )
+        do {
+            return try await repository.understand(
+                url: url,
+                source: source,
+                clientRequestID: clientRequestID
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as AuthSessionError
+            where [.notSignedIn, .tokenUnavailable, .sessionUnavailable].contains(error) {
+            return Self.authUnavailableResult
+        } catch let error as WanderRemoteError where error == .notAuthenticated {
+            return Self.authUnavailableResult
+        } catch {
+            // Close the admission/use race even when an underlying client wraps
+            // its token error in a transport-specific type.
+            if let authSession,
+               !authSession.isSessionValidated
+                    || authSession.state.session?.userID != userID {
+                return Self.authUnavailableResult
+            }
+            throw error
+        }
     }
+
+    private static let authUnavailableResult = SocialImportUnderstandingResult(
+        outcome: .fallback,
+        hints: [],
+        diagnostics: SocialImportUnderstandingDiagnostics(
+            providerPath: "local_fallback",
+            mediaCount: 0,
+            modelAttemptCount: 0,
+            failureCategory: "auth_unavailable"
+        )
+    )
 }
 
 @MainActor
@@ -303,9 +372,14 @@ final class WanderBackend: ObservableObject {
     }
 
     func socialImportUnderstandingProvider(
-        for userID: String
+        for userID: String,
+        authSession: AuthSessionStore? = nil
     ) -> any SocialImportUnderstandingRepository {
-        FeatureGatedSocialImportUnderstandingRepository(backend: self, userID: userID)
+        FeatureGatedSocialImportUnderstandingRepository(
+            backend: self,
+            userID: userID,
+            authSession: authSession
+        )
     }
 
     func refreshFeatureFlags(for userID: String) async {
@@ -351,6 +425,45 @@ final class WanderBackend: ObservableObject {
             task: task
         )
         await task.value
+    }
+
+    /// Makes a remotely controlled feature safe to consume at an action boundary.
+    ///
+    /// A launch-snapshot device override is already authoritative. Otherwise,
+    /// callers join a refresh already in flight, accept a settled same-account
+    /// result, or retry an unresolved/failed/stale account state exactly once.
+    func ensureFeatureFlagsCurrentForUse(
+        _ key: FeatureFlagKey,
+        for userID: String
+    ) async {
+        if featureFlagDeviceOverrides.override(for: key, userID: userID) != nil {
+            return
+        }
+        if let inFlight = inFlightFeatureFlagRefreshes[userID] {
+            await inFlight.task.value
+            if case .resolved(let resolvedUserID, _) = featureFlagResolution,
+               resolvedUserID == userID {
+                return
+            }
+        }
+        if case .resolved(let resolvedUserID, _) = featureFlagResolution,
+           resolvedUserID == userID {
+            return
+        }
+        await refreshFeatureFlags(for: userID)
+    }
+
+    func hasAuthoritativeFeatureFlagResolution(
+        _ key: FeatureFlagKey,
+        for userID: String
+    ) -> Bool {
+        if featureFlagDeviceOverrides.override(for: key, userID: userID) != nil {
+            return true
+        }
+        if case .resolved(let resolvedUserID, _) = featureFlagResolution {
+            return resolvedUserID == userID
+        }
+        return false
     }
 
     func clearFeatureFlags() {

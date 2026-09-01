@@ -123,6 +123,21 @@ export type PlaceHint = {
   confidence: number;
   start_ms: number | null;
   end_ms: number | null;
+  resolved_places?: ResolvedPlace[];
+};
+
+export type ResolvedPlace = {
+  provider: "google_places";
+  provider_place_id: string;
+  name: string;
+  formatted_address: string | null;
+  locality: string | null;
+  region: string | null;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+  primary_type: string | null;
+  types: string[];
 };
 
 export type PublicFallbackReason =
@@ -149,6 +164,7 @@ export type UnderstandResponse = {
   media_count: number;
   model_attempt_count: number;
   failure_category: PublicFallbackReason | null;
+  declared_count_complete?: boolean;
 };
 
 export type Environment = (name: string) => string | undefined;

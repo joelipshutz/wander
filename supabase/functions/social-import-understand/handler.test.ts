@@ -1116,6 +1116,37 @@ Deno.test("handler separates honest emptiness, uncertainty, and intentional excl
   assertEquals(incomplete.hints, []);
   assertEquals(incomplete.failure_category, "media_incomplete");
 
+  const declaredAndGroundedDespiteFailedMedia = await runOutcomeScenario(
+    [candidate({
+      name: "Hotel Bel-Air",
+      area: "Los Angeles, California",
+      modality: "caption",
+      evidenceIds: ["caption:0"],
+    })],
+    false,
+    { description: "Top 1 place to visit: Hotel Bel-Air" },
+    postContext({
+      intent: "place_list",
+      declaredCount: 1,
+      declaredCountEvidenceIds: ["caption:0"],
+      globalArea: "Los Angeles, California",
+      globalAreaEvidenceIds: ["caption:0"],
+    }),
+  );
+  assertEquals(declaredAndGroundedDespiteFailedMedia.outcome, "partial");
+  assertEquals(
+    (declaredAndGroundedDespiteFailedMedia.hints as unknown[]).length,
+    1,
+  );
+  assertEquals(
+    declaredAndGroundedDespiteFailedMedia.failure_category,
+    "grounding_incomplete",
+  );
+  assertEquals(
+    declaredAndGroundedDespiteFailedMedia.declared_count_complete,
+    true,
+  );
+
   const intentionalExclusions = await runOutcomeScenario([candidate({
     name: "Vital Links",
     area: "Texas",

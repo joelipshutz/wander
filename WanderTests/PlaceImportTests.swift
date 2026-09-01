@@ -3115,6 +3115,48 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.items.first?.seed.sourceURLString, sourceURL)
     }
 
+    func testResolverUpgradeCollapsesQueuedAndResolvingSocialChildrenBackToOneSourceJob() {
+        let batch = PlaceImportBatch(
+            id: "social-inflight-upgrade",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 2
+        )
+        let sourceURL = "https://www.instagram.com/p/inflight-upgrade/"
+        let items = [
+            (name: "Queued Guess", state: PlaceImportItemState.queued),
+            (name: "Resolving Guess", state: PlaceImportItemState.resolving)
+        ].enumerated().map { index, fixture in
+            PlaceImportItem(
+                id: "inflight-old-\(index)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: fixture.name,
+                    areaHint: "Los Angeles",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: fixture.state,
+                resolverVersion: PlaceImportItem.currentResolverVersion - 1
+            )
+        }
+
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: items)
+            ),
+            resolver: SuspendedPlaceImportResolver()
+        )
+
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.state, .queued)
+        XCTAssertNil(store.items.first?.seed.nameHint)
+        XCTAssertEqual(store.items.first?.seed.sourceURLString, sourceURL)
+        XCTAssertEqual(store.items.first?.resolverVersion, PlaceImportItem.currentResolverVersion)
+    }
+
     func testSocialResolverUpgradeKeepsOldRowsWhenMetadataRefreshFails() async {
         let batch = PlaceImportBatch(id: "social-fallback", source: .instagram, sourceName: nil, totalCount: 2)
         let sourceURL = "https://www.instagram.com/p/temporarily-unavailable/"
@@ -3155,6 +3197,73 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(Set(store.items.map(\.displayName)), ["Fremont Lake", "Pine Coffee Supply"])
         XCTAssertEqual(store.items.map(\.resolverVersion), [4, 4])
         XCTAssertEqual(Set(persistence.snapshot.items.map(\.displayName)), ["Fremont Lake", "Pine Coffee Supply"])
+    }
+
+    func testSocialResolverUpgradeDropsStaleRowsWhenHostedScanReturnsOnlySourceRetry() async {
+        let batch = PlaceImportBatch(
+            id: "social-retry-only-upgrade",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 2
+        )
+        let sourceURL = "https://www.instagram.com/p/retry-only-upgrade/"
+        let oldItems = ["Unreliable Guess A", "Unreliable Guess B"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "retry-only-old-\(index)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Los Angeles",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: PlaceImportItem.currentResolverVersion - 1
+            )
+        }
+        let retrySeed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: oldItems)
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: SequencedPlaceImportResolver(resolutions: [
+                .partialExpandedResolved(
+                    [
+                        PlaceImportResolvedEntry(
+                            kind: .sourceRetry,
+                            seed: retrySeed,
+                            candidates: [],
+                            selectedCandidateID: nil,
+                            helpMessage: "Automatic matching is temporarily unavailable. Retry the source scan."
+                        )
+                    ],
+                    sourceName: nil
+                )
+            ])
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        let items = store.items(for: batch.id)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertTrue(items[0].isSourceRetry)
+        XCTAssertEqual(items[0].resolverVersion, PlaceImportItem.currentResolverVersion)
+        XCTAssertFalse(items.map(\.displayName).contains("Unreliable Guess A"))
+        XCTAssertFalse(items.map(\.displayName).contains("Unreliable Guess B"))
+        XCTAssertEqual(persistence.snapshot.items, items)
     }
 
     func testCompletingOneSocialUpgradeKeepsOtherUpgradeBackupAcrossRelaunch() async {
@@ -4213,6 +4322,71 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(understanding.requests.first?.source, .instagram)
     }
 
+    func testDeclaredCountCompleteGoogleCandidateSkipsMapKitAndSourceRetry() async throws {
+        let googleCandidate = PlaceCandidate(
+            id: "google-places-nimmo",
+            name: "Nimmo Bay Resort",
+            category: "resort_hotel",
+            rawProviderType: "resort_hotel",
+            address: "1978 Broughton Blvd, Port McNeill, BC, Canada",
+            locality: "Port McNeill",
+            region: "BC",
+            country: "CA",
+            latitude: 50.6014,
+            longitude: -126.6812,
+            sourceProvider: "google_places",
+            sourceProviderPlaceID: "nimmo",
+            confidence: 1
+        )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [:])
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .partial,
+                hints: [
+                    SocialPlaceSearchHint(
+                        name: "Nimmo Bay Resort",
+                        area: "British Columbia, Canada",
+                        evidence: .itineraryPhrase,
+                        isServerGrounded: true,
+                        resolvedCandidates: [googleCandidate]
+                    )
+                ],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 1,
+                    modelAttemptCount: 1,
+                    failureCategory: "media_incomplete",
+                    declaredCountComplete: true
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/p/server-google-candidate/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .candidates(let candidates, let selectedCandidateID) = resolution else {
+            return XCTFail("Expected a selected Google candidate, got \(resolution)")
+        }
+        XCTAssertEqual(candidates, [googleCandidate])
+        XCTAssertEqual(selectedCandidateID, googleCandidate.id)
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
     func testSocialMatchingSelectsUniqueGroundedLocalityDefaultAndRetainsAlternatives() async throws {
         let expected = placeImportCandidate(
             name: "Summit Archive",
@@ -4298,7 +4472,8 @@ final class DevicePlaceImportResolverTests: XCTestCase {
                     SocialPlaceSearchHint(
                         name: "Fremont Lake",
                         area: "Wyoming",
-                        evidence: .imageText
+                        evidence: .imageText,
+                        isServerGrounded: true
                     )
                 ],
                 diagnostics: SocialImportUnderstandingDiagnostics(
@@ -4346,7 +4521,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
     }
 
-    func testEmptyPartialGeminiScanRequiresRetryWithoutLocalGuessResurrection() async throws {
+    func testEmptyPartialGeminiScanCreatesOnlySourceRetryWithoutLocalGuessResurrection() async throws {
         let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
@@ -4389,10 +4564,13 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             source: .instagram
         )
 
-        guard case .needsHelp(let message) = resolution else {
-            return XCTFail("Expected an explicit retry requirement, got \(resolution)")
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected one source retry row, got \(resolution)")
         }
-        XCTAssertTrue(message.contains("partially scanned"))
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].kind, .sourceRetry)
+        XCTAssertNil(entries[0].seed.nameHint)
+        XCTAssertTrue(entries[0].candidates.isEmpty)
         XCTAssertTrue(placeResolver.manualInputs.isEmpty)
     }
 
@@ -4744,7 +4922,106 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertNotNil(UUID(uuidString: freshRequestID))
     }
 
-    func testInFlightDuplicateKeepsLocalResultsVisiblyRetryable() async throws {
+    func testHostedFailuresWithoutGroundedHintsCreateOnlyASourceRetryRow() async throws {
+        for failureCategory in [
+            "auth_unavailable",
+            "feature_flag_unavailable",
+            "not_configured",
+            "duplicate_request",
+            "media_unavailable"
+        ] {
+            let candidate = placeImportCandidate(name: "Unreliable Local Guess")
+            let placeResolver = FakeDevicePlaceResolver(candidates: [candidate])
+            let resolver = DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(
+                    metadata: SocialImportMetadata(
+                        title: "Unreliable Local Guess",
+                        caption: "Visit Unreliable Local Guess",
+                        authorName: nil,
+                        thumbnailURL: nil
+                    )
+                ),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+                socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                    result: SocialImportUnderstandingResult(
+                        outcome: .fallback,
+                        hints: [],
+                        diagnostics: SocialImportUnderstandingDiagnostics(
+                            providerPath: "local_fallback",
+                            mediaCount: 0,
+                            modelAttemptCount: 0,
+                            failureCategory: failureCategory
+                        )
+                    )
+                )
+            )
+            let sourceURL = "https://www.instagram.com/reel/admission-\(failureCategory)/"
+
+            let resolution = try await resolver.resolve(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                source: .instagram
+            )
+
+            guard case .partialExpandedResolved(let entries, _) = resolution else {
+                return XCTFail("Expected one source retry for \(failureCategory), got \(resolution)")
+            }
+            XCTAssertEqual(entries.count, 1, failureCategory)
+            XCTAssertEqual(entries[0].kind, .sourceRetry, failureCategory)
+            XCTAssertNil(entries[0].seed.nameHint, failureCategory)
+            XCTAssertTrue(entries[0].candidates.isEmpty, failureCategory)
+            XCTAssertTrue(placeResolver.manualInputs.isEmpty, failureCategory)
+        }
+    }
+
+    func testThrownHostedFailureCreatesOnlyASourceRetryRow() async throws {
+        let candidate = placeImportCandidate(name: "Unreliable Local Guess")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [candidate])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Unreliable Local Guess",
+                    caption: "Visit Unreliable Local Guess",
+                    authorName: nil,
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: ThrowingSocialImportUnderstandingRepository(
+                error: URLError(.timedOut)
+            )
+        )
+        let sourceURL = "https://www.instagram.com/reel/hosted-timeout/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected one source retry row, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].kind, .sourceRetry)
+        XCTAssertNil(entries[0].seed.nameHint)
+        XCTAssertTrue(entries[0].candidates.isEmpty)
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testInFlightDuplicateDoesNotCreateLocalPlaceClaims() async throws {
         let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
@@ -4758,10 +5035,11 @@ final class DevicePlaceImportResolverTests: XCTestCase {
                 )
             )
         )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [candidate]
+        ])
         let resolver = DevicePlaceImportResolver(
-            placeResolver: RoutingDevicePlaceResolver(routes: [
-                "fremont lake": [candidate]
-            ]),
+            placeResolver: placeResolver,
             metadataProvider: FakeSocialImportMetadataProvider(
                 metadata: SocialImportMetadata(
                     title: "Wyoming itinerary",
@@ -4785,14 +5063,15 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         let resolution = try await resolver.resolve(seed: seed, source: .instagram)
 
         guard case .partialExpandedResolved(let entries, _) = resolution else {
-            return XCTFail("Expected an honest partial result, got \(resolution)")
+            return XCTFail("Expected one source retry row, got \(resolution)")
         }
-        XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
-        XCTAssertNil(entries.last?.seed.nameHint)
-        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].kind, .sourceRetry)
+        XCTAssertNil(entries[0].seed.nameHint)
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
     }
 
-    func testServerMediaFallbackKeepsReelResultsVisiblyRetryable() async throws {
+    func testServerMediaFallbackDoesNotCreateLocalPlaceClaims() async throws {
         let candidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
         let understanding = FakeSocialImportUnderstandingRepository(
             result: SocialImportUnderstandingResult(
@@ -4806,10 +5085,11 @@ final class DevicePlaceImportResolverTests: XCTestCase {
                 )
             )
         )
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [candidate]
+        ])
         let resolver = DevicePlaceImportResolver(
-            placeResolver: RoutingDevicePlaceResolver(routes: [
-                "fremont lake": [candidate]
-            ]),
+            placeResolver: placeResolver,
             metadataProvider: FakeSocialImportMetadataProvider(
                 metadata: SocialImportMetadata(
                     title: "Wyoming itinerary",
@@ -4833,11 +5113,179 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         let resolution = try await resolver.resolve(seed: seed, source: .instagram)
 
         guard case .partialExpandedResolved(let entries, _) = resolution else {
-            return XCTFail("Expected an honest partial result, got \(resolution)")
+            return XCTFail("Expected one source retry row, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].kind, .sourceRetry)
+        XCTAssertNil(entries[0].seed.nameHint)
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testHostedFallbackPreservesGroundedRemoteHintsWithoutAddingLocalGuesses() async throws {
+        let remoteCandidate = placeImportCandidate(name: "Fremont Lake", address: "Wyoming")
+        let localCandidate = placeImportCandidate(name: "Half Moon Lake Lodge", address: "Wyoming")
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [remoteCandidate],
+            "half moon lake lodge": [localCandidate]
+        ])
+        let understanding = FakeSocialImportUnderstandingRepository(
+            result: SocialImportUnderstandingResult(
+                outcome: .fallback,
+                hints: [
+                    SocialPlaceSearchHint(
+                        name: "Fremont Lake",
+                        area: "Wyoming",
+                        evidence: .imageText,
+                        isServerGrounded: true
+                    )
+                ],
+                diagnostics: SocialImportUnderstandingDiagnostics(
+                    providerPath: "apify_gemini",
+                    mediaCount: 2,
+                    modelAttemptCount: 1,
+                    failureCategory: "media_unavailable"
+                )
+            )
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Base camp at Half Moon Lake Lodge!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: understanding
+        )
+        let sourceURL = "https://www.instagram.com/reel/grounded-hosted-fallback/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected grounded partial results plus retry, got \(resolution)")
         }
         XCTAssertEqual(entries.compactMap(\.seed.nameHint), ["Fremont Lake"])
-        XCTAssertNil(entries.last?.seed.nameHint)
-        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries.last?.kind, .sourceRetry)
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
+    }
+
+    func testHostedFallbackRejectsUngroundedHintsWithoutAddingLocalGuesses() async throws {
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "fremont lake": [placeImportCandidate(name: "Fremont Lake", address: "Wyoming")]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Wyoming itinerary",
+                    caption: "Stop at Fremont Lake!",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: SocialImportUnderstandingResult(
+                    outcome: .fallback,
+                    hints: [
+                        SocialPlaceSearchHint(
+                            name: "Fremont Lake",
+                            area: "Wyoming",
+                            evidence: .imageText
+                        )
+                    ],
+                    diagnostics: SocialImportUnderstandingDiagnostics(
+                        providerPath: "apify_deterministic",
+                        mediaCount: 1,
+                        modelAttemptCount: 0,
+                        failureCategory: "media_unavailable"
+                    )
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/reel/ungrounded-hosted-fallback/"
+
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        guard case .partialExpandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected one source retry row, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].kind, .sourceRetry)
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testHostedFailureCategoryOverridesOtherwiseAuthoritativeOutcome() async throws {
+        for outcome: SocialImportUnderstandingOutcome in [.ok, .noPlaces] {
+            let placeResolver = FakeDevicePlaceResolver(
+                candidates: [placeImportCandidate(name: "Unreliable Local Guess")]
+            )
+            let resolver = DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(
+                    metadata: SocialImportMetadata(
+                        title: "Unreliable Local Guess",
+                        caption: "Visit Unreliable Local Guess",
+                        authorName: nil,
+                        thumbnailURL: nil
+                    )
+                ),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+                socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                    result: SocialImportUnderstandingResult(
+                        outcome: outcome,
+                        hints: [],
+                        diagnostics: SocialImportUnderstandingDiagnostics(
+                            providerPath: "apify_gemini",
+                            mediaCount: 1,
+                            modelAttemptCount: 1,
+                            failureCategory: "upstream_timeout"
+                        )
+                    )
+                )
+            )
+            let sourceURL = "https://www.instagram.com/reel/failure-shaped-\(outcome.rawValue)/"
+
+            let resolution = try await resolver.resolve(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                source: .instagram
+            )
+
+            guard case .partialExpandedResolved(let entries, _) = resolution else {
+                return XCTFail("Expected one source retry row for \(outcome), got \(resolution)")
+            }
+            XCTAssertEqual(entries.count, 1, outcome.rawValue)
+            XCTAssertEqual(entries[0].kind, .sourceRetry, outcome.rawValue)
+            XCTAssertTrue(placeResolver.manualInputs.isEmpty, outcome.rawValue)
+        }
     }
 
     func testServerFallbackUsesExistingCaptionAndVisionPath() async throws {
@@ -6462,6 +6910,131 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         XCTAssertNil(match.selectedCandidateID)
     }
 
+    func testSocialCandidateMatcherSelectsExactCanadianVenueWithProvinceAndCountryAliases() {
+        let nimmoBay = placeImportCandidate(
+            name: "Nimmo Bay Resort",
+            address: "1978 Broughton Blvd",
+            locality: "Port McNeill",
+            region: "BC",
+            country: "CA",
+            latitude: 50.9393249,
+            longitude: -126.682148
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [nimmoBay],
+            nameHint: "Nimmo Bay Resort",
+            areaHint: "British Columbia, Canada",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, nimmoBay.id)
+    }
+
+    func testSocialCandidateMatcherDoesNotSelectExactCanadianVenueInWrongProvince() {
+        let ontario = placeImportCandidate(
+            name: "Nimmo Bay Resort",
+            locality: "Toronto",
+            region: "ON",
+            country: "CA",
+            latitude: 43.6532,
+            longitude: -79.3832
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [ontario],
+            nameHint: "Nimmo Bay Resort",
+            areaHint: "British Columbia, Canada",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.candidates.map(\.id), [ontario.id])
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testSocialCandidateMatcherSelectsUniqueExactInternationalVenueWhenAddressOmitsBroaderRegion() {
+        let shintaManiWild = placeImportCandidate(
+            name: "Shinta Mani Wild",
+            address: "Preah Sihanouk, Cambodia",
+            locality: "Preah Sihanouk",
+            region: "Preah Sihanouk Province",
+            country: "KH",
+            latitude: 11.1935,
+            longitude: 103.8364
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [shintaManiWild],
+            nameHint: "Shinta Mani Wild",
+            areaHint: "Cardamom Mountains, Cambodia",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, shintaManiWild.id)
+    }
+
+    func testSocialCandidateMatcherRejectsExactInternationalVenueInWrongCountry() {
+        let washington = placeImportCandidate(
+            name: "Nimmo Bay Resort",
+            locality: "Seattle",
+            region: "WA",
+            country: "US",
+            latitude: 47.6062,
+            longitude: -122.3321
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [washington],
+            nameHint: "Nimmo Bay Resort",
+            areaHint: "British Columbia, Canada",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertTrue(match.candidates.isEmpty)
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testSocialCandidateMatcherMatchesCountryNameHintToISOProviderCountry() {
+        let retreat = placeImportCandidate(
+            name: "The Retreat at Blue Lagoon Iceland",
+            locality: "Grindavik",
+            region: "Southern Peninsula",
+            country: "IS",
+            latitude: 63.8804,
+            longitude: -22.4495
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [retreat],
+            nameHint: "The Retreat at Blue Lagoon Iceland",
+            areaHint: "Iceland",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, retreat.id)
+    }
+
+    func testSocialCandidateMatcherDoesNotTreatCanadianCountryCodeAsCalifornia() {
+        let vancouver = placeImportCandidate(
+            name: "Summit Archive",
+            locality: "Vancouver",
+            region: "BC",
+            country: "CA",
+            latitude: 49.2827,
+            longitude: -123.1207
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [vancouver],
+            nameHint: "Summit Archive",
+            areaHint: "Los Angeles, California",
+            selectionPolicy: .socialGroundedArea
+        )
+
+        XCTAssertEqual(match.candidates.map(\.id), [vancouver.id])
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
     func testSocialCandidateMatcherDoesNotSelectExactNameWhenLocalityContextConflicts() {
         let texas = placeImportCandidate(
             name: "Vital Junction",
@@ -7442,6 +8015,23 @@ private final class FakeSocialImportUnderstandingRepository: SocialImportUnderst
             Request(url: url, source: source, clientRequestID: clientRequestID)
         )
         return result
+    }
+}
+
+@MainActor
+private final class ThrowingSocialImportUnderstandingRepository: SocialImportUnderstandingRepository {
+    let error: Error
+
+    init(error: Error) {
+        self.error = error
+    }
+
+    func understand(
+        url: URL,
+        source: PlaceImportSource,
+        clientRequestID: String
+    ) async throws -> SocialImportUnderstandingResult {
+        throw error
     }
 }
 

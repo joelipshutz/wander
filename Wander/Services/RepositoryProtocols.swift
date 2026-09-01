@@ -2033,12 +2033,28 @@ struct SocialImportUnderstandingDiagnostics: Equatable {
     let mediaCount: Int
     let modelAttemptCount: Int
     let failureCategory: String?
+    let declaredCountComplete: Bool
+
+    init(
+        providerPath: String,
+        mediaCount: Int,
+        modelAttemptCount: Int,
+        failureCategory: String?,
+        declaredCountComplete: Bool = false
+    ) {
+        self.providerPath = providerPath
+        self.mediaCount = mediaCount
+        self.modelAttemptCount = modelAttemptCount
+        self.failureCategory = failureCategory
+        self.declaredCountComplete = declaredCountComplete
+    }
 
     static let localFallback = SocialImportUnderstandingDiagnostics(
         providerPath: "local_fallback",
         mediaCount: 0,
         modelAttemptCount: 0,
-        failureCategory: nil
+        failureCategory: nil,
+        declaredCountComplete: false
     )
 }
 

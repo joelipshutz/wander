@@ -206,9 +206,21 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var discoveredMediaCount = 0
         var understandingPath = "local_fallback"
         var understandingWasPartial = false
-        var remoteGeminiPartialIsAuthoritative = false
         var remoteHintsWereAccepted = false
+        var shouldUseLocalEvidence = socialUnderstandingRepository == nil
         var hints: [SocialPlaceSearchHint] = []
+        let sourceRetryOnly: PlaceImportResolution = .partialExpandedResolved(
+            [
+                PlaceImportResolvedEntry(
+                    kind: .sourceRetry,
+                    seed: seed,
+                    candidates: [],
+                    selectedCandidateID: nil,
+                    helpMessage: "Automatic matching is temporarily unavailable. Retry the source scan."
+                )
+            ],
+            sourceName: nil
+        )
 
         if let socialUnderstandingRepository {
             do {
@@ -229,14 +241,35 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 }
                 understandingPath = remote.diagnostics.providerPath
                 discoveredMediaCount = remote.diagnostics.mediaCount
+                let hasHostedFailure = remote.diagnostics.failureCategory != nil
+                    && remote.diagnostics.failureCategory != "feature_disabled"
                 switch remote.outcome {
                 case .ok, .partial:
-                    hints = SocialImportEvidencePlanner.reviewHints(remote.hints)
+                    let eligibleHints = (remote.outcome == .partial || hasHostedFailure)
+                        ? remote.hints.filter(\.isServerGrounded)
+                        : remote.hints
+                    hints = SocialImportEvidencePlanner.reviewHints(eligibleHints)
                     remoteHintsWereAccepted = !hints.isEmpty
-                    understandingWasPartial = remote.outcome == .partial
-                    remoteGeminiPartialIsAuthoritative = remote.outcome == .partial
-                        && remote.diagnostics.providerPath == "apify_gemini"
+                    understandingWasPartial = (remote.outcome == .partial || hasHostedFailure)
+                        && !remote.diagnostics.declaredCountComplete
+                    if hints.isEmpty {
+                        // A hosted response that claims success or partial
+                        // coverage without any grounded evidence cannot safely
+                        // authorize local caption/cover guesses.
+                        return sourceRetryOnly
+                    }
                 case .noPlaces:
+                    if hasHostedFailure {
+                        hints = SocialImportEvidencePlanner.reviewHints(
+                            remote.hints.filter(\.isServerGrounded)
+                        )
+                        remoteHintsWereAccepted = !hints.isEmpty
+                        understandingWasPartial = true
+                        if hints.isEmpty {
+                            return sourceRetryOnly
+                        }
+                        break
+                    }
                     WanderDebugLog.imports.notice(
                         "social import understanding source=\(source.rawValue, privacy: .public) path=\(understandingPath, privacy: .public) outcome=no_places discovered_media_count=\(discoveredMediaCount, privacy: .public)"
                     )
@@ -244,38 +277,38 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         "No destination was explicitly identified in this post. Add a place name and nearby city to match it."
                     )
                 case .fallback:
-                    if let failureCategory = remote.diagnostics.failureCategory,
-                       failureCategory != "feature_disabled" {
-                        // The server attempted or admitted the richer path but
-                        // could not complete it. Local caption/cover evidence may
-                        // still provide useful rows, but it cannot prove complete
-                        // video or carousel coverage, so keep a source-level Retry
-                        // item. A deliberate server kill-switch preserves the
-                        // established local-only behavior.
-                        understandingWasPartial = true
+                    if remote.diagnostics.failureCategory == "feature_disabled" {
+                        // A deliberate server kill-switch preserves the
+                        // established local-only caption and Vision behavior.
+                        shouldUseLocalEvidence = true
+                        break
                     }
-                    break
+                    // Once the hosted path was admitted, only evidence returned
+                    // by that scan may create place rows. Preserve grounded
+                    // partial evidence, but never replace an empty/failed scan
+                    // with ungrounded local guesses.
+                    hints = SocialImportEvidencePlanner.reviewHints(
+                        remote.hints.filter(\.isServerGrounded)
+                    )
+                    remoteHintsWereAccepted = !hints.isEmpty
+                    understandingWasPartial = true
+                    if hints.isEmpty {
+                        return sourceRetryOnly
+                    }
                 }
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 try Task.checkCancellation()
-                // Provider, auth, and timeout failures are deliberately non-fatal.
-                // The existing public-metadata and on-device Vision path remains
-                // available without exposing the source URL in logs, but it
-                // cannot claim complete video/carousel coverage.
-                understandingPath = "local_fallback"
-                understandingWasPartial = true
+                // Timeouts, transport errors, decode failures, and hosted 5xxs
+                // are retryable source failures. Local caption/cover guesses
+                // would look like real provider results and recreate the exact
+                // misleading partial-import failure this path is meant to avoid.
+                return sourceRetryOnly
             }
         }
 
-        if remoteGeminiPartialIsAuthoritative, hints.isEmpty {
-            return .needsHelp(
-                "This post was only partially scanned. Retry automatic matching before using local text guesses."
-            )
-        }
-
-        if hints.isEmpty || (understandingWasPartial && !remoteGeminiPartialIsAuthoritative) {
+        if shouldUseLocalEvidence {
             let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
             try Task.checkCancellation()
             let metadata = socialMetadata(
@@ -346,7 +379,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     ) async throws -> PlaceImportResolution {
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
-        if durableHints.count > Self.maximumImmediateSocialLookups {
+        let hintsRequiringDeviceLookup = durableHints.filter {
+            !$0.isServerGrounded || $0.resolvedCandidates.isEmpty
+        }
+        if hintsRequiringDeviceLookup.count > Self.maximumImmediateSocialLookups {
             let expandedSeeds = durableHints.map { hint in
                 socialSeed(
                     from: seed,
@@ -382,24 +418,28 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             try Task.checkCancellation()
             var fetchedCandidates: [PlaceCandidate]
             var usedOCRRecoveryLookup = false
-            do {
-                fetchedCandidates = try await resolveSocialManualEntry(
-                    ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
-                )
-            } catch {
-                try Task.checkCancellation()
-                lookupFailureCount += 1
-                if hint.evidence.shouldRemainVisibleWithoutCandidates {
-                    recoveryHints.append(
-                        SocialRecoveryHint(
-                            hint: hint,
-                            helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
-                        )
+            if hint.isServerGrounded, !hint.resolvedCandidates.isEmpty {
+                fetchedCandidates = hint.resolvedCandidates
+            } else {
+                do {
+                    fetchedCandidates = try await resolveSocialManualEntry(
+                        ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
                     )
-                } else {
-                    rejectedHintCount += 1
+                } catch {
+                    try Task.checkCancellation()
+                    lookupFailureCount += 1
+                    if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                        recoveryHints.append(
+                            SocialRecoveryHint(
+                                hint: hint,
+                                helpMessage: "This place was named in the post, but place matching was temporarily unavailable. Retry this item later."
+                            )
+                        )
+                    } else {
+                        rejectedHintCount += 1
+                    }
+                    continue
                 }
-                continue
             }
             if fetchedCandidates.isEmpty,
                let recoveryInput = SocialOCRPlaceRecovery.manualInput(for: hint) {
@@ -426,7 +466,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                            helpMessage: "This place was named in the post, but place matching needs your help."
                         )
                     )
                 } else {
@@ -486,7 +526,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                            helpMessage: "This place was named in the post, but place matching needs your help."
                         )
                     )
                 } else {
@@ -546,7 +586,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .partialExpandedResolved(entries, sourceName: nil)
             }
             return .needsHelp(
-                "Apple Maps matching was temporarily unavailable. Retry later."
+                "Place matching was temporarily unavailable. Retry later."
             )
         }
         if understandingWasPartial, !entries.isEmpty {
@@ -721,7 +761,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         originalSeed: PlaceImportSeed,
         to entries: inout [PlaceImportResolvedEntry],
         seenHints: inout Set<String>,
-        helpMessage: String = "This place was named in the post, but Apple Maps needs your help matching it."
+        helpMessage: String = "This place was named in the post, but place matching needs your help."
     ) -> Bool {
         guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
         let identity = hintIdentity(hint)
@@ -2002,7 +2042,14 @@ final class PlaceImportStore: ObservableObject {
             case .retrySocialUnderstanding, .candidates, .expanded, .expandedResolved:
                 shouldRestorePreviousRows = false
             }
-            if partialResolutionHasSourceRetry(resolution),
+            if partialResolutionContainsOnlySourceRetry(resolution) {
+                // A hosted scan failure must replace stale pre-upgrade guesses,
+                // not merge them back beside the retry row. Grounded partial
+                // results still use the merge path below.
+                replacedSocialItemsByPlaceholderID[claim.itemID] = nil
+                items[index].pendingManualSearch = nil
+                apply(resolution, at: index)
+            } else if partialResolutionHasSourceRetry(resolution),
                mergeReplacedSocialItems(
                    resolution: resolution,
                    placeholderID: claim.itemID,
@@ -2066,6 +2113,17 @@ final class PlaceImportStore: ObservableObject {
             }
         case .candidates, .needsHelp, .retrySocialUnderstanding, .expanded, .expandedResolved:
             false
+        }
+    }
+
+    private func partialResolutionContainsOnlySourceRetry(
+        _ resolution: PlaceImportResolution
+    ) -> Bool {
+        guard case .partialExpandedResolved(let entries, _) = resolution,
+              !entries.isEmpty else { return false }
+        return entries.allSatisfy {
+            $0.kind == .sourceRetry
+                || $0.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
         }
     }
 
@@ -2508,9 +2566,12 @@ final class PlaceImportStore: ObservableObject {
 
     private static func shouldUpgradeResolution(for item: PlaceImportItem) -> Bool {
         let requiredVersion = item.source == .googleMaps ? 4 : PlaceImportItem.currentResolverVersion
+        let upgradeableStates: Set<PlaceImportItemState> = [.instagram, .tiktok].contains(item.source)
+            ? [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed]
+            : [.ready, .ambiguous, .needsHelp, .failed]
         guard (item.resolverVersion ?? 0) < requiredVersion,
               [.googleMaps, .instagram, .tiktok].contains(item.source),
-              [.ready, .ambiguous, .needsHelp, .failed].contains(item.state)
+              upgradeableStates.contains(item.state)
         else { return false }
         return true
     }

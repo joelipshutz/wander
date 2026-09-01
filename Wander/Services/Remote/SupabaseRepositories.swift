@@ -2046,10 +2046,47 @@ private struct SocialImportUnderstandingBody: Encodable {
 
 private struct SocialImportUnderstandingFunctionResponse: Decodable {
     struct Hint: Decodable {
+        struct ResolvedPlace: Decodable {
+            let provider: String
+            let providerPlaceID: String
+            let name: String
+            let formattedAddress: String?
+            let locality: String?
+            let region: String?
+            let country: String?
+            let latitude: Double
+            let longitude: Double
+            let primaryType: String?
+            let types: [String]?
+
+            enum CodingKeys: String, CodingKey {
+                case provider
+                case providerPlaceID = "provider_place_id"
+                case name
+                case formattedAddress = "formatted_address"
+                case locality
+                case region
+                case country
+                case latitude
+                case longitude
+                case primaryType = "primary_type"
+                case types
+            }
+        }
+
         let name: String
         let area: String?
         let modality: String
         let classification: String
+        let resolvedPlaces: [ResolvedPlace]?
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case area
+            case modality
+            case classification
+            case resolvedPlaces = "resolved_places"
+        }
     }
 
     let schemaVersion: Int
@@ -2059,6 +2096,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
     let mediaCount: Int?
     let modelAttemptCount: Int?
     let failureCategory: String?
+    let declaredCountComplete: Bool?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -2068,6 +2106,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
         case mediaCount = "media_count"
         case modelAttemptCount = "model_attempt_count"
         case failureCategory = "failure_category"
+        case declaredCountComplete = "declared_count_complete"
     }
 }
 
@@ -2143,7 +2182,10 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
                 name: name,
                 area: area,
                 evidence: evidence,
-                isServerGrounded: serverReasoningIsAuthoritative
+                isServerGrounded: serverReasoningIsAuthoritative,
+                resolvedCandidates: serverReasoningIsAuthoritative
+                    ? Self.resolvedCandidates(from: hint.resolvedPlaces)
+                    : []
             )
         }
 
@@ -2169,7 +2211,8 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
                 providerPath: providerPath,
                 mediaCount: Self.clamped(response.mediaCount, maximum: Self.maximumHints),
                 modelAttemptCount: Self.clamped(response.modelAttemptCount, maximum: 6),
-                failureCategory: Self.cleaned(response.failureCategory, maximumLength: 64)
+                failureCategory: Self.cleaned(response.failureCategory, maximumLength: 64),
+                declaredCountComplete: response.declaredCountComplete == true
             )
         )
     }
@@ -2180,6 +2223,40 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
             value ?? "unknown"
         default:
             "unknown"
+        }
+    }
+
+    private static func resolvedCandidates(
+        from values: [SocialImportUnderstandingFunctionResponse.Hint.ResolvedPlace]?
+    ) -> [PlaceCandidate] {
+        var seen = Set<String>()
+        return (values ?? []).prefix(3).compactMap { value in
+            guard value.provider == "google_places",
+                  let providerPlaceID = cleaned(value.providerPlaceID, maximumLength: 300),
+                  seen.insert(providerPlaceID).inserted,
+                  let name = cleaned(value.name, maximumLength: 200),
+                  value.latitude.isFinite,
+                  (-90...90).contains(value.latitude),
+                  value.longitude.isFinite,
+                  (-180...180).contains(value.longitude)
+            else { return nil }
+            let rawProviderType = cleaned(value.primaryType, maximumLength: 100)
+                ?? value.types?.compactMap { cleaned($0, maximumLength: 100) }.first
+            return PlaceCandidate(
+                id: "google-places-\(providerPlaceID)",
+                name: name,
+                category: rawProviderType ?? WanderPlaceCategory.fallbackPlace,
+                rawProviderType: rawProviderType,
+                address: cleaned(value.formattedAddress, maximumLength: 500),
+                locality: cleaned(value.locality, maximumLength: 160),
+                region: cleaned(value.region, maximumLength: 160),
+                country: cleaned(value.country, maximumLength: 160),
+                latitude: value.latitude,
+                longitude: value.longitude,
+                sourceProvider: "google_places",
+                sourceProviderPlaceID: providerPlaceID,
+                confidence: 1
+            )
         }
     }
 
