@@ -80,7 +80,6 @@ struct OnboardingFlowView: View {
         .environmentObject(pushNotifications)
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.snappy(duration: 0.35), value: step)
-        .preferredColorScheme(.light)
         .task(id: step) {
             if !didTrackStart {
                 didTrackStart = true
@@ -231,7 +230,7 @@ private struct OnboardingIdentityView: View {
 
                                 Image(systemName: "plus")
                                     .font(.system(size: 14, weight: .black))
-                                    .foregroundStyle(WanderTheme.textOnAction.color)
+                                    .foregroundStyle(AstirTheme.ink.color)
                                     .frame(width: 34, height: 34)
                                     .background(WanderTheme.terracotta.color)
                                     .clipShape(Circle())
@@ -242,9 +241,9 @@ private struct OnboardingIdentityView: View {
 
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Add a photo")
-                                .font(.system(size: 17, weight: .black))
+                                .font(AstirTypography.cardTitle)
                             Text("Optional — you can always do this later.")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(AstirTypography.bodySmall)
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
                     }
@@ -284,19 +283,19 @@ private struct OnboardingIdentityView: View {
                                     Text("2–39 letters, numbers, or underscores")
                                 }
                             }
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(AstirTypography.caption)
                             .foregroundStyle(availabilityFeedbackColor)
                         }
                     }
 
                     if let validation = draft.validationError, !name.isEmpty || !handle.isEmpty {
                         Text(validation.message)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(AstirTypography.caption)
                             .foregroundStyle(WanderTheme.stateError.color)
                     }
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(AstirTypography.label)
                             .foregroundStyle(WanderTheme.stateError.color)
                     }
                 }
@@ -441,7 +440,7 @@ private struct OnboardingLocationPermissionView: View {
                         OnboardingLocationContent.privacyMessage,
                         systemImage: "lock.fill"
                     )
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .symbolRenderingMode(.hierarchical)
                 }
@@ -467,7 +466,7 @@ private struct OnboardingLocationPermissionView: View {
                     trackResult("skipped")
                     continueAction()
                 }
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.control)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
@@ -559,7 +558,7 @@ private struct OnboardingPermissionView: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                     ForEach(bullets, id: \.self) { bullet in
                         Label(bullet, systemImage: "checkmark.circle.fill")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(AstirTypography.body)
                             .foregroundStyle(WanderTheme.textInk.color)
                     }
                 }
@@ -592,7 +591,7 @@ private struct OnboardingPermissionView: View {
                     ))
                     continueAction()
                 }
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.control)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
@@ -630,7 +629,7 @@ private struct OnboardingFriendSuggestionsView: View {
                     case .idle, .loading:
                         Spacer()
                         ProgressView("Finding good people to follow…")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(AstirTypography.bodySmall)
                             .frame(maxWidth: .infinity)
                         Spacer()
                     case .failed:
@@ -707,7 +706,7 @@ private struct OnboardingFriendSuggestionsView: View {
                     ))
                     continueAction()
                 }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
@@ -732,10 +731,10 @@ private struct OnboardingFriendRow: View {
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(recommendation.profile.displayName)
-                    .font(.system(size: 16, weight: .black))
+                    .font(AstirTypography.cardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text("@\(recommendation.profile.handle) · \(reason)")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(1)
             }
@@ -773,9 +772,9 @@ private struct OnboardingEmptySuggestions: View {
             Image(systemName: "person.2.wave.2")
                 .font(.system(size: 44))
                 .foregroundStyle(WanderTheme.pinSocial.color)
-            Text(title).font(.system(size: 18, weight: .black))
+            Text(title).font(AstirTypography.sectionTitle)
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(AstirTypography.bodySmall)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .multilineTextAlignment(.center)
         }
@@ -836,7 +835,7 @@ private struct OnboardingNotificationView: View {
                     ))
                     Task { await finish() }
                 }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
@@ -897,15 +896,15 @@ private struct OnboardingHeadline: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(eyebrow)
-                .font(.system(size: 11, weight: .black))
+                .font(AstirTypography.metadata)
                 .tracking(1.4)
                 .foregroundStyle(WanderTheme.terracotta.color)
             Text(title)
-                .font(WanderTheme.editorialDisplay(size: 38, weight: .bold))
+                .font(AstirTypography.screenTitle)
                 .lineSpacing(-2)
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
-                .font(.system(size: 16, weight: .medium))
+                .font(AstirTypography.body)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -925,14 +924,14 @@ private struct OnboardingTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(AstirTypography.label)
                 .foregroundStyle(WanderTheme.textInk.color)
             HStack(spacing: 2) {
                 if let prefix {
-                    Text(prefix).font(.system(size: 16, weight: .bold))
+                    Text(prefix).font(AstirTypography.control)
                 }
                 TextField(prompt, text: $text)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AstirTypography.body)
                     .textInputAutocapitalization(capitalization)
                     .autocorrectionDisabled(autocorrectionDisabled)
                     .submitLabel(.next)

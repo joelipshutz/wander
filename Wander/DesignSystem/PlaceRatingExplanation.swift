@@ -53,7 +53,11 @@ struct PlaceProfileRatingsRail: View {
         VStack(alignment: .leading, spacing: compact ? WanderTheme.spacing1 : WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing1) {
                 Text("Ratings")
-                    .font(visualStyle == .astir ? AstirTheme.display(compact ? 18 : 22) : (compact ? WanderTypography.editorialCompactTitle : WanderTypography.editorialSectionTitle))
+                    .font(
+                        visualStyle == .astir
+                            ? (compact ? AstirTypography.cardTitle : AstirTypography.sectionTitle)
+                            : (compact ? WanderTypography.editorialCompactTitle : WanderTypography.editorialSectionTitle)
+                    )
                     .foregroundStyle(primaryText)
 
                 Spacer(minLength: WanderTheme.spacing2)
@@ -138,13 +142,21 @@ struct PlaceProfileRatingsRail: View {
             metricValue(metric)
 
             Text(metric.title)
-                .font(.system(size: compact ? 11 : 12, weight: .bold))
+                .font(
+                    visualStyle == .astir
+                        ? AstirTypography.label
+                        : .system(size: compact ? 11 : 12, weight: .bold)
+                )
                 .foregroundStyle(primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
 
             Text(metric.subtitle)
-                .font(.system(size: compact ? 9.5 : 10.5, weight: .medium))
+                .font(
+                    visualStyle == .astir
+                        ? AstirTypography.caption
+                        : .system(size: compact ? 9.5 : 10.5, weight: .medium)
+                )
                 .foregroundStyle(secondaryText)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -197,6 +209,7 @@ struct PlaceRatingInfoButton: View {
     let explanation: PlaceRatingExplanation
     let tint: Color
 
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @State private var isPresented = false
 
     var body: some View {
@@ -225,17 +238,18 @@ struct PlaceRatingInfoButton: View {
                         .foregroundStyle(tint)
 
                     Text(explanation.title)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(astirBrandMode.primaryText)
                 }
 
                 Text(explanation.message)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(astirBrandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(WanderTheme.spacing3)
             .frame(idealWidth: 270, maxWidth: 290, alignment: .leading)
+            .background(astirBrandMode.raisedBackground)
             .presentationCompactAdaptation(.popover)
         }
     }

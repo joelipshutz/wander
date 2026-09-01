@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SharedVisitInviteSection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
     var isLoading = false
@@ -28,18 +29,18 @@ struct SharedVisitInviteSection: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.pinSocial.color)
                     Text("friends")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
 
                     Spacer()
 
                     Text(selectedFriends.isEmpty ? "add" : "\(selectedFriends.count) added")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accent)
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -54,21 +55,21 @@ struct SharedVisitInviteSection: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
                     Text("Loading shared friends...")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
             } else if let errorMessage {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text(errorMessage)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(AstirTypography.caption)
                         .foregroundStyle(WanderTheme.stateError.color)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     if let onRetry {
                         Button("Retry", action: onRetry)
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brandMode.accent)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -84,10 +85,10 @@ struct SharedVisitInviteSection: View {
                     )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(friend.displayName)
-                            .font(.system(size: 14, weight: .black))
+                            .font(AstirTypography.bodySmall)
                         Text("@\(friend.handle)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     Spacer()
                     Button {
@@ -104,11 +105,12 @@ struct SharedVisitInviteSection: View {
             }
         }
         .padding(.bottom, hasExpandedContent ? WanderTheme.spacing3 : 0)
-        .background(WanderTheme.surfaceBone.color)
+        .foregroundStyle(brandMode.primaryText)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color)
+                .stroke(brandMode.border)
         )
         .sheet(isPresented: $isPresentingPicker) {
             SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs)
@@ -119,6 +121,7 @@ struct SharedVisitInviteSection: View {
 
 struct SharedVisitFriendPicker: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
     @State private var query = ""
@@ -142,8 +145,9 @@ struct SharedVisitFriendPicker: View {
                 Section {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(brandMode.secondaryText)
                         TextField("Search friends", text: $query)
+                            .font(AstirTypography.body)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }
@@ -161,7 +165,8 @@ struct SharedVisitFriendPicker: View {
                 Section("friends") {
                     if friends.isEmpty {
                         Text("No mutual friends available.")
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                     } else {
                         ForEach(friends) { friend in
                             Button {
@@ -176,16 +181,16 @@ struct SharedVisitFriendPicker: View {
                                     )
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(friend.displayName)
-                                            .font(.system(size: 15, weight: .black))
-                                            .foregroundStyle(WanderTheme.textInk.color)
+                                            .font(AstirTypography.cardTitle)
+                                            .foregroundStyle(brandMode.primaryText)
                                         Text("@\(friend.handle)")
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundStyle(WanderTheme.textMuted.color)
+                                            .font(AstirTypography.caption)
+                                            .foregroundStyle(brandMode.secondaryText)
                                     }
                                     Spacer()
                                     Image(systemName: selectedUserIDs.contains(friend.id) ? "checkmark.circle.fill" : "circle")
                                         .font(.system(size: 22, weight: .bold))
-                                        .foregroundStyle(selectedUserIDs.contains(friend.id) ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+                                        .foregroundStyle(selectedUserIDs.contains(friend.id) ? brandMode.accent : brandMode.border)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -194,13 +199,15 @@ struct SharedVisitFriendPicker: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(WanderTheme.canvasWarm.color)
+            .background(brandMode.background)
+            .foregroundStyle(brandMode.primaryText)
             .navigationTitle("add friends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .font(.system(size: 15, weight: .bold))
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accent)
                 }
             }
             .sheet(isPresented: $isPresentingContactInvites) {
@@ -247,6 +254,7 @@ enum SharedVisitCompanionPresentation {
 }
 
 struct SharedVisitCompanionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let companions: [SharedVisitCompanion]
     let currentUserID: String
     var onSelect: ((String) -> Void)? = nil
@@ -279,8 +287,8 @@ struct SharedVisitCompanionLabel: View {
                         currentUserID: currentUserID
                     )
                 )
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(2)
             }
             .accessibilityElement(children: onSelect == nil ? .combine : .contain)
@@ -298,7 +306,7 @@ struct SharedVisitCompanionLabel: View {
             size: 26,
             color: WanderTheme.pinSocial.color
         )
-        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+        .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
     }
 }
 
@@ -331,6 +339,7 @@ enum SharedVisitBannerCopy {
 }
 
 struct SharedVisitNotificationBanner: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let invitation: SharedVisitInvitation
     let onOpen: () -> Void
 
@@ -351,21 +360,21 @@ struct SharedVisitNotificationBanner: View {
                             placeName: invitation.placeName
                         )
                     )
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(2)
                     Text("Shared check-in · \(relativeInvitationTime)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             .overlay(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2)
@@ -375,9 +384,9 @@ struct SharedVisitNotificationBanner: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
+                    .stroke(brandMode.border.opacity(0.75), lineWidth: 1)
             }
-            .shadow(color: WanderTheme.textInk.color.opacity(0.15), radius: 10, y: 5)
+            .shadow(color: Color.black.opacity(0.15), radius: 10, y: 5)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -391,6 +400,7 @@ struct SharedVisitNotificationBanner: View {
 }
 
 struct ProfileSharedVisitInboxRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let invitationCount: Int
     let action: () -> Void
 
@@ -406,32 +416,32 @@ struct ProfileSharedVisitInboxRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("check-in invitations")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if invitationCount > 0 {
                     Text("\(invitationCount)")
                         .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .foregroundStyle(brandMode.accentForeground)
                         .frame(minWidth: 24, minHeight: 24)
-                        .background(WanderTheme.terracotta.color, in: Circle())
+                        .background(brandMode.accent, in: Circle())
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.pinSocial.color.opacity(invitationCount > 0 ? 0.45 : 0.2), lineWidth: 1)
+                    .stroke(brandMode.border.opacity(invitationCount > 0 ? 0.8 : 0.45), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -454,6 +464,7 @@ struct ProfileSharedVisitInboxRow: View {
 }
 
 struct SharedVisitInvitationInboxScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     let onReview: (SharedVisitInvitation) -> Void
@@ -493,12 +504,12 @@ struct SharedVisitInvitationInboxScreen: View {
         .overlay {
             if isRefreshing, store.sharedVisitInvitations.isEmpty {
                 ProgressView("Loading invitations...")
-                    .font(.system(size: 13, weight: .bold))
-                    .tint(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .tint(brandMode.accent)
             }
         }
-        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
-        .foregroundStyle(WanderTheme.textInk.color)
+        .background(brandMode.background.ignoresSafeArea())
+        .foregroundStyle(brandMode.primaryText)
         .navigationTitle("check-in invitations")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
@@ -512,18 +523,18 @@ struct SharedVisitInvitationInboxScreen: View {
                 .frame(width: 84, height: 84)
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
             Text("no invitations waiting")
-                .font(.system(size: 21, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
             Text("New shared check-ins will show up here.")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
 
             if refreshError != nil {
                 Button("Try again") { Task { await refresh() } }
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(minWidth: 128, minHeight: 48)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
         .multilineTextAlignment(.center)
@@ -536,14 +547,14 @@ struct SharedVisitInvitationInboxScreen: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(WanderTheme.stateError.color)
             Text(message)
-                .font(.system(size: 12, weight: .bold))
+                .font(AstirTypography.caption)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Retry") { Task { await refresh() } }
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
     }
 
@@ -575,6 +586,7 @@ struct SharedVisitInvitationInboxScreen: View {
 }
 
 private struct SharedVisitInboxInvitationCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let invitation: SharedVisitInvitation
     let isDeclining: Bool
     let errorMessage: String?
@@ -584,24 +596,25 @@ private struct SharedVisitInboxInvitationCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             inviterRow
-            Divider().overlay(WanderTheme.borderHairline.color.opacity(0.7))
+            Divider().overlay(brandMode.border.opacity(0.7))
             placeRow
             if !invitation.tags.isEmpty {
                 tagRow
             }
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
             }
             actionRow
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
+        .foregroundStyle(brandMode.primaryText)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.8), lineWidth: 1)
+                .stroke(brandMode.border.opacity(0.8), lineWidth: 1)
         }
     }
 
@@ -615,15 +628,15 @@ private struct SharedVisitInboxInvitationCard: View {
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(invitation.sourceOwnerDisplayName)
-                    .font(.system(size: 14, weight: .black))
+                    .font(AstirTypography.bodySmall)
                 Text("invited you to a check-in")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             Spacer()
             Text(invitation.invitedAt.formatted(.relative(presentation: .numeric)))
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(WanderTheme.textFaint.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
         }
     }
 
@@ -635,21 +648,21 @@ private struct SharedVisitInboxInvitationCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
                 .overlay {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
+                        .stroke(brandMode.raisedBackground, lineWidth: 2)
                 }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(invitation.placeName)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .font(AstirTypography.sectionTitle)
                     .lineLimit(2)
                 Text(placeContext)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                 Label(invitation.visitedAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                 Text(CheckInCopy.noun.uppercased())
-                    .font(.system(size: 10, weight: .black))
+                    .font(AstirTypography.metadata)
                     .foregroundStyle(WanderTheme.stateSuccess.color)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -661,11 +674,15 @@ private struct SharedVisitInboxInvitationCard: View {
             HStack(spacing: WanderTheme.spacing2) {
                 ForEach(invitation.tags, id: \.self) { tag in
                     Text(tag)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(minHeight: 32)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(brandMode.border)
+                                .frame(height: 1)
+                        }
                 }
             }
         }
@@ -681,13 +698,14 @@ private struct SharedVisitInboxInvitationCard: View {
                         Text("Decline")
                     }
                 }
-                .font(.system(size: 14, weight: .black))
+                .font(AstirTypography.control)
                 .foregroundStyle(WanderTheme.stateError.color)
                 .frame(minWidth: 92, minHeight: 50)
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(Capsule())
+                .background(brandMode.raisedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    Capsule().stroke(WanderTheme.stateError.color.opacity(0.45), lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(WanderTheme.stateError.color.opacity(0.45), lineWidth: 1.5)
                 }
             }
             .buttonStyle(.plain)
@@ -698,12 +716,12 @@ private struct SharedVisitInboxInvitationCard: View {
                     Text("Review & save")
                     Image(systemName: "arrow.right")
                 }
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: 50)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
-                .shadow(color: WanderTheme.terracottaDark.color.opacity(0.2), radius: 4, y: 2)
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: Color.black.opacity(0.18), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .disabled(isDeclining)

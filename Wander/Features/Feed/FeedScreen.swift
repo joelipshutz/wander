@@ -147,6 +147,7 @@ struct FeedScreen: View {
                 .environmentObject(auth)
                 .environmentObject(backend)
                 .environmentObject(activityNavigation)
+                .environment(\.activityPostcardVisualStyle, .astir)
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -1040,7 +1041,7 @@ private struct FeedPeopleSearchField: View {
                 .foregroundStyle(astirBrandMode.secondaryText)
 
             TextField("Search name or @handle", text: $text)
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.bodySmall)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -1068,48 +1069,55 @@ private struct FeedPeopleSearchField: View {
 }
 
 private struct FeedPeopleLoadingPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let label: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             ProgressView()
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             Text(label)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
             Spacer()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
         .accessibilityElement(children: .combine)
     }
 }
 
 private struct FeedPeopleEmptyPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let message: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             Text(title)
-                .font(.system(size: 16, weight: .black))
+                .font(AstirTypography.cardTitle)
             Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedPeopleActionPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let icon: String
     let title: String
     let message: String
@@ -1120,36 +1128,37 @@ private struct FeedPeopleActionPanel: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 44, height: 44)
-                .background(WanderTheme.skyTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             Text(title)
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
             Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
             Button(actionTitle, action: action)
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedMemberResultTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -1164,28 +1173,29 @@ private struct FeedMemberResultTile: View {
                     color: WanderTheme.pinSocial.color
                 )
                 Text(profile.displayName)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
                 Text("@\(profile.handle)")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 Spacer()
                 Text("\(recCount) rec matches")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.accent)
             }
             .frame(width: 154, height: 142, alignment: .leading)
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 }
 
 private struct FeedFollowedPersonRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -1202,22 +1212,22 @@ private struct FeedFollowedPersonRow: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("@\(profile.handle)")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
 
                 Text("\(recCount) recs")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(.vertical, WanderTheme.spacing2)
             .frame(minHeight: WanderTheme.tapMinimum)
@@ -1389,7 +1399,7 @@ private struct FeedSearchLauncher: View {
 
                 Text(placeholder)
                     .id(placeholder)
-                    .font(AstirTheme.ui(15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(astirBrandMode.secondaryText)
                     .lineLimit(1)
                     .transition(.push(from: .bottom).combined(with: .opacity))
@@ -1455,12 +1465,12 @@ private struct FeedSectionHeading: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(AstirTheme.display(25))
+                .font(AstirTypography.sectionTitle)
                 .foregroundStyle(astirBrandMode.primaryText)
 
             if let detail {
                 Text(detail)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(astirBrandMode.secondaryText)
             }
         }
@@ -1515,12 +1525,12 @@ private struct FeedFeaturedCard: View {
                     .padding(.top, -FeedFeaturedLayout.cardContentInset)
 
                     Text(featured.visiblePlace.place.canonicalName)
-                        .font(AstirTheme.display(22))
+                        .font(AstirTypography.sectionTitle)
                         .foregroundStyle(astirBrandMode.primaryText)
                         .lineLimit(2)
 
                     Text(placeDetail(for: featured.visiblePlace))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                 }
@@ -1543,7 +1553,7 @@ private struct FeedFeaturedCard: View {
                     )
 
                     Text("• \(featured.actor.displayName) • \(featuredActivity)")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1988,6 +1998,7 @@ private struct FeedRecoveryActivityList: View {
 }
 
 private struct FeedEmptyState: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let recommendations: [DiscoverPeopleRecommendation]
     let followingProfileIDs: Set<String>
     let openSearch: () -> Void
@@ -1998,21 +2009,21 @@ private struct FeedEmptyState: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("Your Feed fills up from people you follow.")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("Find people whose place memory you’d actually use, then come back here to catch up.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             if recommendations.isEmpty {
                 Button("Find people", action: openSearch)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(minHeight: 44)
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                     .accessibilityLabel("Find people to follow")
             } else {
                 ForEach(recommendations) { recommendation in
@@ -2024,17 +2035,17 @@ private struct FeedEmptyState: View {
                                 initials: initials(for: recommendation.profile.displayName),
                                 avatarURL: recommendation.profile.avatarURL,
                                 size: 44,
-                                color: WanderTheme.skyTint.color
+                                color: brandMode.accent
                             )
                         }
                         .buttonStyle(.plain)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(recommendation.profile.displayName)
-                                .font(.system(size: 15, weight: .black))
+                                .font(AstirTypography.cardTitle)
                             Text(recommendation.reason.displayText(for: recommendation.profile))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .lineLimit(1)
                         }
 
@@ -2045,12 +2056,12 @@ private struct FeedEmptyState: View {
                         } label: {
                             if followingProfileIDs.contains(recommendation.profile.id) {
                                 ProgressView()
-                                    .tint(WanderTheme.terracotta.color)
+                                    .tint(brandMode.accent)
                                     .frame(width: 44, height: 44)
                             } else {
                                 Text("Follow")
-                                    .font(.system(size: 13, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .font(AstirTypography.label)
+                                    .foregroundStyle(brandMode.accent)
                                     .frame(minHeight: 44)
                             }
                         }
@@ -2061,16 +2072,17 @@ private struct FeedEmptyState: View {
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedRetryRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
     let actionTitle: String
@@ -2080,14 +2092,14 @@ private struct FeedRetryRow: View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .black))
+                    .font(AstirTypography.label)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             Spacer(minLength: 0)
@@ -2095,13 +2107,13 @@ private struct FeedRetryRow: View {
             Button(actionTitle) {
                 Task { await retry() }
             }
-            .font(.system(size: 13, weight: .black))
-            .foregroundStyle(WanderTheme.terracotta.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accent)
             .frame(minHeight: 44)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
     }
 }
 

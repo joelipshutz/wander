@@ -3,38 +3,11 @@ import SwiftUI
 enum AstirBrandMode: String, CaseIterable, Equatable {
     case editorial
     case editorialLight
-    case cinemaGold
-
-    static func launchOverride(
-        from arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> AstirBrandMode? {
-        guard let flagIndex = arguments.firstIndex(of: "-AstirBrandMode") else {
-            return nil
-        }
-        let valueIndex = arguments.index(after: flagIndex)
-        guard arguments.indices.contains(valueIndex) else { return nil }
-
-        switch arguments[valueIndex].lowercased() {
-        case "editoriallight", "editorial-light", "light", "paper":
-            return .editorialLight
-        case "cinema", "cinemagold", "cinema-gold", "gold":
-            return .cinemaGold
-        default:
-            return AstirBrandMode(rawValue: arguments[valueIndex])
-        }
-    }
-
-    static func resolved(
-        from arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> AstirBrandMode {
-        launchOverride(from: arguments) ?? .editorial
-    }
 
     var background: Color {
         switch self {
         case .editorial: AstirTheme.ink.color
         case .editorialLight: AstirTheme.paper.color
-        case .cinemaGold: AstirTheme.cinemaBlack.color
         }
     }
 
@@ -42,7 +15,15 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.inkRaised.color
         case .editorialLight: AstirTheme.paperRaised.color
-        case .cinemaGold: AstirTheme.cinemaRaisedBlack.color
+        }
+    }
+
+    /// A quieter well for fields and grouped rows. This stays within the same
+    /// paper/ink family instead of reintroducing the legacy beige surfaces.
+    var recessedBackground: Color {
+        switch self {
+        case .editorial: AstirTheme.inkRecessed.color
+        case .editorialLight: AstirTheme.paperRecessed.color
         }
     }
 
@@ -50,7 +31,6 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.paper.color
         case .editorialLight: AstirTheme.ink.color
-        case .cinemaGold: AstirTheme.cinemaIvory.color
         }
     }
 
@@ -58,7 +38,6 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.mutedOnInk.color
         case .editorialLight: AstirTheme.mutedOnPaper.color
-        case .cinemaGold: AstirTheme.cinemaBrassMuted.color
         }
     }
 
@@ -66,7 +45,6 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.signal.color
         case .editorialLight: AstirTheme.signal.color
-        case .cinemaGold: AstirTheme.cinemaBrass.color
         }
     }
 
@@ -74,7 +52,6 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.lineOnInk.color
         case .editorialLight: AstirTheme.lineOnPaper.color
-        case .cinemaGold: AstirTheme.cinemaBrassDark.color.opacity(0.72)
         }
     }
 
@@ -82,7 +59,6 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.paper.color
         case .editorialLight: AstirTheme.ink.color
-        case .cinemaGold: AstirTheme.cinemaBrassDark.color.opacity(0.20)
         }
     }
 
@@ -90,25 +66,24 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         switch self {
         case .editorial: AstirTheme.ink.color
         case .editorialLight: AstirTheme.paper.color
-        case .cinemaGold: AstirTheme.cinemaIvory.color
         }
     }
 
     var prefersDarkInterface: Bool {
-        self != .editorialLight
-    }
-
-    var usesCinemaGoldTexture: Bool {
-        self == .cinemaGold
+        self == .editorial
     }
 
     var accentForeground: Color {
-        usesCinemaGoldTexture ? AstirTheme.cinemaBlack.color : AstirTheme.ink.color
+        AstirTheme.ink.color
+    }
+
+    var accentWash: Color {
+        accent.opacity(prefersDarkInterface ? 0.18 : 0.12)
     }
 }
 
 private struct AstirBrandModeKey: EnvironmentKey {
-    static let defaultValue = AstirBrandMode.resolved()
+    static let defaultValue = AstirBrandMode.editorial
 }
 
 extension EnvironmentValues {
@@ -121,24 +96,15 @@ extension EnvironmentValues {
 enum AstirTheme {
     static let paper = WanderColorToken(name: "astir.color.paper", hex: "#F2E9DB")
     static let paperRaised = WanderColorToken(name: "astir.color.paperRaised", hex: "#FBF6ED")
+    static let paperRecessed = WanderColorToken(name: "astir.color.paperRecessed", hex: "#E8DED0")
     static let ink = WanderColorToken(name: "astir.color.ink", hex: "#141714")
     static let inkRaised = WanderColorToken(name: "astir.color.inkRaised", hex: "#1B1F1B")
+    static let inkRecessed = WanderColorToken(name: "astir.color.inkRecessed", hex: "#101210")
     static let signal = WanderColorToken(name: "astir.color.signal", hex: "#F05A3C")
     static let mutedOnInk = WanderColorToken(name: "astir.color.mutedOnInk", hex: "#98958D")
     static let mutedOnPaper = WanderColorToken(name: "astir.color.mutedOnPaper", hex: "#6F6A62")
     static let lineOnInk = WanderColorToken(name: "astir.color.lineOnInk", hex: "#464943")
     static let lineOnPaper = WanderColorToken(name: "astir.color.lineOnPaper", hex: "#C9BFB0")
-
-    static let cinemaBlack = WanderColorToken(name: "astir.color.cinemaBlack", hex: "#070706")
-    static let cinemaRaisedBlack = WanderColorToken(name: "astir.color.cinemaRaisedBlack", hex: "#11100D")
-    // Retained as the original exploration reference. The live cinema mode
-    // uses the less-yellow brass system below.
-    static let cinemaGold = WanderColorToken(name: "astir.color.cinemaGold", hex: "#C7A45D")
-    static let cinemaIvory = WanderColorToken(name: "astir.color.cinemaIvory", hex: "#E9E1D5")
-    static let cinemaBrass = WanderColorToken(name: "astir.color.cinemaBrass", hex: "#A77A46")
-    static let cinemaBrassLight = WanderColorToken(name: "astir.color.cinemaBrassLight", hex: "#C4A276")
-    static let cinemaBrassMuted = WanderColorToken(name: "astir.color.cinemaBrassMuted", hex: "#7D7468")
-    static let cinemaBrassDark = WanderColorToken(name: "astir.color.cinemaBrassDark", hex: "#563D26")
 
     static func wordmark(_ size: CGFloat) -> Font {
         .system(size: size, weight: .medium, design: .serif)
@@ -157,76 +123,39 @@ enum AstirTheme {
     }
 }
 
-private struct AstirCinemaGoldTexture: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                AstirTheme.cinemaBrassDark.color,
-                AstirTheme.cinemaBrassLight.color,
-                AstirTheme.cinemaBrass.color,
-                AstirTheme.cinemaBrassLight.color.opacity(0.82),
-                AstirTheme.cinemaBrassDark.color
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            Canvas { context, size in
-                for index in 0 ..< 34 {
-                    let seed = CGFloat((index * 37) % 101) / 101
-                    let x = seed * size.width
-                    let width = CGFloat(index % 3 + 1) * 0.45
-                    let opacity = index.isMultiple(of: 4) ? 0.20 : 0.08
-                    context.fill(
-                        Path(CGRect(x: x, y: 0, width: width, height: size.height)),
-                        with: .color(Color.white.opacity(opacity))
-                    )
-                }
+/// Semantic roles shared by production Astir screens. Fixed-size helpers above
+/// remain for the exploration shell and wordmark; product UI should use these
+/// roles so Dynamic Type and hierarchy stay consistent across surfaces.
+enum AstirTypography {
+    static let screenTitle = Font.system(.largeTitle, design: .serif).weight(.semibold)
+    static let sheetTitle = Font.system(.title2, design: .serif).weight(.semibold)
+    static let sectionTitle = Font.system(.title3, design: .serif).weight(.semibold)
+    static let cardTitle = Font.custom("AvenirNext-DemiBold", size: 16, relativeTo: .body)
+    static let body = Font.custom("AvenirNext-Regular", size: 16, relativeTo: .body)
+    static let bodySmall = Font.custom("AvenirNext-Regular", size: 14, relativeTo: .subheadline)
+    static let control = Font.custom("AvenirNext-DemiBold", size: 15, relativeTo: .body)
+    static let label = Font.custom("AvenirNext-DemiBold", size: 13, relativeTo: .caption)
+    static let caption = Font.custom("AvenirNext-Medium", size: 12, relativeTo: .caption)
+    static let metadata = Font.custom(
+        "AvenirNextCondensed-DemiBold",
+        size: 12,
+        relativeTo: .caption
+    )
+}
 
-                for index in 0 ..< 28 {
-                    let xSeed = CGFloat((index * 29) % 97) / 97
-                    let ySeed = CGFloat((index * 43) % 89) / 89
-                    let diameter = CGFloat(index % 3 + 1) * 0.75
-                    context.fill(
-                        Path(
-                            ellipseIn: CGRect(
-                                x: xSeed * size.width,
-                                y: ySeed * size.height,
-                                width: diameter,
-                                height: diameter
-                            )
-                        ),
-                        with: .color(Color.black.opacity(0.20))
-                    )
-                }
-            }
-            .blendMode(.softLight)
-        }
+private struct AstirScreenSurface: ViewModifier {
+    @Environment(\.astirBrandMode) private var brandMode
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(brandMode.primaryText)
+            .background(brandMode.background.ignoresSafeArea())
     }
 }
 
-struct AstirTexturedAccent<Content: View>: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    private let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    @ViewBuilder
-    var body: some View {
-        if brandMode.usesCinemaGoldTexture {
-            content
-                .foregroundStyle(Color.clear)
-                .overlay {
-                    AstirCinemaGoldTexture()
-                        .mask(content)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-        } else {
-            content.foregroundStyle(brandMode.accent)
-        }
+extension View {
+    func astirScreen() -> some View {
+        modifier(AstirScreenSurface())
     }
 }
 
@@ -236,25 +165,12 @@ struct AstirMastheadLockup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            if brandMode.usesCinemaGoldTexture {
-                AstirTexturedAccent {
-                    Text("ASTIR")
-                        .font(AstirTheme.wordmark(isCompact ? 18 : 22))
-                        .tracking(isCompact ? 4.2 : 5.2)
-                }
-                AstirTexturedAccent {
-                    Text("OCEAN PARK")
-                        .font(AstirTheme.metadata(isCompact ? 6.5 : 7.5))
-                        .tracking(isCompact ? 1.8 : 2.3)
-                }
-            } else {
-                Text("ASTIR")
-                    .font(AstirTheme.wordmark(isCompact ? 18 : 22))
-                    .tracking(isCompact ? 4.2 : 5.2)
-                Text("OCEAN PARK")
-                    .font(AstirTheme.metadata(isCompact ? 6.5 : 7.5))
-                    .tracking(isCompact ? 1.8 : 2.3)
-            }
+            Text("ASTIR")
+                .font(AstirTheme.wordmark(isCompact ? 18 : 22))
+                .tracking(isCompact ? 4.2 : 5.2)
+            Text("OCEAN PARK")
+                .font(AstirTheme.metadata(isCompact ? 6.5 : 7.5))
+                .tracking(isCompact ? 1.8 : 2.3)
         }
         .foregroundStyle(brandMode.primaryText)
         .padding(.horizontal, isCompact ? 12 : 14)
@@ -407,7 +323,7 @@ struct AstirIconActionButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(brandMode.usesCinemaGoldTexture ? brandMode.accent : brandMode.primaryText)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2, castsShadow: true)
                 .contentShape(Circle())
@@ -434,7 +350,7 @@ struct AstirEditorialSegmentedSwitch: View {
                 } label: {
                     VStack(spacing: 0) {
                         Text(option.title)
-                            .font(AstirTheme.ui(13, weight: .bold))
+                            .font(AstirTypography.label)
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
                             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)

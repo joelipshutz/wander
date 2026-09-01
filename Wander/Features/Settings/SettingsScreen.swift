@@ -4,6 +4,7 @@ import UIKit
 struct SettingsScreen: View {
     let onDismiss: (() -> Void)?
 
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -22,12 +23,14 @@ struct SettingsScreen: View {
 
     var body: some View {
         ProfileSettingsHome(onDismiss: onDismiss)
-        .preferredColorScheme(.light)
+            .foregroundStyle(brandMode.primaryText)
+            .tint(brandMode.accent)
+            .background(brandMode.background.ignoresSafeArea())
     }
 
     private var header: some View {
         Text("settings")
-            .font(.system(size: 30, weight: .black, design: .rounded))
+            .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
 
@@ -46,11 +49,11 @@ struct SettingsScreen: View {
                     )
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(session.displayName ?? "Signed in")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(AstirTypography.control)
                         if let publicHandle = SettingsAccountIdentityPresentation.publicHandle(for: session) {
                             Text(publicHandle)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .lineLimit(1)
                         }
                     }
@@ -72,33 +75,38 @@ struct SettingsScreen: View {
                         }
                         Text(auth.isSigningOut ? "signing out" : "sign out")
                     }
-                    .font(.system(size: 15, weight: .black))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     .background(WanderTheme.stateError.color.opacity(0.10))
-                    .clipShape(Capsule())
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusLarge,
+                            style: .continuous
+                        )
+                    )
                 }
                 .disabled(auth.isSigningOut)
 
                 if let signOutError = auth.signOutError {
                     Text(signOutError)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(AstirTypography.caption)
                         .foregroundStyle(WanderTheme.stateError.color)
                 }
             case .signedOut:
                 HStack(spacing: WanderTheme.spacing3) {
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accent)
                         .frame(width: 38, height: 38)
-                        .background(WanderTheme.terracottaTint.color)
+                        .background(brandMode.accentWash)
                         .clipShape(Circle())
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text("Signed out")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(AstirTypography.control)
                         Text("Sign in to sync and follow people.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     Spacer()
                 }
@@ -110,33 +118,38 @@ struct SettingsScreen: View {
                         Image(systemName: "person.crop.circle.badge.plus")
                         Text("sign in")
                     }
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusLarge,
+                            style: .continuous
+                        )
+                    )
                 }
             case .loading:
                 HStack {
                     ProgressView()
                     Text("Checking account...")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             case .unavailable(let message):
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(message)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(AstirTypography.label)
                         .foregroundStyle(WanderTheme.stateError.color)
                     Text("Rebuild with local auth config to sign in or out.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -148,15 +161,15 @@ struct SettingsScreen: View {
 
             if isUpdatingPrivateProfile {
                 ProgressView("Updating privacy...")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AstirTypography.caption)
             } else if let privacyErrorMessage {
                 Text(privacyErrorMessage)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
             }
 
             Divider()
-                .overlay(WanderTheme.borderHairline.color)
+                .overlay(brandMode.border)
 
             PlaceVisibilityStealthToggle(
                 title: SettingsDefaultPlacePrivacySurface.toggleTitle,
@@ -184,7 +197,7 @@ struct SettingsScreen: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -202,23 +215,23 @@ struct SettingsScreen: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 Image(systemName: store.isPrivateProfile ? "lock.shield.fill" : "person.crop.circle.badge.questionmark")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 38, height: 38)
-                    .background(WanderTheme.terracottaTint.color)
+                    .background(brandMode.accentWash)
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(SettingsProfilePrivacySurface.title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(AstirTypography.control)
                     Text(SettingsProfilePrivacySurface.body(isEnabled: store.isPrivateProfile))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .toggleStyle(.switch)
-        .tint(WanderTheme.textInk.color)
+        .tint(brandMode.accent)
         .disabled(isUpdatingPrivateProfile)
         .accessibilityIdentifier(SettingsProfilePrivacySurface.accessibilityID)
     }
@@ -229,8 +242,8 @@ struct SettingsScreen: View {
             let blocked = store.blockedProfiles()
             if blocked.isEmpty {
                 Text("No one blocked.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
             } else {
                 ForEach(blocked) { profile in
                     HStack {
@@ -242,10 +255,10 @@ struct SettingsScreen: View {
                         )
                         VStack(alignment: .leading) {
                             Text(profile.displayName)
-                                .font(.system(size: 14, weight: .bold))
+                                .font(AstirTypography.control)
                             Text("@\(profile.handle)")
-                                .font(.system(size: 12))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                         Spacer()
                         Button("unblock") {
@@ -255,15 +268,15 @@ struct SettingsScreen: View {
                                 }
                             }
                         }
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -300,6 +313,7 @@ private enum SettingsDetail: String, Identifiable {
 }
 
 private struct SettingsSectionTitle: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
 
     init(_ title: String) {
@@ -308,12 +322,14 @@ private struct SettingsSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 15, weight: .black))
+            .font(AstirTypography.sectionTitle)
+            .foregroundStyle(brandMode.primaryText)
     }
 }
 
 private struct TrustAndPrivacySheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         NavigationStack {
@@ -321,11 +337,11 @@ private struct TrustAndPrivacySheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(SettingsTrustSurface.sheetTitle)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(AstirTypography.screenTitle)
                             .accessibilityAddTraits(.isHeader)
                         Text(SettingsTrustSurface.sheetIntro)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -333,24 +349,24 @@ private struct TrustAndPrivacySheet: View {
                         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                             Image(systemName: fact.icon)
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .foregroundStyle(brandMode.accent)
                                 .frame(width: 38, height: 38)
-                                .background(WanderTheme.terracottaTint.color)
+                                .background(brandMode.accentWash)
                                 .clipShape(Circle())
 
                             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                                 Text(fact.title)
-                                    .font(.system(size: 15, weight: .black))
+                                    .font(AstirTypography.cardTitle)
                                 Text(fact.body)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .font(AstirTypography.bodySmall)
+                                    .foregroundStyle(brandMode.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 0)
                         }
                         .padding(WanderTheme.spacing3)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(WanderTheme.surfaceBone.color)
+                        .background(brandMode.raisedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier(SettingsTrustSurface.factAccessibilityPrefix + fact.id)
@@ -359,15 +375,15 @@ private struct TrustAndPrivacySheet: View {
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
             .accessibilityIdentifier(SettingsTrustSurface.sheetAccessibilityID)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("done") {
                         dismiss()
                     }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accent)
                 }
             }
         }
@@ -377,6 +393,7 @@ private struct TrustAndPrivacySheet: View {
 struct NotificationSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -394,11 +411,11 @@ struct NotificationSettingsSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text("notifications")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(AstirTypography.screenTitle)
                             .accessibilityAddTraits(.isHeader)
                         Text("Choose the account activity rec.me can send to this phone.")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -458,25 +475,26 @@ struct NotificationSettingsSheet: View {
                         )
                     }
                     .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color)
+                    .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
 
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(AstirTypography.label)
                             .foregroundStyle(WanderTheme.stateError.color)
                     }
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accent)
                 }
             }
         }
@@ -508,17 +526,17 @@ struct NotificationSettingsSheet: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: "bell.badge")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 38, height: 38)
-                    .background(WanderTheme.terracottaTint.color)
+                    .background(brandMode.accentWash)
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(notificationsEnabled ? "Notifications on" : "Notifications off")
-                        .font(.system(size: 15, weight: .black))
+                        .font(AstirTypography.cardTitle)
                     Text(statusSubtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
@@ -541,7 +559,7 @@ struct NotificationSettingsSheet: View {
             .disabled(isChangingEnabledState || isLoading || !auth.isSignedIn || !backend.canRegisterPushNotifications)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -573,11 +591,16 @@ struct NotificationSettingsSheet: View {
             Image(systemName: systemImage)
             Text(title)
         }
-        .font(.system(size: 15, weight: .black))
-        .foregroundStyle(WanderTheme.textOnAction.color)
+        .font(AstirTypography.control)
+        .foregroundStyle(brandMode.accentForeground)
         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.terracotta.color)
-        .clipShape(Capsule())
+        .background(brandMode.accent)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: WanderTheme.radiusLarge,
+                style: .continuous
+            )
+        )
     }
 
     private func notificationToggle(title: String, systemImage: String, binding: Binding<Bool>) -> some View {
@@ -585,16 +608,16 @@ struct NotificationSettingsSheet: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: systemImage)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 32, height: 32)
-                    .background(WanderTheme.terracottaTint.color)
+                    .background(brandMode.accentWash)
                     .clipShape(Circle())
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(AstirTypography.control)
             }
         }
         .toggleStyle(.switch)
-        .tint(WanderTheme.textInk.color)
+        .tint(brandMode.accent)
         .disabled(isLoading || isSaving || isChangingEnabledState || !notificationsEnabled || !backend.canRegisterPushNotifications)
     }
 
@@ -823,6 +846,7 @@ struct TrustFact: Identifiable, Equatable {
 }
 
 private struct SettingsInlineInfo: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
     let title: String
     let message: String
@@ -832,17 +856,17 @@ private struct SettingsInlineInfo: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 38, height: 38)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(AstirTypography.cardTitle)
                 Text(message)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -854,6 +878,7 @@ private struct SettingsInlineInfo: View {
 }
 
 private struct SettingsRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
     let systemImage: String
@@ -879,27 +904,27 @@ private struct SettingsRow: View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 38, height: 38)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.cardTitle)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
             }
             Spacer()
             if action != nil {
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
         .frame(minHeight: WanderTheme.tapMinimum)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }

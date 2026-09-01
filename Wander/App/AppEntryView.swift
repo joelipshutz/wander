@@ -57,6 +57,7 @@ enum AppEntryNotificationGateState: Equatable {
 
 @MainActor
 struct AppEntryView: View {
+    @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -135,6 +136,10 @@ struct AppEntryView: View {
         .environmentObject(auth)
         .environmentObject(backend)
         .environmentObject(pushNotifications)
+        .environment(
+            \.astirBrandMode,
+            systemColorScheme == .dark ? AstirBrandMode.editorial : .editorialLight
+        )
         .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
             auth.nativeAuthDidDismiss()
             Task {
@@ -223,6 +228,7 @@ struct AppEntryView: View {
 }
 
 private struct AppEntryRecoveryView: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let message: String
     let canContinueOffline: Bool
@@ -234,18 +240,18 @@ private struct AppEntryRecoveryView: View {
             Spacer()
             Image(systemName: "map.fill")
                 .font(.system(size: 58, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 112, height: 112)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(title)
-                    .font(WanderTheme.editorialDisplay(size: 36, weight: .bold))
+                    .font(AstirTypography.screenTitle)
                     .multilineTextAlignment(.center)
                 Text(message)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
             }
             Spacer()
@@ -254,14 +260,14 @@ private struct AppEntryRecoveryView: View {
                 WanderPrimaryButton(title: "Try again") { retry() }
                 if canContinueOffline {
                     Button("Continue offline") { continueOffline() }
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
-        .foregroundStyle(WanderTheme.textInk.color)
+        .background(brandMode.background.ignoresSafeArea())
+        .foregroundStyle(brandMode.primaryText)
     }
 }

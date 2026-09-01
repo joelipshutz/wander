@@ -77,7 +77,7 @@ struct ListsScreen: View {
                     onDelete: deleteList
                 )
                     .presentationDetents([.large])
-                    .presentationBackground(WanderTheme.canvasWarm.color)
+                    .presentationBackground(astirBrandMode.background)
             }
             .sheet(item: $collaboratorList) { list in
                 CollaboratorInviteSheet(
@@ -87,14 +87,14 @@ struct ListsScreen: View {
                     }
                 )
                     .presentationDetents([.medium, .large])
-                    .presentationBackground(WanderTheme.canvasWarm.color)
+                    .presentationBackground(astirBrandMode.background)
             }
             .sheet(item: $pendingListInvite) { prompt in
                 PlaceListInviteSheet(prompt: prompt) {
                     await acceptListInvite(prompt)
                 }
                     .presentationDetents([.medium])
-                    .presentationBackground(WanderTheme.canvasWarm.color)
+                    .presentationBackground(astirBrandMode.background)
             }
             .onChange(of: walkthroughs.requestedSurface) { _, surface in
                 guard surface == .lists else { return }
@@ -385,7 +385,7 @@ struct ListsScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                 Text("lists")
-                    .font(AstirTheme.display(30))
+                    .font(AstirTypography.screenTitle)
                     .foregroundStyle(astirBrandMode.primaryText)
 
                 Spacer(minLength: WanderTheme.spacing2)
@@ -404,7 +404,7 @@ struct ListsScreen: View {
             }
 
             Text("save places into a plan you can actually use")
-                .font(.system(size: 13, weight: .semibold))
+                .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
@@ -447,19 +447,19 @@ struct ListsScreen: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(emptyStateTitle)
-                            .font(AstirTheme.display(40))
+                            .font(AstirTypography.screenTitle)
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
                             .foregroundStyle(astirBrandMode.primaryText)
 
                         Text(emptyStateSubtitle)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(AstirTypography.body)
                             .foregroundStyle(astirBrandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Text("new list")
-                        .font(.system(size: 16, weight: .black))
+                        .font(AstirTypography.control)
                         .padding(.horizontal, WanderTheme.spacing4)
                         .frame(minHeight: 48)
                         .background(astirBrandMode.accent)
@@ -517,10 +517,10 @@ struct ListsScreen: View {
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("coming next")
-                    .font(.system(size: 13, weight: .black))
+                    .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text("Saved places will get an add-to-list action from map surfaces.")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
@@ -763,7 +763,7 @@ private struct ListTile: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
                     Text(list.name)
-                        .font(AstirTheme.display(20))
+                        .font(AstirTypography.sectionTitle)
                         .foregroundStyle(astirBrandMode.primaryText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -783,7 +783,7 @@ private struct ListTile: View {
                 }
 
                 Text(list.subtitle)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(astirBrandMode.secondaryText)
                     .lineLimit(1)
             }
@@ -792,7 +792,7 @@ private struct ListTile: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     FacePileView(collaborators: list.collaborators, size: 24)
                     Text(list.collaboratorSummary)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                 }
@@ -886,6 +886,7 @@ private struct ListDetailScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     let list: PlaceListMock
     var onEdit: (PlaceListMock) -> Void
     var onCollaborators: (PlaceListMock) -> Void
@@ -939,7 +940,8 @@ private struct ListDetailScreen: View {
             .padding(WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing16)
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -949,9 +951,13 @@ private struct ListDetailScreen: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 14, weight: .black))
                             .frame(width: 34, height: 34)
-                            .background(WanderTheme.surfaceSand.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Circle())
+                            .background(brandMode.raisedBackground)
+                            .foregroundStyle(brandMode.primaryText)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(brandMode.border, lineWidth: 1)
+                            }
                     }
                     .accessibilityLabel("Share list")
                 }
@@ -963,9 +969,9 @@ private struct ListDetailScreen: View {
                         Image(systemName: "plus")
                             .font(.system(size: 15, weight: .black))
                             .frame(width: 34, height: 34)
-                            .background(WanderTheme.textInk.color)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .clipShape(Circle())
+                            .background(brandMode.accent)
+                            .foregroundStyle(brandMode.accentForeground)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
@@ -978,9 +984,13 @@ private struct ListDetailScreen: View {
                         Image(systemName: "pencil")
                             .font(.system(size: 14, weight: .black))
                             .frame(width: 34, height: 34)
-                            .background(WanderTheme.surfaceSand.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Circle())
+                            .background(brandMode.raisedBackground)
+                            .foregroundStyle(brandMode.primaryText)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(brandMode.border, lineWidth: 1)
+                            }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
@@ -989,7 +999,7 @@ private struct ListDetailScreen: View {
                 if !renderedList.isOwnedByCurrentUser {
                     if isLeavingList {
                         ProgressView()
-                            .tint(WanderTheme.textInk.color)
+                            .tint(brandMode.accent)
                             .frame(width: 34, height: 34)
                             .accessibilityLabel("Leaving list")
                     } else {
@@ -1011,9 +1021,13 @@ private struct ListDetailScreen: View {
                             Image(systemName: "ellipsis")
                                 .font(.system(size: 14, weight: .black))
                                 .frame(width: 34, height: 34)
-                                .background(WanderTheme.surfaceSand.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(Circle())
+                                .background(brandMode.raisedBackground)
+                                .foregroundStyle(brandMode.primaryText)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(brandMode.border, lineWidth: 1)
+                                }
                         }
                         .accessibilityLabel("List actions")
                     }
@@ -1135,20 +1149,21 @@ private struct ListDetailScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
                         Text(renderedList.name)
-                            .font(WanderTypography.editorialMasthead)
+                            .font(AstirTypography.screenTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
 
                         if renderedList.isStealth {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 14, weight: .black))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                     }
 
                     Text(renderedList.description)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -1167,8 +1182,8 @@ private struct ListDetailScreen: View {
                                 color: WanderTheme.pinSocial.color
                             )
                             Text(owner.displayName)
-                                .font(.system(size: 12, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
+                                .font(AstirTypography.label)
+                                .foregroundStyle(brandMode.primaryText)
                         }
                     }
                     .buttonStyle(.plain)
@@ -1180,8 +1195,8 @@ private struct ListDetailScreen: View {
                     onSelect: onOpenProfile
                 )
                 Text(renderedList.collaboratorSummary)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                 if canManageList {
                     Button {
                         onCollaborators(renderedList)
@@ -1189,9 +1204,13 @@ private struct ListDetailScreen: View {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .black))
                             .frame(width: 28, height: 28)
-                            .background(WanderTheme.terracottaTint.color)
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .clipShape(Circle())
+                            .background(brandMode.accentWash)
+                            .foregroundStyle(brandMode.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
+                            }
                     }
                     .accessibilityLabel("Manage collaborators")
                     .disabled(!canManageCollaborators(for: renderedList))
@@ -1200,8 +1219,8 @@ private struct ListDetailScreen: View {
                 }
                 Spacer()
                 Text("\(renderedList.itemCount) places")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.accent)
             }
             .padding(.top, WanderTheme.spacing1)
         }
@@ -1225,16 +1244,21 @@ private struct ListDetailScreen: View {
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("places")
-                .font(.system(size: 18, weight: .black))
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
 
             if visiblePlaces.isEmpty {
                 Text("There are no places added to this list yet.")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(WanderTheme.spacing4)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
             } else {
                 ForEach(visiblePlaces) { place in
                     ListPlaceRow(
@@ -1463,6 +1487,7 @@ private struct ListDetailScreen: View {
 }
 
 private struct ListSuggestionsSection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let suggestions: [ListPlaceSuggestion]
     let isLoading: Bool
     let outlineCatalog: [String: [MapPinOutline]]
@@ -1475,8 +1500,8 @@ private struct ListSuggestionsSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 Text("suggested places")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Spacer()
             }
 
@@ -1484,12 +1509,16 @@ private struct ListSuggestionsSection: View {
                 ListLoadingRow(title: "Finding places that fit this list")
             } else if suggestions.isEmpty {
                 Text("Suggestions will appear as the list gets more specific.")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(WanderTheme.spacing4)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
             } else {
                 VStack(spacing: WanderTheme.spacing2) {
                     ForEach(suggestions.prefix(4)) { suggestion in
@@ -1519,6 +1548,7 @@ private struct ListSuggestionsSection: View {
 
 private struct ListAddPlacesScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -1540,10 +1570,11 @@ private struct ListAddPlacesScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("add places")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(AstirTypography.screenTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(list.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 ListPlaceSearchField(query: $query)
@@ -1557,7 +1588,8 @@ private struct ListAddPlacesScreen: View {
             .padding(WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing16)
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -1565,8 +1597,8 @@ private struct ListAddPlacesScreen: View {
                 Button("Done") {
                     dismiss()
                 }
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
             }
         }
         .task(id: list.id) {
@@ -1623,18 +1655,23 @@ private struct ListAddPlacesScreen: View {
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
-                .font(.system(size: 18, weight: .black))
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
 
             if isLoadingSuggestions {
                 ListLoadingRow(title: "Finding places that fit")
             } else if suggestionBatch.suggestions.isEmpty {
                 Text("Start with search, then suggestions will get sharper as the list fills in.")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(WanderTheme.spacing4)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
             } else {
                 VStack(spacing: WanderTheme.spacing2) {
                     ForEach(suggestionBatch.suggestions) { suggestion in
@@ -1670,18 +1707,23 @@ private struct ListAddPlacesScreen: View {
     private var searchContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("results")
-                .font(.system(size: 18, weight: .black))
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
 
             if isSearching {
                 ListLoadingRow(title: "Searching places")
             } else if addableSearchCandidates.isEmpty {
                 Text("No places match that search.")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(WanderTheme.spacing4)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
             } else {
                 VStack(spacing: WanderTheme.spacing2) {
                     ForEach(addableSearchCandidates) { candidate in
@@ -1837,17 +1879,20 @@ private struct ListAddPlacesScreen: View {
 }
 
 private struct ListAddPlacesUnavailableScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("add places")
-                .font(.system(size: 30, weight: .black, design: .rounded))
+                .font(AstirTypography.screenTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text("This list is not connected to local list data yet.")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(WanderTheme.spacing4)
-        .wanderScreen()
+        .astirScreen()
     }
 }
 
@@ -1968,6 +2013,7 @@ struct ListSaveToastPresentation: Equatable {
 }
 
 private struct ListSaveToast: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let presentation: ListSaveToastPresentation
     let onEdit: () -> Void
 
@@ -1979,62 +2025,64 @@ private struct ListSaveToast: View {
                 .symbolEffect(.bounce, value: presentation.message)
 
             Text(presentation.message + " •")
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
                 .layoutPriority(1)
 
             Button(presentation.actionTitle, action: onEdit)
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
                 .underline()
                 .padding(.horizontal, 10)
                 .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.terracottaTint.color)
-                .clipShape(Capsule())
-                .contentShape(Capsule())
+                .contentShape(Rectangle())
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens the place save editor")
         }
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, WanderTheme.spacing2)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceRaised.color.opacity(0.98))
+        .background(brandMode.raisedBackground.opacity(0.98))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 10)
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
+                .stroke(brandMode.border.opacity(0.65), lineWidth: 1)
         )
     }
 }
 
 private struct ListPlaceSearchField: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var query: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
             TextField("Search places", text: $query)
-                .font(.system(size: 16, weight: .bold))
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.primaryText)
+                .tint(brandMode.accent)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }
         .padding(WanderTheme.spacing3)
         .frame(minHeight: 54)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.recessedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
     }
 }
 
 private struct ListVisiblePlaceAddRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let visiblePlace: VisiblePlace
     let supportingText: String
     let outlines: [MapPinOutline]
@@ -2064,12 +2112,12 @@ private struct ListVisiblePlaceAddRow: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name)
-                            .font(WanderTypography.editorialSmallNamedContent)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1)
                         Text(supportingText.isEmpty ? place.metadata : supportingText)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(2)
                     }
 
@@ -2083,11 +2131,11 @@ private struct ListVisiblePlaceAddRow: View {
                 Group {
                     if isAdding {
                         ProgressView()
-                            .tint(WanderTheme.terracotta.color)
+                            .tint(brandMode.accent)
                     } else {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 28, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(brandMode.accent)
                     }
                 }
                 .frame(width: 44, height: 44)
@@ -2096,16 +2144,17 @@ private struct ListVisiblePlaceAddRow: View {
             .accessibilityLabel("Add \(place.name) to list")
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border.opacity(0.70), lineWidth: 1)
         )
     }
 }
 
 private struct ListPlaceCandidateAddRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let candidate: PlaceCandidate
     let supportingText: String
     let isAdding: Bool
@@ -2126,7 +2175,7 @@ private struct ListPlaceCandidateAddRow: View {
         HStack(spacing: WanderTheme.spacing3) {
             HStack(spacing: WanderTheme.spacing3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
                         .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
                     WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
                 }
@@ -2134,12 +2183,12 @@ private struct ListPlaceCandidateAddRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(candidate.name)
-                        .font(WanderTypography.editorialSmallNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                     Text(subtitle.isEmpty ? "Map search" : subtitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(2)
                 }
 
@@ -2150,11 +2199,11 @@ private struct ListPlaceCandidateAddRow: View {
                 Group {
                     if isAdding {
                         ProgressView()
-                            .tint(WanderTheme.terracotta.color)
+                            .tint(brandMode.accent)
                     } else {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 28, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(brandMode.accent)
                     }
                 }
                 .frame(width: 44, height: 44)
@@ -2163,35 +2212,41 @@ private struct ListPlaceCandidateAddRow: View {
             .accessibilityLabel("Add \(candidate.name) to list")
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border.opacity(0.70), lineWidth: 1)
         )
     }
 }
 
 private struct ListLoadingRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             ProgressView()
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             Text(title)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
             Spacer()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.recessedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
     }
 }
 
 private struct ListMapPreview: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     let list: PlaceListMock
     let height: CGFloat
@@ -2237,18 +2292,22 @@ private struct ListMapPreview: View {
                     VStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: list.mapAvailability == .loading ? "arrow.triangle.2.circlepath" : "map")
                             .font(.system(size: 22, weight: .black))
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .foregroundStyle(brandMode.accent)
                         Text(previewStateTitle)
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(previewStateMessage)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .multilineTextAlignment(.center)
                     }
                     .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color.opacity(0.94))
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.raisedBackground.opacity(0.94))
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
                     .padding(.horizontal, WanderTheme.spacing4)
                 }
 
@@ -2274,22 +2333,22 @@ private struct ListMapPreview: View {
             Button(action: onOpen) {
                 HStack(spacing: WanderTheme.spacing2) {
                     Label(label, systemImage: "map.fill")
-                        .font(.subheadline.weight(.black))
+                        .font(AstirTypography.control)
                     Spacer(minLength: WanderTheme.spacing2)
                     Text(list.mapContentState.countLabel)
-                        .font(.caption.weight(.bold))
+                        .font(AstirTypography.caption)
                         .lineLimit(1)
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.black))
+                        .font(.system(size: 12, weight: .black))
                 }
                 .foregroundStyle(
                     list.totalItemCount == 0
-                        ? WanderTheme.textMuted.color
-                        : WanderTheme.textInk.color
+                        ? brandMode.secondaryText
+                        : brandMode.primaryText
                 )
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(brandMode.raisedBackground)
             }
             .buttonStyle(.plain)
             .disabled(list.totalItemCount == 0)
@@ -2299,10 +2358,10 @@ private struct ListMapPreview: View {
                     : "View map for \(list.name), \(list.mapContentState.countLabel)"
             )
         }
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
     }
 
@@ -2359,6 +2418,7 @@ private struct ListMapPreview: View {
 }
 
 private struct ListSavedPlaceIcon: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let emoji: String
     let outlines: [MapPinOutline]
     let frameSize: CGFloat
@@ -2368,7 +2428,7 @@ private struct ListSavedPlaceIcon: View {
     var body: some View {
         WanderCategoryEmoji(emoji: emoji, size: emojiSize)
             .frame(width: diameter, height: diameter)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(brandMode.raisedBackground)
             .clipShape(Circle())
             .overlay(outlineLayer)
             .frame(width: frameSize, height: frameSize)
@@ -2391,6 +2451,7 @@ private struct ListSavedPlaceIcon: View {
 }
 
 private struct ListPlaceRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let place: ListPlaceMock
     let outlines: [MapPinOutline]
     var canRemove: Bool = true
@@ -2411,13 +2472,13 @@ private struct ListPlaceRow: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(place.name)
-                            .font(WanderTypography.editorialNamedContent)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1)
 
                         Text(place.metadata)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -2433,19 +2494,19 @@ private struct ListPlaceRow: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .black))
                         .frame(width: 40, height: 40)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .clipShape(Circle())
+                        .background(brandMode.recessedBackground)
+                        .foregroundStyle(brandMode.secondaryText)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .accessibilityLabel("Remove \(place.name)")
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border.opacity(0.70), lineWidth: 1)
         )
     }
 }
@@ -2480,6 +2541,7 @@ private extension PlaceListInviteResolution {
 
 private struct PlaceListInviteSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     let prompt: PlaceListInvitePrompt
     let onAccept: @MainActor () async -> Bool
     @State private var isAccepting = false
@@ -2491,25 +2553,31 @@ private struct PlaceListInviteSheet: View {
                 Image(systemName: "person.2.badge.plus")
                     .font(.system(size: 24, weight: .black))
                     .frame(width: 52, height: 52)
-                    .background(WanderTheme.terracottaTint.color)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .clipShape(Circle())
+                    .background(brandMode.accentWash)
+                    .foregroundStyle(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
+                    }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("build this list together")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(prompt.resolution.listName ?? "Shared list")
-                        .font(WanderTypography.editorialTitle)
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     if let owner = prompt.resolution.ownerDisplayName {
                         Text("Invited by \(owner)")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     if let description = prompt.resolution.listDescription,
                        !description.isEmpty {
                         Text(description)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                 }
 
@@ -2527,29 +2595,33 @@ private struct PlaceListInviteSheet: View {
                     HStack {
                         if isAccepting {
                             ProgressView()
-                                .tint(WanderTheme.textOnAction.color)
+                                .tint(brandMode.accentForeground)
                         }
                         Text(isAccepting ? "joining..." : "accept invitation")
-                            .font(.system(size: 15, weight: .black))
+                            .font(AstirTypography.control)
                     }
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                    .foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(WanderTheme.terracotta.color)
+                .buttonStyle(.plain)
                 .disabled(isAccepting)
 
                 Text("You’ll become a collaborator only after accepting. The link is single-use and can expire or be revoked.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 Spacer()
             }
             .padding(WanderTheme.spacing4)
-            .wanderScreen()
+            .astirScreen()
+            .tint(brandMode.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("not now") { dismiss() }
-                        .font(.system(size: 14, weight: .black))
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
                 }
             }
             .alert("Couldn’t join list", isPresented: acceptanceErrorBinding) {
@@ -2577,6 +2649,7 @@ private struct CollaboratorInviteSheet: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     let list: PlaceListMock
     let onSave: ([ListCollaboratorMock]) -> Void
     @State private var selectedCollaborators: [ListCollaboratorMock]
@@ -2596,10 +2669,11 @@ private struct CollaboratorInviteSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text("collaborators")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(AstirTypography.sheetTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(list.name)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
 
                     if store.isPrivateProfile && !canInviteWhilePrivate {
@@ -2622,15 +2696,16 @@ private struct CollaboratorInviteSheet: View {
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
+            .tint(brandMode.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         onSave(selectedCollaborators)
                         dismiss()
                     }
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                 }
             }
             .sheet(item: $sharePresentation) { presentation in
@@ -2659,8 +2734,8 @@ private struct CollaboratorInviteSheet: View {
     private var inviteByLinkSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("invite by link")
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
 
             Button {
                 createInviteLink()
@@ -2669,27 +2744,32 @@ private struct CollaboratorInviteSheet: View {
                     Image(systemName: "link")
                         .font(.system(size: 17, weight: .black))
                         .frame(width: 42, height: 42)
-                        .background(WanderTheme.terracottaTint.color)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                        .clipShape(Circle())
+                        .background(brandMode.accentWash)
+                        .foregroundStyle(brandMode.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(isCreatingInviteLink ? "creating link..." : "share collaborator invite")
-                            .font(.system(size: 15, weight: .black))
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text("Single-use · expires in 7 days")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     Spacer()
                     if isCreatingInviteLink {
                         ProgressView()
                     } else {
                         Image(systemName: "square.and.arrow.up")
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(brandMode.accent)
                     }
                 }
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.raisedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
+                }
             }
             .buttonStyle(.plain)
             .disabled(!canCreateInviteLink || isCreatingInviteLink)
@@ -2731,6 +2811,7 @@ private struct CollaboratorInviteSheet: View {
 private struct FriendCollaboratorSearchSheet: View {
     @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var selectedCollaborators: [ListCollaboratorMock]
     let allowsInvitesWhilePrivate: Bool
     let listName: String?
@@ -2751,10 +2832,11 @@ private struct FriendCollaboratorSearchSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("invite collaborator")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("Search friends and add the people who can view this list with you.")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -2777,14 +2859,15 @@ private struct FriendCollaboratorSearchSheet: View {
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
+            .tint(brandMode.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                 }
             }
         }
@@ -2793,6 +2876,7 @@ private struct FriendCollaboratorSearchSheet: View {
 
 private struct FriendCollaboratorSearchContent: View {
     @EnvironmentObject private var store: WanderStore
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var selectedCollaborators: [ListCollaboratorMock]
     let listName: String?
     @State private var query = ""
@@ -2825,24 +2909,27 @@ private struct FriendCollaboratorSearchContent: View {
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
                 TextField("Search friends", text: $query)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.primaryText)
+                    .tint(brandMode.accent)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
             .padding(WanderTheme.spacing3)
             .frame(minHeight: 54)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.recessedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
 
             InviteEntryPointButton(surface: .listCollaborator(listName: listName)) {
                 isPresentingContactInvites = true
             }
+            .tint(brandMode.accent)
 
             if !selectedCollaborators.isEmpty {
                 selectedCollaboratorsSection
@@ -2850,33 +2937,33 @@ private struct FriendCollaboratorSearchContent: View {
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("friends")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 if allFriendCandidates.isEmpty {
                     Text("No friends available to invite.")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .background(brandMode.recessedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 } else if friendCandidates.isEmpty {
                     Text("All available friends are already collaborators.")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .background(brandMode.recessedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 } else if filteredFriends.isEmpty {
                     Text("No friends match that search.")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .background(brandMode.recessedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 } else {
                     ForEach(filteredFriends) { friend in
                         friendRow(friend)
@@ -2891,6 +2978,7 @@ private struct FriendCollaboratorSearchContent: View {
                 senderProfileID: store.currentUser.id,
                 analytics: store.productAnalytics
             )
+            .presentationBackground(brandMode.background)
         }
     }
 
@@ -2899,8 +2987,8 @@ private struct FriendCollaboratorSearchContent: View {
             HStack(spacing: WanderTheme.spacing2) {
                 FacePileView(collaborators: selectedCollaborators, size: 28)
                 Text("\(selectedCollaborators.count) selected")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
                 Spacer()
             }
 
@@ -2913,8 +3001,8 @@ private struct FriendCollaboratorSearchContent: View {
                         color: collaborator.color
                     )
                     Text("@\(collaborator.handle)")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                     Spacer()
                     Button {
                         selectedCollaborators.removeAll { isSameCollaborator($0, collaborator) }
@@ -2927,8 +3015,12 @@ private struct FriendCollaboratorSearchContent: View {
                     .accessibilityLabel("Remove @\(collaborator.handle)")
                 }
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.raisedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
+                }
             }
         }
     }
@@ -2947,22 +3039,26 @@ private struct FriendCollaboratorSearchContent: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(friend.name)
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("@\(friend.handle)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
 
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add \(friend.name)")
@@ -2984,6 +3080,7 @@ private struct FriendCollaboratorSearchContent: View {
 }
 
 private struct ExistingCollaboratorsSummary: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let collaborators: [ListCollaboratorMock]
     var showsContainer = true
 
@@ -2991,11 +3088,11 @@ private struct ExistingCollaboratorsSummary: View {
         if showsContainer {
             row
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.raisedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
         } else {
             row
@@ -3008,11 +3105,11 @@ private struct ExistingCollaboratorsSummary: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(collaborators.count) existing collaborator\(collaborators.count == 1 ? "" : "s")")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("This collaboration stays unchanged.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             Spacer(minLength: 0)
@@ -3021,6 +3118,7 @@ private struct ExistingCollaboratorsSummary: View {
 }
 
 private struct PrivateProfileCollaborationUnavailable: View {
+    @Environment(\.astirBrandMode) private var brandMode
     var showsContainer = true
     var title = "new collaboration is off"
     var message = "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
@@ -3029,11 +3127,11 @@ private struct PrivateProfileCollaborationUnavailable: View {
         if showsContainer {
             content
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.recessedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
         } else {
             content
@@ -3046,17 +3144,17 @@ private struct PrivateProfileCollaborationUnavailable: View {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 42, height: 42)
-                .background(WanderTheme.terracottaTint.color)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .clipShape(Circle())
+                .background(brandMode.accentWash)
+                .foregroundStyle(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(title)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(message)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -3093,6 +3191,7 @@ private struct ListMapFullScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let list: PlaceListMock
@@ -3221,7 +3320,7 @@ private struct ListMapFullScreen: View {
                     applyInitialViewportFit(visibleMapHeight: minY)
                 }
             }
-            .background(WanderTheme.canvasWarm.color)
+            .background(brandMode.background)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: profilePlaceDestinationBinding) {
                 profilePlaceDestination
@@ -3243,22 +3342,22 @@ private struct ListMapFullScreen: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .black))
                     .frame(width: 44, height: 44)
-                    .background(WanderTheme.surfaceRaised.color.opacity(0.97))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Circle())
+                    .background(brandMode.raisedBackground.opacity(0.97))
+                    .foregroundStyle(brandMode.primaryText)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
-                        Circle()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
                     )
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 4)
+                    .shadow(color: Color.black.opacity(0.14), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close list map")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
-                    .font(WanderTypography.editorialNamedContent)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                     .multilineTextAlignment(.leading)
 
@@ -3266,11 +3365,11 @@ private struct ListMapFullScreen: View {
                     if list.mapAvailability == .loading {
                         ProgressView()
                             .controlSize(.mini)
-                            .tint(WanderTheme.terracotta.color)
+                            .tint(brandMode.accent)
                     }
                     Text(list.mapContentState.countLabel)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .padding(.horizontal, WanderTheme.spacing3)
@@ -3280,13 +3379,13 @@ private struct ListMapFullScreen: View {
                 minHeight: 44,
                 alignment: .leading
             )
-            .background(WanderTheme.surfaceRaised.color.opacity(0.95))
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground.opacity(0.95))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, x: 0, y: 5)
+            .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 5)
 
             Spacer(minLength: 0)
         }
@@ -3521,6 +3620,7 @@ private struct ListMapFullScreen: View {
 
 private struct ListMapMarker: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     let place: ListPlaceMock
     let outlines: [MapPinOutline]
     let isSelected: Bool
@@ -3530,10 +3630,10 @@ private struct ListMapMarker: View {
         ZStack {
             if isSelected {
                 Circle()
-                    .fill(WanderTheme.surfaceRaised.color)
+                    .fill(brandMode.raisedBackground)
                     .overlay(
                         Circle()
-                            .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                            .stroke(brandMode.accent, lineWidth: 2)
                     )
                     .frame(width: compact ? 40 : 50, height: compact ? 40 : 50)
             }
@@ -3548,7 +3648,7 @@ private struct ListMapMarker: View {
         }
             .frame(width: compact ? 40 : 52, height: compact ? 40 : 52)
             .contentShape(Circle())
-            .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: isSelected ? 9 : 6, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.20), radius: isSelected ? 9 : 6, x: 0, y: 2)
             .scaleEffect(isSelected ? 1.08 : 1)
             .animation(
                 reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82),
@@ -3559,6 +3659,7 @@ private struct ListMapMarker: View {
 }
 
 private struct ListMapClusterMarker: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let count: Int
     let outlines: [MapPinOutline]
     let isSelected: Bool
@@ -3566,10 +3667,12 @@ private struct ListMapClusterMarker: View {
 
     var body: some View {
         Text("\(count)")
-            .font(.system(size: compact ? 12 : 14, weight: .black, design: .rounded))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.primaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
             .frame(width: compact ? 34 : 42, height: compact ? 34 : 42)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(brandMode.raisedBackground)
             .clipShape(Circle())
             .overlay {
                 ForEach(Array(outlines.indices), id: \.self) { index in
@@ -3583,17 +3686,18 @@ private struct ListMapClusterMarker: View {
             .overlay {
                 if isSelected {
                     Circle()
-                        .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                        .stroke(brandMode.accent, lineWidth: 2)
                         .padding(-5)
                 }
             }
             .frame(width: compact ? 40 : 52, height: compact ? 40 : 52)
-            .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: 7, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.20), radius: 7, x: 0, y: 2)
     }
 }
 
 private struct ListMapPlaceRail: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
     @ScaledMetric(relativeTo: .body) private var railViewportHeight: CGFloat = 102
     let list: PlaceListMock
     @Binding var focusedPlaceID: String?
@@ -3606,13 +3710,13 @@ private struct ListMapPlaceRail: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
                 Text(list.mapContentState.countLabel)
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Spacer()
                 if list.places.count > 1 {
                     Text("Swipe to browse")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .padding(.horizontal, WanderTheme.spacing3)
@@ -3640,13 +3744,13 @@ private struct ListMapPlaceRail: View {
         }
         .padding(.top, WanderTheme.spacing3)
         .padding(.bottom, max(bottomInset, WanderTheme.spacing2))
-        .background(WanderTheme.surfaceRaised.color.opacity(0.97))
+        .background(brandMode.raisedBackground.opacity(0.97))
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(brandMode.border)
                 .frame(height: 1)
         }
-        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, x: 0, y: -5)
+        .shadow(color: Color.black.opacity(0.14), radius: 18, x: 0, y: -5)
         .onAppear {
             if focusedPlaceID == nil {
                 focusedPlaceID = walkthroughPlaceID ?? list.places.first?.id
@@ -3671,6 +3775,7 @@ private struct ListMapPlaceRail: View {
 
 private struct ListMapPlaceTile: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
     let place: ListPlaceMock
     let outlines: [MapPinOutline]
     let isFocused: Bool
@@ -3686,38 +3791,38 @@ private struct ListMapPlaceTile: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(place.name)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                         .multilineTextAlignment(.leading)
                     Text(place.detailsLine)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     Text(place.contextLine)
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.accent)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(width: 20, height: 44)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(isFocused ? brandMode.accentWash : brandMode.recessedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
                     .stroke(
-                        isFocused ? WanderTheme.textInk.color : WanderTheme.borderHairline.color,
+                        isFocused ? brandMode.accent : brandMode.border,
                         lineWidth: isFocused ? 2 : 1
                     )
             )
             .shadow(
-                color: WanderTheme.textInk.color.opacity(isFocused ? 0.16 : 0.08),
+                color: Color.black.opacity(isFocused ? 0.16 : 0.08),
                 radius: isFocused ? 10 : 5,
                 x: 0,
                 y: 3
@@ -3737,6 +3842,7 @@ private struct ListMapPlaceTile: View {
 }
 
 private struct ListMapCompactMedia: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let place: ListPlaceMock
     let outlines: [MapPinOutline]
 
@@ -3747,10 +3853,10 @@ private struct ListMapCompactMedia: View {
             fallbackEmojiSize: 22
         )
         .frame(width: 62, height: 62)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
         .overlay(alignment: .bottomTrailing) {
             ListSavedPlaceIcon(
@@ -3797,7 +3903,7 @@ private struct ListPlacePhotoMedia: View {
                 : cachedPhoto
 
             ZStack {
-                RoundedRectangle(cornerRadius: cornerRadius)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(place.tint)
 
                 AstirPlacePhotoAsset(stableKey: place.id)
@@ -3813,7 +3919,7 @@ private struct ListPlacePhotoMedia: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
                 if let cachedPhoto {
                     resolvedPhoto = cachedPhoto
@@ -3868,26 +3974,28 @@ private struct ListPlacePhotoMedia: View {
 }
 
 private struct ListMapAvailabilityNotice: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
     let message: String
 
     var body: some View {
         Label(message, systemImage: systemImage)
-            .font(.caption.weight(.black))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.caption)
+            .foregroundStyle(brandMode.primaryText)
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 36)
-            .background(WanderTheme.surfaceRaised.color.opacity(0.96))
-            .clipShape(Capsule())
+            .background(brandMode.raisedBackground.opacity(0.96))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
             .overlay(
-                Capsule()
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.10), radius: 8, x: 0, y: 3)
+            .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 3)
     }
 }
 
 private struct ListMapStatePanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let list: PlaceListMock
     let bottomInset: CGFloat
 
@@ -3896,24 +4004,24 @@ private struct ListMapStatePanel: View {
             Group {
                 if list.mapAvailability == .loading {
                     ProgressView()
-                        .tint(WanderTheme.terracotta.color)
+                        .tint(brandMode.accent)
                 } else {
                     Image(systemName: stateIcon)
                         .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accent)
                 }
             }
             .frame(width: 36, height: 36)
-            .background(WanderTheme.terracottaTint.color)
-            .clipShape(Circle())
+            .background(brandMode.accentWash)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(stateTitle)
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(stateMessage)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -3921,10 +4029,10 @@ private struct ListMapStatePanel: View {
         }
         .padding(WanderTheme.spacing4)
         .padding(.bottom, max(bottomInset, WanderTheme.spacing2))
-        .background(WanderTheme.surfaceRaised.color.opacity(0.98))
+        .background(brandMode.raisedBackground.opacity(0.98))
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(brandMode.border)
                 .frame(height: 1)
         }
     }
@@ -4034,6 +4142,7 @@ private struct ListEditorSheet: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     private let presentation: ListEditorPresentation
     private let onSave: (ListEditorDraft) -> Void
     private let onDelete: (PlaceListMock) -> Void
@@ -4086,16 +4195,19 @@ private struct ListEditorSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(isEditing ? "edit list" : "new list")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(AstirTypography.sheetTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     fieldBlock(title: "title") {
                         TextField("LA laptop mornings", text: $title)
-                            .font(.system(size: 17, weight: .bold))
+                            .font(AstirTypography.body)
+                            .foregroundStyle(brandMode.primaryText)
+                            .tint(brandMode.accent)
                             .textInputAutocapitalization(.words)
                             .focused($focusedField, equals: .title)
                     }
@@ -4104,13 +4216,15 @@ private struct ListEditorSheet: View {
 
                     fieldBlock(title: "description") {
                         TextField("quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.primaryText)
+                            .tint(brandMode.accent)
                             .lineLimit(3...5)
                     }
 
                     if let contentErrorMessage {
                         Label(contentErrorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(WanderTypography.emphasizedBody)
+                            .font(AstirTypography.bodySmall)
                             .foregroundStyle(WanderTheme.stateError.color)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("listEditor.contentError")
@@ -4126,7 +4240,8 @@ private struct ListEditorSheet: View {
                 .scrollTargetLayout()
             }
             .scrollPosition(id: $walkthroughScrollPosition, anchor: .center)
-            .wanderScreen()
+            .astirScreen()
+            .tint(brandMode.accent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 editorActionButtons
             }
@@ -4148,8 +4263,8 @@ private struct ListEditorSheet: View {
                     Button("Done") {
                         saveAndDismiss()
                     }
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                     .disabled(trimmedTitle.isEmpty)
                 }
             }
@@ -4160,7 +4275,7 @@ private struct ListEditorSheet: View {
                     listName: title
                 )
                     .presentationDetents([.large])
-                    .presentationBackground(WanderTheme.canvasWarm.color)
+                    .presentationBackground(brandMode.background)
             }
             .onAppear {
                 enforcePrivateProfileRules()
@@ -4202,7 +4317,7 @@ private struct ListEditorSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(WanderTheme.textInk.color)
+        .foregroundStyle(brandMode.primaryText)
         .accessibilityLabel("Back to lists")
     }
 
@@ -4217,7 +4332,7 @@ private struct ListEditorSheet: View {
 
     private var editorActionButtons: some View {
         VStack(spacing: WanderTheme.spacing3) {
-            WanderPrimaryButton(
+            ListPrimaryButton(
                 title: isEditing ? "Save changes" : "Save list",
                 systemImage: "checkmark",
                 isDisabled: trimmedTitle.isEmpty
@@ -4234,7 +4349,7 @@ private struct ListEditorSheet: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing3)
         .padding(.bottom, WanderTheme.spacing3)
-        .background(WanderTheme.canvasWarm.color.opacity(0.96))
+        .background(brandMode.background.opacity(0.96))
     }
 
     private func saveAndDismiss() {
@@ -4326,17 +4441,17 @@ private struct ListEditorSheet: View {
     private func fieldBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
 
             content()
                 .padding(WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.recessedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
         }
     }
@@ -4345,20 +4460,24 @@ private struct ListEditorSheet: View {
         Toggle(isOn: listStealthBinding) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("stealth mode")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(stealthHelperCopy)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .toggleStyle(.switch)
-        .tint(WanderTheme.textInk.color)
+        .tint(brandMode.accent)
         .disabled(store.isPrivateProfile)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
         .walkthroughTarget(.listEditorPrivacy)
     }
 
@@ -4367,10 +4486,11 @@ private struct ListEditorSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("collaborators")
-                        .font(.system(size: 14, weight: .black))
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(collaboratorsHelperCopy)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
@@ -4383,9 +4503,13 @@ private struct ListEditorSheet: View {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .black))
                             .frame(width: 44, height: 44)
-                            .background(WanderTheme.terracottaTint.color)
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .clipShape(Circle())
+                            .background(brandMode.accentWash)
+                            .foregroundStyle(brandMode.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
+                            }
                     }
                     .accessibilityLabel("Invite collaborator")
                 }
@@ -4402,10 +4526,10 @@ private struct ListEditorSheet: View {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 18, weight: .black))
                         .frame(width: 32, height: 32)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                     Text("No collaborators yet")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                     Spacer()
                 }
             } else if store.isPrivateProfile && canEditCollaborators {
@@ -4420,11 +4544,11 @@ private struct ListEditorSheet: View {
                             color: collaborator.color
                         )
                         Text("@\(collaborator.handle)")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(isEditing ? "can view" : "draft invite")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                         Spacer()
                         if canEditCollaborators {
                             Button {
@@ -4442,8 +4566,12 @@ private struct ListEditorSheet: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
         .walkthroughTarget(.listEditorCollaborators)
     }
 
@@ -4494,6 +4622,31 @@ private enum ListEditorWalkthroughAnchor {
     static let collaborators = "listEditor.collaborators"
 }
 
+private struct ListPrimaryButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    let title: String
+    let systemImage: String
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(AstirTypography.control)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(brandMode.accent)
+            .foregroundStyle(brandMode.accentForeground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.48 : 1)
+    }
+}
+
 private struct ListDestructiveButton: View {
     let title: String
     let systemImage: String
@@ -4505,11 +4658,11 @@ private struct ListDestructiveButton: View {
                 Image(systemName: systemImage)
                 Text(title)
             }
-            .font(.system(size: 16, weight: .bold))
+            .font(AstirTypography.control)
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(WanderTheme.stateError.color)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .clipShape(Capsule())
+            .foregroundStyle(AstirTheme.paper.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
     }
 }
