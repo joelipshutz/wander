@@ -172,6 +172,7 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
     let foundCount: Int
     let matchedCount: Int
     let needsReviewCount: Int
+    let sourceRetryCount: Int
     let sourceName: String
 
     var id: String {
@@ -183,6 +184,17 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
     }
 
     var bannerDetail: String {
+        if foundCount == 0, sourceRetryCount > 0 {
+            return sourceRetryCount == 1
+                ? "Source scan needs a retry"
+                : "\(sourceRetryCount) source scans need a retry"
+        }
+        if sourceRetryCount > 0 {
+            let placeSummary = needsReviewCount > 0
+                ? "\(matchedCount) matched · \(needsReviewCount) need a look"
+                : matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
+            return "\(placeSummary) · scan incomplete"
+        }
         if needsReviewCount > 0 {
             return "\(matchedCount) matched · \(needsReviewCount) need a look"
         }
@@ -200,15 +212,17 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
             requestedIDs.contains($0.batchID) && $0.state != .dismissed
         }
         guard !scopedBatches.isEmpty, !scopedItems.isEmpty else { return nil }
+        let placeItems = scopedItems.filter { !$0.isSourceRetry }
+        let sourceRetryCount = scopedItems.filter(\.isSourceRetry).count
 
-        let matchedCount = scopedItems.filter {
+        let matchedCount = placeItems.filter {
             [.ready, .duplicate, .saved].contains($0.state)
         }.count
-        let needsReviewCount = scopedItems.filter {
+        let needsReviewCount = placeItems.filter {
             [.ambiguous, .needsHelp, .failed].contains($0.state)
         }.count
         let foundCount = matchedCount + needsReviewCount
-        guard foundCount > 0 else { return nil }
+        guard foundCount > 0 || sourceRetryCount > 0 else { return nil }
 
         let sources = Set(scopedBatches.map(\.source))
         let sourceName: String
@@ -228,6 +242,7 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
             foundCount: foundCount,
             matchedCount: matchedCount,
             needsReviewCount: needsReviewCount,
+            sourceRetryCount: sourceRetryCount,
             sourceName: sourceName
         )
     }

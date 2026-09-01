@@ -1706,15 +1706,12 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @MainActor
     private func commitScopedImports(expectedUserID: String) async {
         var allEntries: [PlaceImportReceiptEntry] = []
-        var sourceRetryCount = 0
-        var destinationListID: String?
 
         for batch in scopedBatches {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             let activeItems = importStore.items(for: batch.id)
                 .filter { ![.saved, .dismissed].contains($0.state) }
             let placeItems = activeItems.filter { !$0.isSourceRetry }
-            let batchSourceRetryCount = activeItems.filter(\.isSourceRetry).count
             let excludedItems = placeItems.filter { !$0.isSelectedForImport }
             let items = placeItems.filter(\.isSelectedForImport)
             for item in excludedItems {
@@ -1806,20 +1803,10 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 destinationListID: destination?.id
             )
             allEntries.append(contentsOf: entries)
-            sourceRetryCount += batchSourceRetryCount
-            destinationListID = destination?.id ?? destinationListID
         }
 
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
         guard !allEntries.isEmpty else { return }
-        let receipt = PlaceImportReceipt(
-            batchID: scopedBatches.count == 1 ? scopedBatches[0].id : "combined",
-            sourceName: scopedBatches.count == 1 ? scopedBatches[0].sourceName : captureSourceCopy,
-            entries: allEntries,
-            destinationListID: destinationListID,
-            sourceRetryCount: sourceRetryCount
-        )
-        completedReceipt = receipt
         markDisplayedReceiptsPresented()
         onDone()
     }

@@ -207,6 +207,7 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
         XCTAssertEqual(notice.foundCount, 4)
         XCTAssertEqual(notice.matchedCount, 2)
         XCTAssertEqual(notice.needsReviewCount, 2)
+        XCTAssertEqual(notice.sourceRetryCount, 0)
         XCTAssertEqual(notice.sourceName, "Multiple sources")
         XCTAssertEqual(notice.bannerTitle, "Your import is ready")
         XCTAssertEqual(notice.bannerDetail, "2 matched · 2 need a look")
@@ -245,6 +246,57 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
 
         XCTAssertEqual(notice.sourceName, "Google Maps")
         XCTAssertEqual(notice.bannerDetail, "1 place matched")
+    }
+
+    func testResolvedNoticeKeepsSourceRetrySeparateFromPlaceCounts() throws {
+        let batch = PlaceImportBatch(
+            id: "instagram",
+            source: .instagram,
+            sourceName: nil,
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+        let retry = PlaceImportItem(
+            id: "source-retry",
+            batchID: batch.id,
+            source: .instagram,
+            kind: .sourceRetry,
+            seed: PlaceImportSeed(
+                rawText: "Instagram post",
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .failed
+        )
+
+        let notice = try XCTUnwrap(
+            PlaceImportCompletionNotice.resolved(
+                batchIDs: [batch.id],
+                batches: [batch],
+                items: [retry]
+            )
+        )
+
+        XCTAssertEqual(notice.foundCount, 0)
+        XCTAssertEqual(notice.matchedCount, 0)
+        XCTAssertEqual(notice.needsReviewCount, 0)
+        XCTAssertEqual(notice.sourceRetryCount, 1)
+        XCTAssertEqual(notice.bannerDetail, "Source scan needs a retry")
+    }
+}
+
+final class EphemeralPlaceImportPersistenceTests: XCTestCase {
+    func testSnapshotSurvivesWithinOneStoreButNotAcrossFixtureSessions() throws {
+        let persistence = EphemeralPlaceImportPersistence()
+        let snapshot = PlaceImportSnapshot(ownerUserID: "fixture-user")
+
+        try persistence.save(snapshot)
+
+        XCTAssertEqual(try persistence.load(), snapshot)
+        XCTAssertEqual(try EphemeralPlaceImportPersistence().load(), PlaceImportSnapshot())
     }
 }
 

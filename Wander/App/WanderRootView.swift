@@ -410,7 +410,11 @@ struct WanderRootView: View {
             store.isDarkMapEnabled = true
         }
         _store = StateObject(wrappedValue: store)
+        let importPersistence: any PlaceImportPersisting = fixtureMode == .empty
+            ? FilePlaceImportPersistence()
+            : EphemeralPlaceImportPersistence()
         let importStore = PlaceImportStore(
+            persistence: importPersistence,
             resolver: DevicePlaceImportResolver(
                 socialUnderstandingRepository: socialImportUnderstandingRepository
             )
@@ -808,6 +812,7 @@ struct WanderRootView: View {
                 if let previousUserID = previousState.session?.userID {
                     calendarReservations.clearAccountState(userID: previousUserID)
                 }
+                cancelInteractivePlaceImports(clearCompletionQueue: true)
                 walkthroughFeatureFlagRefreshTask?.cancel()
                 walkthroughFeatureFlagRefreshTask = nil
                 placeProfileFloatingActionVariant = .productionDefault
@@ -815,10 +820,6 @@ struct WanderRootView: View {
             if let automaticImportOwnerUserID,
                automaticImportOwnerUserID != nextUserID {
                 cancelAutomaticPlaceImports(clearVerificationQueue: true)
-            }
-            if let interactiveImportOwnerUserID,
-               interactiveImportOwnerUserID != nextUserID {
-                cancelInteractivePlaceImports(clearCompletionQueue: true)
             }
             if let userID = state.session?.userID {
                 importStore.bind(to: userID)
@@ -1338,7 +1339,13 @@ struct WanderRootView: View {
             expirationHandler: {
                 Task { @MainActor in
                     guard interactiveImportOwnerUserID == expectedUserID else { return }
-                    importStore.pauseProcessing(batchIDs: Array(queuedInteractiveImportBatchIDs))
+                    let pendingBatchIDs = importStore.batches.compactMap { batch -> String? in
+                        guard batch.automaticSaveRequested != true,
+                              batch.receipt == nil
+                        else { return nil }
+                        return batch.id
+                    }
+                    importStore.pauseProcessing(batchIDs: pendingBatchIDs)
                     interactiveImportResolutionTask?.cancel()
                 }
             }
@@ -1388,12 +1395,15 @@ struct WanderRootView: View {
                 if scenePhase == .active {
                     presentPendingImportVerificationIfPossible()
                 } else {
-                    surfacedImportCompletionBatchIDs.formUnion(notice.batchIDs)
-                    await pushNotifications.notifyImportMatchingFinished(
+                    let didScheduleNotification = await pushNotifications.notifyImportMatchingFinished(
                         batchIDs: notice.batchIDs,
                         matchedCount: notice.matchedCount,
-                        needsReviewCount: notice.needsReviewCount
+                        needsReviewCount: notice.needsReviewCount,
+                        sourceRetryCount: notice.sourceRetryCount
                     )
+                    if didScheduleNotification {
+                        surfacedImportCompletionBatchIDs.formUnion(notice.batchIDs)
+                    }
                 }
             }
         }

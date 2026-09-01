@@ -898,17 +898,27 @@ final class PushNotificationManager: ObservableObject {
     func notifyImportMatchingFinished(
         batchIDs: [String],
         matchedCount: Int,
-        needsReviewCount: Int
-    ) async {
-        guard !batchIDs.isEmpty else { return }
+        needsReviewCount: Int,
+        sourceRetryCount: Int
+    ) async -> Bool {
+        guard !batchIDs.isEmpty else { return false }
         await refreshAuthorizationStatus()
-        guard canRegisterForRemoteNotifications else { return }
+        guard canRegisterForRemoteNotifications else { return false }
 
         let content = UNMutableNotificationContent()
-        content.title = "Your import is ready"
-        if needsReviewCount > 0 {
+        if matchedCount == 0, needsReviewCount == 0, sourceRetryCount > 0 {
+            content.title = sourceRetryCount == 1
+                ? "Your source scan needs a retry"
+                : "\(sourceRetryCount) source scans need a retry"
+            content.body = "Open rec.me to retry the incomplete source scan."
+        } else if sourceRetryCount > 0 {
+            content.title = "Your import is ready"
+            content.body = "\(matchedCount) matched. Open rec.me to review and retry the incomplete source scan."
+        } else if needsReviewCount > 0 {
+            content.title = "Your import is ready"
             content.body = "\(matchedCount) matched. \(needsReviewCount) need a quick look."
         } else {
+            content.title = "Your import is ready"
             content.body = matchedCount == 1
                 ? "1 place is ready to add to your map."
                 : "\(matchedCount) places are ready to add to your map."
@@ -930,12 +940,14 @@ final class PushNotificationManager: ObservableObject {
                     trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
                 )
             )
+            return true
         } catch {
             #if DEBUG
             WanderDebugLog.imports.error(
                 "import matching notification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
+            return false
         }
     }
 
