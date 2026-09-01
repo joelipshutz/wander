@@ -33,10 +33,25 @@ actor SocialImportAutomaticLookupPacer {
 }
 
 struct PlaceImportResolvedEntry: Equatable, Sendable {
+    let kind: PlaceImportItemKind
     let seed: PlaceImportSeed
     let candidates: [PlaceCandidate]
     let selectedCandidateID: String?
     let helpMessage: String?
+
+    init(
+        kind: PlaceImportItemKind = .place,
+        seed: PlaceImportSeed,
+        candidates: [PlaceCandidate],
+        selectedCandidateID: String?,
+        helpMessage: String?
+    ) {
+        self.kind = kind
+        self.seed = seed
+        self.candidates = candidates
+        self.selectedCandidateID = selectedCandidateID
+        self.helpMessage = helpMessage
+    }
 }
 
 enum PlaceImportResolution: Equatable, Sendable {
@@ -76,6 +91,7 @@ extension PlaceImportResolving {
 final class DevicePlaceImportResolver: PlaceImportResolving {
     private static let maximumExtractedSocialHints = 150
     private static let maximumImmediateSocialLookups = 24
+    private static let maximumSocialLookupAttempts = 3
 
     private struct SocialMediaRecognition {
         let recognizedTexts: [String]
@@ -113,14 +129,12 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
                 return await googleSeedResolution(seed, name: name)
             }
-            if [.instagram, .tiktok].contains(source), seed.sourceURLString != nil {
-                try await SocialImportAutomaticLookupPacer.shared.waitForTurn()
-            }
             return try await manualResolution(
                 name: name,
                 area: seed.areaHint,
                 latitude: seed.latitude,
-                longitude: seed.longitude
+                longitude: seed.longitude,
+                retriesTransientSocialFailures: [.instagram, .tiktok].contains(source)
             )
         }
 
@@ -369,11 +383,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             var fetchedCandidates: [PlaceCandidate]
             var usedOCRRecoveryLookup = false
             do {
-                fetchedCandidates = try await placeResolver.resolveManualEntry(
+                fetchedCandidates = try await resolveSocialManualEntry(
                     ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
                 )
-            } catch PlaceResolutionError.noCandidates {
-                fetchedCandidates = []
             } catch {
                 try Task.checkCancellation()
                 lookupFailureCount += 1
@@ -392,20 +404,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             if fetchedCandidates.isEmpty,
                let recoveryInput = SocialOCRPlaceRecovery.manualInput(for: hint) {
                 do {
-                    fetchedCandidates = try await placeResolver.resolveManualEntry(recoveryInput)
+                    fetchedCandidates = try await resolveSocialManualEntry(recoveryInput)
                     usedOCRRecoveryLookup = !fetchedCandidates.isEmpty
-                } catch PlaceResolutionError.noCandidates {
-                    fetchedCandidates = []
                 } catch {
                     try Task.checkCancellation()
-                    lookupFailureCount += 1
-                    recoveryHints.append(
-                        SocialRecoveryHint(
-                            hint: hint,
-                            helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
-                        )
-                    )
-                    continue
+                    // The exact creator-provided lookup already completed with
+                    // no candidates. OCR recovery is only an optional second
+                    // chance, so its transient failure must not replace that
+                    // clean result with a misleading service-outage row.
+                    fetchedCandidates = []
                 }
             }
             try Task.checkCancellation()
@@ -460,7 +467,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 }
                 continue
             }
-            if match.candidates.count > 1, match.bestScore >= 0.7 {
+            if !match.candidates.isEmpty, match.bestScore >= 0.7 {
                 let identity = hintIdentity(hint)
                 if seenPlausibleHints.insert(identity).inserted {
                     entries.append(
@@ -522,6 +529,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         if understandingWasPartial, !entries.isEmpty {
             entries.append(
                 PlaceImportResolvedEntry(
+                    kind: .sourceRetry,
                     seed: seed,
                     candidates: [],
                     selectedCandidateID: nil,
@@ -564,6 +572,38 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
         )
+    }
+
+    /// Runs every automatic social-place lookup through one bounded retry path.
+    /// The shared pacer applies only to the real MapKit resolver, keeping unit
+    /// tests deterministic and avoiding artificial sleeps for local fakes.
+    private func resolveSocialManualEntry(
+        _ input: ManualPlaceInput
+    ) async throws -> [PlaceCandidate] {
+        for attempt in 1...Self.maximumSocialLookupAttempts {
+            try Task.checkCancellation()
+            if placeResolver is MapKitPlaceResolver {
+                try await SocialImportAutomaticLookupPacer.shared.waitForTurn()
+            }
+            do {
+                return try await placeResolver.resolveManualEntry(input)
+            } catch PlaceResolutionError.noCandidates {
+                // A real empty search is terminal, not a transient failure.
+                return []
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as URLError where error.code == .cancelled {
+                throw CancellationError()
+            } catch let error as PlaceResolutionError {
+                throw error
+            } catch {
+                try Task.checkCancellation()
+                if attempt == Self.maximumSocialLookupAttempts {
+                    throw error
+                }
+            }
+        }
+        return []
     }
 
     private enum SocialOCRPlaceRecovery {
@@ -702,13 +742,19 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         area: String?,
         latitude: Double? = nil,
         longitude: Double? = nil,
-        preserveUnselectedCandidates: Bool = false
+        preserveUnselectedCandidates: Bool = false,
+        retriesTransientSocialFailures: Bool = false
     ) async throws -> PlaceImportResolution {
         do {
+            let input = ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+            let resolvedCandidates: [PlaceCandidate]
+            if retriesTransientSocialFailures {
+                resolvedCandidates = try await resolveSocialManualEntry(input)
+            } else {
+                resolvedCandidates = try await placeResolver.resolveManualEntry(input)
+            }
             let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
-                try await placeResolver.resolveManualEntry(
-                    ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
-                ),
+                resolvedCandidates,
                 areaHint: area
             )
             let match = PlaceImportCandidateMatcher.match(
@@ -1016,8 +1062,11 @@ final class PlaceImportStore: ObservableObject {
             let snapshot = try persistence.load()
             let upgrade = Self.upgradedLoadedItems(snapshot.items)
             ownerUserID = snapshot.ownerUserID
-            batches = snapshot.batches
             items = upgrade.items
+            batches = Self.normalizedLoadedReceipts(
+                snapshot.batches,
+                items: snapshot.items
+            )
             replacedSocialItemsByPlaceholderID = upgrade.replacedSocialItemsByPlaceholderID
             persistenceError = nil
         } catch {
@@ -1028,6 +1077,52 @@ final class PlaceImportStore: ObservableObject {
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
+    }
+
+    /// Separates source-level retry status from place receipt rows written by
+    /// builds that predated `PlaceImportItemKind`.
+    ///
+    /// Matching by item identity is authoritative here. Receipt text and shape
+    /// are deliberately ignored because a real unresolved place can share the
+    /// same display copy as an old source placeholder.
+    private static func normalizedLoadedReceipts(
+        _ loadedBatches: [PlaceImportBatch],
+        items: [PlaceImportItem]
+    ) -> [PlaceImportBatch] {
+        let sourceRetryItemIDsByBatch = Dictionary(
+            grouping: items.filter(\.isSourceRetry),
+            by: \.batchID
+        ).mapValues { Set($0.map(\.id)) }
+
+        return loadedBatches.map { loadedBatch in
+            guard let receipt = loadedBatch.receipt,
+                  let sourceRetryItemIDs = sourceRetryItemIDsByBatch[loadedBatch.id]
+            else { return loadedBatch }
+            let receiptSourceRetryItemIDs = Set(
+                receipt.entries.lazy
+                    .map(\.itemID)
+                    .filter(sourceRetryItemIDs.contains)
+            )
+            guard !receiptSourceRetryItemIDs.isEmpty else { return loadedBatch }
+
+            var normalizedBatch = loadedBatch
+            normalizedBatch.receipt = PlaceImportReceipt(
+                id: receipt.id,
+                batchID: receipt.batchID,
+                sourceName: receipt.sourceName,
+                createdAt: receipt.createdAt,
+                entries: receipt.entries.filter {
+                    !receiptSourceRetryItemIDs.contains($0.itemID)
+                },
+                destinationListID: receipt.destinationListID,
+                sourceRetryCount: max(
+                    receipt.sourceRetryCount,
+                    receiptSourceRetryItemIDs.count
+                ),
+                presentedAt: receipt.presentedAt
+            )
+            return normalizedBatch
+        }
     }
 
     private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> LoadedItemUpgrade {
@@ -1091,9 +1186,11 @@ final class PlaceImportStore: ObservableObject {
     var summary: PlaceImportSummary {
         let inboxItems = items.filter { $0.state != .dismissed }
         guard !inboxItems.isEmpty else { return .empty }
-        let unresolvedItems = inboxItems.filter {
+        let placeItems = inboxItems.filter { !$0.isSourceRetry }
+        let unresolvedItems = placeItems.filter {
             [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
         }
+        let sourceRetryItems = inboxItems.filter(\.isSourceRetry)
         let processingCount = unresolvedItems.filter { [.queued, .resolving].contains($0.state) }.count
         let readyCount = unresolvedItems.filter { $0.state == .ready }.count
         let needsHelpCount = unresolvedItems.filter { [.ambiguous, .needsHelp, .failed].contains($0.state) }.count
@@ -1104,8 +1201,12 @@ final class PlaceImportStore: ObservableObject {
             processingCount: processingCount,
             readyCount: readyCount,
             needsHelpCount: needsHelpCount,
-            duplicateCount: inboxItems.filter { $0.state == .duplicate }.count,
-            savedCount: inboxItems.filter { $0.state == .saved }.count
+            duplicateCount: placeItems.filter { $0.state == .duplicate }.count,
+            savedCount: placeItems.filter { $0.state == .saved }.count,
+            sourceRetryCount: sourceRetryItems.count,
+            sourceRetryProcessingCount: sourceRetryItems.filter {
+                [.queued, .resolving].contains($0.state)
+            }.count
         )
     }
 
@@ -1348,7 +1449,9 @@ final class PlaceImportStore: ObservableObject {
         guard !ids.isEmpty else { return }
         var didChange = false
         for index in items.indices
-        where ids.contains(items[index].id) && items[index].state != .dismissed {
+        where ids.contains(items[index].id)
+            && items[index].state != .dismissed
+            && !items[index].isSourceRetry {
             items[index].isSelectedForImport = isIncluded
             items[index].updatedAt = .now
             didChange = true
@@ -1634,11 +1737,17 @@ final class PlaceImportStore: ObservableObject {
         destinationListID: String?
     ) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        let sourceRetryItems = items.filter { $0.batchID == batchID && $0.isSourceRetry }
+        let sourceRetryItemIDs = Set(sourceRetryItems.map(\.id))
+        let activeSourceRetryCount = sourceRetryItems.filter {
+            ![.saved, .dismissed].contains($0.state)
+        }.count
         let receipt = PlaceImportReceipt(
             batchID: batchID,
             sourceName: batches[index].sourceName,
-            entries: entries,
-            destinationListID: destinationListID
+            entries: entries.filter { !sourceRetryItemIDs.contains($0.itemID) },
+            destinationListID: destinationListID,
+            sourceRetryCount: activeSourceRetryCount
         )
         batches[index].destinationListID = destinationListID
         batches[index].receipt = receipt
@@ -1951,7 +2060,10 @@ final class PlaceImportStore: ObservableObject {
         case .partialExpanded:
             true
         case .partialExpandedResolved(let entries, _):
-            entries.contains { $0.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
+            entries.contains {
+                $0.kind == .sourceRetry
+                    || $0.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            }
         case .candidates, .needsHelp, .retrySocialUnderstanding, .expanded, .expandedResolved:
             false
         }
@@ -1977,6 +2089,12 @@ final class PlaceImportStore: ObservableObject {
     private func apply(_ resolution: PlaceImportResolution, at index: Int) {
         switch resolution {
         case .candidates(let candidates, let selectedCandidateID):
+            if !candidates.isEmpty {
+                // A source-level retry can collapse to one resolved place.
+                // Convert that placeholder into a normal, selected place row.
+                items[index].kind = nil
+                items[index].isIncludedInImport = nil
+            }
             items[index].candidates = candidates
             items[index].selectedCandidateID = selectedCandidateID
             if selectedCandidateID != nil {
@@ -2036,6 +2154,7 @@ final class PlaceImportStore: ObservableObject {
             let retryItem = PlaceImportItem(
                 batchID: original.batchID,
                 source: original.source,
+                kind: .sourceRetry,
                 seed: retrySeed,
                 state: .needsHelp,
                 helpMessage: "Some media in this post could not be read. Retry automatic matching to look for more places.",
@@ -2053,7 +2172,16 @@ final class PlaceImportStore: ObservableObject {
         case .expandedResolved(let entries, let sourceName),
              .partialExpandedResolved(let entries, let sourceName):
             let original = items[index]
+            let infersLegacyRetryKind: Bool
+            if case .partialExpandedResolved = resolution {
+                infersLegacyRetryKind = true
+            } else {
+                infersLegacyRetryKind = false
+            }
             let expandedItems = entries.map { entry in
+                let isSourceRetry = entry.kind == .sourceRetry
+                    || (infersLegacyRetryKind
+                        && entry.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)
                 let state: PlaceImportItemState
                 if entry.selectedCandidateID != nil {
                     state = .ready
@@ -2065,6 +2193,7 @@ final class PlaceImportStore: ObservableObject {
                 return PlaceImportItem(
                     batchID: original.batchID,
                     source: original.source,
+                    kind: isSourceRetry ? .sourceRetry : nil,
                     seed: entry.seed,
                     state: state,
                     candidates: entry.candidates,
@@ -2110,6 +2239,7 @@ final class PlaceImportStore: ObservableObject {
                 // Keep the original row identity and staged user edits while
                 // accepting a better result from the source-level retry.
                 items[existingIndex].seed = items[index].seed
+                items[existingIndex].kind = items[index].kind
                 items[existingIndex].state = items[index].state
                 items[existingIndex].candidates = items[index].candidates
                 items[existingIndex].selectedCandidateID = items[index].selectedCandidateID
@@ -2130,6 +2260,9 @@ final class PlaceImportStore: ObservableObject {
         _ lhs: PlaceImportItem,
         _ rhs: PlaceImportItem
     ) -> Bool {
+        if lhs.isSourceRetry || rhs.isSourceRetry {
+            return lhs.isSourceRetry && rhs.isSourceRetry
+        }
         let lhsName = lhs.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let rhsName = rhs.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         if lhsName?.isEmpty != false || rhsName?.isEmpty != false {
@@ -2285,16 +2418,25 @@ final class PlaceImportStore: ObservableObject {
     private func synchronizeBatch(_ batchID: String, persist: Bool = true) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
         let batchItems = items(for: batchID)
-        let pendingCount = batchItems.filter { [.queued, .resolving].contains($0.state) }.count
-        let terminalCount = batchItems.filter { [.saved, .duplicate, .dismissed].contains($0.state) }.count
-        batches[index].totalCount = batchItems.count
-        batches[index].processedCount = batchItems.count - pendingCount
+        let placeItems = batchItems.filter { !$0.isSourceRetry }
+        let pendingPlaceCount = placeItems.filter { [.queued, .resolving].contains($0.state) }.count
+        let terminalPlaceCount = placeItems.filter {
+            [.saved, .duplicate, .dismissed].contains($0.state)
+        }.count
+        let hasActiveSourceRetry = batchItems.contains {
+            $0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
+        }
+        let hasPendingSourceRetry = batchItems.contains {
+            $0.isSourceRetry && [.queued, .resolving].contains($0.state)
+        }
+        batches[index].totalCount = placeItems.count
+        batches[index].processedCount = placeItems.count - pendingPlaceCount
         batches[index].updatedAt = .now
 
         if batches[index].state != .cancelled {
-            if pendingCount > 0 {
+            if pendingPlaceCount > 0 || hasPendingSourceRetry {
                 batches[index].state = .processing
-            } else if terminalCount == batchItems.count {
+            } else if terminalPlaceCount == placeItems.count && !hasActiveSourceRetry {
                 batches[index].state = .complete
             } else {
                 batches[index].state = .ready

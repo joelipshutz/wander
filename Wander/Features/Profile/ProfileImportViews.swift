@@ -33,15 +33,25 @@ struct AddImportEntrySection: View {
                     Spacer(minLength: WanderTheme.spacing1)
 
                     if summary.hasPendingImports {
-                        Text("\(summary.processingCount + summary.remainingCount)")
-                            .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .frame(minWidth: 22, minHeight: 22)
-                            .background(WanderTheme.terracotta.color)
-                            .clipShape(Capsule())
-                            .accessibilityLabel(
-                                "\(summary.processingCount + summary.remainingCount) imports in progress or ready"
-                            )
+                        if summary.processingCount + summary.remainingCount > 0 {
+                            Text("\(summary.processingCount + summary.remainingCount)")
+                                .font(.system(size: 11, weight: .black))
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .frame(minWidth: 22, minHeight: 22)
+                                .background(WanderTheme.terracotta.color)
+                                .clipShape(Capsule())
+                                .accessibilityLabel(
+                                    "\(summary.processingCount + summary.remainingCount) places in progress or ready"
+                                )
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .black))
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .frame(width: 22, height: 22)
+                                .background(WanderTheme.terracotta.color)
+                                .clipShape(Circle())
+                                .accessibilityLabel("A source scan needs attention")
+                        }
                     }
 
                     Image(systemName: "chevron.right")
@@ -193,7 +203,7 @@ struct PlaceImportHubScreen: View {
             if summary.hasPendingImports {
                 Button(action: inboxAction) {
                     HStack(spacing: WanderTheme.spacing3) {
-                        if summary.processingCount > 0 {
+                        if summary.processingCount > 0 || summary.sourceRetryProcessingCount > 0 {
                             ProgressView()
                                 .font(.system(size: 12, weight: .black))
                                 .tint(WanderTheme.textOnAction.color)
@@ -227,6 +237,12 @@ struct PlaceImportHubScreen: View {
         }
         if summary.processingCount > 0 {
             return "Previous imports · matching \(summary.processedCount) of \(summary.totalCount)"
+        }
+        if summary.sourceRetryProcessingCount > 0 {
+            return "Previous import · rescanning source"
+        }
+        if summary.sourceRetryCount > 0 {
+            return "Previous import · scan incomplete"
         }
         return "Previous imports"
     }
@@ -387,13 +403,21 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private var reviewContent: some View {
         switch reviewPlan.surface {
         case .resolving:
-            resolvingContent
+            if hasPlaceProcessing {
+                resolvingContent
+            } else {
+                heading(
+                    title: "Scanning the rest of this post",
+                    subtitle: "We’ll keep every place already found and add any new matches when the scan finishes."
+                )
+                itemStack
+            }
         case .quickAdd:
             heading(
                 title: "Ready to add",
                 subtitle: "Keep it checked, then choose Check In or Wanna. Details are optional."
             )
-            if let item = scopedItems.first {
+            if let item = placeItems.first {
                 adaptiveCard(item, prominent: true)
             }
         case .duplicate:
@@ -401,28 +425,35 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 title: "You already saved this",
                 subtitle: "Keep it checked to include it in the imported list. Your existing details stay unchanged."
             )
-            if let item = scopedItems.first {
+            if let item = placeItems.first {
                 duplicateCard(item)
             }
         case .compact:
             heading(
-                title: "Review \(scopedItems.count) places",
+                title: "Review \(reviewPlan.totalCount) places",
                 subtitle: "Uncheck anything you don’t want. Choose Check In or Wanna on each place."
             )
             batchControls
             itemStack
         case .batch:
             heading(
-                title: "Ready to import \(scopedItems.count) places",
+                title: "Ready to import \(reviewPlan.totalCount) places",
                 subtitle: "Check the places you want, then set each one to Check In or Wanna."
             )
             batchControls
             itemStack
         case .recovery:
-            heading(
-                title: "Help us match \(scopedItems.count == 1 ? "this place" : "these places")",
-                subtitle: "Search for the right place. Nothing will be saved until you confirm."
-            )
+            if reviewPlan.totalCount == 0, !sourceRetryItems.isEmpty {
+                heading(
+                    title: "Post scan incomplete",
+                    subtitle: "Retry the source scan to look for places in media we couldn’t read."
+                )
+            } else {
+                heading(
+                    title: "Help us match \(reviewPlan.totalCount == 1 ? "this place" : "these places")",
+                    subtitle: "Search for the right place. Nothing will be saved until you confirm."
+                )
+            }
             itemStack
         case .complete:
             ContentUnavailableView(
@@ -465,13 +496,72 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private var itemStack: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
             ForEach(scopedItems) { item in
-                if item.state == .duplicate {
+                if item.isSourceRetry {
+                    sourceRetryCard(item)
+                } else if item.state == .duplicate {
                     duplicateCard(item)
                 } else {
                     adaptiveCard(item, prominent: false)
                 }
             }
         }
+    }
+
+    private func sourceRetryCard(_ item: PlaceImportItem) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                Image(systemName: "photo.stack.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateInfo.color)
+                    .frame(width: 44, height: 44)
+                    .background(WanderTheme.skyTint.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Source scan incomplete")
+                        .font(WanderTypography.editorialNamedContent)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("This is a scan status, not another place.")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+
+            if let helpMessage = item.helpMessage, !helpMessage.isEmpty {
+                Text(helpMessage)
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if [.queued, .resolving].contains(item.state) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView().controlSize(.small)
+                    Text("Scanning remaining media…")
+                        .font(WanderTypography.label)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                .frame(minHeight: WanderTheme.tapMinimum)
+            } else {
+                Button("Retry source scan", systemImage: "arrow.clockwise") {
+                    importStore.retry(itemID: item.id)
+                }
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .buttonStyle(.plain)
+                .accessibilityHint("Scans the post again for places in unread media")
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.skyTint.color.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.stateInfo.color.opacity(0.28), lineWidth: 1)
+        )
+        .accessibilityIdentifier("import.source-retry.\(item.id)")
     }
 
     private var batchControls: some View {
@@ -711,9 +801,17 @@ struct PlaceImportAdaptiveReviewScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 HStack(spacing: WanderTheme.spacing3) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(
+                        systemName: receipt.entries.isEmpty && receipt.sourceRetryCount > 0
+                            ? "exclamationmark.arrow.triangle.2.circlepath"
+                            : "checkmark.circle.fill"
+                    )
                         .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                        .foregroundStyle(
+                            receipt.entries.isEmpty && receipt.sourceRetryCount > 0
+                                ? WanderTheme.stateWarning.color
+                                : WanderTheme.stateSuccess.color
+                        )
                     Text(completionTitle(receipt))
                         .font(WanderTypography.editorialMajorSectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
@@ -755,25 +853,31 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
             )
 
-            LazyVStack(spacing: 0) {
-                ForEach(receipt.entries) { entry in
-                    verificationRow(entry)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.vertical, WanderTheme.spacing2)
+            if receipt.sourceRetryCount > 0 {
+                PlaceImportReceiptSourceScanStatus(count: receipt.sourceRetryCount)
+            }
 
-                    if entry.id != receipt.entries.last?.id {
-                        Divider()
-                            .overlay(WanderTheme.borderHairline.color)
-                            .padding(.leading, 52)
+            if !receipt.entries.isEmpty {
+                LazyVStack(spacing: 0) {
+                    ForEach(receipt.entries) { entry in
+                        verificationRow(entry)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .padding(.vertical, WanderTheme.spacing2)
+
+                        if entry.id != receipt.entries.last?.id {
+                            Divider()
+                                .overlay(WanderTheme.borderHairline.color)
+                                .padding(.leading, 52)
+                        }
                     }
                 }
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
             }
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
 
             WanderPrimaryButton(
                 title: "Done",
@@ -849,8 +953,20 @@ struct PlaceImportAdaptiveReviewScreen: View {
         scopedItems.filter { $0.state == .ready && $0.isSelectedForImport }
     }
 
+    private var placeItems: [PlaceImportItem] {
+        scopedItems.filter { !$0.isSourceRetry }
+    }
+
+    private var sourceRetryItems: [PlaceImportItem] {
+        scopedItems.filter(\.isSourceRetry)
+    }
+
+    private var hasPlaceProcessing: Bool {
+        placeItems.contains { [.queued, .resolving].contains($0.state) }
+    }
+
     private var allItemsSelected: Bool {
-        !scopedItems.isEmpty && scopedItems.allSatisfy(\.isSelectedForImport)
+        !placeItems.isEmpty && placeItems.allSatisfy(\.isSelectedForImport)
     }
 
     private var bulkStatusSelection: Binding<String> {
@@ -877,7 +993,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private func setAllIncluded(_ isIncluded: Bool) {
         withAnimation(.easeInOut(duration: 0.16)) {
-            importStore.setIncludedInImport(isIncluded, itemIDs: scopedItems.map(\.id))
+            importStore.setIncludedInImport(isIncluded, itemIDs: placeItems.map(\.id))
         }
     }
 
@@ -907,6 +1023,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             createdAt: receipts.map(\.createdAt).max() ?? .now,
             entries: receipts.flatMap(\.entries),
             destinationListID: receipts.compactMap(\.destinationListID).last,
+            sourceRetryCount: receipts.reduce(0) { $0 + $1.sourceRetryCount },
             presentedAt: receipts.allSatisfy { $0.presentedAt != nil } ? .now : nil
         )
     }
@@ -1221,14 +1338,17 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @MainActor
     private func commitScopedImports(expectedUserID: String) async {
         var allEntries: [PlaceImportReceiptEntry] = []
+        var sourceRetryCount = 0
         var destinationListID: String?
 
         for batch in scopedBatches {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             let activeItems = importStore.items(for: batch.id)
                 .filter { ![.saved, .dismissed].contains($0.state) }
-            let excludedItems = activeItems.filter { !$0.isSelectedForImport }
-            let items = activeItems.filter(\.isSelectedForImport)
+            let placeItems = activeItems.filter { !$0.isSourceRetry }
+            let batchSourceRetryCount = activeItems.filter(\.isSourceRetry).count
+            let excludedItems = placeItems.filter { !$0.isSelectedForImport }
+            let items = placeItems.filter(\.isSelectedForImport)
             for item in excludedItems {
                 importStore.dismiss(itemID: item.id)
             }
@@ -1318,6 +1438,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 destinationListID: destination?.id
             )
             allEntries.append(contentsOf: entries)
+            sourceRetryCount += batchSourceRetryCount
             destinationListID = destination?.id ?? destinationListID
         }
 
@@ -1327,7 +1448,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
             batchID: scopedBatches.count == 1 ? scopedBatches[0].id : "combined",
             sourceName: scopedBatches.count == 1 ? scopedBatches[0].sourceName : captureSourceCopy,
             entries: allEntries,
-            destinationListID: destinationListID
+            destinationListID: destinationListID,
+            sourceRetryCount: sourceRetryCount
         )
         completedReceipt = receipt
         markDisplayedReceiptsPresented()
@@ -1385,6 +1507,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private func completionTitle(_ receipt: PlaceImportReceipt) -> String {
         let total = receipt.entries.count
+        if total == 0, receipt.sourceRetryCount > 0 {
+            return "Source scan incomplete"
+        }
         return total == 1 ? "Review this place" : "Review \(total) places"
     }
 
@@ -1726,9 +1851,12 @@ struct PlaceImportInboxScreen: View {
     private var inboxSummary: some View {
         let summary = importStore.summary
         let unresolvedCount = inboxItems.filter {
-            [.queued, .resolving, .ready, .ambiguous, .needsHelp].contains($0.state)
+            !$0.isSourceRetry
+                && [.queued, .resolving, .ready, .ambiguous, .needsHelp].contains($0.state)
         }.count
+        let sourceRetryCount = inboxItems.filter(\.isSourceRetry).count
         let sources = Set(inboxItems.map(\.source))
+        let isProcessing = summary.processingCount > 0 || summary.sourceRetryProcessingCount > 0
 
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
@@ -1739,7 +1867,7 @@ struct PlaceImportInboxScreen: View {
                         .font(.system(size: 22, weight: .black))
                         .foregroundStyle(WanderTheme.stateInfo.color)
 
-                    if summary.processingCount == 0 {
+                    if !isProcessing {
                         Image(systemName: "checkmark")
                             .font(.system(size: 8, weight: .black))
                             .frame(width: 16, height: 16)
@@ -1753,11 +1881,21 @@ struct PlaceImportInboxScreen: View {
                 .frame(width: 48, height: 48)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(summary.processingCount > 0 ? "Importing places" : "Imports done")
-                        .font(.system(size: 19, weight: .black))
                     Text(
-                        "\(unresolvedCount) waiting across \(sources.count) source\(sources.count == 1 ? "" : "s")"
+                        summary.processingCount > 0
+                            ? "Importing places"
+                            : summary.sourceRetryProcessingCount > 0
+                                ? "Rescanning source"
+                                : sourceRetryCount > 0
+                                    ? "A source scan needs attention"
+                                    : "Imports done"
                     )
+                        .font(.system(size: 19, weight: .black))
+                    Text(inboxWaitingSummary(
+                        placeCount: unresolvedCount,
+                        sourceRetryCount: sourceRetryCount,
+                        sourceCount: sources.count
+                    ))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(1)
@@ -1766,16 +1904,27 @@ struct PlaceImportInboxScreen: View {
                 Spacer()
             }
 
-            if summary.processingCount > 0 {
-                ProgressView(value: summary.progress)
-                    .tint(WanderTheme.terracotta.color)
-                Text("Importing \(summary.processedCount) of \(summary.totalCount)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+            if isProcessing {
+                if summary.processingCount > 0 {
+                    ProgressView(value: summary.progress)
+                        .tint(WanderTheme.terracotta.color)
+                    Text("Importing \(summary.processedCount) of \(summary.totalCount) places")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                } else {
+                    ProgressView()
+                        .tint(WanderTheme.terracotta.color)
+                    Text("Scanning remaining source media")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
                     importMetric(unresolvedCount, "to review", WanderTheme.terracotta.color)
                     importMetric(summary.duplicateCount, "duplicates", WanderTheme.stateInfo.color)
+                    if sourceRetryCount > 0 {
+                        importMetric(sourceRetryCount, "scan retry", WanderTheme.stateWarning.color)
+                    }
                 }
             }
 
@@ -1788,9 +1937,30 @@ struct PlaceImportInboxScreen: View {
         .padding(.vertical, WanderTheme.spacing2)
     }
 
+    private func inboxWaitingSummary(
+        placeCount: Int,
+        sourceRetryCount: Int,
+        sourceCount: Int
+    ) -> String {
+        if sourceRetryCount > 0, placeCount > 0 {
+            return "\(placeCount) places waiting · \(sourceRetryCount) source scan incomplete"
+        }
+        if sourceRetryCount > 0 {
+            return "\(sourceRetryCount) source scan needs attention"
+        }
+        return "\(placeCount) waiting across \(sourceCount) source\(sourceCount == 1 ? "" : "s")"
+    }
+
     @ViewBuilder
     private func reviewRow(for item: PlaceImportItem) -> some View {
-        switch selectedFilter {
+        if item.isSourceRetry {
+            PlaceImportSourceRetryRow(
+                item: item,
+                retryAction: { importStore.retry(itemID: item.id) },
+                dismissAction: { importStore.dismiss(itemID: item.id) }
+            )
+        } else {
+            switch selectedFilter {
         case .unresolved:
             PlaceImportUnresolvedRow(
                 item: item,
@@ -1819,6 +1989,7 @@ struct PlaceImportInboxScreen: View {
                 rescueAction: { rescueItem = item },
                 dismissAction: { importStore.dismiss(itemID: item.id) }
             )
+            }
         }
     }
 
@@ -1968,18 +2139,23 @@ struct PlaceImportInboxScreen: View {
     private func commitReadyImports() async {
         let batchOrder = importStore.batches.sorted { $0.createdAt < $1.createdAt }
         var combinedEntries: [PlaceImportReceiptEntry] = []
+        var combinedSourceRetryCount = 0
         var recordedReceiptIDs: [String] = []
         var lastDestinationListID: String?
 
         for batch in batchOrder {
             let batchItems = importStore.items(for: batch.id)
-            let ready = batchItems.filter { $0.state == .ready && $0.selectedCandidate != nil }
-            let duplicates = batchItems.filter {
+            let placeItems = batchItems.filter { !$0.isSourceRetry }
+            let batchSourceRetryCount = batchItems.filter {
+                $0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
+            }.count
+            let ready = placeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }
+            let duplicates = placeItems.filter {
                 $0.state == .duplicate && $0.duplicateUserPlaceID != nil
             }
             guard !ready.isEmpty || !duplicates.isEmpty else { continue }
 
-            let destinationList = destinationList(for: batch, itemCount: batchItems.count)
+            let destinationList = destinationList(for: batch, itemCount: placeItems.count)
             let remoteBackend = auth.isSignedIn ? backend : nil
             var entries: [PlaceImportReceiptEntry] = []
 
@@ -2033,7 +2209,7 @@ struct PlaceImportInboxScreen: View {
                 bulkSavedCount += 1
             }
 
-            entries.append(contentsOf: batchItems.compactMap { item in
+            entries.append(contentsOf: placeItems.compactMap { item in
                 guard [.ambiguous, .needsHelp, .failed].contains(item.state) else { return nil }
                 return PlaceImportReceiptEntry(
                     itemID: item.id,
@@ -2054,6 +2230,7 @@ struct PlaceImportInboxScreen: View {
                 recordedReceiptIDs.append(receipt.id)
             }
             combinedEntries.append(contentsOf: entries)
+            combinedSourceRetryCount += batchSourceRetryCount
             lastDestinationListID = destinationList?.id ?? lastDestinationListID
         }
 
@@ -2067,7 +2244,8 @@ struct PlaceImportInboxScreen: View {
             batchID: batchOrder.count == 1 ? batchOrder[0].id : "combined",
             sourceName: batchOrder.count == 1 ? batchOrder[0].sourceName : "Imported places",
             entries: combinedEntries,
-            destinationListID: lastDestinationListID
+            destinationListID: lastDestinationListID,
+            sourceRetryCount: combinedSourceRetryCount
         )
     }
 
@@ -2162,6 +2340,40 @@ struct PlaceImportInboxScreen: View {
     }
 }
 
+private struct PlaceImportReceiptSourceScanStatus: View {
+    let count: Int
+
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: "photo.stack.fill")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(WanderTheme.stateWarning.color)
+                .frame(width: 34, height: 34)
+                .background(WanderTheme.skyTint.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(count == 1 ? "Source scan incomplete" : "\(count) source scans incomplete")
+                    .font(WanderTypography.editorialNamedContent)
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("This is scan status, not another place. Open Import Review to retry unread media.")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.skyTint.color.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.stateWarning.color.opacity(0.28), lineWidth: 1)
+        )
+        .accessibilityIdentifier("import.receipt.source-scan-status")
+    }
+}
+
 private struct PlaceImportReceiptSheet: View {
     let receipt: PlaceImportReceipt
     let streakCount: Int
@@ -2176,23 +2388,29 @@ private struct PlaceImportReceiptSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     summaryCard
 
-                    VStack(spacing: 0) {
-                        ForEach(receipt.entries) { entry in
-                            receiptRow(entry)
+                    if receipt.sourceRetryCount > 0 {
+                        PlaceImportReceiptSourceScanStatus(count: receipt.sourceRetryCount)
+                    }
 
-                            if entry.id != receipt.entries.last?.id {
-                                Divider()
-                                    .overlay(WanderTheme.borderHairline.color)
-                                    .padding(.leading, 46)
+                    if !receipt.entries.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(receipt.entries) { entry in
+                                receiptRow(entry)
+
+                                if entry.id != receipt.entries.last?.id {
+                                    Divider()
+                                        .overlay(WanderTheme.borderHairline.color)
+                                        .padding(.leading, 46)
+                                }
                             }
                         }
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        )
                     }
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
                 }
                 .padding(WanderTheme.spacing4)
             }
@@ -2211,9 +2429,17 @@ private struct PlaceImportReceiptSheet: View {
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(
+                    systemName: receipt.entries.isEmpty && receipt.sourceRetryCount > 0
+                        ? "exclamationmark.arrow.triangle.2.circlepath"
+                        : "checkmark.circle.fill"
+                )
                     .font(.system(size: 34, weight: .black))
-                    .foregroundStyle(WanderTheme.stateSuccess.color)
+                    .foregroundStyle(
+                        receipt.entries.isEmpty && receipt.sourceRetryCount > 0
+                            ? WanderTheme.stateWarning.color
+                            : WanderTheme.stateSuccess.color
+                    )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summaryTitle)
@@ -2263,7 +2489,9 @@ private struct PlaceImportReceiptSheet: View {
     private var summaryTitle: String {
         let savedCount = receipt.addedCount + receipt.existingCount
         if savedCount == 0 {
-            return "Nothing added yet"
+            return receipt.sourceRetryCount > 0
+                ? "Source scan incomplete"
+                : "Nothing added yet"
         }
         return savedCount == 1 ? "1 place saved" : "\(savedCount) places saved"
     }
@@ -2551,6 +2779,63 @@ private struct PlaceImportUnresolvedRow: View {
         case .duplicate, .saved, .failed, .dismissed:
             EmptyView()
         }
+    }
+}
+
+private struct PlaceImportSourceRetryRow: View {
+    let item: PlaceImportItem
+    let retryAction: () -> Void
+    let dismissAction: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: "photo.stack.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(WanderTheme.stateInfo.color)
+                .frame(width: 42, height: 42)
+                .background(WanderTheme.skyTint.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Source scan incomplete")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("Scan status — not another place")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                if [.queued, .resolving].contains(item.state) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ProgressView().controlSize(.small)
+                        Text("Scanning remaining media…")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                } else {
+                    PlaceImportInlineAction(
+                        title: "Retry source scan",
+                        systemImage: "arrow.clockwise",
+                        color: WanderTheme.terracotta.color,
+                        action: retryAction
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Menu {
+                Button(
+                    "Remove scan status",
+                    systemImage: "xmark",
+                    role: .destructive,
+                    action: dismissAction
+                )
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .accessibilityLabel("Source scan actions")
+        }
+        .padding(.vertical, WanderTheme.spacing1)
+        .accessibilityIdentifier("import.inbox.source-retry.\(item.id)")
     }
 }
 

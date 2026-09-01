@@ -1,4 +1,5 @@
 import {
+  maximumConcurrentGeminiImageUploads,
   maximumGeminiFileUploadTimeoutMilliseconds,
   maximumGeminiSemanticPasses,
   maximumInlineImageBytes,
@@ -971,7 +972,7 @@ Deno.test("a pre-cancelled request starts no Gemini upload or model work", async
   assertEquals(fetchCount, 0);
 });
 
-Deno.test("inline images are selected under an aggregate raw-byte cap and excluded images cannot be cited", () => {
+Deno.test("inline image selection leaves overflow available for Files API upload", () => {
   const first = imageIngestion("media:0", 10 * 1_024 * 1_024);
   const second = imageIngestion("media:1", 3 * 1_024 * 1_024);
 
@@ -981,9 +982,159 @@ Deno.test("inline images are selected under an aggregate raw-byte cap and exclud
   assertEquals(selected.map((item) => item.mediaID), ["media:0"]);
   assertEquals(first.status, "ok");
   assert(first.bytes instanceof Uint8Array);
-  assertEquals(second.status, "failed");
-  assertEquals(second.errorCode, "gemini_inline_image_limit_exceeded");
-  assertEquals(second.bytes, undefined);
+  assertEquals(second.status, "ok");
+  assertEquals(second.errorCode, null);
+  assert(second.bytes instanceof Uint8Array);
+});
+
+Deno.test("Gemini uploads a realistic seventeen-image overflow with bounded concurrency and preserves source order", async () => {
+  const oneMiB = 1_024 * 1_024;
+  const ingestions = Array.from(
+    { length: 17 },
+    (_, index) => imageIngestion(`media:${index}`, oneMiB),
+  );
+  const generatedBodies: Record<string, unknown>[] = [];
+  const deletedFiles: string[] = [];
+  let nextUploadIndex = 0;
+  let activeStarts = 0;
+  let maximumActiveStarts = 0;
+  let uploadCount = 0;
+
+  const dependencies = runtime(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (url === `${geminiOrigin}/upload/v1beta/files`) {
+      const index = nextUploadIndex;
+      nextUploadIndex += 1;
+      activeStarts += 1;
+      maximumActiveStarts = Math.max(maximumActiveStarts, activeStarts);
+      await Promise.resolve();
+      activeStarts -= 1;
+      return new Response(null, {
+        headers: {
+          "x-goog-upload-url":
+            `${geminiOrigin}/upload/v1beta/files?upload_id=image-${index}`,
+        },
+      });
+    }
+    if (
+      url.startsWith(`${geminiOrigin}/upload/v1beta/files?upload_id=image-`)
+    ) {
+      uploadCount += 1;
+      const index = Number(
+        new URL(url).searchParams.get("upload_id")?.slice(6),
+      );
+      const name = `files/image-${index}`;
+      return Response.json({
+        file: {
+          name,
+          uri: `${geminiOrigin}/v1beta/${name}`,
+          state: "ACTIVE",
+        },
+      });
+    }
+    if (url.includes(":generateContent")) {
+      generatedBodies.push(JSON.parse(String(init?.body)));
+      return geminiUnderstandingResponse({
+        intent: "unknown",
+        declaredCount: -1,
+        declaredCountEvidenceIds: [],
+        globalArea: "",
+        globalAreaEvidenceIds: [],
+      }, []);
+    }
+    if (
+      method === "DELETE" && url.startsWith(`${geminiOrigin}/v1beta/files/`)
+    ) {
+      deletedFiles.push(url);
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`unexpected fetch ${method} ${url}`);
+  });
+
+  const result = await understandWithGemini(
+    {
+      platform: "instagram",
+      contentType: "post",
+      url: "https://www.instagram.com/p/ABC123xyz/",
+      sourceID: "ABC123xyz",
+    },
+    emptyCatalog,
+    ingestions,
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result.attemptCount, 2);
+  assertEquals(nextUploadIndex, 5);
+  assertEquals(uploadCount, 5);
+  assertEquals(deletedFiles.length, 5);
+  assertEquals(maximumActiveStarts, maximumConcurrentGeminiImageUploads);
+  assert(maximumActiveStarts <= maximumConcurrentGeminiImageUploads);
+  assertEquals(ingestions.map((item) => item.status), Array(17).fill("ok"));
+  assertEquals(ingestions.map((item) => item.errorCode), Array(17).fill(null));
+  assert(ingestions.every((item) => item.bytes === undefined));
+
+  const parts = requestParts(generatedBodies[0] ?? null);
+  assertEquals(parts.filter((part) => part.inlineData).length, 12);
+  assertEquals(parts.filter((part) => part.fileData).length, 5);
+  const mediaParts = parts.filter((part) => part.inlineData || part.fileData);
+  assertEquals(mediaParts.length, 17);
+  assertEquals(
+    mediaParts.slice(12).map((part) => asRecord(part.fileData)?.fileUri),
+    Array.from(
+      { length: 5 },
+      (_, index) => `${geminiOrigin}/v1beta/files/image-${index}`,
+    ),
+  );
+  const evidence = JSON.parse(String(asRecord(parts.at(-1))?.text));
+  assertEquals(
+    evidence.allowed_media_evidence_ids,
+    Array.from({ length: 17 }, (_, index) => `media:${index}`),
+  );
+});
+
+Deno.test("a genuine overflow image upload failure remains an honest per-media failure", async () => {
+  const first = imageIngestion("media:0", 10 * 1_024 * 1_024);
+  const overflow = imageIngestion("media:1", 3 * 1_024 * 1_024);
+  let generateCount = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url === `${geminiOrigin}/upload/v1beta/files`) {
+      return new Response(null, { status: 503 });
+    }
+    if (url.includes(":generateContent")) {
+      generateCount += 1;
+      return geminiUnderstandingResponse({
+        intent: "unknown",
+        declaredCount: -1,
+        declaredCountEvidenceIds: [],
+        globalArea: "",
+        globalAreaEvidenceIds: [],
+      }, []);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+
+  const result = await understandWithGemini(
+    source,
+    emptyCatalog,
+    [first, overflow],
+    "gemini-secret",
+    "gemini-3.5-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+
+  assertEquals(result.attemptCount, 1);
+  assertEquals(generateCount, 1);
+  assertEquals(first.status, "ok");
+  assertEquals(first.bytes, undefined);
+  assertEquals(overflow.status, "failed");
+  assertEquals(overflow.errorCode, "gemini_image_ingestion_failed");
+  assertEquals(overflow.bytes, undefined);
 });
 
 type TestFetcher = (

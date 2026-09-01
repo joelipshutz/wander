@@ -3,6 +3,7 @@ import {
   acquireWithApify,
   maximumInstagramProfileAliases,
   minimumProfileEnrichmentGlobalBudgetMilliseconds,
+  normalizeApifyDataset,
   normalizeInstagramProfileAliases,
 } from "./apify.ts";
 import { parseSocialSource } from "./source.ts";
@@ -74,6 +75,84 @@ Deno.test("Apify starts immediately, polls a known run, and reads its dataset", 
     calls.some((call) => call.url.pathname.endsWith("/abort")),
     false,
   );
+});
+
+Deno.test("ordered carousel children remain canonical over top-level media", () => {
+  const slideURLs = Array.from(
+    { length: 17 },
+    (_, index) =>
+      `https://images.cdninstagram.com/media/carousel-slide-${index + 1}.jpg`,
+  );
+  const evidence = normalizeApifyDataset([{
+    inputUrl: instagramURL,
+    childPosts: slideURLs.map((url, index) => ({
+      displayUrl: url,
+      alt: `Carousel slide ${index + 1}`,
+    })),
+    images: [
+      slideURLs[0],
+      "https://images.cdninstagram.com/media/duplicate-top-level-image.jpg",
+    ],
+    photos: [
+      { url: slideURLs[1] },
+      {
+        url:
+          "https://images.cdninstagram.com/media/duplicate-top-level-photo.jpg",
+      },
+    ],
+    displayUrl: slideURLs[0],
+    videoUrl:
+      "https://scontent.cdninstagram.com/media/duplicate-top-level-video.mp4",
+  }], source());
+
+  assertEquals(evidence.media.map((item) => item.url), slideURLs);
+  assertEquals(
+    evidence.media.map((item) => item.index),
+    Array.from({ length: 17 }, (_, index) => index),
+  );
+  assertEquals(
+    evidence.media.map((item) => item.id),
+    Array.from({ length: 17 }, (_, index) => `media:${index}`),
+  );
+});
+
+Deno.test("a partial childPosts tail does not suppress a complete declared carousel", () => {
+  const slideURLs = Array.from(
+    { length: 17 },
+    (_, index) =>
+      `https://images.cdninstagram.com/media/declared-slide-${index + 1}.jpg`,
+  );
+  const evidence = normalizeApifyDataset([{
+    inputUrl: instagramURL,
+    childPostsCount: 17,
+    childPosts: slideURLs.slice(14).map((url, index) => ({
+      displayUrl: url,
+      alt: `Partial child slide ${index + 15}`,
+    })),
+    images: slideURLs,
+    displayUrl: slideURLs[0],
+  }], source());
+
+  assertEquals(evidence.media.map((item) => item.url), slideURLs);
+  assertEquals(
+    evidence.media.map((item) => item.index),
+    Array.from({ length: 17 }, (_, index) => index),
+  );
+  assertEquals(
+    evidence.media.map((item) => item.id),
+    Array.from({ length: 17 }, (_, index) => `media:${index}`),
+  );
+});
+
+Deno.test("top-level media remains a fallback for unusable children", () => {
+  const evidence = normalizeApifyDataset([{
+    inputUrl: instagramURL,
+    childPosts: [null, {}, { displayUrl: "" }],
+    images: [imageURL],
+    displayUrl: imageURL,
+  }], source());
+
+  assertEquals(evidence.media.map((item) => item.url), [imageURL]);
 });
 
 Deno.test("a matching restricted Instagram item triggers one bounded media fallback", async () => {

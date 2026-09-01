@@ -15,6 +15,7 @@ import { Deadline, SocialImportError } from "./types.ts";
 export const maximumGeminiAttempts = 3;
 export const maximumGeminiSemanticPasses = 2;
 export const maximumInlineImageBytes = 12 * 1_024 * 1_024;
+export const maximumConcurrentGeminiImageUploads = 4;
 export const maximumGeminiVideoInputs = 10;
 export const maximumGeminiFileUploadTimeoutMilliseconds = 60_000;
 
@@ -615,6 +616,17 @@ async function geminiMediaParts(
 ): Promise<Record<string, unknown>[]> {
   normalizeMediaForGemini(ingestions);
   const inlineImages = new Set(selectInlineImageIngestions(ingestions));
+  const uploadedImageParts = await uploadOverflowImageParts(
+    ingestions.filter((ingestion) =>
+      ingestion.status === "ok" && ingestion.kind === "image" &&
+      !inlineImages.has(ingestion)
+    ),
+    apiKey,
+    deadline,
+    dependencies,
+    uploadedFiles,
+    requestSignal,
+  );
   const videoParts = new Map<MediaIngestion, Record<string, unknown>>();
   let acceptedVideos = 0;
 
@@ -677,7 +689,7 @@ async function geminiMediaParts(
           data: base64(ingestion.bytes as Uint8Array),
         },
       }
-      : undefined;
+      : uploadedImageParts.get(ingestion);
     if (!mediaPart) {
       rejectMediaForGemini(ingestion, "gemini_media_not_included");
       continue;
@@ -706,13 +718,85 @@ export function selectInlineImageIngestions(
       continue;
     }
     if (totalBytes + bytes.byteLength > maximumBytes) {
-      rejectMediaForGemini(ingestion, "gemini_inline_image_limit_exceeded");
       continue;
     }
     totalBytes += bytes.byteLength;
     selected.push(ingestion);
   }
   return selected;
+}
+
+async function uploadOverflowImageParts(
+  ingestions: MediaIngestion[],
+  apiKey: string,
+  deadline: Deadline,
+  dependencies: RuntimeDependencies,
+  uploadedFiles: UploadedGeminiFile[],
+  requestSignal?: AbortSignal,
+): Promise<Map<MediaIngestion, Record<string, unknown>>> {
+  const parts = new Map<MediaIngestion, Record<string, unknown>>();
+  let nextIndex = 0;
+  let fatalError: unknown = null;
+
+  const worker = async () => {
+    while (fatalError === null) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= ingestions.length) return;
+      const ingestion = ingestions[index];
+      try {
+        const uploaded = await uploadGeminiFile(
+          ingestion.bytes as Uint8Array,
+          ingestion.mimeType as string,
+          apiKey,
+          deadline,
+          dependencies,
+          requestSignal,
+        );
+        uploadedFiles.push(uploaded);
+        delete ingestion.bytes;
+        const active = await waitForActiveGeminiFile(
+          uploaded,
+          apiKey,
+          deadline,
+          dependencies,
+          requestSignal,
+        );
+        parts.set(ingestion, {
+          fileData: {
+            mimeType: active.mimeType,
+            fileUri: active.uri,
+          },
+        });
+      } catch (error) {
+        rejectMediaForGemini(ingestion, "gemini_image_ingestion_failed");
+        if (
+          requestSignal?.aborted ||
+          (error instanceof SocialImportError &&
+            (error.code === "deadline_exceeded" ||
+              error.code === "request_cancelled"))
+        ) {
+          fatalError ??= requestSignal?.aborted
+            ? new SocialImportError("request_cancelled")
+            : error;
+        }
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.min(
+          maximumConcurrentGeminiImageUploads,
+          ingestions.length,
+        ),
+      },
+      worker,
+    ),
+  );
+  if (fatalError !== null) throw fatalError;
+  return parts;
 }
 
 export function validatedGeminiUploadURL(value: string): URL {
@@ -758,7 +842,13 @@ async function uploadGeminiFile(
           accept: "application/json",
           "content-type": "application/json",
         },
-        body: JSON.stringify({ file: { displayName: "recme-social-video" } }),
+        body: JSON.stringify({
+          file: {
+            displayName: mimeType.startsWith("image/")
+              ? "recme-social-image"
+              : "recme-social-video",
+          },
+        }),
         redirect: "error",
         signal: combinedSignal(requestSignal, deadline.remaining(15_000)),
       },

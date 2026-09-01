@@ -860,25 +860,21 @@ final class PushNotificationManager: ObservableObject {
     func notifyImportFinished(
         batchIDs: [String],
         savedCount: Int,
-        needsReviewCount: Int
+        needsReviewCount: Int,
+        sourceRetryCount: Int = 0
     ) async {
         guard !batchIDs.isEmpty else { return }
         await refreshAuthorizationStatus()
         guard canRegisterForRemoteNotifications else { return }
 
         let content = UNMutableNotificationContent()
-        if savedCount == 0 {
-            content.title = "Your import needs a quick review"
-        } else {
-            content.title = savedCount == 1
-                ? "1 place saved"
-                : "\(savedCount) places saved"
-        }
-        if needsReviewCount > 0 {
-            content.body = "Open rec.me to verify what was saved and review \(needsReviewCount) more."
-        } else {
-            content.body = "Open rec.me to verify the places from your import."
-        }
+        let copy = PlaceImportFinishedNotificationCopy.make(
+            savedCount: savedCount,
+            needsReviewCount: needsReviewCount,
+            sourceRetryCount: sourceRetryCount
+        )
+        content.title = copy.title
+        content.body = copy.body
         content.sound = .default
         let eventID = "local-import-\(UUID().uuidString.lowercased())"
         content.userInfo = [

@@ -645,6 +645,46 @@ export function normalizeApifyDataset(
 
 function normalizeRecord(record: Record<string, unknown>): AcquisitionEvidence {
   const pending: Array<Omit<AcquiredMedia, "id">> = [];
+  const orderedChildren = orderedChildMedia(record);
+  const declaredChildren = declaredChildMediaCount(record);
+  const childrenAreIncomplete = declaredChildren !== null &&
+    orderedChildren.length < declaredChildren;
+  const topLevelMedia = childrenAreIncomplete
+    ? topLevelMediaForRecord(record)
+    : [];
+  if (
+    orderedChildren.length > 0 &&
+    (!childrenAreIncomplete || topLevelMedia.length <= orderedChildren.length)
+  ) {
+    pending.push(...orderedChildren);
+  } else {
+    pending.push(
+      ...(topLevelMedia.length > 0
+        ? topLevelMedia
+        : topLevelMediaForRecord(record)),
+    );
+  }
+
+  pending.sort((left, right) => left.index - right.index);
+  const media = pending.slice(0, 150).map((item, index) => ({
+    ...item,
+    id: `media:${index}`,
+  }));
+  return {
+    title: cleanString(record.title, 500),
+    caption: cleanMultilineString(
+      record.description ?? record.caption ?? record.text ?? record.title,
+      30_000,
+    ),
+    taggedLocations: taggedLocations(record),
+    media,
+  };
+}
+
+function topLevelMediaForRecord(
+  record: Record<string, unknown>,
+): Array<Omit<AcquiredMedia, "id">> {
+  const pending: Array<Omit<AcquiredMedia, "id">> = [];
   const postContent = arrayValue(record.post_content ?? record.postContent);
   for (const [index, value] of postContent.entries()) {
     const item = asRecord(value);
@@ -657,24 +697,6 @@ function normalizeRecord(record: Record<string, unknown>): AcquisitionEvidence {
       url: item.url ?? item.video_url ?? item.image_url,
       thumbnailURL: null,
       altText: item.alt_text ?? item.altText,
-    });
-  }
-
-  const children = arrayValue(
-    record.childPosts ?? record.child_posts ?? record.carousel_media,
-  );
-  for (const [index, value] of children.entries()) {
-    const item = asRecord(value);
-    if (!item) continue;
-    const video = item.videoUrl ?? item.video_url ?? item.videoPlayUrl;
-    const image = item.displayUrl ?? item.display_url ?? item.imageUrl ??
-      item.image_url;
-    addMedia(pending, {
-      index,
-      kind: cleanString(video, 4_096) ? "video" : "image",
-      url: video ?? image,
-      thumbnailURL: cleanString(video, 4_096) ? image : null,
-      altText: item.alt ?? item.altText ?? item.accessibility_caption,
     });
   }
 
@@ -723,19 +745,20 @@ function normalizeRecord(record: Record<string, unknown>): AcquisitionEvidence {
   }
 
   const videoMeta = asRecord(record.videoMeta) ?? {};
-  const videoURL = record.video_url ?? record.videoUrl ?? record.downloadAddr ??
-    record.videoPlayUrl ?? asRecord(record.video)?.url ??
+  const videoURL = record.video_url ?? record.videoUrl ??
+    record.downloadAddr ?? record.videoPlayUrl ??
+    asRecord(record.video)?.url ??
     videoMeta.downloadAddr;
-  const persistentVideo = record.downloadedVideo ?? record.downloaded_video ??
-    record.videoDownloadURL ?? (!slideshow ? downloaded[0] : null);
+  const persistentVideo = record.downloadedVideo ??
+    record.downloaded_video ?? record.videoDownloadURL ??
+    (!slideshow ? downloaded[0] : null);
   if (cleanString(videoURL, 4_096) || cleanString(persistentVideo, 4_096)) {
     addMedia(pending, {
       index: pending.length,
       kind: "video",
       url: persistentVideo ?? videoURL,
       thumbnailURL: record.thumbnail_url ?? record.thumbnailUrl ??
-        record.thumbnail ??
-        record.displayUrl ?? videoMeta.coverUrl,
+        record.thumbnail ?? record.displayUrl ?? videoMeta.coverUrl,
       altText: null,
     });
   } else {
@@ -748,21 +771,54 @@ function normalizeRecord(record: Record<string, unknown>): AcquisitionEvidence {
       altText: record.alt ?? record.altText ?? record.accessibility_caption,
     });
   }
+  return pending;
+}
 
-  pending.sort((left, right) => left.index - right.index);
-  const media = pending.slice(0, 150).map((item, index) => ({
-    ...item,
-    id: `media:${index}`,
-  }));
-  return {
-    title: cleanString(record.title, 500),
-    caption: cleanMultilineString(
-      record.description ?? record.caption ?? record.text ?? record.title,
-      30_000,
-    ),
-    taggedLocations: taggedLocations(record),
-    media,
-  };
+function orderedChildMedia(
+  record: Record<string, unknown>,
+): Array<Omit<AcquiredMedia, "id">> {
+  for (
+    const children of [
+      record.childPosts,
+      record.child_posts,
+      record.carousel_media,
+    ].map(arrayValue)
+  ) {
+    const media: Array<Omit<AcquiredMedia, "id">> = [];
+    for (const [index, value] of children.entries()) {
+      const item = asRecord(value);
+      if (!item) continue;
+      const video = item.videoUrl ?? item.video_url ?? item.videoPlayUrl;
+      const image = item.displayUrl ?? item.display_url ?? item.imageUrl ??
+        item.image_url;
+      addMedia(media, {
+        index,
+        kind: cleanString(video, 4_096) ? "video" : "image",
+        url: video ?? image,
+        thumbnailURL: cleanString(video, 4_096) ? image : null,
+        altText: item.alt ?? item.altText ?? item.accessibility_caption,
+      });
+    }
+    if (media.length > 0) return media;
+  }
+  return [];
+}
+
+function declaredChildMediaCount(
+  record: Record<string, unknown>,
+): number | null {
+  for (
+    const value of [
+      record.childPostsCount,
+      record.child_posts_count,
+      record.carouselMediaCount,
+      record.carousel_media_count,
+    ]
+  ) {
+    const count = numberValue(value);
+    if (count !== null && Number.isInteger(count) && count > 0) return count;
+  }
+  return null;
 }
 
 function taggedLocations(record: Record<string, unknown>): TaggedLocation[] {

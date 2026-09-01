@@ -1288,7 +1288,8 @@ struct WanderRootView: View {
                         await pushNotifications.notifyImportFinished(
                             batchIDs: result.batchIDs,
                             savedCount: result.savedCount,
-                            needsReviewCount: result.needsReviewCount
+                            needsReviewCount: result.needsReviewCount,
+                            sourceRetryCount: result.sourceRetryCount
                         )
                     }
                 }
