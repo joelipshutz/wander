@@ -110,10 +110,18 @@ struct PlaceProfileRatingsRail: View {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing3) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(metric.title)
-                            .font(WanderTypography.label)
+                            .font(
+                                visualStyle == .astir
+                                    ? AstirTypography.label
+                                    : WanderTypography.label
+                            )
                             .foregroundStyle(primaryText)
                         Text(metric.subtitle)
-                            .font(WanderTypography.metadata)
+                            .font(
+                                visualStyle == .astir
+                                    ? AstirTypography.metadata
+                                    : WanderTypography.metadata
+                            )
                             .foregroundStyle(secondaryText)
                     }
 
@@ -172,14 +180,22 @@ struct PlaceProfileRatingsRail: View {
     private func metricValue(_ metric: Metric) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 2) {
             Text(metric.value)
-                .font(WanderTypography.editorialRatingDisplay)
+                .font(
+                    visualStyle == .astir
+                        ? AstirTypography.metricDisplay
+                        : WanderTypography.editorialRatingDisplay
+                )
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.textInk.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.76)
 
             if let suffix = metric.suffix {
                 Text(suffix)
-                    .font(WanderTypography.editorialRatingSuffix)
+                    .font(
+                        visualStyle == .astir
+                            ? AstirTypography.metricSuffix
+                            : WanderTypography.editorialRatingSuffix
+                    )
                     .foregroundStyle(secondaryText)
             }
         }
