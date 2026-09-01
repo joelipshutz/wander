@@ -10,12 +10,13 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
     case placeWannaGo = "place_want_to_go"
     case listCreated = "list_created"
     case listItemAdded = "list_item_added"
+    case questionAsked = "question_asked"
 
     var supportsRating: Bool {
         switch self {
         case .placeBeen, .listItemAdded:
             true
-        case .placeSaved, .placeWannaGo, .listCreated:
+        case .placeSaved, .placeWannaGo, .listCreated, .questionAsked:
             false
         }
     }
@@ -28,6 +29,8 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
             .wanna
         case .listCreated, .listItemAdded:
             .list
+        case .questionAsked:
+            .question
         case .placeSaved:
             .saved
         }
@@ -39,6 +42,7 @@ enum FeedTicketKind: Equatable {
     case wanna
     case list
     case saved
+    case question
 }
 
 struct FeedMediaPreview: Identifiable, Equatable, Sendable {
@@ -62,6 +66,7 @@ struct FeedActivity: Identifiable {
     let actor: ProfileShell
     let place: VisiblePlace?
     let list: LocalPlaceList?
+    let questionText: String?
     let occurredAt: Date
     let note: String?
     let rating: Double?
@@ -73,6 +78,7 @@ struct FeedActivity: Identifiable {
         actor: ProfileShell,
         place: VisiblePlace? = nil,
         list: LocalPlaceList? = nil,
+        questionText: String? = nil,
         occurredAt: Date,
         note: String? = nil,
         rating: Double? = nil,
@@ -83,6 +89,10 @@ struct FeedActivity: Identifiable {
         self.actor = actor
         self.place = place
         self.list = list
+        let normalizedQuestion = questionText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.questionText = kind == .questionAsked && normalizedQuestion?.isEmpty == false
+            ? normalizedQuestion
+            : nil
         self.occurredAt = occurredAt
         self.note = note
         self.rating = kind.supportsRating ? rating : nil

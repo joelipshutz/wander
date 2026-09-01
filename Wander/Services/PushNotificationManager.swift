@@ -654,7 +654,7 @@ final class PushNotificationManager: ObservableObject {
             return (data?["list_id"] as? String).map { .list(id: $0) }
         case "place_saved_from_your_map", "followed_place_visit", WannaGoReminderPlanner.notificationType:
             return (data?["place_id"] as? String).map { .place(id: $0) }
-        case "activity_liked", "activity_commented":
+        case "activity_liked", "activity_commented", "question_asked":
             return (data?["activity_id"] as? String).map { .activityComments(id: $0) }
         case "shared_visit":
             guard let participantID = data?["participant_id"] as? String,
@@ -693,6 +693,7 @@ final class PushNotificationManager: ObservableObject {
             "list_place_added",
             "mutual_follow",
             "place_saved_from_your_map",
+            "question_asked",
             "save_streak_reminder",
             "shared_visit",
             "wanna_go_reminder"

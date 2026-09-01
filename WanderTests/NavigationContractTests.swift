@@ -133,6 +133,52 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
+    func testFeedComposerDefaultsToPlaceAndOffersThreeCreationModesWithQuestionTooltip() throws {
+        XCTAssertEqual(AddCreationMode.allCases, [.place, .importPlaces, .question])
+        XCTAssertEqual(AddCreationMode.allCases.first, .place)
+        XCTAssertTrue(
+            AddQuestionTooltipPolicy.shouldShow(
+                isDismissed: false,
+                activeMode: .place,
+                isSourceStep: true,
+                isWalkthroughActive: false
+            )
+        )
+        XCTAssertFalse(
+            AddQuestionTooltipPolicy.shouldShow(
+                isDismissed: true,
+                activeMode: .place,
+                isSourceStep: true,
+                isWalkthroughActive: false
+            )
+        )
+        XCTAssertFalse(
+            AddQuestionTooltipPolicy.shouldShow(
+                isDismissed: false,
+                activeMode: .question,
+                isSourceStep: true,
+                isWalkthroughActive: false
+            )
+        )
+
+        let add = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(add.contains("@State private var creationMode: AddCreationMode = .place"))
+        XCTAssertTrue(add.contains("case .place: \"Add a place\""))
+        XCTAssertTrue(add.contains("case .importPlaces: \"Import\""))
+        XCTAssertTrue(add.contains("case .question: \"Ask a question\""))
+        XCTAssertTrue(add.contains("WanderSegmentedSwitch("))
+        XCTAssertTrue(add.contains("accessibilityIdentifier(\"add.creationMode\")"))
+        XCTAssertTrue(add.contains("accessibilityIdentifier(\"add.question.tooltip\")"))
+        XCTAssertTrue(add.contains("store.createFeedQuestion("))
+        XCTAssertTrue(feed.contains("accessibilityLabel: \"Create a Feed post\""))
+    }
+
     func testPrimaryTabsUseStaticNativeSymbolsAndSystemSelectionFeedback() throws {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")

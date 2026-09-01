@@ -121,6 +121,39 @@ enum AddSheetLayout {
     }
 }
 
+enum AddCreationMode: String, CaseIterable, Identifiable {
+    case place
+    case importPlaces = "import"
+    case question
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .place: "Add a place"
+        case .importPlaces: "Import"
+        case .question: "Ask a question"
+        }
+    }
+}
+
+enum AddQuestionTooltipPolicy {
+    static let storageKey = "add.questionModeTooltipDismissed"
+    static let copy = "New: Ask your circle where to go and get answers in Feed."
+
+    static func shouldShow(
+        isDismissed: Bool,
+        activeMode: AddCreationMode,
+        isSourceStep: Bool,
+        isWalkthroughActive: Bool
+    ) -> Bool {
+        !isDismissed
+            && activeMode == .place
+            && isSourceStep
+            && !isWalkthroughActive
+    }
+}
+
 enum AddSuggestedPlaces {
     static let maximumCount = 7
     static let walkthroughPartialResultCapacity = 3
@@ -162,7 +195,12 @@ struct AddScreen: View {
     let onLaunchRequestHandled: (UUID) -> Void
     let walkthroughParkSuggestion: @MainActor () async -> PlaceCandidate?
     let onClose: () -> Void
+    @AppStorage(AddQuestionTooltipPolicy.storageKey) private var isQuestionTooltipDismissed = false
     @State private var step: AddStep = .source
+    @State private var creationMode: AddCreationMode = .place
+    @State private var questionText = ""
+    @State private var questionMessage: String?
+    @State private var isPostingQuestion = false
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
     @State private var selectedSource: AddSourceType = .manual
@@ -193,6 +231,7 @@ struct AddScreen: View {
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
     @FocusState private var isQuickAddFocused: Bool
+    @FocusState private var isQuestionFocused: Bool
 
     init(
         importStore: PlaceImportStore,
@@ -302,10 +341,17 @@ struct AddScreen: View {
     private var addPlaceFlow: some View {
         NavigationStack {
             Group {
-                if showsPinnedImportEntry {
-                    compactSheetContent
-                } else {
-                    scrollableFlowContent
+                switch creationMode {
+                case .question:
+                    questionSheetContent
+                case .importPlaces:
+                    importSheetContent
+                case .place:
+                    if showsPinnedImportEntry {
+                        compactSheetContent
+                    } else {
+                        scrollableFlowContent
+                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)
@@ -327,6 +373,23 @@ struct AddScreen: View {
             }
             .onChange(of: resetToken) { _, _ in
                 reset()
+            }
+            .onChange(of: creationMode) { _, mode in
+                questionMessage = nil
+                switch mode {
+                case .question:
+                    isQuestionTooltipDismissed = true
+                    expandSheet()
+                    Task { @MainActor in
+                        await Task.yield()
+                        isQuestionFocused = true
+                    }
+                case .importPlaces:
+                    isQuestionFocused = false
+                    expandSheet()
+                case .place:
+                    isQuestionFocused = false
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -368,6 +431,7 @@ struct AddScreen: View {
             }
             .task(id: launchRequest?.id) {
                 guard let launchRequest else { return }
+                creationMode = .place
                 switch launchRequest.destination {
                 case .hereNow:
                     expandSheet()
@@ -472,22 +536,7 @@ struct AddScreen: View {
     }
 
     private var compactSheetContent: some View {
-        VStack(spacing: 0) {
-            compactSourceContent
-
-            AddImportEntrySection(
-                summary: importStore.summary,
-                action: {
-                    walkthroughs.perform(.addImport)
-                    openImportHub()
-                }
-            )
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing2)
-            .padding(.bottom, WanderTheme.spacing3)
-            .background(WanderTheme.canvasWarm.color)
-            .walkthroughTarget(.addImport)
-        }
+        compactSourceContent
     }
 
     private var compactSourceContent: some View {
@@ -509,6 +558,7 @@ struct AddScreen: View {
             } else {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     header
+                    creationModePicker
                     suggestedPlaces
 
                     if let resolutionMessage {
@@ -527,6 +577,10 @@ struct AddScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 header
+
+                if step == .source {
+                    creationModePicker
+                }
 
                 switch step {
                 case .source:
@@ -548,7 +602,7 @@ struct AddScreen: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-            if step.canGoBack {
+            if creationMode == .place, step.canGoBack {
                 Button(action: goBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .black))
@@ -560,10 +614,10 @@ struct AddScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isShowingHereNowResults ? "I'm here now" : "add a place")
+                Text(headerTitle)
                     .font(.system(size: 22, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
+                Text(headerSubtitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -584,7 +638,219 @@ struct AddScreen: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close add place")
+                .accessibilityLabel("Close \(creationMode.title.lowercased())")
+            }
+        }
+    }
+
+    private var headerTitle: String {
+        switch creationMode {
+        case .question:
+            "ask a question"
+        case .importPlaces:
+            "import places"
+        case .place:
+            isShowingHereNowResults ? "I'm here now" : "add a place"
+        }
+    }
+
+    private var headerSubtitle: String {
+        switch creationMode {
+        case .question:
+            "get a recommendation from people you trust"
+        case .importPlaces:
+            "bring your saved spots into rec.me"
+        case .place:
+            isShowingHereNowResults ? "choose the place you're at" : step.subtitle
+        }
+    }
+
+    private var creationModePicker: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            WanderSegmentedSwitch(
+                options: AddCreationMode.allCases.map {
+                    WanderSegmentOption(
+                        id: $0.rawValue,
+                        title: $0.title,
+                        accessibilityLabel: $0.title
+                    )
+                },
+                selection: Binding(
+                    get: { creationMode.rawValue },
+                    set: { creationMode = AddCreationMode(rawValue: $0) ?? .place }
+                )
+            )
+            .accessibilityIdentifier("add.creationMode")
+
+            if AddQuestionTooltipPolicy.shouldShow(
+                isDismissed: isQuestionTooltipDismissed,
+                activeMode: creationMode,
+                isSourceStep: step == .source,
+                isWalkthroughActive: isWalkthroughAddFlowActive
+            ) {
+                questionModeTooltip
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.snappy(duration: 0.25, extraBounce: 0), value: isQuestionTooltipDismissed)
+    }
+
+    private var questionModeTooltip: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+            Image(systemName: "questionmark.bubble.fill")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+
+            Text(AddQuestionTooltipPolicy.copy)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: WanderTheme.spacing1)
+
+            Button {
+                isQuestionTooltipDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss ask a question tip")
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, WanderTheme.spacing2)
+        .padding(.vertical, WanderTheme.spacing2)
+        .background(WanderTheme.terracotta.color.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.terracotta.color.opacity(0.32), lineWidth: 1)
+        }
+        .accessibilityIdentifier("add.question.tooltip")
+    }
+
+    private var importSheetContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+                creationModePicker
+
+                AddImportEntrySection(
+                    summary: importStore.summary,
+                    showsHeading: false,
+                    action: {
+                        walkthroughs.perform(.addImport)
+                        openImportHub()
+                    }
+                )
+                .walkthroughTarget(.addImport)
+            }
+            .padding(WanderTheme.spacing4)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var questionSheetContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+                creationModePicker
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("What are you looking for?")
+                        .font(WanderTypography.editorialCardTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text("Try “Where’s the best iced latte in West LA?”")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    TextField("Ask for a place recommendation…", text: $questionText, axis: .vertical)
+                        .font(.system(size: 17, weight: .medium))
+                        .lineLimit(4...8)
+                        .focused($isQuestionFocused)
+                        .textInputAutocapitalization(.sentences)
+                        .submitLabel(.send)
+                        .onSubmit(submitQuestion)
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                                .stroke(WanderTheme.borderStrong.color, lineWidth: 1)
+                        }
+                        .onChange(of: questionText) { _, value in
+                            if value.count > 280 {
+                                questionText = String(value.prefix(280))
+                            }
+                            questionMessage = nil
+                        }
+                        .accessibilityIdentifier("add.question.text")
+
+                    HStack {
+                        Text("People who can see your Feed can answer it.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+
+                        Spacer(minLength: WanderTheme.spacing2)
+
+                        Text("\(normalizedQuestion.count)/280")
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                }
+
+                if let questionMessage {
+                    InlineMessage(text: questionMessage)
+                }
+
+                WanderPrimaryButton(
+                    title: isPostingQuestion ? "asking…" : "ask your circle",
+                    systemImage: "questionmark.bubble.fill"
+                ) {
+                    submitQuestion()
+                }
+                .disabled(normalizedQuestion.isEmpty || isPostingQuestion)
+                .accessibilityIdentifier("add.question.submit")
+            }
+            .padding(WanderTheme.spacing4)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var normalizedQuestion: String {
+        questionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func submitQuestion() {
+        let question = normalizedQuestion
+        guard !question.isEmpty, question.count <= 280, !isPostingQuestion else { return }
+
+        do {
+            try CommunityContentPolicy.validate(question)
+        } catch {
+            questionMessage = error.localizedDescription
+            return
+        }
+
+        auth.requireSignIn(for: .socialActivity) {
+            isPostingQuestion = true
+            questionMessage = nil
+            Task {
+                let created = await store.createFeedQuestion(
+                    text: question,
+                    backend: auth.isSignedIn ? backend : nil
+                )
+                isPostingQuestion = false
+                if created != nil {
+                    questionText = ""
+                    onClose()
+                } else {
+                    questionMessage = "Your question couldn't post. Try again."
+                }
             }
         }
     }
@@ -1002,6 +1268,10 @@ struct AddScreen: View {
 
     private func reset() {
         step = .source
+        creationMode = .place
+        questionText = ""
+        questionMessage = nil
+        isPostingQuestion = false
         candidates = []
         selectedCandidateID = nil
         selectedSource = .manual
@@ -1030,6 +1300,7 @@ struct AddScreen: View {
 
     private func resetAfterSave() {
         step = .source
+        creationMode = .place
         candidates = []
         selectedCandidateID = nil
         selectedSource = .manual

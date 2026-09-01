@@ -6767,6 +6767,13 @@ final class WanderStoreTests: XCTestCase {
             sourceType: .manual
         )
         _ = await store.toggleActivityLike(activityID: "local-analytics-activity", backend: nil)
+        let question = await store.createFeedQuestion(
+            text: "Private question about a place",
+            backend: nil
+        )
+
+        XCTAssertEqual(question?.kind, .questionAsked)
+        XCTAssertEqual(store.followedFeedPage?.activity.first?.id, question?.id)
 
         let engagement = analytics.events.filter {
             $0.name == WanderAnalyticsEvents.engagementActionPerformed
@@ -6779,6 +6786,7 @@ final class WanderStoreTests: XCTestCase {
         })
         XCTAssertTrue(needAndAction.contains("connect:follow_created"))
         XCTAssertTrue(needAndAction.contains("connect:activity_liked"))
+        XCTAssertTrue(needAndAction.contains("connect:question_asked"))
         XCTAssertTrue(needAndAction.contains("expression:list_created"))
         XCTAssertTrue(needAndAction.contains("expression:place_saved"))
 
@@ -6787,6 +6795,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(serializedProperties.contains("Private list description"))
         XCTAssertFalse(serializedProperties.contains("Private place name"))
         XCTAssertFalse(serializedProperties.contains("Private note"))
+        XCTAssertFalse(serializedProperties.contains("Private question about a place"))
         XCTAssertFalse(serializedProperties.contains("34.05"))
         XCTAssertFalse(serializedProperties.contains("-118.24"))
     }

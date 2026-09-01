@@ -46,6 +46,34 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(FeedActivityKind.listCreated.ticketKind, .list)
         XCTAssertEqual(FeedActivityKind.listItemAdded.ticketKind, .list)
         XCTAssertEqual(FeedActivityKind.placeSaved.ticketKind, .saved)
+        XCTAssertEqual(FeedActivityKind.questionAsked.ticketKind, .question)
+    }
+
+    func testQuestionActivityNormalizesItsTextAndNeverRetainsPlaceRating() {
+        let activity = FeedActivity(
+            id: "question",
+            kind: .questionAsked,
+            actor: actor,
+            questionText: "  Where is the best iced latte in West LA?  ",
+            occurredAt: .now,
+            rating: 5
+        )
+
+        XCTAssertEqual(activity.questionText, "Where is the best iced latte in West LA?")
+        XCTAssertNil(activity.rating)
+        XCTAssertEqual(activity.resolvedTicketKind, .question)
+    }
+
+    func testNonQuestionActivityDropsQuestionText() {
+        let activity = FeedActivity(
+            id: "place",
+            kind: .placeSaved,
+            actor: actor,
+            questionText: "This must not leak into a place ticket",
+            occurredAt: .now
+        )
+
+        XCTAssertNil(activity.questionText)
     }
 
     func testLegacySocialSaveUsesTheResultingPlaceStatusForItsTicket() {

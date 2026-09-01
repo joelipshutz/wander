@@ -17,21 +17,33 @@ struct ActivityEngagementActionRow: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            likeButton
+            if context.ticketKind == .question {
+                if showsCommentButton {
+                    answerButton
+                }
 
-            if showsCommentButton {
-                commentButton
+                if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
+                    reportMenu
+                }
+
+                Spacer(minLength: WanderTheme.spacing3)
+            } else {
+                likeButton
+
+                if showsCommentButton {
+                    commentButton
+                }
+
+                shareButton
+
+                if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
+                    reportMenu
+                }
+
+                Spacer(minLength: WanderTheme.spacing3)
+
+                bookmarkButton
             }
-
-            shareButton
-
-            if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
-                reportMenu
-            }
-
-            Spacer(minLength: WanderTheme.spacing3)
-
-            bookmarkButton
         }
         .frame(minHeight: 44)
         .sheet(item: $wannaSaveContext, onDismiss: {
@@ -133,6 +145,42 @@ struct ActivityEngagementActionRow: View {
         .accessibilityValue("\(engagement.commentCount) comments")
     }
 
+    private var answerButton: some View {
+        Button {
+            auth.requireSignIn(for: .socialActivity) {
+                activityNavigation.openComments(
+                    context: context,
+                    visiblePlace: nil
+                )
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 20, weight: .semibold))
+
+                Text(answerCountLabel)
+                    .font(.system(size: 14, weight: .black))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(WanderTheme.terracottaDark.color)
+            .frame(minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEngagementEnabled)
+        .opacity(isEngagementEnabled ? 1 : 0.45)
+        .accessibilityLabel("Answer question")
+        .accessibilityValue("\(engagement.commentCount) answers")
+    }
+
+    private var answerCountLabel: String {
+        switch engagement.commentCount {
+        case 0: "Answer"
+        case 1: "1 answer"
+        default: "\(engagement.commentCount) answers"
+        }
+    }
+
     private var reportMenu: some View {
         Menu {
             Button {
@@ -163,7 +211,9 @@ struct ActivityEngagementActionRow: View {
             kind: .activity,
             subjectID: context.activityID,
             reportedUserID: context.actor.id,
-            context: "Report \(context.actor.displayName)’s activity at \(context.placeName)."
+            context: context.ticketKind == .question
+                ? "Report \(context.actor.displayName)’s question."
+                : "Report \(context.actor.displayName)’s activity at \(context.placeName)."
         )
     }
 
@@ -290,6 +340,24 @@ struct ActivityPostcardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if context.ticketKind == .question {
+                questionContent
+            } else {
+                placeOrListContent
+            }
+        }
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(postcardAccessibilityIdentifier)
+    }
+
+    private var placeOrListContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
             artworkDestination
                 .overlay(alignment: .topLeading) {
                     ticketBadge
@@ -318,29 +386,59 @@ struct ActivityPostcardView: View {
                         .accessibilityLabel("Note: \(note)")
                 }
 
-                if showsEngagementActions {
-                    Divider()
-                        .overlay(WanderTheme.borderHairline.color)
-
-                    ActivityEngagementActionRow(
-                        context: context,
-                        visiblePlace: visiblePlace,
-                        showsCommentButton: showsCommentButton,
-                        onSharePreviewPresentation: onSharePreviewPresentation
-                    )
-                }
+                engagementActions
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, ActivityPostcardLayout.contentVerticalPadding)
         }
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+    }
+
+    private var questionContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack {
+                ticketBadge
+                Spacer(minLength: 0)
+            }
+
+            actorAttribution
+
+            Text(context.placeName)
+                .font(WanderTypography.editorialTitle)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Question: \(context.placeName)")
+
+            if showsEngagementActions, showsCommentButton {
+                Text("Share a place you’d recommend and why it fits.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                engagementActions
+            }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(postcardAccessibilityIdentifier)
+        .padding(WanderTheme.spacing4)
+        .background(
+            LinearGradient(
+                colors: [WanderTheme.sunTint.color.opacity(0.65), WanderTheme.surfaceBone.color],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+    }
+
+    @ViewBuilder
+    private var engagementActions: some View {
+        if showsEngagementActions {
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+
+            ActivityEngagementActionRow(
+                context: context,
+                visiblePlace: visiblePlace,
+                showsCommentButton: showsCommentButton,
+                onSharePreviewPresentation: onSharePreviewPresentation
+            )
+        }
     }
 
     @ViewBuilder
@@ -393,6 +491,7 @@ struct ActivityPostcardView: View {
         case .wanna: "plus"
         case .list: "list.bullet"
         case .saved: "mappin"
+        case .question: "questionmark.bubble.fill"
         }
     }
 
@@ -528,7 +627,7 @@ struct ActivityPostcardView: View {
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
 
-                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · someone you follow")
+                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · \(actorRelationshipText)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
@@ -542,7 +641,11 @@ struct ActivityPostcardView: View {
 
     private var actorAccessibilityLabel: String {
         "\(context.actor.displayName) \(context.attributionAction), "
-            + "\(FeedPresentation.timestampText(for: context.occurredAt)), someone you follow"
+            + "\(FeedPresentation.timestampText(for: context.occurredAt)), \(actorRelationshipText)"
+    }
+
+    private var actorRelationshipText: String {
+        context.actor.relationship == .owner ? "you" : "someone you follow"
     }
 }
 
@@ -644,7 +747,7 @@ struct ActivityCommentsScreen: View {
                     .listRowBackground(Color.clear)
 
                 if isLoading, comments.isEmpty {
-                    ProgressView("Loading comments…")
+                    ProgressView(context.ticketKind == .question ? "Loading answers…" : "Loading comments…")
                         .tint(WanderTheme.terracotta.color)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .frame(maxWidth: .infinity, minHeight: 140)
@@ -697,7 +800,9 @@ struct ActivityCommentsScreen: View {
                 activityID: context.activityID,
                 backend: auth.isSignedIn ? backend : nil
             )
-            commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
+            commentError = didRefresh
+                ? nil
+                : "\(context.ticketKind == .question ? "Answers" : "Comments") couldn't refresh. Try again."
             isLoading = false
         }
         .fullScreenCover(item: $photoViewerRoute) { route in
@@ -791,6 +896,7 @@ struct ActivityCommentsScreen: View {
         return switch context.ticketKind {
         case .list: "list.bullet"
         case .saved, .checkIn, .wanna: "mappin"
+        case .question: "questionmark.bubble.fill"
         }
     }
 
@@ -847,10 +953,14 @@ struct ActivityCommentsScreen: View {
             Image(systemName: "bubble.right")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(WanderTheme.terracotta.color)
-            Text("Start the conversation")
+            Text(context.ticketKind == .question ? "Be the first to answer" : "Start the conversation")
                 .font(WanderTypography.editorialCardTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
-            Text("Share what makes this place worth remembering.")
+            Text(
+                context.ticketKind == .question
+                    ? "Recommend a place and add the detail that makes it a fit."
+                    : "Share what makes this place worth remembering."
+            )
                 .font(.system(size: 14, weight: .medium))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(WanderTheme.textMuted.color)
@@ -871,7 +981,11 @@ struct ActivityCommentsScreen: View {
                     color: WanderTheme.terracottaTint.color
                 )
 
-                TextField("Add a comment…", text: $draft, axis: .vertical)
+                TextField(
+                    context.ticketKind == .question ? "Write an answer…" : "Add a comment…",
+                    text: $draft,
+                    axis: .vertical
+                )
                     .font(.system(size: 16))
                     .lineLimit(1...4)
                     .focused($composerFocused)
@@ -886,7 +1000,7 @@ struct ActivityCommentsScreen: View {
                             .stroke(WanderTheme.borderStrong.color, lineWidth: 1)
                     )
 
-                Button("Post", action: post)
+                Button(context.ticketKind == .question ? "Answer" : "Post", action: post)
                     .font(.system(size: 15, weight: .black))
                     .foregroundStyle(WanderTheme.terracottaDark.color)
                     .frame(minWidth: 52, minHeight: 44)
@@ -922,7 +1036,9 @@ struct ActivityCommentsScreen: View {
             )
             if !didPost {
                 if draft.isEmpty { draft = body }
-                commentError = "Your comment couldn't post. Try again."
+                commentError = context.ticketKind == .question
+                    ? "Your answer couldn't post. Try again."
+                    : "Your comment couldn't post. Try again."
             }
             isPosting = false
             composerFocused = true
@@ -937,7 +1053,9 @@ struct ActivityCommentsScreen: View {
                 backend: auth.isSignedIn ? backend : nil
             )
             if !didDelete {
-                commentError = "Your comment couldn't be deleted. Try again."
+                commentError = context.ticketKind == .question
+                    ? "Your answer couldn't be deleted. Try again."
+                    : "Your comment couldn't be deleted. Try again."
             }
         }
     }
@@ -1129,7 +1247,7 @@ struct ActivityCommentsRouteScreen: View {
                 resolutionState
             }
         }
-        .navigationTitle("comments")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .tint(WanderTheme.textInk.color)
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
@@ -1150,6 +1268,10 @@ struct ActivityCommentsRouteScreen: View {
     private var currentRoute: ActivityCommentsRoute? {
         guard let route = activityNavigation.commentsRoute, route.id == requestID else { return nil }
         return route
+    }
+
+    private var navigationTitle: String {
+        currentRoute?.context?.ticketKind == .question ? "answers" : "comments"
     }
 
     private var resolutionError: String? {

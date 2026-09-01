@@ -619,7 +619,7 @@ final class ActivityEngagementTests: XCTestCase {
             ),
         ]
 
-        for ticketKind in [FeedTicketKind.checkIn, .wanna, .list] {
+        for ticketKind in [FeedTicketKind.checkIn, .wanna, .list, .question] {
             let context = ActivityEngagementContext(
                 activityID: "activity-\(ticketKind)",
                 actor: actor,
@@ -640,6 +640,30 @@ final class ActivityEngagementTests: XCTestCase {
             XCTAssertEqual(coordinator.commentsRoute?.context?.note, "Found god.")
             XCTAssertEqual(coordinator.commentsRoute?.context?.media, media)
         }
+    }
+
+    func testQuestionContextUsesQuestionSpecificTicketCopy() {
+        let context = ActivityEngagementContext(
+            activityID: "question-395",
+            actor: ProfileShell(
+                id: "user_joe",
+                handle: "joelipshutz",
+                displayName: "Joe",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .owner
+            ),
+            placeName: "Where is the best iced latte in West LA?",
+            placeServerID: nil,
+            placeDetail: "Asked your circle",
+            ticketKind: .question,
+            occurredAt: .now
+        )
+
+        XCTAssertEqual(context.ticketEyebrow, "QUESTION")
+        XCTAssertEqual(context.attributionAction, "asked")
+        XCTAssertEqual(context.actionTitle, "asked")
+        XCTAssertTrue(context.shareMessage.contains("best iced latte"))
     }
 
     func testCommentsContextCollapsesMissingNoteAndPhotos() {

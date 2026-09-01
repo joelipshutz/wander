@@ -1625,6 +1625,53 @@ final class WanderStore: ObservableObject {
         activityEngagementByID[activityID] ?? .empty(activityID: activityID)
     }
 
+    @discardableResult
+    func createFeedQuestion(text: String, backend: WanderBackend?) async -> FeedActivity? {
+        let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedText.isEmpty, normalizedText.count <= 280 else { return nil }
+
+        do {
+            try CommunityContentPolicy.validate(normalizedText)
+            let activity: FeedActivity
+            if let repository = backend?.feedRepository {
+                activity = try await repository.createQuestion(text: normalizedText)
+            } else {
+                activity = FeedActivity(
+                    id: UUID().uuidString.lowercased(),
+                    kind: .questionAsked,
+                    actor: shell(for: currentUser),
+                    questionText: normalizedText,
+                    occurredAt: .now
+                )
+            }
+
+            let currentPage = followedFeedPage
+            followedFeedPage = FollowedFeedPage(
+                activity: FeedPresentation.newestFirst(
+                    [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
+                ),
+                featuredPlaces: currentPage?.featuredPlaces ?? [],
+                nextCursor: currentPage?.nextCursor,
+                fetchedAt: .now
+            )
+            feedLoadState = .loaded
+            lastFeedRefreshAt = .now
+            lastRemoteError = nil
+            activityEngagementByID[activity.id] = .empty(activityID: activity.id)
+            trackFeedQuestionCreated(outcome: backend?.feedRepository == nil ? "local_only" : "succeeded")
+            return activity
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.feedQuestionCreated,
+                    properties: ["outcome": "failed"]
+                )
+            )
+            return nil
+        }
+    }
+
     @MainActor
     func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
         let existing = followedFeedPage?.activity.first(where: { $0.id == activityID })
@@ -1923,6 +1970,23 @@ final class WanderStore: ObservableObject {
                 need: .connect,
                 action: .activityCommented,
                 surface: "activity",
+                properties: ["outcome": outcome]
+            )
+        )
+    }
+
+    private func trackFeedQuestionCreated(outcome: String) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.feedQuestionCreated,
+                properties: ["outcome": outcome]
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .questionAsked,
+                surface: "feed",
                 properties: ["outcome": outcome]
             )
         )

@@ -213,7 +213,7 @@ struct FeedScreen: View {
 
                 WanderGlassActionButton(
                     systemImage: "plus",
-                    accessibilityLabel: "Add a place",
+                    accessibilityLabel: "Create a Feed post",
                     accessibilityIdentifier: "feed.headerAdd",
                     action: onAdd
                 )
@@ -1478,6 +1478,7 @@ private struct FeedActivityModule: View {
 
     private var metadataIcon: String {
         if let place = activity.place { return categorySymbol(for: place.effectiveCategory) }
+        if activity.kind == .questionAsked { return "questionmark.bubble.fill" }
         return "list.bullet"
     }
 
@@ -1506,7 +1507,11 @@ private extension FeedActivity {
         let subjectServerID: String?
         let detail: String
 
-        if let place {
+        if let questionText, kind == .questionAsked {
+            subjectName = questionText
+            subjectServerID = nil
+            detail = "Asked your circle"
+        } else if let place {
             subjectName = place.place.canonicalName
             subjectServerID = place.place.serverID ?? place.place.id
             detail = placeDetail(for: place)
