@@ -7,6 +7,7 @@ import ClerkKitUI
 #endif
 
 struct AuthGateSheet: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var auth: AuthSessionStore
     let request: AuthGateRequest
 
@@ -14,28 +15,28 @@ struct AuthGateSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 58, height: 58)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(request.copy.title)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(AstirTypography.sheetTitle)
                 Text(request.copy.message)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if case .unavailable(let message) = auth.state {
                 Text(message)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .padding(WanderTheme.spacing3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .background(brandMode.accentWash)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
             }
 
             VStack(spacing: WanderTheme.spacing2) {
@@ -47,15 +48,16 @@ struct AuthGateSheet: View {
                     Button(secondaryAction) {
                         auth.dismissGate()
                     }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
             }
         }
         .padding(WanderTheme.spacing4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .foregroundStyle(brandMode.primaryText)
+        .background(brandMode.background.ignoresSafeArea())
     }
 }
 
@@ -72,20 +74,25 @@ struct ClerkNativeAuthView: View {
 }
 
 struct ClerkAccountManagementView: View {
+    @Environment(\.astirBrandMode) private var brandMode
+
     var body: some View {
         #if canImport(ClerkKitUI) && canImport(ClerkKit)
         UserProfileView()
             .environment(Clerk.shared)
+            .tint(brandMode.accent)
+            .foregroundStyle(brandMode.primaryText)
+            .background(brandMode.background.ignoresSafeArea())
         #else
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.system(size: 30, weight: .bold))
             Text("Account management is not linked in this build.")
-                .font(.system(size: 18, weight: .black))
+                .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
         }
         .padding(WanderTheme.spacing4)
-        .wanderScreen()
+        .astirScreen()
         #endif
     }
 }

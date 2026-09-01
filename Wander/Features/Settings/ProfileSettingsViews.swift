@@ -20,6 +20,7 @@ struct ProfileSettingsHome: View {
     let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -50,13 +51,14 @@ struct ProfileSettingsHome: View {
                 settingsList
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+            .foregroundStyle(brandMode.primaryText)
+            .background(brandMode.background.ignoresSafeArea())
             .offset(x: settingsDragOffset)
             .contentShape(Rectangle())
             .simultaneousGesture(interactiveDismissGesture(containerWidth: geometry.size.width))
             .accessibilityIdentifier("settings.screen")
         }
-        .tint(WanderTheme.terracotta.color)
+        .tint(brandMode.accent)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showsAccountManagement) {
             ClerkAccountManagementView()
@@ -95,16 +97,16 @@ struct ProfileSettingsHome: View {
             Button(action: closeSettings) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceBone.color, in: Circle())
+                    .background(brandMode.raisedBackground, in: Circle())
             }
             .accessibilityLabel("Back")
             .accessibilityIdentifier("settings.back")
 
             Text("Settings")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.screenTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
 
             Spacer()
@@ -112,7 +114,7 @@ struct ProfileSettingsHome: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
         .padding(.bottom, WanderTheme.spacing3)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
     }
 
     private var settingsList: some View {
@@ -128,16 +130,17 @@ struct ProfileSettingsHome: View {
             if let errorMessage {
                 Section {
                     Text(errorMessage)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AstirTypography.label)
                         .foregroundStyle(WanderTheme.stateError.color)
                 }
+                .listRowBackground(brandMode.raisedBackground)
             }
 
             accountActionsSection
             resourcesSection
         }
         .scrollContentBackground(.hidden)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
     }
 
     private func interactiveDismissGesture(containerWidth: CGFloat) -> some Gesture {
@@ -184,8 +187,8 @@ struct ProfileSettingsHome: View {
             case .offline(let session, _):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
                 Label("Saved map available offline", systemImage: "wifi.slash")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
             case .signedOut:
                 Button("Sign in") { auth.beginSignIn() }
             case .loading:
@@ -194,6 +197,7 @@ struct ProfileSettingsHome: View {
                 Text(message).foregroundStyle(WanderTheme.stateError.color)
             }
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     private var privacySection: some View {
@@ -216,6 +220,7 @@ struct ProfileSettingsHome: View {
                 destination: RecmeSettingsWebDestination.privacyChoices
             )
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     private var mapSection: some View {
@@ -227,10 +232,11 @@ struct ProfileSettingsHome: View {
                     Label("Default map filter", systemImage: "map")
                     Spacer()
                     Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
-            .tint(WanderTheme.terracotta.color)
+            .tint(brandMode.accent)
             .accessibilityIdentifier("settings.map.defaultFilter")
 
             Toggle(
@@ -241,12 +247,13 @@ struct ProfileSettingsHome: View {
             ) {
                 Label("Dark map", systemImage: "moon.stars")
             }
-            .tint(WanderTheme.terracotta.color)
+            .tint(brandMode.accent)
             .accessibilityHint("Uses a dark map and matching controls on the Map tab")
             .accessibilityIdentifier("settings.map.darkMode")
         } header: {
             Text("Map")
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     private var notificationsSection: some View {
@@ -258,14 +265,16 @@ struct ProfileSettingsHome: View {
                     Label("Notifications", systemImage: "bell")
                     Spacer()
                     Text(pushNotifications.statusTitle)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
-            .foregroundStyle(WanderTheme.textInk.color)
+            .foregroundStyle(brandMode.primaryText)
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     @ViewBuilder
@@ -300,6 +309,7 @@ struct ProfileSettingsHome: View {
             .disabled(isDeleting || !auth.isSignedIn)
             .accessibilityIdentifier("settings.account.delete")
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     private var resourcesSection: some View {
@@ -311,6 +321,7 @@ struct ProfileSettingsHome: View {
             }
             .accessibilityIdentifier("settings.resources")
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     // Every Simulator build exposes this local tester surface. Physical devices
@@ -329,8 +340,8 @@ struct ProfileSettingsHome: View {
     private var featureFlagsSection: some View {
         Section {
             Text("Device overrides are saved for this account on this device. Active behavior changes only after you fully quit and reopen rec.me.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
 
             ForEach(FeatureFlagKey.allCases, id: \.self) { key in
                 featureFlagControl(for: key)
@@ -345,13 +356,14 @@ struct ProfileSettingsHome: View {
 
             if hasPendingFeatureFlagRestart {
                 Label("Restart rec.me to apply these changes", systemImage: "arrow.clockwise")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                     .accessibilityIdentifier("settings.flags.restartRequired")
             }
         } header: {
             Text("Feature flags")
         }
+        .listRowBackground(brandMode.raisedBackground)
     }
 
     @ViewBuilder
@@ -360,18 +372,18 @@ struct ProfileSettingsHome: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .firstTextBaseline) {
                 Text(definition.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(AstirTypography.cardTitle)
                 Spacer()
                 if !definition.isEditableOnDevice {
                     Text(activeFeatureFlagStatus(for: key))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
 
             Text(definition.summary)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
 
             if definition.isEditableOnDevice {
                 switch definition.valueKind {
@@ -389,7 +401,7 @@ struct ProfileSettingsHome: View {
 
             Text(featureFlagProvenance(for: key))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .padding(.vertical, WanderTheme.spacing1)
         .accessibilityIdentifier("settings.flags.\(key.rawValue)")
@@ -402,16 +414,16 @@ struct ProfileSettingsHome: View {
     ) -> some View {
         if let range = definition.integerRange {
             Toggle("Override on this device", isOn: integerOverrideEnabledBinding(for: key))
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             if deviceFeatureFlagOverrides[key]?.integerValue != nil {
                 Stepper(value: integerOverrideBinding(for: key, range: range), in: range) {
                     Text("Value: \(integerOverrideBinding(for: key, range: range).wrappedValue)")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AstirTypography.label)
                 }
             }
         } else {
             Text("Invalid integer flag configuration")
-                .font(.system(size: 12, weight: .medium))
+                .font(AstirTypography.caption)
                 .foregroundStyle(WanderTheme.stateError.color)
         }
     }
@@ -578,6 +590,7 @@ struct ProfileSettingsHome: View {
 }
 
 private struct DefaultMapFilterSettingsScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
 
     var body: some View {
@@ -590,17 +603,17 @@ private struct DefaultMapFilterSettingsScreen: View {
                         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                             Image(systemName: source.systemImage)
                                 .font(.system(.body, design: .default, weight: .bold))
-                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .foregroundStyle(brandMode.accent)
                                 .frame(width: 24)
 
                             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                                 Text(source.title)
-                                    .font(.system(.body, design: .default, weight: .bold))
-                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .font(AstirTypography.cardTitle)
+                                    .foregroundStyle(brandMode.primaryText)
 
                                 Text(source.subtitle)
-                                    .font(.system(.subheadline, design: .default, weight: .medium))
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .font(AstirTypography.bodySmall)
+                                    .foregroundStyle(brandMode.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
 
@@ -609,7 +622,7 @@ private struct DefaultMapFilterSettingsScreen: View {
                             if store.defaultMapFilter == source {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 15, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .foregroundStyle(brandMode.accent)
                                     .accessibilityHidden(true)
                             }
                         }
@@ -624,9 +637,11 @@ private struct DefaultMapFilterSettingsScreen: View {
             } footer: {
                 Text("Used whenever the map opens or resets on this device.")
             }
+            .listRowBackground(brandMode.raisedBackground)
         }
         .scrollContentBackground(.hidden)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
+        .tint(brandMode.accent)
         .navigationTitle("Default map filter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -634,6 +649,7 @@ private struct DefaultMapFilterSettingsScreen: View {
 }
 
 private struct SettingsResourcesScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     var body: some View {
         List {
             SettingsExternalLink(
@@ -663,7 +679,8 @@ private struct SettingsResourcesScreen: View {
             )
         }
         .scrollContentBackground(.hidden)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
+        .tint(brandMode.accent)
         .navigationTitle("Resources")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -679,6 +696,7 @@ private enum RecmeSettingsWebDestination {
 }
 
 private struct SettingsExternalLink: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let icon: String
     let destination: URL
@@ -687,17 +705,19 @@ private struct SettingsExternalLink: View {
         Link(destination: destination) {
             HStack {
                 Label(title, systemImage: icon)
+                    .font(AstirTypography.control)
                 Spacer()
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
-        .foregroundStyle(WanderTheme.textInk.color)
+        .foregroundStyle(brandMode.primaryText)
     }
 }
 
 private struct ProfileSettingsIdentityRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let session: AuthSession
     let avatarURL: String?
 
@@ -711,18 +731,19 @@ private struct ProfileSettingsIdentityRow: View {
             )
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(session.displayName ?? "Your account")
-                    .font(.system(.headline, design: .default, weight: .bold))
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 if let emailAddress = SettingsAccountIdentityPresentation.emailAddress(for: session) {
                     Text(emailAddress)
-                        .font(.system(.subheadline, design: .default, weight: .regular))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 if let phoneNumber = SettingsAccountIdentityPresentation.phoneNumber(for: session) {
                     Text(phoneNumber)
-                        .font(.system(.subheadline, design: .default, weight: .regular))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -734,6 +755,7 @@ private struct ProfileSettingsIdentityRow: View {
 }
 
 private struct ProfileSettingsAccountActions: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let session: AuthSession
     let onSelect: () -> Void
 
@@ -769,19 +791,19 @@ private struct ProfileSettingsAccountActions: View {
             VStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: icon)
                     .font(.system(.title3, design: .default, weight: .semibold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(height: 24)
 
                 Text(title)
-                    .font(.system(.caption, design: .default, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.primaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let value {
                     Text(value)
-                        .font(.system(.caption2, design: .default, weight: .regular))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -798,7 +820,7 @@ private struct ProfileSettingsAccountActions: View {
 
     private var actionDivider: some View {
         Divider()
-            .overlay(Color.gray.opacity(0.22))
+            .overlay(brandMode.border)
             .padding(.vertical, WanderTheme.spacing3)
     }
 }
@@ -832,6 +854,7 @@ struct SettingsAccountIdentityPresentation {
 }
 
 struct ProfilePrivacyTrustScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var pendingPrivateProfileValue: Bool?
@@ -844,13 +867,14 @@ struct ProfilePrivacyTrustScreen: View {
                 Toggle(isOn: privateProfileBinding) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(SettingsProfilePrivacySurface.title)
-                            .font(.system(size: 15, weight: .black))
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(SettingsProfilePrivacySurface.body(isEnabled: store.isPrivateProfile))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                 }
-                .tint(WanderTheme.textInk.color)
+                .tint(brandMode.accent)
 
                 PlaceVisibilityStealthToggle(
                     title: SettingsDefaultPlacePrivacySurface.toggleTitle,
@@ -872,35 +896,41 @@ struct ProfilePrivacyTrustScreen: View {
                 )
                 .disabled(store.isPrivateProfile)
             }
+            .listRowBackground(brandMode.raisedBackground)
 
             Section("How privacy works") {
                 ForEach(SettingsTrustSurface.facts) { fact in
                     HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                         Image(systemName: fact.icon)
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(brandMode.accent)
                             .frame(width: 28)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(fact.title).font(.system(size: 15, weight: .black))
+                            Text(fact.title)
+                                .font(AstirTypography.cardTitle)
+                                .foregroundStyle(brandMode.primaryText)
                             Text(fact.body)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.bodySmall)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                     }
                     .padding(.vertical, WanderTheme.spacing1)
                 }
             }
+            .listRowBackground(brandMode.raisedBackground)
 
 
             if let errorMessage {
                 Section {
                     Text(errorMessage)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AstirTypography.label)
                         .foregroundStyle(WanderTheme.stateError.color)
                 }
+                .listRowBackground(brandMode.raisedBackground)
             }
         }
         .scrollContentBackground(.hidden)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
+        .tint(brandMode.accent)
         .navigationTitle("Privacy and trust")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -962,6 +992,7 @@ enum ProfileRelationshipFilter: String, CaseIterable, Identifiable {
 }
 
 struct BlockedMutedScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -990,10 +1021,12 @@ struct BlockedMutedScreen: View {
                             color: WanderTheme.avatarRyan.color
                         )
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.displayName).font(.system(size: 15, weight: .black))
+                            Text(profile.displayName)
+                                .font(AstirTypography.cardTitle)
+                                .foregroundStyle(brandMode.primaryText)
                             Text("@\(profile.handle)")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.bodySmall)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                         Spacer()
                         Button(selectedTab == .blocked ? "Unblock" : "Unmute") {
@@ -1007,16 +1040,18 @@ struct BlockedMutedScreen: View {
                                 }
                             }
                         }
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
                     }
                     .padding(.vertical, WanderTheme.spacing1)
+                    .listRowBackground(brandMode.raisedBackground)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
         }
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
+        .tint(brandMode.accent)
         .navigationTitle("Blocked and muted")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
@@ -1028,6 +1063,7 @@ struct BlockedMutedScreen: View {
 }
 
 private struct BlockedMutedEmptyState: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let tab: ProfileRelationshipFilter
 
     var body: some View {
@@ -1036,11 +1072,12 @@ private struct BlockedMutedEmptyState: View {
                 .font(.system(size: 72, weight: .regular))
                 .foregroundStyle(WanderTheme.categoryMoss.color)
             Text(tab == .blocked ? "You haven't blocked anyone" : "You haven't muted anyone")
-                .font(.system(size: 28, weight: .black, design: .rounded))
+                .font(AstirTypography.sheetTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
             Text(message)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -1,6 +1,7 @@
 # REC-383 Astir brand shell
 
-Status: first production visual tranche, with a retained debug comparison shell
+Status: adaptive Astir visual system applied across production app surfaces,
+with a retained debug comparison shell
 
 ## Purpose
 
@@ -42,12 +43,13 @@ adopting any board as a source of truth:
 | Role | Value | Use |
 |---|---|---|
 | Paper | `#F2E9DB` | Light Mode canvas and memory surfaces |
-| Raised paper | `#FFF9EF` | Light Mode cards and notes |
+| Raised paper | `#FBF6ED` | Light Mode cards and notes |
 | Ink | `#141714` | Dark Mode canvas and high-contrast controls |
-| Deep ocean | `#0E3033` | Place and list accents |
 | Signal | `#F05A3C` | Astir actions, selections, and editorial emphasis |
-| Pool | `#3D6A78` | Places, people, and coastal context |
-| Cinema brass | `#C7A45D` | Explicit exploration override only |
+
+The earlier movie-theater-gold exploration remains available in exported design
+references only. It is not a runtime mode, token, launch override, or product
+code path.
 
 ### Typography
 
@@ -72,7 +74,7 @@ adopting any board as a source of truth:
 
 - The editorial serif and wide-tracked wordmark introduce more personality than
   the current utility shell, while compact sans-serif controls preserve clarity.
-- Warm paper, clay, ocean, and gold deliberately reject both generic travel blue
+- Warm paper, clay, ocean, and signal coral deliberately reject both generic travel blue
   and an all-beige lifestyle app.
 - Feed and profile are treated as records of trusted place behavior rather than
   content-creator surfaces.
@@ -89,15 +91,15 @@ adopting any board as a source of truth:
 5. Shared check-in and activity surfaces — initial palette and component bridge.
 
 The production palette follows system appearance automatically: warm paper in
-Light Mode and ink-black in Dark Mode. Cinema/brass remains available only via
-the explicit `-AstirBrandMode cinemaGold` exploration override.
+Light Mode and ink-black in Dark Mode. Those adaptive editorial variants are
+the only live Astir modes; launch arguments do not select a separate palette.
 
-## Remaining consistency pass
+## Consistency pass
 
-Add, Profile, Settings, and nested check-in/save editors still contain legacy
-typography, terracotta references, or fixed warm-paper surfaces. The next tranche
-will migrate those screens to shared semantic Astir typography, the signal coral,
-and adaptive Light/Dark surfaces without changing copy, order, or functionality.
+Add, Profile, Settings, Lists, shared visits, import, search, and nested
+check-in/save editors use the shared semantic Astir typography, signal coral,
+and adaptive Light/Dark surfaces. Copy, order, identifiers, navigation, analytics,
+and functionality remain unchanged.
 
 ## Debug comparison pages
 

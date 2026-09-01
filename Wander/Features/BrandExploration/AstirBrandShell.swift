@@ -160,7 +160,7 @@ private struct AstirMapView: View {
                     "Heavy Handed",
                     coordinate: CLLocationCoordinate2D(latitude: 34.0105, longitude: -118.4934)
                 ) {
-                    AstirMapPin(symbol: "takeoutbag.and.cup.and.straw.fill", color: AstirPalette.gold)
+                    AstirMapPin(symbol: "takeoutbag.and.cup.and.straw.fill", color: AstirPalette.signal)
                 }
 
                 Annotation(
@@ -334,7 +334,7 @@ private struct AstirFeedView: View {
                     actor: "Alex",
                     action: "checked in",
                     initials: "AR",
-                    avatarColor: AstirPalette.gold,
+                    avatarColor: AstirPalette.signal,
                     place: "Gjusta",
                     metadata: "BAKERY · VENICE",
                     note: "The patio is calm before nine. Coffee, sesame croissant, no notes."
@@ -353,7 +353,7 @@ private struct AstirPeopleRow: View {
     private let people: [(String, String, Color)] = [
         ("Maya", "MC", AstirPalette.clay),
         ("Jonah", "JL", AstirPalette.pool),
-        ("Alex", "AR", AstirPalette.gold),
+        ("Alex", "AR", AstirPalette.signal),
         ("Tessa", "TS", AstirPalette.deepOcean),
     ]
 
@@ -825,7 +825,7 @@ private struct AstirAddView: View {
                         symbol: "photo",
                         title: "Add from a photo",
                         detail: "Use a screenshot or camera roll",
-                        color: AstirPalette.gold
+                        color: AstirPalette.signal
                     )
                 }
 
@@ -1145,11 +1145,10 @@ private enum AstirPalette {
     static let clay = Color(astirHex: 0xC65A3C)
     static let signal = Color(astirHex: 0xF05A3C)
     static let pool = Color(astirHex: 0x3D6A78)
-    static let gold = Color(astirHex: 0xC99B3E)
     static let inkMuted = Color(astirHex: 0x6F675D)
     static let line = Color(astirHex: 0xD8CCBD)
     static let lineStrong = Color(astirHex: 0xA99B8C)
-    static let avatarColors = [clay, pool, gold, deepOcean]
+    static let avatarColors = [clay, pool, signal, deepOcean]
 }
 
 private enum AstirType {

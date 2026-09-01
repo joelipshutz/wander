@@ -1,6 +1,6 @@
 # Design System - rec.me
 
-Status: Draft
+Status: Active, with a provisional Astir visual override
 Created: 2026-06-01
 Skill: design-consultation
 
@@ -17,6 +17,34 @@ This is the project-level design source of truth for rec.me. Read it before maki
 - Original mock PDF: `docs/source/wander-mocks.pdf`
 - Original rendered mocks: `docs/source/wander-mocks-pages/`
 - Onboarding research: `research/screensdesign/2026-05-30-social-map-onboarding/report.md`
+
+## Provisional Astir Visual Override (REC-383 / REC-397)
+
+Joe explicitly requested an in-product Astir brand exploration before deciding
+whether to rename rec.me. This override is production-real visual styling for
+evaluation; it does not change the public product name, information architecture,
+copy, data model, analytics, or backend behavior.
+
+The handoff package remains useful for interaction structure, spacing, and
+functional coverage. Its cream/espresso/terracotta visual tokens are superseded
+across production surfaces by this provisional grammar:
+
+- Light Mode uses warm paper (`#F2E9DB`) with ink (`#141714`).
+- Dark Mode inverts that relationship and uses ink-black as the canvas; every
+  production surface and sheet must adapt with system appearance.
+- Astir signal coral (`#F05A3C`) is the single brand-action and selection accent.
+  Success, warning, info/social, and destructive colors keep their semantic roles.
+- Screen, place, list, and major section titles use Dynamic-Type-aware native
+  editorial serif. Body, controls, search, identity, and supporting copy use
+  Avenir Next; condensed sans is reserved for short metadata.
+- Header elements float independently as Liquid Glass components over a subtle,
+  frameless blur field. Do not place the full header group inside one glass block.
+- Search and action fields use soft continuous rectangles, not hard boxes. Tabs
+  use an editorial underline treatment rather than filled chips.
+- The only live Astir modes are the adaptive editorial Dark and Light schemes;
+  launch arguments must not select a separate palette.
+- Feed's floating header hides on sustained downward scrolling and returns on
+  upward scrolling; Reduce Motion must remain respected.
 
 ## Product Context
 
@@ -68,7 +96,7 @@ Map:
 
 1. Search: place, vibe, area, contact, or username.
 2. Map viewport with filtered pins and clusters.
-3. Filter chips: you, social/following, friends, been, wanna go.
+3. Editorial filter rail: you, social/following, friends, been, wanna go.
 4. Selected place sheet.
 5. Bottom nav.
 
@@ -122,7 +150,7 @@ Current handoff covers:
 
 Original Lovable mocks still provide useful reference for Discover smart filters and some social/planning breadth, but they are no longer the primary visual source.
 
-Still needs a later visual pass:
+The Astir consistency pass now also covers:
 
 - Other-user profile with follow/unfollow, follows-you, mutual/friend, and block actions.
 - Followers and Following lists.
@@ -133,7 +161,9 @@ Still needs a later visual pass:
 - Non-follower profile shell with no visible places.
 - Social place detail states when follow/block/visibility changes mid-flow.
 
-Before implementation, run design review against the handoff package and the missing-pass list, then convert the chosen screens into native SwiftUI specs. The handoff follows the warm Rodeo-ish direction: cream/sand surfaces, espresso text, terracotta user pins, sky social pins, chunky rounded controls, and casual travel-buddy copy.
+The older handoff still documents interaction structure and functional coverage;
+the provisional Astir override above is authoritative for production color,
+typography, glass, selection, and surface styling.
 
 ## Typography
 
@@ -161,7 +191,7 @@ Rules:
 
 - No negative letter spacing.
 - Do not scale fonts with viewport width.
-- Dynamic Type must not break chips, controls, or bottom sheets.
+- Dynamic Type must not break selection rails, controls, or bottom sheets.
 - Reserve display-scale type for true onboarding or major hierarchy moments.
 
 ## Color
@@ -202,7 +232,8 @@ Rules:
 - Color must never be the only status indicator.
 - Pin state uses owner color plus fill/dash pattern.
 - Avoid palettes that drift into all-beige, all-slate, all-purple, or generic travel blue.
-- Dark mode is not required for v0.1 unless explicitly prioritized.
+- Dark mode is required for authenticated production surfaces covered by the
+  provisional Astir override.
 
 ## Spacing
 
@@ -222,7 +253,7 @@ Rules:
   - `radius.md`: 12px, repeated result cards.
   - `radius.lg`: 16px, larger cards and grouped panels.
   - `radius.sheet`: 24px, bottom sheets.
-  - `radius.pill`: 999px, chips and compact buttons.
+  - `radius.pill`: 999px, tiny status badges only.
 
 Rules:
 
@@ -273,7 +304,7 @@ States:
 
 Placeholder direction: "search a place, vibe, or username..."
 
-### Filter Chips
+### Filter Rail
 
 Multi-select:
 
@@ -287,7 +318,8 @@ Rules:
 
 - Up to four pin states can show at once.
 - Selected state must be readable by color, fill, and accessibility label.
-- Filter selection must not shift the layout.
+- Filter selection must not shift the layout; use type, signal color, and a fine
+  underline instead of a filled chip.
 
 ### Pin System
 
@@ -530,7 +562,7 @@ Entry: Profile gear only.
 Hierarchy:
 
 1. Profile/account basics.
-2. Default place visibility with Everyone/Friends/Self pills and helper copy.
+2. Default place visibility with an Everyone/Friends/Self underline selector and helper copy.
 3. Blocked users.
 4. Contacts status and native Contacts affordance.
 5. Notifications.
@@ -625,7 +657,7 @@ Required partial states:
 
 - 44px minimum tap targets.
 - VoiceOver labels for pins include owner, status, category, and place name.
-- Dynamic Type must not break chips.
+- Dynamic Type must not break selection rails.
 - Long tags truncate predictably.
 - Reduce Motion disables decorative pin drops and long transitions.
 - Color is not the only state indicator.

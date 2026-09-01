@@ -27,6 +27,7 @@ enum ProfileSocialGraphTab: String, CaseIterable, Identifiable {
 
 struct ProfileSocialGraphScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -49,12 +50,17 @@ struct ProfileSocialGraphScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    Picker("Connections", selection: $selectedTab) {
-                        ForEach(ProfileSocialGraphTab.allCases) { tab in
-                            Text(tab.title).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    AstirEditorialSegmentedSwitch(
+                        options: ProfileSocialGraphTab.allCases.map {
+                            WanderSegmentOption(id: $0.rawValue, title: $0.title)
+                        },
+                        selection: Binding(
+                            get: { selectedTab.rawValue },
+                            set: { selectedTab = ProfileSocialGraphTab(rawValue: $0) ?? .followers }
+                        )
+                    )
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Connections")
 
                     ProfileGraphSearchField(query: $query)
 
@@ -67,27 +73,30 @@ struct ProfileSocialGraphScreen: View {
                                 Image(systemName: "person.badge.plus")
                                     .font(.system(size: 17, weight: .black))
                                     .frame(width: 36, height: 36)
-                                    .background(WanderTheme.terracottaTint.color)
-                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .background(brandMode.accentWash)
+                                    .foregroundStyle(brandMode.accent)
                                     .clipShape(Circle())
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Find friends")
-                                        .font(.system(size: 16, weight: .black))
+                                        .font(AstirTypography.cardTitle)
                                     Text("Search rec.me members")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                        .font(AstirTypography.caption)
+                                        .foregroundStyle(brandMode.secondaryText)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .black))
-                                    .foregroundStyle(WanderTheme.textFaint.color)
+                                    .foregroundStyle(brandMode.secondaryText)
                             }
                             .padding(.horizontal, WanderTheme.spacing3)
                             .frame(minHeight: 62)
-                            .background(WanderTheme.surfaceBone.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                            .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+                            .background(brandMode.raisedBackground)
+                            .foregroundStyle(brandMode.primaryText)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                                    .stroke(brandMode.border)
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -114,7 +123,7 @@ struct ProfileSocialGraphScreen: View {
                         Button("Could not refresh. Try again") {
                             Task { await refresh() }
                         }
-                        .font(.system(size: 14, weight: .bold))
+                        .font(AstirTypography.control)
                         .foregroundStyle(WanderTheme.stateError.color)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     }
@@ -122,14 +131,14 @@ struct ProfileSocialGraphScreen: View {
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
             .navigationTitle(isOwnerGraph ? "friends" : "connections")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("done") { dismiss() }
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accent)
                 }
             }
             .task { await refresh() }
@@ -202,19 +211,21 @@ private struct ProfileGraphProfileID: Identifiable {
 }
 
 private struct ProfileGraphSearchField: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var query: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
             TextField("Search people", text: $query)
+                .font(AstirTypography.body)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(width: 32, height: 32)
                 }
                 .accessibilityLabel("Clear search")
@@ -222,13 +233,18 @@ private struct ProfileGraphSearchField: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 48)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+        .foregroundStyle(brandMode.primaryText)
+        .background(brandMode.recessedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(brandMode.border)
+        )
     }
 }
 
 private struct ProfileGraphRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: LocalProfile
     let relationship: ViewerRelationship
     let action: () -> Void
@@ -246,11 +262,11 @@ private struct ProfileGraphRow: View {
                     )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.displayName)
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text("@\(profile.handle)  •  \(relationshipLabel)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -261,18 +277,26 @@ private struct ProfileGraphRow: View {
 
             if relationship != .owner {
                 Button(actionTitle, action: action)
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(relationship == .nonFollower ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(relationship == .nonFollower ? brandMode.accentForeground : brandMode.primaryText)
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: WanderTheme.tapMinimum)
-                    .background(relationship == .nonFollower ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
-                    .clipShape(Capsule())
+                    .background(relationship == .nonFollower ? brandMode.accent : brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                            .stroke(relationship == .nonFollower ? brandMode.accent : brandMode.border)
+                    )
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 66)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(brandMode.border)
+        )
     }
 
     private var relationshipLabel: String {
@@ -290,21 +314,22 @@ private struct ProfileGraphRow: View {
 }
 
 private struct ProfileGraphEmptyState: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let tab: ProfileSocialGraphTab
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "person.2.slash")
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 62, height: 62)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
             Text(tab.emptyTitle)
-                .font(.system(size: 20, weight: .black))
+                .font(AstirTypography.sectionTitle)
             Text(tab.emptyMessage)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 210)

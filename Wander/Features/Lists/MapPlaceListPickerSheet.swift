@@ -149,6 +149,7 @@ struct MapPlaceListPickerResult: Equatable {
 
 struct MapPlaceListPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     let target: MapPlaceListTarget
@@ -165,11 +166,11 @@ struct MapPlaceListPickerSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text("add to lists")
-                            .font(WanderTypography.actionScreenTitle)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.sheetTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(target.placeName)
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -192,7 +193,7 @@ struct MapPlaceListPickerSheet: View {
 
                     if let errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(WanderTypography.emphasizedBody)
+                            .font(AstirTypography.bodySmall)
                             .foregroundStyle(WanderTheme.stateError.color)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("map-list-picker.error")
@@ -202,7 +203,8 @@ struct MapPlaceListPickerSheet: View {
                 .padding(.top, WanderTheme.spacing3)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
+            .tint(brandMode.accent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 applyButton
             }
@@ -211,8 +213,8 @@ struct MapPlaceListPickerSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                     .disabled(isApplying)
                     .accessibilityIdentifier("map-list-picker.cancel")
                 }
@@ -227,7 +229,7 @@ struct MapPlaceListPickerSheet: View {
                 createListAndAddPlace(draft)
             }
             .presentationDetents([.large])
-            .presentationBackground(WanderTheme.canvasWarm.color)
+            .presentationBackground(brandMode.background)
         }
         .onAppear(perform: loadMembershipOnce)
         .accessibilityIdentifier("map-list-picker.sheet")
@@ -257,29 +259,33 @@ struct MapPlaceListPickerSheet: View {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .black))
                     .frame(width: 36, height: 36)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
+                    .foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("new list")
-                        .font(WanderTypography.control)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("Create it and add this place")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
-            .foregroundStyle(WanderTheme.textInk.color)
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 60)
-            .background(WanderTheme.terracottaTint.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.accentWash)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
         .disabled(isApplying)
@@ -290,21 +296,21 @@ struct MapPlaceListPickerSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Image(systemName: WanderTab.lists.systemImage)
                 .font(.system(size: 20, weight: .black))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(brandMode.accent)
             Text("No lists yet")
-                .font(WanderTypography.editorialSectionTitle)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text("Make a list above and this place will be its first stop.")
-                .font(WanderTypography.body)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 
@@ -312,12 +318,12 @@ struct MapPlaceListPickerSheet: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing2) {
             Image(systemName: "bookmark.fill")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 18, height: 18)
 
             Text("This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go.")
-                .font(WanderTypography.metadata)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -335,22 +341,22 @@ struct MapPlaceListPickerSheet: View {
             HStack(spacing: WanderTheme.spacing2) {
                 if isApplying {
                     ProgressView()
-                        .tint(WanderTheme.textOnAction.color)
+                        .tint(brandMode.accentForeground)
                 }
                 Text(applyButtonTitle)
-                    .font(WanderTypography.control)
+                    .font(AstirTypography.control)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .background(WanderTheme.terracotta.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .foregroundStyle(brandMode.accentForeground)
+            .background(brandMode.accent)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isApplying)
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing3)
         .padding(.bottom, WanderTheme.spacing3)
-        .background(WanderTheme.canvasWarm.color.opacity(0.97))
+        .background(brandMode.background.opacity(0.97))
         .accessibilityIdentifier("map-list-picker.apply")
     }
 
@@ -369,9 +375,9 @@ struct MapPlaceListPickerSheet: View {
     private func listSection(title: String, lists: [LocalPlaceList]) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 11, weight: .black))
+                .font(AstirTypography.metadata)
                 .textCase(.uppercase)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             VStack(spacing: 0) {
                 ForEach(Array(lists.enumerated()), id: \.element.id) { index, list in
@@ -379,16 +385,16 @@ struct MapPlaceListPickerSheet: View {
 
                     if index < lists.count - 1 {
                         Divider()
-                            .overlay(WanderTheme.borderHairline.color)
+                            .overlay(brandMode.border)
                             .padding(.leading, 60)
                     }
                 }
             }
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
         }
     }
@@ -407,21 +413,21 @@ struct MapPlaceListPickerSheet: View {
                     .font(.system(size: 14, weight: .bold))
                     .frame(width: 36, height: 36)
                     .foregroundStyle(list.ownerUserID == store.currentUser.id
-                        ? WanderTheme.terracottaDark.color
-                        : WanderTheme.pinSocial.color)
-                    .background((list.ownerUserID == store.currentUser.id
-                        ? WanderTheme.terracottaTint.color
-                        : WanderTheme.skyTint.color))
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                        ? brandMode.accent
+                        : brandMode.secondaryText)
+                    .background(list.ownerUserID == store.currentUser.id
+                        ? brandMode.accentWash
+                        : brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous))
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(list.name)
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                     Text(listDetail(list))
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
 
@@ -431,10 +437,10 @@ struct MapPlaceListPickerSheet: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(
                         isExisting
-                            ? Color(uiColor: .systemGray3)
+                            ? brandMode.secondaryText.opacity(0.58)
                             : isPending
-                                ? WanderTheme.terracotta.color
-                                : WanderTheme.borderStrong.color
+                                ? brandMode.accent
+                                : brandMode.border
                     )
             }
             .padding(.horizontal, WanderTheme.spacing3)

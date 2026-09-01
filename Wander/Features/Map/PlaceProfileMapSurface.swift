@@ -197,7 +197,6 @@ struct PlaceProfileFullScreen: View {
             onAttachedClose: onAttachedClose,
             onAttachedSaveCompleted: onAttachedSaveCompleted
         )
-        .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -444,7 +443,7 @@ private struct PlaceProfilePreviewCard: View {
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(place.name)
-                        .font(WanderTypography.editorialTitle)
+                        .font(AstirTypography.sheetTitle)
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.32), radius: 3, y: 1)
                         .lineLimit(2)
@@ -456,7 +455,7 @@ private struct PlaceProfilePreviewCard: View {
                         droppedPinMetadata
                     } else {
                         Text(place.compactPlaceType)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(AstirTypography.caption)
                             .foregroundStyle(.white.opacity(0.88))
                             .lineLimit(1)
                             .accessibilityIdentifier("map.selectedPlaceCategory")
@@ -478,7 +477,7 @@ private struct PlaceProfilePreviewCard: View {
 
                     if isSavedDroppedPin {
                         Text("Saved from a dropped pin")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(AstirTypography.metadata)
                             .foregroundStyle(.white.opacity(0.86))
                             .accessibilityIdentifier("map.selectedPlaceDroppedPinSource")
                     }
@@ -499,7 +498,7 @@ private struct PlaceProfilePreviewCard: View {
         if place.isDroppedPin, let coordinates = place.droppedPinCoordinateDisplay {
             VStack(alignment: .leading, spacing: 7) {
                 Text(place.name)
-                    .font(WanderTypography.editorialTitle)
+                    .font(AstirTypography.sheetTitle)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                     .padding(.trailing, hasCardActions ? 58 : 0)
@@ -508,13 +507,13 @@ private struct PlaceProfilePreviewCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AstirTypography.caption)
                         .lineLimit(1)
                         .hidden()
                         .allowsHitTesting(false)
 
                     Text(coordinates)
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(AstirTypography.caption.monospaced())
                         .foregroundStyle(Color.clear)
                         .lineLimit(1)
                         .textSelection(.enabled)
@@ -1260,6 +1259,7 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(astirBrandMode.background)
         .environment(\.placeProfileVisualStyle, .astir)
+        .environment(\.activityPostcardVisualStyle, .astir)
         .ignoresSafeArea(.container, edges: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty {
@@ -1371,7 +1371,7 @@ private struct PlaceProfileFullView: View {
         Image(systemName: systemImage)
             .font(.system(size: 18, weight: .bold))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            .foregroundStyle(astirBrandMode.usesCinemaGoldTexture ? astirBrandMode.accent : astirBrandMode.primaryText)
+            .foregroundStyle(astirBrandMode.primaryText)
             .contentShape(Circle())
             .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
     }
@@ -1568,14 +1568,14 @@ private struct PlaceProfileFullView: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(place.name)
-                    .font(AstirTheme.display(39))
+                    .font(AstirTypography.screenTitle)
                     .foregroundStyle(astirBrandMode.primaryText)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
 
                 if let heroMetadata {
                     Text(heroMetadata)
-                        .font(AstirTheme.metadata(12))
+                        .font(AstirTypography.metadata)
                         .textCase(.uppercase)
                         .tracking(1.2)
                         .foregroundStyle(astirBrandMode.secondaryText)
@@ -1632,7 +1632,7 @@ private struct PlaceProfileFullView: View {
                 Image(systemName: iconName(for: item.kind))
                     .font(.system(size: 15, weight: .black))
                 Text(item.title)
-                    .font(.system(size: 13, weight: .black))
+                    .font(AstirTypography.label)
                     .lineLimit(1)
             }
             .frame(width: 136, height: 48)
@@ -1652,7 +1652,7 @@ private struct PlaceProfileFullView: View {
                 Image(systemName: iconName(for: item.kind))
                     .font(.system(size: 14, weight: .black))
                 Text(item.title)
-                    .font(.system(size: 10, weight: .black))
+                    .font(AstirTypography.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.68)
             }
@@ -1668,7 +1668,7 @@ private struct PlaceProfileFullView: View {
     private var primaryPlaceAction: some View {
         Button(action: onAction) {
             Label(primaryActionTitle, systemImage: action.systemImage)
-                .font(.system(size: 15, weight: .black))
+                .font(AstirTypography.control)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .background(astirBrandMode.accent)
@@ -1884,7 +1884,7 @@ private struct PlaceProfileFullView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(AstirTheme.metadata(11))
+            .font(AstirTypography.metadata)
             .textCase(.uppercase)
             .tracking(1.2)
             .foregroundStyle(astirBrandMode.accent)
@@ -2084,7 +2084,11 @@ struct PlaceProfileFloatingActions: View {
                     }
                 }
             }
-            .font(.system(size: 15, weight: .bold))
+            .font(
+                visualStyle == .astir
+                    ? AstirTypography.control
+                    : .system(size: 15, weight: .bold)
+            )
             .padding(.horizontal, WanderTheme.spacing1)
             .frame(
                 minWidth: compactActionWidth,
@@ -2108,7 +2112,11 @@ struct PlaceProfileFloatingActions: View {
                         .accessibilityHidden(true)
                 }
             }
-            .font(.system(size: 15, weight: .bold))
+            .font(
+                visualStyle == .astir
+                    ? AstirTypography.control
+                    : .system(size: 15, weight: .bold)
+            )
             .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
             .padding(.horizontal, WanderTheme.spacing2)
             .foregroundStyle(
@@ -2212,6 +2220,7 @@ private struct PlacePhotoContributorProfileRoute: Identifiable {
 
 private struct PlacePhotoGalleryViewer: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
@@ -2381,12 +2390,11 @@ private struct PlacePhotoGalleryViewer: View {
             .accessibilityLabel(positionAccessibilityLabel)
         } else if let positionLabel {
             Text(positionLabel)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(.white)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.primaryText)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 36)
-                .background(Color.white.opacity(0.14))
-                .clipShape(Capsule())
+                .astirGlassSurface(cornerRadius: 12)
                 .accessibilityLabel("Photo \(positionLabel)")
         }
     }
@@ -2437,9 +2445,9 @@ private struct PlacePhotoGalleryViewer: View {
                     selectedProfileRoute = PlacePhotoContributorProfileRoute(id: contributor.userID)
                 } label: {
                     Text("@\(contributor.handle)")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(AstirTypography.bodySmall)
                         .underline()
-                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                        .foregroundStyle(brandMode.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .allowsTightening(true)
@@ -2460,32 +2468,40 @@ private struct PlacePhotoGalleryViewer: View {
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
         .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .astirGlassSurface(cornerRadius: WanderTheme.radiusLarge, castsShadow: true)
     }
 
     private func attributionDisplayName(_ displayName: String) -> some View {
         Text(displayName)
-            .font(.system(size: 18, weight: .black))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.cardTitle)
+            .foregroundStyle(brandMode.primaryText)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func attributionTimestamp(_ timestamp: String) -> some View {
         Text(timestamp)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(WanderTheme.textMuted.color)
+            .font(AstirTypography.metadata)
+            .foregroundStyle(brandMode.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func statusPill(_ status: PlaceStatus) -> some View {
-        Text(status == .been ? CheckInCopy.noun : "wanna go")
-            .font(.system(size: 13, weight: .black))
-            .foregroundStyle(WanderTheme.stateSuccess.color)
-            .padding(.horizontal, 12)
+        HStack(spacing: WanderTheme.spacing2) {
+            Rectangle()
+                .fill(brandMode.accent)
+                .frame(width: 2, height: 18)
+            Text(status == .been ? CheckInCopy.noun : "wanna go")
+                .font(AstirTypography.metadata)
+                .textCase(.uppercase)
+        }
+            .foregroundStyle(brandMode.accent)
+            .padding(.horizontal, WanderTheme.spacing2)
             .frame(minHeight: 38)
-            .background(WanderTheme.categorySage.color.opacity(0.24))
-            .clipShape(Capsule())
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(brandMode.border)
+                    .frame(height: 1)
+            }
             .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -2595,7 +2611,11 @@ private struct PlaceProfileMapHeader: View {
 
                         if let positionLabel {
                             Text(positionLabel)
-                                .font(.system(size: 12, weight: .black))
+                                .font(
+                                    visualStyle == .astir
+                                        ? AstirTypography.caption
+                                        : .system(size: 12, weight: .black)
+                                )
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 10)
                                 .frame(minHeight: 44)
@@ -2660,7 +2680,11 @@ private struct PlaceProfileMapHeader: View {
                     color: WanderTheme.pinSocial.color
                 )
                 Text("@\(contributor.handle)")
-                    .font(.system(size: 12, weight: .black))
+                    .font(
+                        visualStyle == .astir
+                            ? AstirTypography.caption
+                            : .system(size: 12, weight: .black)
+                    )
                     .lineLimit(1)
             }
             .padding(.horizontal, 9)
@@ -2933,7 +2957,7 @@ private struct PlaceProfileTagRail: View {
                                     .fill(astirBrandMode.accent)
                                     .frame(width: 5, height: 5)
                                 Text(tag)
-                                    .font(AstirTheme.ui(compact ? 11 : 12, weight: .bold))
+                                    .font(compact ? AstirTypography.caption : AstirTypography.label)
                                     .lineLimit(1)
                             }
                             .textCase(.uppercase)
@@ -2981,7 +3005,7 @@ private struct PlaceProfileWrappingTags: View {
             ForEach(tags, id: \.self) { tag in
                 if visualStyle == .astir {
                     Text(tag)
-                        .font(AstirTheme.ui(12, weight: .bold))
+                        .font(AstirTypography.label)
                         .textCase(.uppercase)
                         .tracking(0.7)
                         .padding(.leading, WanderTheme.spacing2)
@@ -3108,20 +3132,36 @@ private struct PlaceProfileSaveCard: View {
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(owner.id == currentUserID ? "You" : owner.displayName)
-                        .font(.system(size: 14, weight: .black))
+                        .font(
+                            visualStyle == .astir
+                                ? AstirTypography.label
+                                : .system(size: 14, weight: .black)
+                        )
                         .foregroundStyle(primaryText)
                     Text(noteSubtitle)
-                        .font(.system(size: 12, weight: .bold))
+                        .font(
+                            visualStyle == .astir
+                                ? AstirTypography.caption
+                                : .system(size: 12, weight: .bold)
+                        )
                         .foregroundStyle(secondaryText)
                 }
                 Spacer()
                 if let ratingScore = displayedRatingScore {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(PlaceRating.display(ratingScore)) / 5")
-                            .font(.system(size: 13, weight: .black))
+                            .font(
+                                visualStyle == .astir
+                                    ? AstirTypography.label
+                                    : .system(size: 13, weight: .black)
+                            )
                             .foregroundStyle(accent)
                         Text("rating")
-                            .font(.system(size: 10, weight: .black))
+                            .font(
+                                visualStyle == .astir
+                                    ? AstirTypography.metadata
+                                    : .system(size: 10, weight: .black)
+                            )
                             .textCase(.uppercase)
                             .foregroundStyle(secondaryText)
                     }
@@ -3132,7 +3172,11 @@ private struct PlaceProfileSaveCard: View {
 
             if let note {
                 Text("\"\(note)\"")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(
+                        visualStyle == .astir
+                            ? AstirTypography.bodySmall
+                            : .system(size: 15, weight: .bold)
+                    )
                     .foregroundStyle(primaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -3222,7 +3266,11 @@ private struct PlaceProfileStatusPill: View {
 
     var body: some View {
         Text(status == .been ? CheckInCopy.noun : "wanna")
-            .font(.system(size: 12, weight: .black))
+            .font(
+                visualStyle == .astir
+                    ? AstirTypography.metadata
+                    : .system(size: 12, weight: .black)
+            )
             .textCase(visualStyle == .astir ? .uppercase : nil)
             .tracking(visualStyle == .astir ? 0.8 : 0)
             .padding(.horizontal, WanderTheme.spacing3)
@@ -3245,7 +3293,11 @@ private struct PlaceProfileSubtleCard: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13, weight: .bold))
+            .font(
+                visualStyle == .astir
+                    ? AstirTypography.bodySmall
+                    : .system(size: 13, weight: .bold)
+            )
             .foregroundStyle(visualStyle == .astir ? astirBrandMode.secondaryText : WanderTheme.textMuted.color)
             .fixedSize(horizontal: false, vertical: true)
             .padding(WanderTheme.spacing3)

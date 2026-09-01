@@ -3,6 +3,7 @@ import MapKit
 import SwiftUI
 
 struct ProfileScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -215,6 +216,8 @@ struct ProfileScreen: View {
                     openRequestedVisitInvitationInbox()
                 }
         }
+        .tint(brandMode.accent)
+        .background(brandMode.background.ignoresSafeArea())
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
         }
@@ -429,7 +432,7 @@ struct ProfileScreen: View {
 
     private var pageTitle: some View {
         Text("profile")
-            .font(.system(size: 30, weight: .black, design: .rounded))
+            .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
 
@@ -451,7 +454,14 @@ struct ProfileScreen: View {
             Button {
                 savedListMode = .wanna
             } label: {
-                StatTile(value: "\(store.stats.wanna)", label: "WANNA", color: WanderTheme.stateWarning.color, fill: WanderTheme.sunTint.color)
+                StatTile(
+                    value: "\(store.stats.wanna)",
+                    label: "WANNA",
+                    color: WanderTheme.stateWarning.color,
+                    fill: WanderTheme.stateWarning.color.opacity(
+                        brandMode.prefersDarkInterface ? 0.22 : 0.14
+                    )
+                )
             }
             .buttonStyle(ProfileStatButtonStyle())
             .accessibilityLabel("Open wanna places")
@@ -462,24 +472,24 @@ struct ProfileScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 Text("this month")
-                    .font(.system(size: 17, weight: .black))
+                    .font(AstirTypography.sectionTitle)
                 Spacer()
                 Text("JUN '26")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             HStack(alignment: .center, spacing: WanderTheme.spacing4) {
                 Text("\(store.currentUserVisiblePlaces.count)")
-                    .font(.system(size: 38, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.screenTitle)
+                    .foregroundStyle(brandMode.accent)
                 Text("saved places this month.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                 Spacer()
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
     }
@@ -487,7 +497,7 @@ struct ProfileScreen: View {
     private var draftsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("drafts")
-                .font(.system(size: 17, weight: .black))
+                .font(AstirTypography.sectionTitle)
 
             if store.unresolvedDrafts.isEmpty {
                 SmallEmptyRow(title: "No unresolved drafts", subtitle: "link and photo shells land here")
@@ -495,19 +505,19 @@ struct ProfileScreen: View {
                 ForEach(store.unresolvedDrafts) { draft in
                     HStack {
                         Image(systemName: draft.sourceType == .link ? "link" : "photo")
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(brandMode.accent)
                         VStack(alignment: .leading) {
                             Text(draft.title)
-                                .font(.system(size: 15, weight: .bold))
+                                .font(AstirTypography.cardTitle)
                             Text(draft.message)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .lineLimit(1)
                         }
                         Spacer()
                     }
                     .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color)
+                    .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                     .id("profile.draft.\(draft.extractionJobID ?? draft.id)")
                 }
@@ -520,7 +530,7 @@ struct ProfileScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 Text("recent")
-                    .font(.system(size: 17, weight: .black))
+                    .font(AstirTypography.sectionTitle)
                 Spacer()
             }
 
@@ -533,9 +543,9 @@ struct ProfileScreen: View {
     private var peopleSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("people")
-                .font(.system(size: 17, weight: .black))
+                .font(AstirTypography.sectionTitle)
 
-            WanderSegmentedSwitch(
+            AstirEditorialSegmentedSwitch(
                 options: GraphListMode.allCases.map { mode in
                     WanderSegmentOption(id: mode.rawValue, title: mode.title)
                 },
@@ -639,6 +649,7 @@ enum ProfileDetailBackSwipePolicy {
 
 struct ProfileDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -733,7 +744,7 @@ struct ProfileDetailView: View {
                     } else if isLoading {
                         ProgressView("Loading profile")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .wanderScreen()
+                            .astirScreen()
                     } else {
                         AccessChangedPanel(
                             title: "This profile isn't available",
@@ -741,7 +752,7 @@ struct ProfileDetailView: View {
                         )
                         .padding(WanderTheme.spacing4)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .wanderScreen()
+                        .astirScreen()
                     }
                 }
 
@@ -818,6 +829,8 @@ struct ProfileDetailView: View {
                 }
             }
         }
+        .tint(brandMode.accent)
+        .background(brandMode.background.ignoresSafeArea())
     }
 
     private var hasNestedNavigationDestination: Bool {
@@ -1086,6 +1099,7 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
 }
 
 private struct ProfileActivityHistoryScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let items: [ProfileActivityItem]
     let checkInCount: Int
     let wannaCount: Int
@@ -1132,16 +1146,16 @@ private struct ProfileActivityHistoryScreen: View {
                             }
                             if index < filteredItems.count - 1 {
                                 Divider()
-                                    .overlay(WanderTheme.borderHairline.color)
+                                    .overlay(brandMode.border)
                                     .padding(.leading, 58)
                             }
                         }
                     }
-                    .background(WanderTheme.surfaceBone.color)
+                    .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                     .overlay {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                            .stroke(brandMode.border, lineWidth: 1)
                     }
                 }
             }
@@ -1149,7 +1163,8 @@ private struct ProfileActivityHistoryScreen: View {
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing8)
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -1654,6 +1669,7 @@ struct ProfilePlaceCollectionMapCameraLifecycle: Equatable {
 private struct ProfilePlaceCollectionMap: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
     let presentation: ProfilePlaceCollectionMapPresentation
     let overviewRegion: MKCoordinateRegion?
     let overviewTotalCount: Int
@@ -1700,7 +1716,7 @@ private struct ProfilePlaceCollectionMap: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .onChange(of: overviewRegionSignature) { _, signature in
             let shouldApplyOverview = cameraLifecycle.reconcileOverview(
                 isAvailable: signature != nil
@@ -1801,13 +1817,13 @@ private struct ProfilePlaceCollectionMap: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "map")
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
             Text(mapStatusText)
-                .font(.system(size: 17, weight: .black))
+                .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
             Text(unavailableSubtitle)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -1820,19 +1836,19 @@ private struct ProfilePlaceCollectionMap: View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Image(systemName: "mappin.and.ellipse")
                 .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
             Text(mapStatusText)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
         .padding(.horizontal, WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(brandMode.border)
                 .frame(height: 1)
         }
         .accessibilityElement(children: .combine)
@@ -2006,17 +2022,18 @@ private struct ProfilePlaceCollectionMap: View {
 }
 
 private struct ProfilePlaceCollectionMapMarker: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let item: ProfilePlaceCollectionMapItem
 
     var body: some View {
         WanderCategoryEmoji(emoji: item.visiblePlace.categoryEmoji, size: 16)
             .frame(width: 38, height: 38)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(brandMode.raisedBackground)
             .clipShape(Circle())
             .overlay(outlineLayer)
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .contentShape(Circle())
-            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.22), radius: 6, x: 0, y: 2)
     }
 
     private var outlineLayer: some View {
@@ -2031,22 +2048,23 @@ private struct ProfilePlaceCollectionMapMarker: View {
 }
 
 private struct ProfilePlaceCollectionClusterMarker: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let count: Int
     let outlines: [MapPinOutline]
 
     var body: some View {
         Text("\(count)")
-            .font(.system(size: 14, weight: .black, design: .rounded))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.primaryText)
             .lineLimit(1)
             .minimumScaleFactor(0.65)
             .frame(width: 38, height: 38)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(brandMode.raisedBackground)
             .clipShape(Circle())
             .overlay(outlineLayer)
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .contentShape(Circle())
-            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(0.22), radius: 6, x: 0, y: 2)
     }
 
     private var outlineLayer: some View {
@@ -2093,6 +2111,7 @@ private struct InCommonReleaseSignal: Identifiable {
 }
 
 private struct InCommonReleaseHero: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let score: Int
     let sharedPlaceCount: Int
     let viewerName: String
@@ -2107,28 +2126,28 @@ private struct InCommonReleaseHero: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     avatarPair
                     Text(score >= 80 ? "Your maps really click ✨" : "You’ve got common ground")
-                        .font(WanderTypography.editorialCardTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(
                         "\(sharedPlaceCount) shared \(sharedPlaceCount == 1 ? "place" : "places") with \(profileName)."
                     )
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
 
             if !signals.isEmpty {
                 Text("you both keep coming back for")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
@@ -2144,13 +2163,13 @@ private struct InCommonReleaseHero: View {
     private var scoreRing: some View {
         ZStack {
             Circle()
-                .stroke(WanderTheme.surfaceSand.color, lineWidth: 9)
+                .stroke(brandMode.recessedBackground, lineWidth: 9)
             Circle()
                 .trim(from: 0, to: CGFloat(score) / 100)
                 .stroke(
                     AngularGradient(
                         colors: [
-                            WanderTheme.terracotta.color,
+                            brandMode.accent,
                             WanderTheme.categorySun.color,
                             WanderTheme.pinSocial.color
                         ],
@@ -2161,11 +2180,11 @@ private struct InCommonReleaseHero: View {
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
                 Text("\(score)%")
-                    .font(.system(size: 25, weight: .black, design: .rounded))
+                    .font(AstirTypography.sheetTitle)
                     .monospacedDigit()
                 Text("overlap")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
         .frame(width: 102, height: 102)
@@ -2178,15 +2197,15 @@ private struct InCommonReleaseHero: View {
             WanderAvatar(
                 initials: initials(for: viewerName),
                 size: 34,
-                color: WanderTheme.terracotta.color
+                color: brandMode.accent
             )
-            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+            .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
             WanderAvatar(
                 initials: initials(for: profileName),
                 size: 34,
                 color: WanderTheme.pinSocial.color
             )
-            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+            .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
         }
         .accessibilityHidden(true)
     }
@@ -2199,6 +2218,7 @@ private struct InCommonReleaseHero: View {
 }
 
 private struct InCommonReleaseSignalChip: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let signal: InCommonReleaseSignal
 
     var body: some View {
@@ -2207,22 +2227,25 @@ private struct InCommonReleaseSignalChip: View {
                 .font(.system(size: 20))
             VStack(alignment: .leading, spacing: 1) {
                 Text(signal.title)
-                    .font(.system(size: 13, weight: .black))
+                    .font(AstirTypography.label)
                 Text(signal.detail)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
-        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
         .frame(minHeight: 54)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(brandMode.border)
+                .frame(height: 1)
+        }
         .accessibilityElement(children: .combine)
     }
 }
 
 private struct InCommonReleaseMapScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let places: [VisiblePlace]
     let currentUserID: String
     let onSelect: (VisiblePlace) -> Void
@@ -2261,7 +2284,8 @@ private struct InCommonReleaseMapScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .navigationTitle("Shared map")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -2269,6 +2293,7 @@ private struct InCommonReleaseMapScreen: View {
 
 private struct SavedPlacesListScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -2430,16 +2455,21 @@ private struct SavedPlacesListScreen: View {
                     showsInCommonMap = true
                 } label: {
                     Label("Open your shared map", systemImage: "map.fill")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accentForeground)
                         .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(WanderTheme.textInk.color)
-                        .clipShape(Capsule())
+                        .background(brandMode.accent)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: WanderTheme.radiusLarge,
+                                style: .continuous
+                            )
+                        )
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.vertical, WanderTheme.spacing2)
-                .background(WanderTheme.canvasWarm.color.opacity(0.96))
+                .background(brandMode.background.opacity(0.96))
                 .accessibilityHint("Shows every place you have in common on a map")
             }
         }
@@ -2462,7 +2492,8 @@ private struct SavedPlacesListScreen: View {
                 await removeProfileSave(context)
             }
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
@@ -2542,14 +2573,18 @@ private struct SavedPlacesListScreen: View {
                     Text("Based on places visible to you")
                         .font(.system(size: 13, weight: .black))
                     Text("Friends-only and private saves stay out of this comparison.")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .padding(WanderTheme.spacing3)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.skyTint.color)
+            .background(brandMode.recessedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
         }
     }
 
@@ -2560,8 +2595,8 @@ private struct SavedPlacesListScreen: View {
     private var inlineNavigationHeader: some View {
         ZStack {
             Text(navigationTitle)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
 
@@ -2646,8 +2681,8 @@ private struct SavedPlacesListScreen: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
 
             Menu {
                 Button {
@@ -2683,14 +2718,14 @@ private struct SavedPlacesListScreen: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .black))
                 }
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(brandMode.recessedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -2703,14 +2738,14 @@ private struct SavedPlacesListScreen: View {
     private var searchField: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
             TextField("search \(navigationTitle.lowercased())", text: $query)
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
     }
 
@@ -2721,15 +2756,15 @@ private struct SavedPlacesListScreen: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
                         selectedValue.wrappedValue = nil
                     } label: {
-                        WanderChip(title: "all", isSelected: selectedValue.wrappedValue == nil)
+                        filterOption("all", isSelected: selectedValue.wrappedValue == nil)
                     }
                     .buttonStyle(.plain)
 
@@ -2737,8 +2772,8 @@ private struct SavedPlacesListScreen: View {
                         Button {
                             selectedValue.wrappedValue = selectedValue.wrappedValue == value ? nil : value
                         } label: {
-                            WanderChip(
-                                title: title == "type" ? WanderPlaceCategory.broadCategory(for: value) : value,
+                            filterOption(
+                                title == "type" ? WanderPlaceCategory.broadCategory(for: value) : value,
                                 isSelected: selectedValue.wrappedValue == value
                             )
                         }
@@ -2749,11 +2784,26 @@ private struct SavedPlacesListScreen: View {
         }
     }
 
+    private func filterOption(_ title: String, isSelected: Bool) -> some View {
+        Text(title)
+            .font(AstirTypography.label)
+            .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(isSelected ? brandMode.accent : brandMode.border)
+                    .frame(height: isSelected ? 2 : 1)
+            }
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
     private var tagFilterDropdown: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("tags")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
 
             Button {
                 withAnimation(.easeOut(duration: 0.16)) {
@@ -2763,24 +2813,24 @@ private struct SavedPlacesListScreen: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "tag.fill")
                         .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                     Text(selectedMetadataTag ?? "all tags")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(selectedMetadataTag == nil ? WanderTheme.textMuted.color : WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(selectedMetadataTag == nil ? brandMode.secondaryText : brandMode.primaryText)
                         .lineLimit(1)
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .rotationEffect(.degrees(isTagFilterExpanded ? 180 : 0))
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(brandMode.recessedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -2790,7 +2840,7 @@ private struct SavedPlacesListScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(brandMode.secondaryText)
                         TextField("search tags", text: $tagFilterQuery)
                             .textFieldStyle(.plain)
                             .textInputAutocapitalization(.never)
@@ -2798,7 +2848,7 @@ private struct SavedPlacesListScreen: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 40)
-                    .background(WanderTheme.surfaceSand.color)
+                    .background(brandMode.recessedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
                     ScrollView {
@@ -2807,8 +2857,8 @@ private struct SavedPlacesListScreen: View {
 
                             if filteredMetadataTags.isEmpty {
                                 Text(metadataTags.isEmpty ? "no tags saved yet" : "no matching tags")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .font(AstirTypography.bodySmall)
+                                    .foregroundStyle(brandMode.secondaryText)
                                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                                     .padding(.horizontal, WanderTheme.spacing2)
                             } else {
@@ -2821,11 +2871,11 @@ private struct SavedPlacesListScreen: View {
                     .frame(maxHeight: 220)
                 }
                 .padding(WanderTheme.spacing2)
-                .background(WanderTheme.surfaceBone.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -2842,8 +2892,8 @@ private struct SavedPlacesListScreen: View {
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
                 Spacer()
                 if selectedMetadataTag == value {
@@ -3030,6 +3080,7 @@ enum ProfileMetadataTagParser {
 }
 
 private struct GraphListScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -3064,11 +3115,11 @@ private struct GraphListScreen: View {
                             handleFollowAction(for: profile)
                         }
                     )
-                    .listRowBackground(WanderTheme.surfaceBone.color)
+                    .listRowBackground(brandMode.raisedBackground)
                 }
             }
             .scrollContentBackground(.hidden)
-            .wanderScreen()
+            .astirScreen()
             .navigationTitle(mode.rawValue.capitalized)
             .fullScreenCover(item: $selectedProfile) { selection in
                 ProfileDetailView(profileID: selection.id)
@@ -3089,6 +3140,8 @@ private struct GraphListScreen: View {
                 await store.refreshRemoteSocialGraph(backend: backend)
             }
         }
+        .tint(brandMode.accent)
+        .background(brandMode.background.ignoresSafeArea())
     }
 
     private var pendingUnfollowTitle: String {
@@ -3129,6 +3182,7 @@ private struct GraphProfileSelection: Identifiable {
 }
 
 private struct GraphPersonListRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: LocalProfile
     let relationship: ViewerRelationship
     let savedPlaceCount: Int
@@ -3152,14 +3206,14 @@ private struct GraphPersonListRow: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(profile.displayName)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text("@\(profile.handle) · \(relationship.displayTitle)")
-                            .font(.system(size: 13))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                         Text(savedPlaceCountLabel)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textFaint.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
 
                     Spacer(minLength: WanderTheme.spacing2)
@@ -3169,21 +3223,15 @@ private struct GraphPersonListRow: View {
             .buttonStyle(.plain)
 
             Button(actionTitle, action: onFollowAction)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : WanderTheme.terracotta.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accent)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 34)
-                .background(
-                    Capsule()
-                        .fill(actionTitle == "unfollow" ? WanderTheme.surfaceRaised.color : WanderTheme.terracottaTint.color)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(
-                            actionTitle == "unfollow" ? WanderTheme.borderHairline.color : WanderTheme.terracotta.color.opacity(0.35),
-                            lineWidth: 1
-                        )
-                )
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accent)
+                        .frame(height: 1.5)
+                }
         }
     }
 
@@ -3200,6 +3248,7 @@ private struct GraphPersonListRow: View {
 }
 
 private struct ConnectionRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
     let count: Int
@@ -3211,29 +3260,29 @@ private struct ConnectionRow: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 40, height: 40)
-                    .background(WanderTheme.terracottaTint.color)
+                    .background(brandMode.accentWash)
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(title)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(AstirTypography.cardTitle)
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
 
                 Spacer()
 
                 Text("\(count)")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .frame(minWidth: 30, alignment: .trailing)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .buttonStyle(.plain)
@@ -3241,6 +3290,7 @@ private struct ConnectionRow: View {
 }
 
 private struct ProfilePersonRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: LocalProfile
     let relationship: ViewerRelationship
     let action: () -> Void
@@ -3257,16 +3307,16 @@ private struct ProfilePersonRow: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(AstirTypography.cardTitle)
                     Text("@\(profile.handle) · \(relationship.displayTitle)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .buttonStyle(.plain)
@@ -3274,6 +3324,7 @@ private struct ProfilePersonRow: View {
 }
 
 private struct StatTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let value: String
     let label: String
     let color: Color
@@ -3283,7 +3334,7 @@ private struct StatTile: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                 Text(value)
-                    .font(.system(size: 28, weight: .black))
+                    .font(AstirTypography.sheetTitle)
                     .foregroundStyle(color)
 
                 Spacer(minLength: WanderTheme.spacing2)
@@ -3291,14 +3342,14 @@ private struct StatTile: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .black))
                     .frame(width: 28, height: 28)
-                    .background(WanderTheme.surfaceRaised.color.opacity(0.85))
+                    .background(brandMode.raisedBackground.opacity(0.85))
                     .foregroundStyle(color)
                     .clipShape(Circle())
             }
 
             Text(label)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: 72)
@@ -3322,21 +3373,22 @@ private struct ProfileStatButtonStyle: ButtonStyle {
 }
 
 private struct ProfilePlaceRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let visiblePlace: VisiblePlace
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             WanderCategoryEmoji(emoji: visiblePlace.categoryEmoji, size: 17)
                 .frame(width: 40, height: 40)
-                .background(WanderTheme.terracottaTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(visiblePlace.place.canonicalName)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.cardTitle)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             Spacer()
             if let recommendedScore = visiblePlace.recommendedScore,
@@ -3346,7 +3398,7 @@ private struct ProfilePlaceRow: View {
             PlaceVisibilityIconPill(visibility: visiblePlace.userPlace.visibility, size: 30)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -3360,20 +3412,21 @@ private struct ProfilePlaceRow: View {
 }
 
 private struct ProfileCalendarDayDetailHeader: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let summary: ProfileCalendarDaySummary
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun, color: WanderTheme.terracotta.color)
+            metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun, color: brandMode.accent)
             Divider()
-                .overlay(WanderTheme.borderHairline.color)
-            metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)
+                .overlay(brandMode.border)
+            metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: brandMode.primaryText)
         }
         .frame(maxWidth: .infinity)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(brandMode.border))
         .accessibilityElement(children: .combine)
     }
 
@@ -3385,11 +3438,11 @@ private struct ProfileCalendarDayDetailHeader: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("\(value)")
-                .font(.system(size: 20, weight: .black))
+                .font(AstirTypography.sectionTitle)
                 .foregroundStyle(color)
             Text(value == 1 ? singular : plural)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
@@ -3398,6 +3451,7 @@ private struct ProfileCalendarDayDetailHeader: View {
 }
 
 private struct RecommendedScorePill: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let score: Double
 
     var body: some View {
@@ -3405,52 +3459,50 @@ private struct RecommendedScorePill: View {
             Image(systemName: "star.fill")
                 .font(.system(size: 10, weight: .black))
             Text(PlaceRating.averageDisplay(score))
-                .font(.system(size: 12, weight: .black))
+                .font(AstirTypography.metadata)
         }
-        .foregroundStyle(WanderTheme.terracotta.color)
-        .padding(.horizontal, WanderTheme.spacing2)
-        .frame(height: 30)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .foregroundStyle(brandMode.accent)
+        .frame(minHeight: 30)
         .accessibilityLabel("Recommended score \(PlaceRating.averageDisplay(score)) out of 5")
     }
 }
 
 private struct SmallEmptyRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             Text(title)
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.cardTitle)
             Text(subtitle)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
 
 private struct AccessChangedPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 17, weight: .bold))
+                .font(AstirTypography.sectionTitle)
             Text(subtitle)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceSand.color)
+        .background(brandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }

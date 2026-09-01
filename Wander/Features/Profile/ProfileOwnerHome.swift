@@ -254,6 +254,7 @@ struct ProfileMemberActions {
 
 struct ProfileOwnerHome: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let profile: LocalProfile
     let viewerProfile: LocalProfile
@@ -382,7 +383,8 @@ struct ProfileOwnerHome: View {
                 profileScrollPosition = destination
             }
         }
-        .wanderScreen()
+        .astirScreen()
+        .tint(brandMode.accent)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -401,8 +403,8 @@ struct ProfileOwnerHome: View {
                 }
 
                 Text("@\(profile.handle)")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
 
@@ -480,8 +482,8 @@ struct ProfileOwnerHome: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(profile.displayName)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
 
@@ -506,34 +508,37 @@ struct ProfileOwnerHome: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let homeArea = normalized(profile.homeArea) {
                     Text(homeArea)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
                 }
 
                 if let bio = normalized(profile.bio) {
                     Text(bio)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text(memberSinceText)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             if let relationship = mode.relationship {
                 Button(action: relationshipAction) {
                     Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
-                        .font(.system(size: 14, weight: .black))
+                        .font(AstirTypography.control)
                         .padding(.horizontal, WanderTheme.spacing4)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .foregroundStyle(
                             relationship == .nonFollower
-                                ? WanderTheme.terracottaDark.color
-                                : WanderTheme.textInk.color
+                                ? brandMode.accent
+                                : brandMode.primaryText
                         )
-                        .wanderGlassCapsule(tone: relationship == .nonFollower ? .accent : .neutral)
+                        .astirOutlinedSurface(
+                            selected: relationship == .nonFollower,
+                            castsShadow: true
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -548,7 +553,7 @@ struct ProfileOwnerHome: View {
                 size: profileAvatarSize,
                 color: WanderTheme.avatarRyan.color
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 8, y: 4)
+            .shadow(color: Color.black.opacity(0.16), radius: 8, y: 4)
 
         }
     }
@@ -590,6 +595,7 @@ struct ProfileOwnerHome: View {
 }
 
 private struct ProfileMemberActionsPopover: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let actions: ProfileMemberActions
     let dismiss: () -> Void
 
@@ -626,7 +632,7 @@ private struct ProfileMemberActionsPopover: View {
         }
         .frame(width: 236)
         .padding(.vertical, WanderTheme.spacing1)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Profile actions")
     }
@@ -642,7 +648,7 @@ private struct ProfileMemberActionsPopover: View {
             action()
         } label: {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.control)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
                 .padding(.horizontal, WanderTheme.spacing3)
         }
@@ -665,6 +671,7 @@ struct ProfileHeaderActionButton: View {
 }
 
 struct ProfileBackButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let action: () -> Void
 
     var body: some View {
@@ -672,7 +679,7 @@ struct ProfileBackButton: View {
             Image(systemName: "chevron.left")
                 .font(.system(size: 18, weight: .semibold))
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum, alignment: .leading)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.primaryText)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -726,19 +733,21 @@ private struct ProfileInvitationButton: View {
 }
 
 private struct ProfileHeaderActionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
 
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: 16, weight: .black))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            .foregroundStyle(WanderTheme.textInk.color)
+            .foregroundStyle(brandMode.primaryText)
             .contentShape(Circle())
             .wanderGlassCapsule()
     }
 }
 
 private struct ProfileInCommonPlacesRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let viewerProfile: LocalProfile
     let profile: LocalProfile
     let count: Int
@@ -751,18 +760,18 @@ private struct ProfileInCommonPlacesRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(count) \(count == 1 ? "place" : "places") in common")
-                        .font(.system(.body, design: .default, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("See where your maps overlap")
-                        .font(.system(.caption, design: .default, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer(minLength: WanderTheme.spacing2)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, WanderTheme.spacing3)
@@ -783,7 +792,7 @@ private struct ProfileInCommonPlacesRow: View {
                 size: 32,
                 color: WanderTheme.avatarRyan.color
             )
-            .overlay(Circle().stroke(WanderTheme.canvasWarm.color, lineWidth: 2))
+            .overlay(Circle().stroke(brandMode.background, lineWidth: 2))
             .zIndex(1)
 
             WanderAvatar(
@@ -792,7 +801,7 @@ private struct ProfileInCommonPlacesRow: View {
                 size: 32,
                 color: WanderTheme.avatarJames.color
             )
-            .overlay(Circle().stroke(WanderTheme.canvasWarm.color, lineWidth: 2))
+            .overlay(Circle().stroke(brandMode.background, lineWidth: 2))
         }
         .frame(width: 54, alignment: .leading)
         .accessibilityHidden(true)
@@ -800,6 +809,7 @@ private struct ProfileInCommonPlacesRow: View {
 }
 
 private struct ProfileGraphCountButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let value: Int
     let label: String
     let action: () -> Void
@@ -808,11 +818,11 @@ private struct ProfileGraphCountButton: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(value)")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(label)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
@@ -827,6 +837,7 @@ private struct ProfileGraphCountButton: View {
 }
 
 private struct OwnerProfileSaveTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let value: Int
     let label: String
     let symbol: String
@@ -842,18 +853,18 @@ private struct OwnerProfileSaveTile: View {
                     Image(systemName: symbol)
                         .font(.system(size: isCompact ? 16 : 19, weight: .black))
                     Text("\(value)")
-                        .font(.system(size: isCompact ? 23 : 28, weight: .black))
+                        .font(isCompact ? AstirTypography.sectionTitle : AstirTypography.sheetTitle)
                     Spacer(minLength: isCompact ? 0 : WanderTheme.spacing2)
                     Image(systemName: "chevron.right")
                         .font(.system(size: isCompact ? 10 : 12, weight: .black))
                         .frame(width: isCompact ? 24 : 28, height: isCompact ? 24 : 28)
-                        .background(WanderTheme.surfaceRaised.color.opacity(0.8))
+                        .background(brandMode.raisedBackground.opacity(0.8))
                         .clipShape(Circle())
                 }
 
                 Text(label)
-                    .font(.system(size: isCompact ? 11 : 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
             }
@@ -877,7 +888,7 @@ struct ProfileActivityFilterControl: View {
     let wannaCount: Int
 
     var body: some View {
-        WanderGlassSegmentedSwitch(
+        AstirEditorialSegmentedSwitch(
             options: ProfileActivityFilter.allCases.map { filter in
                 WanderSegmentOption(
                     id: filter.rawValue,
@@ -918,6 +929,7 @@ struct ProfileActivityFilterControl: View {
 }
 
 private struct ProfileRecentActivitySection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let items: [ProfileActivityItem]
     let checkInCount: Int
@@ -934,7 +946,7 @@ private struct ProfileRecentActivitySection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 Text("Activity")
-                    .font(WanderTypography.editorialMajorSectionTitle)
+                    .font(AstirTypography.sectionTitle)
                     .accessibilityAddTraits(.isHeader)
 
                 ProfileActivityFilterControl(
@@ -956,8 +968,8 @@ private struct ProfileRecentActivitySection: View {
             VStack(spacing: 0) {
                 if filteredItems.isEmpty {
                     Text(emptyStateText)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
                 } else {
@@ -967,17 +979,17 @@ private struct ProfileRecentActivitySection: View {
                         }
                         if index < min(filteredItems.count, 6) - 1 {
                             Divider()
-                                .overlay(WanderTheme.borderHairline.color)
+                                .overlay(brandMode.border)
                                 .padding(.leading, 58)
                         }
                     }
                 }
             }
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
 
             Button {
@@ -990,15 +1002,15 @@ private struct ProfileRecentActivitySection: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .black))
                 }
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 }
             }
             .buttonStyle(.plain)
@@ -1017,6 +1029,7 @@ private struct ProfileRecentActivitySection: View {
 }
 
 struct ProfileActivityRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let item: ProfileActivityItem
     let action: () -> Void
 
@@ -1029,13 +1042,13 @@ struct ProfileActivityRow: View {
             HStack(spacing: WanderTheme.spacing2) {
                 WanderCategoryEmoji(emoji: item.visiblePlace.categoryEmoji, size: 24)
                     .frame(width: 42, height: 42)
-                    .background(WanderTheme.surfaceSand.color)
+                    .background(brandMode.recessedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.visiblePlace.place.canonicalName)
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
@@ -1048,8 +1061,8 @@ struct ProfileActivityRow: View {
                             Text(locality)
                         }
                     }
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1058,15 +1071,15 @@ struct ProfileActivityRow: View {
                     Text(timestamp.date)
                     Text(timestamp.time)
                 }
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
                 .frame(minWidth: 62, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 64)
@@ -1095,22 +1108,23 @@ struct ProfileActivityRow: View {
 }
 
 private struct ProfileSaveStreakRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let summary: SaveStreakSummary
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
-                .overlay(WanderTheme.borderHairline.color)
+                .overlay(brandMode.border)
 
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 28, height: 28)
 
                 Text(streakTitle)
-                    .font(.system(size: 15, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
 
                 Spacer(minLength: WanderTheme.spacing1)
@@ -1123,7 +1137,7 @@ private struct ProfileSaveStreakRow: View {
                             .overlay {
                                 if summary.displayedDayStates[index] == .streakSave {
                                     Capsule()
-                                        .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+                                        .stroke(brandMode.accent, lineWidth: 1)
                                 }
                             }
                     }
@@ -1132,8 +1146,8 @@ private struct ProfileSaveStreakRow: View {
 
                 if summary.bestCount > 0 {
                     Text("\(summary.bestCount) best")
-                        .font(.system(size: 11, weight: .black, design: .rounded))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
             }
@@ -1141,7 +1155,7 @@ private struct ProfileSaveStreakRow: View {
             .padding(.vertical, WanderTheme.spacing1)
 
             Divider()
-                .overlay(WanderTheme.borderHairline.color)
+                .overlay(brandMode.border)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
@@ -1172,11 +1186,11 @@ private struct ProfileSaveStreakRow: View {
     private func dayFill(_ state: SaveStreakDayState) -> Color {
         switch state {
         case .saved:
-            WanderTheme.terracotta.color
+            brandMode.accent
         case .streakSave:
-            WanderTheme.terracotta.color.opacity(0.2)
+            brandMode.accentWash
         case .missed:
-            WanderTheme.borderHairline.color.opacity(0.65)
+            brandMode.border.opacity(0.65)
         }
     }
 }
@@ -1259,6 +1273,7 @@ struct SaveStreakProfileRowMockup: View {
 #endif
 
 private struct ProfileCalendarSection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
     let ownerLabel: String
@@ -1272,10 +1287,10 @@ private struct ProfileCalendarSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) calendar")
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(AstirTypography.sectionTitle)
                     Text(monthTitle)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 Spacer()
                 WanderGlassButtonCluster {
@@ -1294,16 +1309,16 @@ private struct ProfileCalendarSection: View {
             }
 
             Text(monthActivitySummary)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
                 .accessibilityLabel(monthActivitySummary)
 
             Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2) {
                 GridRow {
                     ForEach(Array(weekdays.enumerated()), id: \.offset) { _, weekday in
                         Text(weekday)
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
                             .frame(maxWidth: .infinity, minHeight: 28)
                     }
                 }
@@ -1336,9 +1351,9 @@ private struct ProfileCalendarSection: View {
             ProfileCalendarLegend()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(brandMode.border))
         .walkthroughEmphasis(.profileCalendar)
         .accessibilityIdentifier("profile.walkthrough.calendarSection")
     }
@@ -1383,6 +1398,7 @@ private struct ProfileCalendarSection: View {
 }
 
 private struct ProfileMonthButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
     let action: () -> Void
 
@@ -1391,7 +1407,7 @@ private struct ProfileMonthButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .black))
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.primaryText)
                 .contentShape(Circle())
                 .wanderGlassCapsule()
         }
@@ -1400,17 +1416,18 @@ private struct ProfileMonthButton: View {
 }
 
 private struct ProfileCalendarMetric: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let value: Int
     let label: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(value)")
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .font(AstirTypography.sheetTitle)
+                .foregroundStyle(brandMode.accent)
             Text(label)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
@@ -1419,6 +1436,7 @@ private struct ProfileCalendarMetric: View {
 }
 
 private struct ProfileCalendarDayCell: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let date: Date?
     let summary: ProfileCalendarDaySummary?
     let isToday: Bool
@@ -1435,13 +1453,15 @@ private struct ProfileCalendarDayCell: View {
 
                 if isToday {
                     Text("NOW")
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.accent)
                         .padding(.horizontal, 5)
                         .frame(height: 13)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 0.75))
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(brandMode.accent)
+                                .frame(height: 1)
+                        }
                         .offset(y: -6)
                         .accessibilityHidden(true)
                 }
@@ -1463,6 +1483,7 @@ private struct ProfileCalendarDayCell: View {
 }
 
 private struct ProfileCalendarActivityMarker: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let state: ProfileCalendarActivityState
     let size: CGFloat
     let label: String?
@@ -1471,7 +1492,7 @@ private struct ProfileCalendarActivityMarker: View {
         ZStack {
             if state == .visit {
                 Circle()
-                    .fill(WanderTheme.terracotta.color)
+                    .fill(brandMode.accent)
                     .frame(width: size - 4, height: size - 4)
             }
 
@@ -1480,8 +1501,8 @@ private struct ProfileCalendarActivityMarker: View {
                     .font(.system(size: size * 0.35, weight: state == .none ? .bold : .black))
                     .foregroundStyle(
                         state == .visit
-                            ? WanderTheme.textOnAction.color
-                            : WanderTheme.textInk.color
+                            ? brandMode.accentForeground
+                            : brandMode.primaryText
                     )
             }
         }
@@ -1490,12 +1511,13 @@ private struct ProfileCalendarActivityMarker: View {
 }
 
 private struct ProfileCalendarLegend: View {
+    @Environment(\.astirBrandMode) private var brandMode
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             item(state: .visit, title: CheckInCopy.pluralNoun)
         }
-        .font(.system(size: 11, weight: .bold))
-        .foregroundStyle(WanderTheme.textMuted.color)
+        .font(AstirTypography.caption)
+        .foregroundStyle(brandMode.secondaryText)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Calendar legend: filled is check-ins")
     }
@@ -1510,6 +1532,7 @@ private struct ProfileCalendarLegend: View {
 }
 
 private struct ProfileYourMapPreview: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let insights: ProfileInsights
     let action: () -> Void
 
@@ -1518,11 +1541,11 @@ private struct ProfileYourMapPreview: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("your map")
-                            .font(WanderTypography.editorialSectionTitle)
+                        Text(title)
+                            .font(AstirTypography.sectionTitle)
                         Text(countSummary)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
 
                     Spacer(minLength: 0)
@@ -1531,8 +1554,8 @@ private struct ProfileYourMapPreview: View {
                         Text("Explore")
                         Image(systemName: "chevron.right")
                     }
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                 }
 
                 ProfileMapSnapshotView(
@@ -1543,18 +1566,18 @@ private struct ProfileYourMapPreview: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
                 Text("Slice your place diary by time, status, category, city, country, tags, ratings, and repeat visits.")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceBone.color.opacity(0.72))
+            .background(brandMode.raisedBackground.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color)
+                    .stroke(brandMode.border)
             )
         }
         .buttonStyle(.plain)
@@ -1583,6 +1606,7 @@ enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
 }
 
 private struct ProfileMapSection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: LocalProfile
     let insights: ProfileInsights
     let ownerLabel: String
@@ -1596,10 +1620,10 @@ private struct ProfileMapSection: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) map")
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(AstirTypography.sectionTitle)
                     Text(mapCountSummary)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 Spacer()
                 if let shareContent = mapShareContent {
@@ -1635,11 +1659,11 @@ private struct ProfileMapSection: View {
 
             if summaryItems.isEmpty {
                 Text(emptyCopy)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
                     .padding(.horizontal, WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color)
+                    .background(brandMode.recessedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             } else {
                 VStack(spacing: 0) {
@@ -1662,17 +1686,17 @@ private struct ProfileMapSection: View {
                             .padding(.trailing, WanderTheme.spacing2)
                         }
                         if index < summaryItems.count - 1 {
-                            Divider().overlay(WanderTheme.borderHairline.color)
+                            Divider().overlay(brandMode.border)
                         }
                     }
                 }
-                .background(WanderTheme.surfaceBone.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(brandMode.border))
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color.opacity(0.4))
+        .background(brandMode.raisedBackground.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
         .walkthroughEmphasis(.profileMap)
         .accessibilityIdentifier("profile.walkthrough.mapSection")
@@ -1715,36 +1739,26 @@ private struct ProfileMapSummaryPicker: View {
     @Binding var selection: ProfileMapSummaryKind
 
     var body: some View {
-        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(ProfileMapSummaryKind.allCases) { kind in
-                    Button {
-                        selection = kind
-                    } label: {
-                        Text(kind.title)
-                            .font(.system(.subheadline, design: .default, weight: .black))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .foregroundStyle(
-                                selection == kind
-                                    ? WanderTheme.terracottaDark.color
-                                    : WanderTheme.textInk.color
-                            )
-                            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                            .contentShape(Capsule())
-                            .wanderGlassCapsule(tone: selection == kind ? .selected : .neutral)
+        AstirEditorialSegmentedSwitch(
+            options: ProfileMapSummaryKind.allCases.map { kind in
+                WanderSegmentOption(id: kind.rawValue, title: kind.title)
+            },
+            selection: Binding(
+                get: { selection.rawValue },
+                set: { value in
+                    if let resolved = ProfileMapSummaryKind(rawValue: value) {
+                        selection = resolved
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selection == kind ? .isSelected : [])
                 }
-            }
-        }
+            )
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Map summary")
     }
 }
 
 private struct ProfileMapSnapshotView: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let points: [ProfileMapPoint]
     @Binding var shareImageFileURL: URL?
     @Environment(\.colorScheme) private var colorScheme
@@ -1767,11 +1781,11 @@ private struct ProfileMapSnapshotView: View {
                         .interpolation(.high)
                         .scaledToFill()
                 } else {
-                    WanderTheme.surfaceSand.color
+                    brandMode.recessedBackground
                         .overlay {
                             Image(systemName: "map")
                                 .font(.system(size: 22, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                 }
             }
@@ -1910,8 +1924,12 @@ private final class ProfileMapSnapshotCache {
         return UIGraphicsImageRenderer(size: request.size, format: format).image { context in
             snapshot.image.draw(in: CGRect(origin: .zero, size: request.size))
 
-            let fillColor = UIColor(WanderTheme.terracotta.color).cgColor
-            let strokeColor = UIColor(WanderTheme.surfaceRaised.color).cgColor
+            let fillColor = UIColor(AstirTheme.signal.color).cgColor
+            let strokeColor = UIColor(
+                request.userInterfaceStyle == .dark
+                    ? AstirTheme.inkRaised.color
+                    : AstirTheme.paperRaised.color
+            ).cgColor
             context.cgContext.setFillColor(fillColor)
             context.cgContext.setStrokeColor(strokeColor)
             context.cgContext.setLineWidth(1)
@@ -1928,25 +1946,26 @@ private final class ProfileMapSnapshotCache {
 }
 
 private struct ProfileMapSummaryRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let item: ProfileSummaryItem
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("\(item.count) \(item.count == 1 ? "place" : "places")")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             Spacer()
             Text("\(item.percentage)%")
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accent)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1962,6 +1981,7 @@ private struct ProfileMapSummaryShareButton: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var shareTask: Task<Void, Never>?
     @State private var shareContent: WanderShareContent?
     @State private var showsShareSheet = false
@@ -1974,11 +1994,11 @@ private struct ProfileMapSummaryShareButton: View {
             ZStack {
                 if isPreparing {
                     ProgressView()
-                        .tint(WanderTheme.terracotta.color)
+                        .tint(brandMode.accent)
                 } else {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accent)
                 }
             }
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)

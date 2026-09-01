@@ -1628,7 +1628,7 @@ final class MapFilterSelectionTests: XCTestCase {
                 "if !isPlaceProfilePresented && !isMapSearchFocused"
             )
         )
-        XCTAssertTrue(map.contains("mapSearchDockClearance + nearbyLift"))
+        XCTAssertTrue(map.contains(".padding(.bottom, nearbyClusterBottomPadding)"))
     }
 
     func testMoreSectionsMatchTheActiveSource() {
@@ -1750,7 +1750,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(theme.contains("isElevated"))
     }
 
-    func testMapSearchCapsuleUsesLiquidGlassOnIOS26WithFlatFallback() throws {
+    func testMapSearchRoundedRectangleUsesLiquidGlassOnIOS26WithFlatFallback() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1777,13 +1777,25 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(searchBarSource.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
         XCTAssertTrue(searchBarSource.contains("@State private var draftQuery"))
         XCTAssertTrue(searchBarSource.contains("Task.sleep(for: .milliseconds(80))"))
+        XCTAssertTrue(
+            searchSurfaceSource.contains(
+                "let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)"
+            )
+        )
         XCTAssertTrue(searchSurfaceSource.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(searchSurfaceSource.contains(".glassEffect("))
-        XCTAssertTrue(searchSurfaceSource.contains(".tint(appearance.isDark ? Color.black.opacity(0.50) : nil)"))
+        XCTAssertTrue(searchSurfaceSource.contains(".tint(astirBrandMode.background.opacity(0.74))"))
         XCTAssertTrue(searchSurfaceSource.contains(".interactive(true)"))
-        XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
+        XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: shape)"))
         XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
-        XCTAssertTrue(filterChipSource.contains(".wanderGlassCapsule("))
+        XCTAssertFalse(filterChipSource.contains(".wanderGlassCapsule("))
+        XCTAssertTrue(filterChipSource.contains(".overlay(alignment: .bottom)"))
+        XCTAssertTrue(filterChipSource.contains("Rectangle()"))
+        XCTAssertTrue(
+            filterChipSource.contains(
+                ".fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)"
+            )
+        )
     }
 
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {
