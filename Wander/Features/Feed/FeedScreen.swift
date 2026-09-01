@@ -299,7 +299,7 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "Activity", detail: freshnessDetail)
+            FeedSectionHeading(title: "Recent", detail: freshnessDetail)
             FeedActivityList(
                 activity: page.activity,
                 openProfile: openProfile,
@@ -318,7 +318,7 @@ struct FeedScreen: View {
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
             FeedRefreshRecoveryState(retry: refresh)
         } else {
-            FeedSectionHeading(title: "Activity")
+            FeedSectionHeading(title: "Recent")
             FeedEmptyState(
                 recommendations: peopleRecommendations,
                 followingProfileIDs: followingProfileIDs,
@@ -1672,7 +1672,7 @@ private struct FeedLoadingState: View {
                         .frame(width: 184, height: 218)
                 }
             }
-            FeedSectionHeading(title: "Activity")
+            FeedSectionHeading(title: "Recent")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -1697,7 +1697,7 @@ private struct FeedRefreshRecoveryState: View {
             FeedSectionHeading(title: "Featured for you")
             FeedRecoveryFeaturedRail()
 
-            FeedSectionHeading(title: "Activity", detail: "Unavailable")
+            FeedSectionHeading(title: "Recent", detail: "Unavailable")
             FeedRecoveryActivityList()
 
             FeedRetryRow(
