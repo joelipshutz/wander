@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(12);
+select plan(18);
 
 select has_function(
   'public',
@@ -45,6 +45,47 @@ select ok(
   'place photo gallery pins search_path'
 );
 
+select has_function(
+  'public',
+  'visible_place_photos_for_places',
+  array['uuid[]', 'timestamptz', 'integer', 'uuid', 'integer']
+);
+
+select function_privs_are(
+  'public',
+  'visible_place_photos_for_places',
+  array['uuid[]', 'timestamptz', 'integer', 'uuid', 'integer'],
+  'authenticated',
+  array['EXECUTE']
+);
+
+select function_privs_are(
+  'public',
+  'visible_place_photos_for_places',
+  array['uuid[]', 'timestamptz', 'integer', 'uuid', 'integer'],
+  'anon',
+  array[]::text[]
+);
+
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.visible_place_photos_for_places(uuid[],timestamptz,integer,uuid,integer)'::regprocedure
+  ),
+  false,
+  'grouped place photo gallery stays security invoker'
+);
+
+select ok(
+  (
+    select 'search_path=pg_catalog, public, app' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'public.visible_place_photos_for_places(uuid[],timestamptz,integer,uuid,integer)'::regprocedure
+  ),
+  'grouped place photo gallery pins search_path'
+);
+
 insert into public.profiles (id, handle, display_name, avatar_url, is_private_profile)
 values
   ('gallery_public_owner', 'publicowner', 'Public Owner', 'https://example.com/public.jpg', false),
@@ -80,15 +121,25 @@ insert into public.places (
   source_provider,
   source_provider_place_id
 )
-values (
-  '71000000-0000-0000-0000-000000000133',
-  'Gallery Place',
-  'restaurants_food',
-  34.01,
-  -118.01,
-  'mapkit',
-  'rec-133-gallery'
-);
+values
+  (
+    '71000000-0000-0000-0000-000000000133',
+    'Gallery Place',
+    'restaurants_food',
+    34.01,
+    -118.01,
+    'mapkit',
+    'rec-133-gallery'
+  ),
+  (
+    '71000000-0000-0000-0000-000000000134',
+    'Gallery Place Duplicate',
+    'restaurants_food',
+    34.01001,
+    -118.01001,
+    'google_places',
+    'rec-134-gallery-duplicate'
+  );
 
 insert into public.user_places (
   id,
@@ -150,6 +201,16 @@ values
     '2026-07-22T19:00:00Z',
     '2026-07-22T19:00:00Z',
     'manual'
+  ),
+  (
+    '72000000-0000-0000-0000-000000000136',
+    'gallery_public_owner',
+    '71000000-0000-0000-0000-000000000134',
+    'been',
+    'followers',
+    '2026-07-24T18:00:00Z',
+    '2026-07-24T18:00:00Z',
+    'manual'
   );
 
 insert into public.place_visits (
@@ -163,7 +224,8 @@ values
   ('73000000-0000-0000-0000-000000000131', '72000000-0000-0000-0000-000000000131', '2026-07-20T18:00:00Z', false),
   ('73000000-0000-0000-0000-000000000132', '72000000-0000-0000-0000-000000000132', '2026-07-21T18:00:00Z', false),
   ('73000000-0000-0000-0000-000000000133', '72000000-0000-0000-0000-000000000133', '2026-07-22T18:00:00Z', false),
-  ('73000000-0000-0000-0000-000000000135', '72000000-0000-0000-0000-000000000135', '2026-07-22T19:00:00Z', false);
+  ('73000000-0000-0000-0000-000000000135', '72000000-0000-0000-0000-000000000135', '2026-07-22T19:00:00Z', false),
+  ('73000000-0000-0000-0000-000000000136', '72000000-0000-0000-0000-000000000136', '2026-07-24T18:00:00Z', false);
 
 insert into public.visit_photos (
   id,
@@ -249,6 +311,18 @@ values
     0,
     'uploaded',
     '2026-07-22T19:10:00Z'
+  ),
+  (
+    '74000000-0000-0000-0000-000000000136',
+    '73000000-0000-0000-0000-000000000136',
+    'gallery_public_owner/73000000-0000-0000-0000-000000000136/74000000-0000-0000-0000-000000000136.jpg',
+    'image/jpeg',
+    1200,
+    1600,
+    '2026-07-24T18:10:00Z',
+    0,
+    'uploaded',
+    '2026-07-24T18:10:00Z'
   );
 
 set local role authenticated;
@@ -307,6 +381,21 @@ select is(
   ),
   '74000000-0000-0000-0000-000000000135',
   'gallery cursor returns the next stable photo'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.visible_place_photos_for_places(
+      array[
+        '71000000-0000-0000-0000-000000000133'::uuid,
+        '71000000-0000-0000-0000-000000000134'::uuid,
+        '71000000-0000-0000-0000-000000000134'::uuid
+      ]
+    )
+  ),
+  5,
+  'grouped gallery includes eligible photos from every equivalent place row once'
 );
 
 reset role;

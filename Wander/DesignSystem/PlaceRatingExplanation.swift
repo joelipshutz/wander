@@ -43,7 +43,7 @@ struct PlaceProfileRatingsRail: View {
             Metric(
                 title: "Fit score",
                 value: presentation.fitRating?.displayScore ?? "—",
-                suffix: presentation.fitRating == nil ? nil : "/10",
+                suffix: presentation.fitRating == nil ? nil : "/5",
                 subtitle: presentation.fitRating == nil ? "Keep saving to unlock" : "Based on your taste"
             )
         ]

@@ -337,7 +337,7 @@ struct RemotePlaceAttributeDTO: Codable, Equatable {
     }
 }
 
-struct RemoteFeedMediaDTO: Codable, Equatable {
+struct RemoteFeedMediaDTO: Codable, Equatable, Sendable {
     let id: String
     let urlString: String?
     let storageBucket: String?
@@ -373,6 +373,49 @@ struct RemoteFeedMediaDTO: Codable, Equatable {
             accessibilityLabel: accessibilityLabel
         )
     }
+}
+
+private struct FeedMediaResolutionRequest: Sendable {
+    let activityID: String
+    let mediaIndex: Int
+    let media: RemoteFeedMediaDTO
+}
+
+private struct FeedMediaResolution: Sendable {
+    let activityID: String
+    let mediaIndex: Int
+    let preview: FeedMediaPreview
+}
+
+@MainActor
+private func resolveFeedMedia(
+    _ requests: [FeedMediaResolutionRequest],
+    storage: (any RemoteStorageCalling)?
+) async -> [FeedMediaResolution] {
+    var resolved: [FeedMediaResolution] = []
+    resolved.reserveCapacity(requests.count)
+    for batchStart in stride(from: 0, to: requests.count, by: 8) {
+        guard !Task.isCancelled else { break }
+        let batchEnd = min(batchStart + 8, requests.count)
+        let batch = Array(requests[batchStart..<batchEnd])
+        let tasks = batch.map { request in
+            Task { @MainActor in
+                FeedMediaResolution(
+                    activityID: request.activityID,
+                    mediaIndex: request.mediaIndex,
+                    preview: await request.media.preview(storage: storage)
+                )
+            }
+        }
+        for task in tasks {
+            guard !Task.isCancelled else {
+                tasks.forEach { $0.cancel() }
+                return resolved
+            }
+            resolved.append(await task.value)
+        }
+    }
+    return resolved
 }
 
 struct RemoteActivityMediaDTO: Codable, Equatable {
@@ -448,16 +491,29 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
     @MainActor
     func activity(
         storage: (any RemoteStorageCalling)? = nil,
-        mediaOverride: [RemoteFeedMediaDTO]? = nil
+        mediaOverride: [RemoteFeedMediaDTO]? = nil,
+        renderedMediaOverride: [FeedMediaPreview]? = nil
     ) async throws -> FeedActivity {
         guard let kind = FeedActivityKind(rawValue: eventType) else {
             throw WanderRemoteError.invalidResponse("Unknown Feed event type: \(eventType)")
         }
-        var renderedMedia: [FeedMediaPreview] = []
-        let sourceMedia = mediaOverride ?? media
-        renderedMedia.reserveCapacity(sourceMedia.count)
-        for item in sourceMedia {
-            renderedMedia.append(await item.preview(storage: storage))
+        let renderedMedia: [FeedMediaPreview]
+        if let renderedMediaOverride {
+            renderedMedia = renderedMediaOverride
+        } else {
+            let sourceMedia = mediaOverride ?? media
+            renderedMedia = await resolveFeedMedia(
+                sourceMedia.enumerated().map {
+                    FeedMediaResolutionRequest(
+                        activityID: id.lowercased(),
+                        mediaIndex: $0.offset,
+                        media: $0.element
+                    )
+                },
+                storage: storage
+            )
+            .sorted { $0.mediaIndex < $1.mediaIndex }
+            .map(\.preview)
         }
         return FeedActivity(
             id: id,
@@ -508,11 +564,34 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
     }
 
     @MainActor
-    func followedFeedPage() async throws -> FollowedFeedPage {
+    func followedFeedPage(
+        storage: (any RemoteStorageCalling)? = nil,
+        mediaByActivityID: [String: [RemoteFeedMediaDTO]] = [:]
+    ) async throws -> FollowedFeedPage {
+        let mediaRequests = activity.flatMap { item in
+            let activityID = item.id.lowercased()
+            return (mediaByActivityID[activityID] ?? item.media).enumerated().map {
+                FeedMediaResolutionRequest(
+                    activityID: activityID,
+                    mediaIndex: $0.offset,
+                    media: $0.element
+                )
+            }
+        }
+        let renderedMediaByActivityID = Dictionary(
+            grouping: await resolveFeedMedia(mediaRequests, storage: storage),
+            by: \.activityID
+        ).mapValues { resolutions in
+            resolutions.sorted { $0.mediaIndex < $1.mediaIndex }.map(\.preview)
+        }
         var renderedActivity: [FeedActivity] = []
         renderedActivity.reserveCapacity(activity.count)
         for item in activity {
-            renderedActivity.append(try await item.activity())
+            renderedActivity.append(
+                try await item.activity(
+                    renderedMediaOverride: renderedMediaByActivityID[item.id.lowercased()] ?? []
+                )
+            )
         }
         let actorsByID = Dictionary(
             renderedActivity.map { ($0.actor.id, $0.actor) },

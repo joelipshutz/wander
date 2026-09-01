@@ -2,6 +2,61 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderREC386PhotoFixture",
+            "-WanderMapPlace", "Dudley Market QA",
+            "-WanderMapSheetExpanded",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Dudley Market QA"].firstMatch.waitForExistence(timeout: 8))
+        let memberPhoto = app.buttons["Open place photo by Ryan full screen"]
+        XCTAssertTrue(memberPhoto.waitForExistence(timeout: 6))
+        XCTAssertFalse(memberPhoto.frame.isEmpty)
+        XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 3))
+        capture("REC-386 member photo visible in gallery")
+
+        let ryanNote = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "QA proof: Ryan's uploaded check-in photo")
+        ).firstMatch
+        scrollUp(in: app, until: ryanNote)
+        XCTAssertTrue(ryanNote.isHittable)
+        let ryanCheckInPhoto = app.buttons["Open check-in photo by Ryan"]
+        XCTAssertTrue(ryanCheckInPhoto.waitForExistence(timeout: 3))
+        scrollUp(in: app, until: ryanCheckInPhoto)
+        XCTAssertTrue(ryanCheckInPhoto.isHittable)
+        capture("REC-386 member photo visible in check-in")
+
+        let disposableNote = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "QA disposable check-in")
+        ).firstMatch
+        scrollDown(in: app, until: disposableNote)
+        XCTAssertTrue(disposableNote.exists)
+
+        let editButton = app.buttons["Edit check-in"].firstMatch
+        XCTAssertTrue(editButton.waitForExistence(timeout: 3))
+        editButton.tap()
+
+        let deleteButton = app.buttons["Delete check-in"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 4))
+        deleteButton.tap()
+        let confirmation = app.alerts["Delete check-in?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.buttons["Delete check-in"].tap()
+
+        XCTAssertFalse(disposableNote.waitForExistence(timeout: 3))
+        XCTAssertTrue(ryanNote.waitForExistence(timeout: 3))
+        scrollUp(in: app, until: ryanNote)
+        XCTAssertTrue(ryanNote.isHittable)
+        capture("REC-386 disposable check-in deleted")
+    }
+
     func testCancelingMapSearchDoesNotRevealAnUnrelatedPlaceCard() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -122,6 +177,18 @@ final class MapPlaceCardUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func scrollUp(in app: XCUIApplication, until element: XCUIElement) {
+        for _ in 0..<8 where !element.isHittable {
+            app.swipeUp()
+        }
+    }
+
+    private func scrollDown(in app: XCUIApplication, until element: XCUIElement) {
+        for _ in 0..<8 where !element.isHittable {
+            app.swipeDown()
+        }
     }
 
     private func assertSharedContainerInsets(
