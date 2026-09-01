@@ -5,12 +5,22 @@ import UIKit
 struct WanderColorToken: Equatable {
     let name: String
     let hex: String
+    let darkHex: String?
     private let resolvedColor: Color
 
-    init(name: String, hex: String) {
+    init(name: String, hex: String, darkHex: String? = nil) {
         self.name = name
         self.hex = hex
-        resolvedColor = Color(hex: hex)
+        self.darkHex = darkHex
+        if let darkHex {
+            resolvedColor = Color(
+                uiColor: UIColor { traits in
+                    UIColor(wanderHex: traits.userInterfaceStyle == .dark ? darkHex : hex)
+                }
+            )
+        } else {
+            resolvedColor = Color(hex: hex)
+        }
     }
 
     var color: Color {
@@ -18,31 +28,91 @@ struct WanderColorToken: Equatable {
     }
 
     static func == (lhs: WanderColorToken, rhs: WanderColorToken) -> Bool {
-        lhs.name == rhs.name && lhs.hex == rhs.hex
+        lhs.name == rhs.name && lhs.hex == rhs.hex && lhs.darkHex == rhs.darkHex
     }
 }
 
 enum WanderTheme {
-    static let canvasWarm = WanderColorToken(name: "color.canvas.warm", hex: "#F3DFCA")
-    static let surfaceBone = WanderColorToken(name: "color.surface.bone", hex: "#FFF7EA")
-    static let surfaceRaised = WanderColorToken(name: "color.surface.raised", hex: "#FFFFFF")
-    static let surfaceSand = WanderColorToken(name: "color.surface.sand", hex: "#EFE3D0")
+    static let canvasWarm = WanderColorToken(
+        name: "color.canvas.warm",
+        hex: "#F2E9DB",
+        darkHex: "#141714"
+    )
+    static let surfaceBone = WanderColorToken(
+        name: "color.surface.bone",
+        hex: "#FBF6ED",
+        darkHex: "#1B1F1B"
+    )
+    static let surfaceRaised = WanderColorToken(
+        name: "color.surface.raised",
+        hex: "#FFF9F0",
+        darkHex: "#222622"
+    )
+    static let surfaceSand = WanderColorToken(
+        name: "color.surface.sand",
+        hex: "#E8DED0",
+        darkHex: "#101210"
+    )
 
-    static let textInk = WanderColorToken(name: "color.text.ink", hex: "#2C2118")
-    static let textMuted = WanderColorToken(name: "color.text.muted", hex: "#7B6555")
-    static let textFaint = WanderColorToken(name: "color.text.faint", hex: "#A8957F")
-    static let textOnAction = WanderColorToken(name: "color.text.onAction", hex: "#FFF7EA")
+    static let textInk = WanderColorToken(
+        name: "color.text.ink",
+        hex: "#141714",
+        darkHex: "#F2E9DB"
+    )
+    static let textMuted = WanderColorToken(
+        name: "color.text.muted",
+        hex: "#6F6A62",
+        darkHex: "#98958D"
+    )
+    static let textFaint = WanderColorToken(
+        name: "color.text.faint",
+        hex: "#8D877E",
+        darkHex: "#74776F"
+    )
+    static let textOnAction = WanderColorToken(
+        name: "color.text.onAction",
+        hex: "#F2E9DB",
+        darkHex: "#141714"
+    )
 
-    static let borderHairline = WanderColorToken(name: "color.border.hairline", hex: "#DBC2AA")
-    static let borderStrong = WanderColorToken(name: "color.border.strong", hex: "#C9AC8F")
+    static let borderHairline = WanderColorToken(
+        name: "color.border.hairline",
+        hex: "#C9BFB0",
+        darkHex: "#464943"
+    )
+    static let borderStrong = WanderColorToken(
+        name: "color.border.strong",
+        hex: "#A99F91",
+        darkHex: "#686C63"
+    )
 
-    static let terracotta = WanderColorToken(name: "color.action.terracotta", hex: "#D46F4D")
-    static let terracottaDark = WanderColorToken(name: "color.action.terracottaDark", hex: "#A94F35")
-    static let terracottaTint = WanderColorToken(name: "color.action.terracottaTint", hex: "#F6E0D2")
-    static let sunTint = WanderColorToken(name: "color.surface.sunTint", hex: "#F4E8C9")
-    static let skyTint = WanderColorToken(name: "color.surface.skyTint", hex: "#DBEAF1")
+    static let terracotta = WanderColorToken(
+        name: "color.action.terracotta",
+        hex: "#F05A3C",
+        darkHex: "#F05A3C"
+    )
+    static let terracottaDark = WanderColorToken(
+        name: "color.action.terracottaDark",
+        hex: "#C9422A",
+        darkHex: "#FF8069"
+    )
+    static let terracottaTint = WanderColorToken(
+        name: "color.action.terracottaTint",
+        hex: "#FBE0D9",
+        darkHex: "#3A211B"
+    )
+    static let sunTint = WanderColorToken(
+        name: "color.surface.sunTint",
+        hex: "#F4E8C9",
+        darkHex: "#312B1A"
+    )
+    static let skyTint = WanderColorToken(
+        name: "color.surface.skyTint",
+        hex: "#DBEAF1",
+        darkHex: "#172A32"
+    )
 
-    static let pinYou = WanderColorToken(name: "color.pin.you", hex: "#D46F4D")
+    static let pinYou = WanderColorToken(name: "color.pin.you", hex: "#F05A3C")
     static let pinSocial = WanderColorToken(name: "color.pin.social", hex: "#69B8D7")
 
     static let categoryMoss = WanderColorToken(name: "color.category.moss", hex: "#6F8F5F")
@@ -92,14 +162,14 @@ enum WanderTheme {
     ]
 }
 
-/// A map-scoped appearance palette. The rest of rec.me intentionally keeps its
-/// warm light canvas; this palette only follows the Map setting through the Map
-/// view hierarchy.
+/// Compatibility palette for Map-specific components. Chrome follows the live
+/// adaptive Astir appearance; the separate Map setting now affects MapKit tiles
+/// only, so it cannot introduce a third product theme.
 struct WanderMapAppearance: Equatable {
-    static let nightSurface = WanderColorToken(name: "color.map.night.surface", hex: "#171A1C")
-    static let nightRaised = WanderColorToken(name: "color.map.night.raised", hex: "#25292C")
-    static let nightText = WanderColorToken(name: "color.map.night.text", hex: "#FFF7EA")
-    static let nightMuted = WanderColorToken(name: "color.map.night.muted", hex: "#CEC1B4")
+    static let nightSurface = WanderColorToken(name: "color.map.night.surface", hex: "#141714")
+    static let nightRaised = WanderColorToken(name: "color.map.night.raised", hex: "#1B1F1B")
+    static let nightText = WanderColorToken(name: "color.map.night.text", hex: "#F2E9DB")
+    static let nightMuted = WanderColorToken(name: "color.map.night.muted", hex: "#98958D")
 
     static let light = WanderMapAppearance(isDark: false)
     static let dark = WanderMapAppearance(isDark: true)
@@ -111,31 +181,31 @@ struct WanderMapAppearance: Equatable {
     }
 
     var primaryText: Color {
-        isDark ? Self.nightText.color : WanderTheme.textInk.color
+        isDark ? Self.nightText.color : AstirTheme.ink.color
     }
 
     var secondaryText: Color {
-        isDark ? Self.nightMuted.color : WanderTheme.textMuted.color
+        isDark ? Self.nightMuted.color : AstirTheme.mutedOnPaper.color
     }
 
     var faintText: Color {
-        isDark ? Self.nightMuted.color.opacity(0.72) : WanderTheme.textFaint.color
+        isDark ? Self.nightMuted.color.opacity(0.72) : AstirTheme.mutedOnPaper.color.opacity(0.82)
     }
 
     var surface: Color {
-        isDark ? Self.nightSurface.color : WanderTheme.surfaceBone.color
+        isDark ? Self.nightSurface.color : AstirTheme.paper.color
     }
 
     var raisedSurface: Color {
-        isDark ? Self.nightRaised.color : WanderTheme.surfaceRaised.color
+        isDark ? Self.nightRaised.color : AstirTheme.paperRaised.color
     }
 
     var border: Color {
-        isDark ? Color.white.opacity(0.20) : WanderTheme.borderHairline.color
+        isDark ? AstirTheme.lineOnInk.color : AstirTheme.lineOnPaper.color
     }
 
     var accentText: Color {
-        isDark ? WanderTheme.terracotta.color : WanderTheme.terracottaDark.color
+        AstirTheme.signal.color
     }
 
     var neutralGlassTone: WanderGlassTone {
@@ -204,6 +274,21 @@ private extension Color {
     }
 }
 
+private extension UIColor {
+    convenience init(wanderHex hex: String) {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        var value: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&value)
+
+        self.init(
+            red: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+
 struct WanderScreenBackground: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -264,6 +349,7 @@ struct WanderCategoryEmoji: View {
 }
 
 struct WanderChip: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     var isSelected = false
     var systemImage: String?
@@ -276,12 +362,16 @@ struct WanderChip: View {
             }
             Text(title)
         }
-        .font(.system(size: 13, weight: .semibold))
-        .padding(.horizontal, WanderTheme.spacing4)
+        .font(AstirTypography.label)
+        .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceSand.color)
-        .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-        .clipShape(Capsule())
+        .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+        .contentShape(Rectangle())
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(isSelected ? brandMode.accent : brandMode.border)
+                .frame(height: isSelected ? 2 : 1)
+        }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -908,8 +998,13 @@ struct WanderPrimaryButton: View {
                             ? WanderTheme.borderStrong.color
                             : solidFillColor
                     )
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Capsule())
+                    .foregroundStyle(solidForegroundColor)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusLarge,
+                            style: .continuous
+                        )
+                    )
             }
         }
         .buttonStyle(WanderPrimaryButtonPressStyle())
@@ -923,7 +1018,7 @@ struct WanderPrimaryButton: View {
             }
             Text(title)
         }
-        .font(.system(size: 16, weight: .bold))
+        .font(AstirTypography.control)
         .frame(maxWidth: .infinity, minHeight: 52)
     }
 
@@ -933,6 +1028,17 @@ struct WanderPrimaryButton: View {
             .black
         case .brand, .espressoConfirmation:
             WanderTheme.terracotta.color
+        }
+    }
+
+    private var solidForegroundColor: Color {
+        switch tone {
+        case .brand:
+            AstirTheme.ink.color
+        case .solidBlackConfirmation:
+            AstirTheme.paper.color
+        case .espressoConfirmation:
+            WanderTheme.textOnAction.color
         }
     }
 }

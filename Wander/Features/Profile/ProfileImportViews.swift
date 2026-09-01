@@ -9,12 +9,13 @@ enum ImportHelpDestination {
 struct AddImportEntrySection: View {
     let summary: PlaceImportSummary
     let action: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("Import")
-                .font(.system(size: 17, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
 
             Button(action: action) {
@@ -23,11 +24,11 @@ struct AddImportEntrySection: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Import from")
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text("Import your places and lists from Google Maps, Instagram, TikTok, and more here")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(2)
                     }
 
@@ -36,36 +37,36 @@ struct AddImportEntrySection: View {
                     if summary.hasPendingImports {
                         if summary.processingCount + summary.remainingCount > 0 {
                             Text("\(summary.processingCount + summary.remainingCount)")
-                                .font(.system(size: 11, weight: .black))
-                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.accentForeground)
                                 .frame(minWidth: 22, minHeight: 22)
-                                .background(WanderTheme.terracotta.color)
+                                .background(brandMode.accent)
                                 .clipShape(Capsule())
                                 .accessibilityLabel(
                                     "\(summary.processingCount + summary.remainingCount) places in progress or ready"
                                 )
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .black))
-                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.accentForeground)
                                 .frame(width: 22, height: 22)
-                                .background(WanderTheme.terracotta.color)
+                                .background(brandMode.accent)
                                 .clipShape(Circle())
                                 .accessibilityLabel("A source scan needs attention")
                         }
                     }
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .background(brandMode.raisedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -82,6 +83,7 @@ struct PlaceImportHubScreen: View {
     var cancelAction: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var isStarting = false
@@ -98,12 +100,12 @@ struct PlaceImportHubScreen: View {
 
                 VStack(spacing: WanderTheme.spacing1) {
                     Text("Bring your places with you")
-                        .font(WanderTypography.editorialMajorSectionTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .multilineTextAlignment(.center)
                     Text("Paste a link from Instagram, Google Maps, or TikTok")
-                        .font(WanderTypography.body)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -111,13 +113,13 @@ struct PlaceImportHubScreen: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "link")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accentText)
 
                     TextField("Paste a link…", text: $input, axis: .vertical)
                         .focused($isInputFocused)
                         .accessibilityLabel("Import link")
                         .accessibilityIdentifier("import.input")
-                        .font(WanderTypography.body.weight(.semibold))
+                        .font(AstirTypography.body)
                         .lineLimit(1...3)
 
                     if !input.isEmpty {
@@ -125,7 +127,7 @@ struct PlaceImportHubScreen: View {
                             input = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(WanderTheme.borderStrong.color)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                         }
                         .buttonStyle(.plain)
@@ -135,14 +137,14 @@ struct PlaceImportHubScreen: View {
                 .padding(.leading, WanderTheme.spacing3)
                 .padding(.trailing, input.isEmpty ? WanderTheme.spacing3 : 0)
                 .frame(maxWidth: .infinity, minHeight: 64)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .stroke(
                             isInputFocused
-                                ? WanderTheme.terracotta.color
-                                : WanderTheme.borderHairline.color,
+                                ? brandMode.accent
+                                : brandMode.border,
                             lineWidth: isInputFocused ? 2 : 1
                         )
                 )
@@ -151,17 +153,17 @@ struct PlaceImportHubScreen: View {
                     HStack(spacing: WanderTheme.spacing2) {
                         if isStarting {
                             ProgressView()
-                                .tint(WanderTheme.textOnAction.color)
+                                .tint(brandMode.accentForeground)
                         } else {
                             Image(systemName: "arrow.down.doc.fill")
                         }
                         Text("Start import")
                     }
-                    .font(.system(size: 16, weight: .black))
+                    .font(AstirTypography.control)
                     .frame(maxWidth: .infinity, minHeight: 54)
-                    .background(canStart ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Capsule())
+                    .background(canStart ? brandMode.accent : brandMode.border)
+                    .foregroundStyle(brandMode.accentForeground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!canStart || isStarting)
@@ -171,8 +173,8 @@ struct PlaceImportHubScreen: View {
                     pasteFromClipboard()
                 } label: {
                     Label("Paste from clipboard", systemImage: "doc.on.clipboard")
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -192,7 +194,7 @@ struct PlaceImportHubScreen: View {
             .padding(.bottom, WanderTheme.spacing6)
         }
         .scrollDismissesKeyboard(.interactively)
-        .wanderScreen()
+        .astirScreen()
         .navigationTitle("Import places")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -376,6 +378,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var candidatePickerItem: PlaceImportItem?
     @State private var rescueItem: PlaceImportItem?
     @State private var saveRoute: PlaceImportSaveRoute?
@@ -423,7 +427,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             .padding(.bottom, displayedReceipt == nil && bottomActionTitle != nil ? 88 : WanderTheme.spacing6)
         }
         .scrollDismissesKeyboard(.interactively)
-        .wanderScreen()
+        .astirScreen()
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -860,22 +864,23 @@ struct PlaceImportAdaptiveReviewScreen: View {
             HStack(spacing: WanderTheme.spacing3) {
                 ProgressView()
                     .controlSize(.large)
-                    .tint(WanderTheme.terracotta.color)
+                    .tint(brandMode.accent)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Matching \(reviewPlan.processingCount) item\(reviewPlan.processingCount == 1 ? "" : "s")")
-                        .font(WanderTypography.editorialNamedContent)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(captureSourceCopy)
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
         }
     }
@@ -955,16 +960,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(spacing: WanderTheme.spacing2) {
                 Text("\(reviewPlan.selectedCount) of \(reviewPlan.totalCount) selected")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 Spacer()
 
                 Button(allItemsSelected ? "Clear all" : "Select all") {
                     setAllIncluded(!allItemsSelected)
                 }
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .buttonStyle(.plain)
             }
@@ -972,9 +977,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
             if !selectedReadyItems.isEmpty {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("Apply to selected")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                    WanderGlassSegmentedSwitch(
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
+                    AstirEditorialSegmentedSwitch(
                         options: importStatusOptions,
                         selection: bulkStatusSelection
                     )
@@ -997,12 +1002,12 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(prominent ? WanderTypography.editorialCardTitle : WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(prominent ? AstirTypography.sectionTitle : AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(item.reviewMetadata)
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1014,9 +1019,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
             if item.state == .ready {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("Save as")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                    WanderGlassSegmentedSwitch(
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
+                    AstirEditorialSegmentedSwitch(
                         options: importStatusOptions,
                         selection: statusSelection(for: item)
                     )
@@ -1030,8 +1035,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         beginOptionalDetails(for: item)
                     } label: {
                         Label("Optional details", systemImage: "slider.horizontal.3")
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
@@ -1041,8 +1046,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     Button("Edit place", systemImage: "magnifyingglass") {
                         rescueItem = item
                     }
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .buttonStyle(.plain)
                 }
@@ -1057,17 +1062,17 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
             if !isSelected {
                 Label("Won’t be added", systemImage: "minus.circle")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
         .padding(prominent ? WanderTheme.spacing4 : WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
         .animation(.easeInOut(duration: 0.16), value: isSelected)
     }
@@ -1080,15 +1085,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 PlaceImportPhotoThumb(item: item, loadsRemotePhoto: auth.isSignedIn, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(WanderTypography.editorialNamedContent)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(item.reviewMetadata)
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                     Label(
                         existing?.userPlace.status == .been ? "Already checked in" : "Already in Wanna",
                         systemImage: "checkmark.seal.fill"
                     )
-                    .font(WanderTypography.metadata)
+                    .font(AstirTypography.metadata)
                     .foregroundStyle(WanderTheme.stateInfo.color)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1102,8 +1108,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     beginOptionalDetails(for: item, visiblePlace: existing)
                 } label: {
                     Label("Optional details", systemImage: "slider.horizontal.3")
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -1111,16 +1117,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
             if !isSelected {
                 Label("Won’t be added to the imported list", systemImage: "minus.circle")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
         .animation(.easeInOut(duration: 0.16), value: isSelected)
     }
@@ -1133,8 +1139,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(
                     item.isSelectedForImport
-                        ? WanderTheme.terracotta.color
-                        : WanderTheme.borderStrong.color
+                        ? brandMode.accent
+                        : brandMode.border
                 )
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 .contentShape(Circle())
@@ -1150,13 +1156,13 @@ struct PlaceImportAdaptiveReviewScreen: View {
             HStack(spacing: WanderTheme.spacing2) {
                 ProgressView().controlSize(.small)
                 Text("Matching place…")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         } else {
             if let help = item.helpMessage, !help.isEmpty {
                 Text(help)
-                    .font(WanderTypography.metadata)
+                    .font(AstirTypography.metadata)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1164,19 +1170,21 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 Button("Search for the place", systemImage: "magnifyingglass") {
                     rescueItem = item
                 }
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .buttonStyle(.plain)
 
                 if item.candidates.count > 1 {
                     Button("Review matches") { candidatePickerItem = item }
-                        .font(WanderTypography.label)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 } else {
                     Button("Retry") { importStore.retry(itemID: item.id) }
-                        .font(WanderTypography.label)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 }
@@ -1200,8 +1208,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                                 : WanderTheme.stateSuccess.color
                         )
                     Text(completionTitle(receipt))
-                        .font(WanderTypography.editorialMajorSectionTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                 }
 
                 HStack(spacing: WanderTheme.spacing3) {
@@ -1223,21 +1231,23 @@ struct PlaceImportAdaptiveReviewScreen: View {
                             : "Today is covered · \(store.saveStreakSummary.currentCount)-day streak",
                         systemImage: "flame.fill"
                     )
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 36)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Capsule())
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
+                    .frame(minHeight: 36, alignment: .leading)
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(brandMode.accent)
+                            .frame(height: 1)
+                    }
                 }
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
 
             if receipt.sourceRetryCount > 0 {
@@ -1253,23 +1263,23 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
                         if entry.id != receipt.entries.last?.id {
                             Divider()
-                                .overlay(WanderTheme.borderHairline.color)
+                                .overlay(brandMode.border)
                                 .padding(.leading, 52)
                         }
                     }
                 }
-                .background(WanderTheme.surfaceBone.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
             }
 
             WanderPrimaryButton(
                 title: "Done",
                 systemImage: "checkmark",
-                tone: .espressoConfirmation,
+                tone: .brand,
                 action: onDone
             )
         }
@@ -1278,15 +1288,15 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private func heading(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialMajorSectionTitle)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sheetTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text(subtitle)
-                .font(WanderTypography.body)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Label(captureSourceCopy, systemImage: "arrow.down.circle")
-                .font(WanderTypography.metadata)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.accent)
         }
     }
 
@@ -1472,10 +1482,11 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     PlaceImportPhotoThumb(item: item, loadsRemotePhoto: auth.isSignedIn, size: 48)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.displayName)
-                            .font(WanderTypography.editorialNamedContent)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                         Text(verificationDetail(entry, item: item))
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1486,8 +1497,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(
                                 item.isSelectedForImport
-                                    ? WanderTheme.terracotta.color
-                                    : WanderTheme.borderStrong.color
+                                    ? brandMode.accent
+                                    : brandMode.border
                             )
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                     }
@@ -1504,14 +1515,14 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     Button("Search for the place", systemImage: "magnifyingglass") {
                         rescueItem = item
                     }
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accent)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .buttonStyle(.plain)
                 } else if item.isSelectedForImport,
                           let visiblePlace = verifiedVisiblePlace(entry, item: item) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        WanderGlassSegmentedSwitch(
+                        AstirEditorialSegmentedSwitch(
                             options: importStatusOptions,
                             selection: Binding(
                                 get: { visiblePlace.userPlace.status.rawValue },
@@ -1526,16 +1537,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
                         if entry.outcome == .existing {
                             Text("Already saved — your existing status and details stay unchanged.")
-                                .font(WanderTypography.metadata)
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
 
                         Button {
                             beginOptionalDetails(for: item, visiblePlace: visiblePlace)
                         } label: {
-                            Label("Optional details", systemImage: "slider.horizontal.3")
-                                .font(WanderTypography.label)
-                                .foregroundStyle(WanderTheme.terracotta.color)
+                                Label("Optional details", systemImage: "slider.horizontal.3")
+                                .font(AstirTypography.label)
+                                .foregroundStyle(brandMode.accent)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
                         .buttonStyle(.plain)
@@ -1545,8 +1556,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         entry.outcome == .existing ? "Existing save kept" : "Removed from your map",
                         systemImage: "minus.circle"
                     )
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                 }
             }
         } else {
@@ -1554,7 +1565,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 Image(systemName: entry.outcome.receiptSystemImage)
                     .foregroundStyle(entry.outcome.receiptColor)
                 Text(entry.displayName)
-                    .font(WanderTypography.editorialNamedContent)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
             }
         }
     }
@@ -1904,11 +1916,11 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private func completionMetric(_ count: Int, _ label: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("\(count)")
-                .font(.system(size: 20, weight: .black))
+                .font(AstirTypography.sectionTitle.monospacedDigit())
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1932,6 +1944,7 @@ private struct PlaceImportSourceIconStack: View {
 private struct PlaceImportSourceIcon: View {
     let source: PlaceImportSource
     let size: CGFloat
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         ZStack {
@@ -1947,7 +1960,7 @@ private struct PlaceImportSourceIcon: View {
             }
         }
         .frame(width: size, height: size)
-        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+        .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
     }
 
     @ViewBuilder
@@ -1966,7 +1979,7 @@ private struct PlaceImportSourceIcon: View {
         case .tiktok:
             Circle().fill(Color.black)
         case .textNotes:
-            Circle().fill(WanderTheme.surfaceSand.color)
+            Circle().fill(brandMode.recessedBackground)
         }
     }
 }
@@ -2009,6 +2022,7 @@ struct PlaceImportInboxScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var selectedFilter: PlaceImportReviewFilter = .unresolved
     @State private var visibleLimit = 50
     @State private var saveRoute: PlaceImportSaveRoute?
@@ -2027,7 +2041,7 @@ struct PlaceImportInboxScreen: View {
                 List {
                     Section {
                         inboxSummary
-                            .listRowBackground(WanderTheme.surfaceBone.color)
+                            .listRowBackground(brandMode.raisedBackground)
                     }
 
                     Section {
@@ -2047,7 +2061,7 @@ struct PlaceImportInboxScreen: View {
                                         trailing: WanderTheme.spacing4
                                     )
                                 )
-                                .listRowBackground(WanderTheme.surfaceBone.color)
+                                .listRowBackground(brandMode.raisedBackground)
                         }
                     }
 
@@ -2074,8 +2088,8 @@ struct PlaceImportInboxScreen: View {
                                 )
                             )
                             .listRowSeparator(.visible)
-                            .listRowSeparatorTint(WanderTheme.borderHairline.color)
-                            .listRowBackground(WanderTheme.surfaceBone.color)
+                            .listRowSeparatorTint(brandMode.border)
+                            .listRowBackground(brandMode.raisedBackground)
                             .onAppear {
                                 loadNextPageIfNeeded(itemID: item.id)
                             }
@@ -2084,7 +2098,7 @@ struct PlaceImportInboxScreen: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .background(WanderTheme.canvasWarm.color)
+                .background(brandMode.background)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if showsBulkSaveButton {
                         bulkSaveButton
@@ -2096,7 +2110,7 @@ struct PlaceImportInboxScreen: View {
                     systemImage: "tray",
                     description: Text("Choose an import source from Profile to get started.")
                 )
-                .wanderScreen()
+                .astirScreen()
             }
         }
         .navigationTitle("Import Review")
@@ -2227,7 +2241,16 @@ struct PlaceImportInboxScreen: View {
                         selectedFilter = filter
                         visibleLimit = 50
                     } label: {
-                        WanderChip(title: filter.rawValue, isSelected: selectedFilter == filter)
+                        let isSelected = selectedFilter == filter
+                        VStack(spacing: 0) {
+                            Text(filter.rawValue)
+                                .font(AstirTypography.label)
+                                .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                            Rectangle()
+                                .fill(isSelected ? brandMode.accent : Color.clear)
+                                .frame(height: 2)
+                        }
                     }
                     .buttonStyle(.plain)
                 }
@@ -2250,7 +2273,7 @@ struct PlaceImportInboxScreen: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .fill(WanderTheme.skyTint.color)
+                        .fill(brandMode.recessedBackground)
                     Image(systemName: "tray.full.fill")
                         .font(.system(size: 22, weight: .black))
                         .foregroundStyle(WanderTheme.stateInfo.color)
@@ -2262,7 +2285,7 @@ struct PlaceImportInboxScreen: View {
                             .background(WanderTheme.stateSuccess.color)
                             .foregroundStyle(Color.white)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                            .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
                             .offset(x: 17, y: -17)
                     }
                 }
@@ -2278,14 +2301,15 @@ struct PlaceImportInboxScreen: View {
                                     ? "A source scan needs attention"
                                     : "Imports done"
                     )
-                        .font(.system(size: 19, weight: .black))
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(inboxWaitingSummary(
                         placeCount: unresolvedCount,
                         sourceRetryCount: sourceRetryCount,
                         sourceCount: sources.count
                     ))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
 
@@ -2295,20 +2319,20 @@ struct PlaceImportInboxScreen: View {
             if isProcessing {
                 if summary.processingCount > 0 {
                     ProgressView(value: summary.progress)
-                        .tint(WanderTheme.terracotta.color)
+                        .tint(brandMode.accent)
                     Text("Importing \(summary.processedCount) of \(summary.totalCount) places")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                 } else {
                     ProgressView()
-                        .tint(WanderTheme.terracotta.color)
+                        .tint(brandMode.accent)
                     Text("Scanning remaining source media")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
-                    importMetric(unresolvedCount, "to review", WanderTheme.terracotta.color)
+                    importMetric(unresolvedCount, "to review", brandMode.accent)
                     importMetric(summary.duplicateCount, "duplicates", WanderTheme.stateInfo.color)
                     if sourceRetryCount > 0 {
                         importMetric(sourceRetryCount, "scan retry", WanderTheme.stateWarning.color)
@@ -2318,7 +2342,7 @@ struct PlaceImportInboxScreen: View {
 
             if let persistenceError = importStore.persistenceError {
                 Label(persistenceError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
             }
         }
@@ -2384,14 +2408,15 @@ struct PlaceImportInboxScreen: View {
     private var markAllRow: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Text("Mark all")
-                .font(.system(size: 14, weight: .black))
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.primaryText)
 
             Spacer(minLength: WanderTheme.spacing2)
 
             VStack(spacing: 2) {
                 Text("Wanna")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                 importSelectionButton(
                     status: .wannaGo,
                     isSelected: readyItems.allSatisfy { $0.stagedStatus == .wannaGo },
@@ -2401,8 +2426,8 @@ struct PlaceImportInboxScreen: View {
 
             VStack(spacing: 2) {
                 Text("Check in")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                 importSelectionButton(
                     status: .been,
                     isSelected: readyItems.allSatisfy { $0.stagedStatus == .been },
@@ -2417,30 +2442,30 @@ struct PlaceImportInboxScreen: View {
             HStack(spacing: WanderTheme.spacing2) {
                 if isBulkSaveRunning {
                     ProgressView()
-                        .tint(WanderTheme.surfaceRaised.color)
+                        .tint(brandMode.accentForeground)
                 }
                 Text(reviewPlan.primaryActionTitle ?? "Add places")
-                    .font(.system(size: 17, weight: .black))
+                    .font(AstirTypography.control)
                 if isBulkSaveRunning {
                     Text("\(bulkSavedCount)/\(reviewPlan.committableCount)")
-                        .font(.system(size: 12, weight: .black))
+                        .font(AstirTypography.metadata)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(WanderTheme.surfaceRaised.color.opacity(0.18))
+                        .background(brandMode.accentForeground.opacity(0.18))
                         .clipShape(Capsule())
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 52)
-            .foregroundStyle(WanderTheme.surfaceRaised.color)
-            .background(WanderTheme.textInk.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+            .foregroundStyle(brandMode.accentForeground)
+            .background(brandMode.accent)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isBulkSaveRunning)
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.canvasWarm.color.opacity(0.96))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 10, y: -2)
+        .background(brandMode.background.opacity(0.96))
+        .shadow(color: Color.black.opacity(0.16), radius: 10, y: -2)
         .accessibilityLabel(reviewPlan.primaryActionTitle ?? "Add imported places")
     }
 
@@ -2453,10 +2478,10 @@ struct PlaceImportInboxScreen: View {
             Image(systemName: status == .been ? "checkmark" : "bookmark")
                 .font(.system(size: 16, weight: .bold))
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .background(isSelected ? status.importColor : WanderTheme.surfaceRaised.color)
+                .background(isSelected ? brandMode.accent : brandMode.raisedBackground)
                 .foregroundStyle(isSelected ? Color.white : status.importColor)
                 .clipShape(Circle())
-                .overlay(Circle().stroke(status.importColor.opacity(0.28), lineWidth: 1))
+                .overlay(Circle().stroke(isSelected ? brandMode.accent : brandMode.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? "Mark all as check-ins" : "Mark all Wanna")
@@ -2465,11 +2490,11 @@ struct PlaceImportInboxScreen: View {
     private func importMetric(_ value: Int, _ label: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(value)")
-                .font(.system(size: 21, weight: .black))
+                .font(AstirTypography.sectionTitle.monospacedDigit())
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2769,6 +2794,7 @@ private struct PlaceImportReceiptSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         NavigationStack {
@@ -2787,22 +2813,22 @@ private struct PlaceImportReceiptSheet: View {
 
                                 if entry.id != receipt.entries.last?.id {
                                     Divider()
-                                        .overlay(WanderTheme.borderHairline.color)
+                                        .overlay(brandMode.border)
                                         .padding(.leading, 46)
                                 }
                             }
                         }
-                        .background(WanderTheme.surfaceBone.color)
+                        .background(brandMode.raisedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                         .overlay(
                             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                                .stroke(brandMode.border, lineWidth: 1)
                         )
                     }
                 }
                 .padding(WanderTheme.spacing4)
             }
-            .background(WanderTheme.canvasWarm.color)
+            .astirScreen()
             .navigationTitle("Import saved")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2831,13 +2857,13 @@ private struct PlaceImportReceiptSheet: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summaryTitle)
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     if let sourceName = receipt.sourceName,
                        !sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(sourceName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(2)
                     }
                 }
@@ -2860,18 +2886,18 @@ private struct PlaceImportReceiptSheet: View {
                     streakCount == 1 ? "Today is covered" : "Today is covered · \(streakCount)-day streak",
                     systemImage: "flame.fill"
                 )
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 36)
-                .background(WanderTheme.terracottaTint.color)
-                .clipShape(Capsule())
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accent)
+                .frame(minHeight: 36, alignment: .leading)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(brandMode.accent).frame(height: 1)
+                }
             }
         }
         .padding(WanderTheme.spacing4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
     }
 
     private var summaryTitle: String {
@@ -2887,11 +2913,11 @@ private struct PlaceImportReceiptSheet: View {
     private func receiptMetric(_ value: Int, _ label: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(value)")
-                .font(.system(size: 18, weight: .black))
+                .font(AstirTypography.sectionTitle.monospacedDigit())
                 .foregroundStyle(color)
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2907,12 +2933,12 @@ private struct PlaceImportReceiptSheet: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayName)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(2)
                 Text(entry.receiptDetail)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(2)
             }
 
@@ -2921,8 +2947,8 @@ private struct PlaceImportReceiptSheet: View {
             Button("Edit") {
                 openAddSearch(for: entry)
             }
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accent)
             .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
             .buttonStyle(.plain)
             .accessibilityLabel("Edit \(entry.displayName) in Add search")
@@ -3072,6 +3098,7 @@ private struct PlaceImportUnresolvedRow: View {
     let rescueAction: () -> Void
     let retryAction: () -> Void
     let dismissAction: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -3080,14 +3107,14 @@ private struct PlaceImportUnresolvedRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
 
                     Text(item.reviewMetadata)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     unresolvedAction
@@ -3120,8 +3147,8 @@ private struct PlaceImportUnresolvedRow: View {
                     Spacer(minLength: 0)
 
                     Button("Edit place", systemImage: "magnifyingglass", action: rescueAction)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 }
@@ -3137,8 +3164,8 @@ private struct PlaceImportUnresolvedRow: View {
             HStack(spacing: WanderTheme.spacing2) {
                 ProgressView().controlSize(.small)
                 Text(item.state == .queued ? "Waiting to match" : "Matching place")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         case .ready:
             EmptyView()
@@ -3161,7 +3188,7 @@ private struct PlaceImportUnresolvedRow: View {
                 PlaceImportInlineAction(
                     title: item.seed.nameHint == nil ? "Retry automatic match" : "Search for the place",
                     systemImage: item.seed.nameHint == nil ? "arrow.clockwise" : "magnifyingglass",
-                    color: WanderTheme.terracotta.color,
+                    color: brandMode.accent,
                     action: item.seed.nameHint == nil ? retryAction : rescueAction
                 )
             }
@@ -3232,6 +3259,7 @@ private struct PlaceImportDuplicateRow: View {
     let item: PlaceImportItem
     let loadsRemotePhoto: Bool
     let dismissAction: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -3239,14 +3267,15 @@ private struct PlaceImportDuplicateRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.displayName)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.reviewMetadata)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 Label("Already in your places", systemImage: "checkmark.seal.fill")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.stateInfo.color)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -3274,6 +3303,7 @@ private struct PlaceImportFailedRow: View {
     let retryAction: () -> Void
     let rescueAction: () -> Void
     let dismissAction: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -3281,10 +3311,11 @@ private struct PlaceImportFailedRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.displayName)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.helpMessage ?? "This import could not be processed.")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -3323,6 +3354,7 @@ private struct PlaceImportStatusSelector: View {
     let status: PlaceStatus
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         Button(action: action) {
@@ -3330,14 +3362,15 @@ private struct PlaceImportStatusSelector: View {
                 status == .been ? CheckInCopy.noun : "Wanna",
                 systemImage: status == .been ? "checkmark.circle.fill" : "bookmark.fill"
             )
-                .font(.system(size: 12, weight: .bold))
-                .padding(.horizontal, 12)
+                .font(AstirTypography.label)
+                .padding(.horizontal, WanderTheme.spacing1)
                 .frame(minHeight: WanderTheme.tapMinimum)
-                .background(isSelected ? status.importColor : WanderTheme.surfaceRaised.color)
-                .foregroundStyle(isSelected ? Color.white : status.importColor)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(status.importColor.opacity(0.28), lineWidth: 1))
-                .shadow(color: status.importColor.opacity(0.14), radius: 4, y: 2)
+                .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(isSelected ? brandMode.accent : brandMode.border.opacity(0.45))
+                        .frame(height: isSelected ? 2 : 1)
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? CheckInCopy.noun : "Wanna")
@@ -3475,6 +3508,7 @@ private extension PlaceImportItem {
 private struct PlaceImportLocationMapSheet: View {
     let location: PlaceImportMapLocation
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         NavigationStack {
@@ -3487,24 +3521,26 @@ private struct PlaceImportLocationMapSheet: View {
                 )
             ) {
                 Marker(location.title, coordinate: location.coordinate)
-                    .tint(WanderTheme.terracotta.color)
+                    .tint(brandMode.accent)
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
             .safeAreaInset(edge: .bottom) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(location.title)
-                        .font(.system(size: 18, weight: .black))
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     if let subtitle = location.subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(WanderTheme.spacing4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.regularMaterial)
+                .background(brandMode.background.opacity(0.44))
             }
             .navigationTitle("Place Map")
             .navigationBarTitleDisplayMode(.inline)
@@ -3523,6 +3559,7 @@ private struct PlaceImportCandidatePicker: View {
     let selectionAction: (String) -> Void
     let quickSaveAction: (String, PlaceStatus) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @State private var profileCandidate: PlaceCandidate?
 
@@ -3550,7 +3587,7 @@ private struct PlaceImportCandidatePicker: View {
                 }
                 .padding(WanderTheme.spacing4)
             }
-            .background(WanderTheme.canvasWarm.color)
+            .astirScreen()
             .navigationTitle("Choose the Place")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -3637,10 +3674,11 @@ private struct PlaceImportCandidatePicker: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Choose on the map")
-                    .font(.system(size: 17, weight: .black))
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("Tap a numbered pin to select that place.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
@@ -3657,7 +3695,7 @@ private struct PlaceImportCandidatePicker: View {
                                 ZStack {
                                     Image(systemName: "mappin.circle.fill")
                                         .font(.system(size: 38, weight: .black))
-                                        .foregroundStyle(WanderTheme.terracotta.color)
+                                        .foregroundStyle(brandMode.accent)
                                         .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
                                     Text("\(index + 1)")
                                         .font(.system(size: 10, weight: .black))
@@ -3679,11 +3717,11 @@ private struct PlaceImportCandidatePicker: View {
             .accessibilityLabel("Map of \(item.candidates.count) possible place matches")
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
     }
 }
@@ -3694,6 +3732,7 @@ private struct PlaceImportCandidateCard: View {
     let profileAction: () -> Void
     let quickSaveAction: (PlaceStatus) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         VStack(spacing: 0) {
@@ -3703,13 +3742,13 @@ private struct PlaceImportCandidateCard: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text("MATCH \(index + 1)")
-                            .font(.caption2.weight(.heavy))
+                            .font(AstirTypography.metadata)
                             .tracking(0.7)
                             .foregroundStyle(WanderTheme.stateInfo.color)
 
                         Text(candidate.name)
-                            .font(.headline.weight(.heavy))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3720,20 +3759,20 @@ private struct PlaceImportCandidateCard: View {
                         } icon: {
                             Image(systemName: "sparkles")
                         }
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accent)
 
                         Text(candidate.importLocationSummary)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .multilineTextAlignment(.leading)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.heavy))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(width: 24, height: 44)
                 }
                 .padding(WanderTheme.spacing3)
@@ -3748,7 +3787,7 @@ private struct PlaceImportCandidateCard: View {
             .accessibilityHint("Shows the place profile and photo")
 
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(brandMode.border)
                 .frame(height: 1)
                 .padding(.horizontal, WanderTheme.spacing3)
 
@@ -3756,14 +3795,14 @@ private struct PlaceImportCandidateCard: View {
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing2)
         }
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
         .shadow(
-            color: WanderTheme.textInk.color.opacity(0.08),
+            color: Color.black.opacity(0.12),
             radius: 8,
             x: 0,
             y: 3
@@ -3785,9 +3824,9 @@ private struct PlaceImportCandidateCard: View {
                 .offset(x: 25, y: -28)
 
             Circle()
-                .fill(WanderTheme.surfaceRaised.color.opacity(0.88))
+                .fill(brandMode.raisedBackground.opacity(0.88))
                 .frame(width: 58, height: 58)
-                .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 5, y: 2)
+                .shadow(color: Color.black.opacity(0.10), radius: 5, y: 2)
 
             WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 34)
         }
@@ -3799,12 +3838,12 @@ private struct PlaceImportCandidateCard: View {
         )
         .overlay(alignment: .topLeading) {
             Text("\(index + 1)")
-                .font(.caption2.weight(.heavy))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(width: 26, height: 26)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(brandMode.raisedBackground)
                 .clipShape(Circle())
-                .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 3, y: 1)
+                .shadow(color: Color.black.opacity(0.14), radius: 3, y: 1)
                 .padding(6)
         }
         .accessibilityHidden(true)
@@ -3817,13 +3856,13 @@ private struct PlaceImportCandidateCard: View {
     private var artworkColors: [Color] {
         switch index % 4 {
         case 1:
-            [WanderTheme.skyTint.color, WanderTheme.categorySage.color.opacity(0.42)]
+            [brandMode.recessedBackground, brandMode.accentWash.opacity(0.72)]
         case 2:
-            [WanderTheme.terracottaTint.color, WanderTheme.categorySun.color.opacity(0.48)]
+            [brandMode.accentWash, brandMode.raisedBackground]
         case 3:
-            [WanderTheme.categoryMoss.color.opacity(0.26), WanderTheme.surfaceSand.color]
+            [brandMode.border.opacity(0.34), brandMode.recessedBackground]
         default:
-            [WanderTheme.surfaceSand.color, WanderTheme.terracottaTint.color]
+            [brandMode.recessedBackground, brandMode.accentWash]
         }
     }
 
@@ -3870,21 +3909,22 @@ private struct PlaceImportCandidateCard: View {
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.caption.weight(.heavy))
+                .font(AstirTypography.label)
                 .padding(.horizontal, WanderTheme.spacing2)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(color.opacity(0.13))
+                .background(brandMode.recessedBackground)
                 .foregroundStyle(color)
-                .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                 .overlay(
-                    Capsule()
-                        .stroke(color.opacity(0.32), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Save \(candidate.name) as \(title)")
     }
+
 }
 
 private extension PlaceCandidate {
@@ -4441,6 +4481,7 @@ private struct PlaceImportRescueScreen: View {
     let searchAction: (String, String?) async -> PlaceImportCandidateSearchOutcome
     let confirmationAction: (String, String?, [PlaceCandidate], String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var query: String
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
@@ -4476,30 +4517,32 @@ private struct PlaceImportRescueScreen: View {
                         HStack(spacing: WanderTheme.spacing2) {
                             ProgressView()
                             Text("Searching Apple Maps…")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
                         .frame(maxWidth: .infinity, minHeight: 80)
                     } else if let searchFailure {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                             Text("No matches yet")
-                                .font(.system(size: 17, weight: .black))
+                                .font(AstirTypography.sectionTitle)
+                                .foregroundStyle(brandMode.primaryText)
                             Label(searchFailure, systemImage: "exclamationmark.triangle.fill")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(AstirTypography.caption)
                                 .foregroundStyle(WanderTheme.stateError.color)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(WanderTheme.spacing3)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                        .background(brandMode.raisedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous))
                     } else if !candidates.isEmpty {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                             Text("Choose the right place")
-                                .font(.system(size: 17, weight: .black))
+                                .font(AstirTypography.sectionTitle)
+                                .foregroundStyle(brandMode.primaryText)
                             Text("Select one match to connect it to this import.")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
 
                             ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
                                 candidateButton(candidate, number: index + 1)
@@ -4509,15 +4552,15 @@ private struct PlaceImportRescueScreen: View {
 
                     Button(action: confirmSelection) {
                         Text("Match Place")
-                            .font(.system(size: 17, weight: .black))
+                            .font(AstirTypography.control)
                             .frame(maxWidth: .infinity, minHeight: 52)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .foregroundStyle(brandMode.accentForeground)
                             .background(
                                 selectedCandidateID == nil
-                                    ? WanderTheme.textFaint.color
-                                    : WanderTheme.terracotta.color
+                                    ? brandMode.border
+                                    : brandMode.accent
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(selectedCandidateID == nil)
@@ -4530,11 +4573,11 @@ private struct PlaceImportRescueScreen: View {
                     if let sourceURLString = item.seed.sourceURLString {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                             Text("SOURCE")
-                                .font(.system(size: 12, weight: .black))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.secondaryText)
                             Text(sourceURLString)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -4542,7 +4585,7 @@ private struct PlaceImportRescueScreen: View {
                 }
                 .padding(WanderTheme.spacing4)
             }
-            .background(WanderTheme.canvasWarm.color)
+            .astirScreen()
             .navigationTitle("Match a Place")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -4571,10 +4614,12 @@ private struct PlaceImportRescueScreen: View {
     private var searchField: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.secondaryText)
 
             TextField("Search for a place", text: $query)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.primaryText)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .focused($isSearchFocused)
@@ -4589,7 +4634,7 @@ private struct PlaceImportRescueScreen: View {
                     isSearchFocused = true
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -4600,10 +4645,10 @@ private struct PlaceImportRescueScreen: View {
                 Task { await performSearch() }
             } label: {
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.terracotta.color)
+                    .background(brandMode.accent)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -4613,11 +4658,11 @@ private struct PlaceImportRescueScreen: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, WanderTheme.spacing1)
         .frame(minHeight: 52)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .background(brandMode.recessedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
     }
 
@@ -4640,7 +4685,7 @@ private struct PlaceImportRescueScreen: View {
                                 Circle()
                                     .fill(
                                         selectedCandidateID == candidate.id
-                                            ? WanderTheme.terracotta.color
+                                            ? brandMode.accent
                                             : WanderTheme.stateInfo.color
                                     )
                                     .frame(width: 34, height: 34)
@@ -4670,8 +4715,8 @@ private struct PlaceImportRescueScreen: View {
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         )
         .accessibilityLabel("Map of \(candidates.count) Apple Maps search results")
     }
@@ -4683,26 +4728,26 @@ private struct PlaceImportRescueScreen: View {
         } label: {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 Text("\(number)")
-                    .font(.system(size: 12, weight: .black))
+                    .font(AstirTypography.metadata)
                     .foregroundStyle(
-                        isSelected ? WanderTheme.textOnAction.color : WanderTheme.stateInfo.color
+                        isSelected ? brandMode.accentForeground : WanderTheme.stateInfo.color
                     )
                     .frame(width: 28, height: 28)
                     .background(
                         isSelected
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.skyTint.color
+                            ? brandMode.accent
+                            : brandMode.recessedBackground
                     )
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(candidate.name)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(candidate.previewSubtitle())
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(3)
                 }
 
@@ -4711,7 +4756,7 @@ private struct PlaceImportRescueScreen: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accent)
                         .accessibilityHidden(true)
                 }
             }
@@ -4719,16 +4764,16 @@ private struct PlaceImportRescueScreen: View {
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
             .background(
                 isSelected
-                    ? WanderTheme.terracottaTint.color
-                    : WanderTheme.surfaceRaised.color
+                    ? brandMode.accentWash
+                    : brandMode.raisedBackground
             )
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous)
                     .stroke(
                         isSelected
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.borderHairline.color,
+                            ? brandMode.accent
+                            : brandMode.border,
                         lineWidth: isSelected ? 2 : 1
                     )
             )

@@ -352,7 +352,6 @@ struct WanderRootView: View {
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
-    private let astirBrandModeOverride: AstirBrandMode?
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
     private let walkthroughDebugPreferenceSnapshot: FirstVisitWalkthroughDebugPreferenceSnapshot
     private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
@@ -379,7 +378,6 @@ struct WanderRootView: View {
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         self.analytics = analytics
-        self.astirBrandModeOverride = AstirBrandMode.launchOverride(from: launchArguments)
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
         self.walkthroughDebugPreferenceSnapshot = walkthroughDebugPreferences.launchSnapshot()
@@ -461,10 +459,7 @@ struct WanderRootView: View {
     }
 
     private var astirBrandMode: AstirBrandMode {
-        if let astirBrandModeOverride {
-            return astirBrandModeOverride
-        }
-        return systemColorScheme == .dark ? .editorial : .editorialLight
+        systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
     private var mapAppearanceColorScheme: ColorScheme {
@@ -512,9 +507,6 @@ struct WanderRootView: View {
                 .tag(WanderTab.profile)
         }
         .tint(astirBrandMode.accent)
-        .preferredColorScheme(
-            astirBrandModeOverride.map { $0.prefersDarkInterface ? .dark : .light }
-        )
         .toolbarBackground(astirBrandMode.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)

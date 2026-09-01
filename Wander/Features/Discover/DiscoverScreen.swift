@@ -6,6 +6,7 @@ enum DiscoverSection: String, Equatable {
 }
 
 struct DiscoverScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -255,7 +256,7 @@ struct DiscoverScreen: View {
                     .scrollDismissesKeyboard(.interactively)
                 }
             }
-            .wanderScreen()
+            .astirScreen()
             .modifier(
                 DiscoverScrollToTopModifier(
                     isActive: isPlaceSearchPresented,
@@ -780,14 +781,14 @@ struct DiscoverScreen: View {
                             Image(systemName: mode.systemImage)
                                 .font(.system(size: 16, weight: .black))
                             Text(mode.title)
-                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                .font(AstirTypography.control)
                         }
-                        .foregroundStyle(selectedMode == mode ? WanderTheme.textInk.color : WanderTheme.textMuted.color)
+                        .foregroundStyle(selectedMode == mode ? brandMode.accent : brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: 42)
 
                         Rectangle()
-                            .fill(selectedMode == mode ? WanderTheme.textInk.color : Color.clear)
-                            .frame(height: 3)
+                            .fill(selectedMode == mode ? brandMode.accent : Color.clear)
+                            .frame(height: 2)
                     }
                 }
                 .buttonStyle(.plain)
@@ -831,7 +832,7 @@ struct DiscoverScreen: View {
                 Button(action: handlePlaceSearchBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accent)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .accessibilityLabel(walkthroughSearchBackLabel)
@@ -892,8 +893,8 @@ struct DiscoverScreen: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("Refining with smart filters…")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -909,23 +910,33 @@ struct DiscoverScreen: View {
         let filters = placeResults.filters
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("Understood as")
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
 
             if filters.chips.isEmpty {
                 Text("places matching your words")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
                         ForEach(filters.chips) { chip in
                             Text(chip.title)
-                                .font(.system(size: 12, weight: .black))
-                                .padding(.horizontal, WanderTheme.spacing3)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.primaryText)
+                                .padding(.leading, WanderTheme.spacing2)
+                                .padding(.trailing, WanderTheme.spacing3)
                                 .frame(minHeight: 32)
-                                .background(WanderTheme.terracottaTint.color)
-                                .clipShape(Capsule())
+                                .overlay(alignment: .leading) {
+                                    Rectangle()
+                                        .fill(brandMode.accent)
+                                        .frame(width: 2)
+                                }
+                                .overlay(alignment: .bottom) {
+                                    Rectangle()
+                                        .fill(brandMode.border)
+                                        .frame(height: 1)
+                                }
                         }
                     }
                 }
@@ -937,15 +948,15 @@ struct DiscoverScreen: View {
                     .sorted()
                     .joined(separator: ", ")
                 Text("We can't reliably filter by \(concepts) yet, so those words weren't applied.")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateWarning.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if placeResults.parseSource == .deterministicFallback {
                 Text("Using basic matching because smart search is temporarily unavailable.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -973,8 +984,8 @@ struct DiscoverScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 SectionTitle("Try a search")
                 Text("A few useful ways to explore places your people recommend.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -1001,8 +1012,8 @@ struct DiscoverScreen: View {
                                     .accessibilityHidden(true)
 
                                 Text(suggestion.query)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .font(AstirTypography.bodySmall)
+                                    .foregroundStyle(brandMode.primaryText)
                                     .multilineTextAlignment(.leading)
                                     .lineLimit(2)
 
@@ -1010,11 +1021,11 @@ struct DiscoverScreen: View {
                             }
                             .padding(WanderTheme.spacing3)
                             .frame(width: 204, height: 64, alignment: .topLeading)
-                            .background(WanderTheme.surfaceBone.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .background(brandMode.raisedBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                             .overlay {
-                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                                    .stroke(brandMode.border, lineWidth: 1)
                             }
                         }
                         .buttonStyle(.plain)
@@ -1035,12 +1046,13 @@ struct DiscoverScreen: View {
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(placeResultTitle)
-                    .font(WanderTypography.editorialMasthead)
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                 Text(resultExplanation(resultCount: totalCount, selectedOwner: selectedOwner))
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             if groups.isEmpty, communityCandidates.isEmpty, !isCommunityPlaceSearchLoading {
@@ -1082,8 +1094,8 @@ struct DiscoverScreen: View {
             if !communityCandidates.isEmpty {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(groups.isEmpty ? "Saved on rec.me" : "More saved on rec.me")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
 
                     ForEach(communityCandidates) { candidate in
                         DiscoverCommunityPlaceCard(candidate: candidate) {
@@ -1104,14 +1116,14 @@ struct DiscoverScreen: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("Searching all rec.me saves…")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .accessibilityElement(children: .combine)
             } else if communityPlaceSearchFailed {
                 Text("Couldn’t load more rec.me places. Your network results are still here.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
         }
     }
@@ -1187,8 +1199,8 @@ struct DiscoverScreen: View {
                 SectionTitle("Activity")
                 Spacer()
                 Text("Network")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             switch activityLoadState {
@@ -1236,17 +1248,17 @@ struct DiscoverScreen: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: "person.2.fill")
                 .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 28, height: 28)
 
             Text("Follow people whose taste you trust. Places they choose to share can appear in Activity and on your map.")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.skyTint.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .background(brandMode.accentWash)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
     }
 
     @ViewBuilder
@@ -1331,8 +1343,8 @@ struct DiscoverScreen: View {
                 SectionTitle("People")
                 Spacer()
                 Text("\(friends.count)")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             if friends.isEmpty {
@@ -1757,6 +1769,7 @@ private struct SelectedDiscoverPlace: Identifiable {
 }
 
 private struct SectionTitle: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
 
     init(_ title: String) {
@@ -1765,11 +1778,13 @@ private struct SectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(WanderTypography.editorialNamedContent)
+            .font(AstirTypography.sectionTitle)
+            .foregroundStyle(brandMode.primaryText)
     }
 }
 
 private struct EmptyPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let action: String
 
@@ -1777,39 +1792,50 @@ private struct EmptyPanel: View {
         HStack {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(action)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             Spacer()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
     }
 }
 
 private struct DiscoverLoadingPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let label: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             ProgressView()
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             Text(label)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
             Spacer()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
         .accessibilityElement(children: .combine)
     }
 }
 
 private struct DiscoverActionPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let icon: String
     let title: String
     let message: String
@@ -1820,34 +1846,34 @@ private struct DiscoverActionPanel: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.accent)
                 .frame(width: 48, height: 48)
-                .background(WanderTheme.skyTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             Text(title)
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
 
             Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(actionTitle, action: action)
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
@@ -1898,6 +1924,7 @@ struct PeopleRecommendationShelf: View {
 }
 
 private struct PeopleRecommendationCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let recommendation: DiscoverPeopleRecommendation
     let isFollowing: Bool
     let isFollowInFlight: Bool
@@ -1926,28 +1953,28 @@ private struct PeopleRecommendationCard: View {
                     )
 
                     Text(profile.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
 
                     Text("@\(profile.handle)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
 
             Text(recommendation.reason.displayText(for: profile))
-                .font(.system(size: 11, weight: .black))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.accent)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(minHeight: 28, alignment: .top)
 
             Text(bioText)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(minHeight: 32, alignment: .top)
@@ -1958,24 +1985,24 @@ private struct PeopleRecommendationCard: View {
                 Group {
                     if isFollowInFlight {
                         ProgressView()
-                            .tint(WanderTheme.textOnAction.color)
+                            .tint(brandMode.accentForeground)
                     } else {
                         Text(isFollowing ? "Following" : "Follow")
                     }
                 }
-                .font(.system(size: 13, weight: .black))
+                .font(AstirTypography.label)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(isFollowing ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
-            .background(isFollowing ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
-            .clipShape(Capsule())
+            .foregroundStyle(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
+            .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .disabled(isFollowing || isFollowInFlight)
             .accessibilityLabel(isFollowInFlight ? "Following \(profile.displayName)" : (isFollowing ? "Following \(profile.displayName)" : "Follow \(profile.displayName)"))
 
             if didFollowFail {
                 Text("Couldn't follow. Try again.")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .multilineTextAlignment(.center)
             }
@@ -1983,11 +2010,11 @@ private struct PeopleRecommendationCard: View {
         .padding(WanderTheme.spacing3)
         .frame(width: 172)
         .frame(minHeight: 238)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
@@ -2011,6 +2038,7 @@ private struct DiscoverScrollToTopModifier: ViewModifier {
 }
 
 private struct DiscoverSearchField: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var text: String
     let placeholders: [String]
     let isTicker: Bool
@@ -2053,25 +2081,25 @@ private struct DiscoverSearchField: View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             ZStack(alignment: .leading) {
                 if draftText.isEmpty {
                     Text(placeholder)
                         .id(placeholder)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                         .transition(isTicker ? .push(from: .bottom).combined(with: .opacity) : .opacity)
                         .allowsHitTesting(false)
                 }
 
                 TextField("", text: $draftText)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.bodySmall)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(brandMode.primaryText)
                     .accessibilityLabel(accessibilityLabel)
                     .accessibilityIdentifier(accessibilityIdentifier)
                     .onTapGesture(perform: onFocus)
@@ -2090,7 +2118,7 @@ private struct DiscoverSearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .accessibilityLabel("Clear search")
@@ -2099,8 +2127,8 @@ private struct DiscoverSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, draftText.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .contentShape(Capsule())
-        .wanderGlassCapsule()
+        .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .astirOutlinedSurface(castsShadow: true)
         .task {
             await runPlaceholderTicker()
         }
@@ -2152,6 +2180,7 @@ private struct DiscoverSearchField: View {
 }
 
 private struct DiscoverPlaceResultCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let group: VisiblePlaceGroup
     let currentUserStatus: PlaceStatus?
     let evidence: DiscoverMatchEvidence
@@ -2169,27 +2198,27 @@ private struct DiscoverPlaceResultCard: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(visiblePlace.place.canonicalName)
-                            .font(WanderTypography.editorialNamedContent)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.sectionTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(2)
 
                         Text(visiblePlace.effectiveCompactType)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
 
                         Text(recMeRating)
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.accent)
 
                         if let noteLine {
                             Text(noteLine)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .lineLimit(2)
                         }
 
                         Text(evidence.summary)
-                            .font(.system(size: 12, weight: .black))
+                            .font(AstirTypography.metadata)
                             .foregroundStyle(WanderTheme.stateInfo.color)
                             .lineLimit(2)
                     }
@@ -2198,7 +2227,7 @@ private struct DiscoverPlaceResultCard: View {
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .buttonStyle(.plain)
@@ -2229,11 +2258,11 @@ private struct DiscoverPlaceResultCard: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border.opacity(0.65), lineWidth: 1)
         )
     }
 
@@ -2311,30 +2340,32 @@ private struct DiscoverResultActionButton: View {
 }
 
 private struct DiscoverResultActionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let systemImage: String
     var isPrimary = false
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.system(size: 11, weight: .black))
-            .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+            .font(AstirTypography.metadata)
+            .foregroundStyle(isPrimary ? brandMode.accentForeground : brandMode.primaryText)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             .padding(.horizontal, WanderTheme.spacing2)
-            .background(isPrimary ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .background(isPrimary ? brandMode.accent : brandMode.recessedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
             .overlay {
                 if !isPrimary {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
                 }
             }
     }
 }
 
 private struct LatestActivityRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let visiblePlace: VisiblePlace
     let openPlace: () -> Void
     let openProfile: () -> Void
@@ -2356,8 +2387,8 @@ private struct LatestActivityRow: View {
                 HStack(spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
 
                     HStack(spacing: WanderTheme.spacing1) {
@@ -2373,23 +2404,27 @@ private struct LatestActivityRow: View {
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .accessibilityElement(children: .combine)
                 }
 
                 Spacer()
 
                 Text(visiblePlace.userPlace.status.displayTitle)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.accent)
                 }
             }
             .buttonStyle(.plain)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
     }
 
     private var metadataSubtitle: String {
@@ -2415,6 +2450,7 @@ private struct LatestActivityRow: View {
 }
 
 private struct OwnerDisambiguationSection: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let candidates: [ProfileShell]
     let recommendationCounts: [String: Int]
     let select: (ProfileShell) -> Void
@@ -2423,11 +2459,11 @@ private struct OwnerDisambiguationSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("Which person?")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("Pick who you want to search.")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             ForEach(candidates) { profile in
@@ -2444,25 +2480,29 @@ private struct OwnerDisambiguationSection: View {
 
                         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                             Text(profile.displayName)
-                                .font(.system(size: 17, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
+                                .font(AstirTypography.cardTitle)
+                                .foregroundStyle(brandMode.primaryText)
                             Text("@\(profile.handle)")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                             Text("\(recommendationCounts[profile.id, default: 0]) rec matches")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.secondaryText)
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(WanderTheme.textFaint.color)
+                            .foregroundStyle(brandMode.secondaryText)
                     }
                     .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .background(brandMode.raisedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
                 }
                 .buttonStyle(.plain)
             }
@@ -2471,6 +2511,7 @@ private struct OwnerDisambiguationSection: View {
 }
 
 private struct MemberResultTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -2485,28 +2526,33 @@ private struct MemberResultTile: View {
                     color: WanderTheme.pinSocial.color
                 )
                 Text(profile.displayName)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
                 Text("@\(profile.handle)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 Spacer()
                 Text("\(recCount) rec matches")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.accent)
             }
             .frame(width: 148, height: 142, alignment: .leading)
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
     }
 }
 
 private struct FriendListRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -2523,28 +2569,33 @@ private struct FriendListRow: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("@\(profile.handle)")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
 
                 Text("\(recCount) recs")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
     }
 }
 
 private struct DiscoverCategoryThumb: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let emoji: String
     let size: CGFloat
     let iconSize: CGFloat
@@ -2552,12 +2603,13 @@ private struct DiscoverCategoryThumb: View {
     var body: some View {
         WanderCategoryEmoji(emoji: emoji, size: iconSize)
             .frame(width: size, height: size)
-            .background(WanderTheme.terracottaTint.color)
+            .background(brandMode.accentWash)
             .clipShape(Circle())
     }
 }
 
 private struct DiscoverCommunityPlaceCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let candidate: PlaceCandidate
     let openSaveFlow: () -> Void
 
@@ -2565,39 +2617,39 @@ private struct DiscoverCommunityPlaceCard: View {
         Button(action: openSaveFlow) {
             HStack(spacing: WanderTheme.spacing3) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .fill(WanderTheme.terracottaTint.color)
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .fill(brandMode.accentWash)
                     WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 20)
                 }
                 .frame(width: 48, height: 48)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(candidate.name)
-                        .font(WanderTypography.editorialSmallNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                     Text(candidate.previewSubtitle(includeCategory: false, fallback: "Saved on rec.me"))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(2)
                     Text("Saved on rec.me")
-                        .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.accent)
                 }
 
                 Spacer(minLength: WanderTheme.spacing2)
 
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
                     .frame(width: 44, height: 44)
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border.opacity(0.70), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

@@ -5,6 +5,7 @@ import UIKit
 struct NativeAuthFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
 
     let isDismissable: Bool
     let mode: NativeAuthMode
@@ -79,7 +80,6 @@ struct NativeAuthFlowView: View {
                 }
             }
         }
-        .preferredColorScheme(.light)
         .interactiveDismissDisabled(auth.isPerformingNativeAuth)
     }
 
@@ -96,11 +96,11 @@ struct NativeAuthFlowView: View {
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 Text("Email")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
 
                 TextField("you@example.com", text: $emailAddress)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AstirTypography.body)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
@@ -129,16 +129,16 @@ struct NativeAuthFlowView: View {
                 Button(action: sendEmailCode) {
                     ZStack {
                         Text("Continue with email")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(AstirTypography.control)
                         if auth.isSendingEmailCode {
                             HStack {
                                 Spacer()
                                 ProgressView()
-                                    .tint(WanderTheme.textOnAction.color)
+                                    .tint(brandMode.accentForeground)
                             }
                         }
                     }
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(
@@ -159,7 +159,7 @@ struct NativeAuthFlowView: View {
                         isUsingPassword = true
                         focusedField = .email
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     .disabled(auth.isPerformingNativeAuth)
@@ -176,7 +176,7 @@ struct NativeAuthFlowView: View {
                 Text(.init("By continuing, you agree to the [Terms of Use](https://getrec.me/terms) and [Community Guidelines](https://getrec.me/community), and acknowledge the [Privacy Policy](https://getrec.me/privacy)."))
                     .accessibilityIdentifier("auth.legalAcknowledgement")
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(AstirTypography.caption)
             .foregroundStyle(WanderTheme.textMuted.color)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -194,11 +194,11 @@ struct NativeAuthFlowView: View {
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(title)
-                    .font(WanderTheme.editorialDisplay(size: 30, weight: .bold))
+                    .font(AstirTypography.screenTitle)
                     .multilineTextAlignment(.center)
 
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -211,14 +211,16 @@ struct NativeAuthFlowView: View {
         ZStack {
             NativeAppleIDButton(
                 type: mode == .signIn ? .signIn : .continue,
+                style: brandMode.prefersDarkInterface ? .white : .black,
                 isEnabled: !auth.isPerformingNativeAuth,
                 action: { authenticate(with: .apple) }
             )
+            .id(brandMode.prefersDarkInterface)
             .opacity(auth.isPerformingNativeAuth ? 0.72 : 1)
 
             if auth.activeSocialAuthProvider == .apple {
                 ProgressView()
-                    .tint(.white)
+                    .tint(brandMode.selectedForeground)
                     .allowsHitTesting(false)
             }
         }
@@ -232,7 +234,7 @@ struct NativeAuthFlowView: View {
         } label: {
             ZStack {
                 Text(mode == .signIn ? "Sign in with Google" : "Continue with Google")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(AstirTypography.control)
 
                 HStack {
                     Text("G")
@@ -271,7 +273,7 @@ struct NativeAuthFlowView: View {
                 .fill(WanderTheme.borderHairline.color)
                 .frame(height: 1)
             Text("or")
-                .font(.system(size: 13, weight: .semibold))
+                .font(AstirTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
             Rectangle()
                 .fill(WanderTheme.borderHairline.color)
@@ -291,10 +293,10 @@ struct NativeAuthFlowView: View {
                     .clipShape(Circle())
 
                 Text("Sign in with password")
-                    .font(WanderTheme.editorialDisplay(size: 30, weight: .bold))
+                    .font(AstirTypography.screenTitle)
 
                 Text("Use the email and password for this account.")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -303,11 +305,11 @@ struct NativeAuthFlowView: View {
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 Text("Email")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
 
                 TextField("you@example.com", text: $emailAddress)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AstirTypography.body)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
@@ -334,11 +336,11 @@ struct NativeAuthFlowView: View {
                     .onSubmit { focusedField = .password }
 
                 Text("Password")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
 
                 SecureField("Password", text: $password)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AstirTypography.body)
                     .textContentType(.password)
                     .submitLabel(.go)
                     .focused($focusedField, equals: .password)
@@ -364,16 +366,16 @@ struct NativeAuthFlowView: View {
                 Button(action: signInWithPassword) {
                     ZStack {
                         Text("Sign in")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(AstirTypography.control)
                         if auth.isSigningInWithPassword {
                             HStack {
                                 Spacer()
                                 ProgressView()
-                                    .tint(WanderTheme.textOnAction.color)
+                                    .tint(brandMode.accentForeground)
                             }
                         }
                     }
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(
@@ -397,7 +399,7 @@ struct NativeAuthFlowView: View {
                 auth.cancelEmailVerification()
                 focusedField = .email
             }
-            .font(.system(size: 15, weight: .bold))
+            .font(AstirTypography.control)
             .foregroundStyle(WanderTheme.textInk.color)
             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             .disabled(auth.isPerformingNativeAuth)
@@ -416,10 +418,10 @@ struct NativeAuthFlowView: View {
                     .clipShape(Circle())
 
                 Text("Check your email")
-                    .font(WanderTheme.editorialDisplay(size: 30, weight: .bold))
+                    .font(AstirTypography.screenTitle)
 
                 Text("Enter the verification code sent to \(address).")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -427,7 +429,7 @@ struct NativeAuthFlowView: View {
             .padding(.top, WanderTheme.spacing4)
 
             TextField("Verification code", text: $verificationCode)
-                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                .font(.system(.title2, design: .monospaced).weight(.semibold))
                 .multilineTextAlignment(.center)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
@@ -448,16 +450,16 @@ struct NativeAuthFlowView: View {
             Button(action: verifyEmailCode) {
                 ZStack {
                     Text("Verify and continue")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(AstirTypography.control)
                     if auth.isVerifyingEmailCode {
                         HStack {
                             Spacer()
                             ProgressView()
-                                .tint(WanderTheme.textOnAction.color)
+                                .tint(brandMode.accentForeground)
                         }
                     }
                 }
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .background(WanderTheme.terracotta.color)
                 .clipShape(
@@ -484,7 +486,7 @@ struct NativeAuthFlowView: View {
                 }
                 .disabled(auth.isPerformingNativeAuth)
             }
-            .font(.system(size: 15, weight: .bold))
+            .font(AstirTypography.control)
             .foregroundStyle(WanderTheme.textInk.color)
             .frame(maxWidth: .infinity)
         }
@@ -494,7 +496,7 @@ struct NativeAuthFlowView: View {
     private var authError: some View {
         if let error = auth.nativeAuthError {
             Text(error)
-                .font(.system(size: 13, weight: .semibold))
+                .font(AstirTypography.caption)
                 .foregroundStyle(WanderTheme.stateError.color)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -539,6 +541,7 @@ struct NativeAuthFlowView: View {
 
 private struct NativeAppleIDButton: UIViewRepresentable {
     let type: ASAuthorizationAppleIDButton.ButtonType
+    let style: ASAuthorizationAppleIDButton.Style
     let isEnabled: Bool
     let action: () -> Void
 
@@ -547,7 +550,7 @@ private struct NativeAppleIDButton: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
-        let button = ASAuthorizationAppleIDButton(type: type, style: .black)
+        let button = ASAuthorizationAppleIDButton(type: type, style: style)
         button.cornerRadius = WanderTheme.radiusMedium
         button.addTarget(
             context.coordinator,

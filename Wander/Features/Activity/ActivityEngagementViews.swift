@@ -108,7 +108,7 @@ struct ActivityEngagementActionRow: View {
                     )
 
                 Text(engagement.likeCount.formatted())
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(primaryColor)
             }
@@ -137,7 +137,7 @@ struct ActivityEngagementActionRow: View {
                     .foregroundStyle(primaryColor)
 
                 Text(engagement.commentCount.formatted())
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(primaryColor)
             }
@@ -335,7 +335,7 @@ struct ActivityPostcardView: View {
 
                 if let note = context.note {
                     Text("“\(note)”")
-                        .font(.system(.subheadline, design: .serif, weight: .medium))
+                        .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(.subheadline, design: .serif, weight: .medium))
                         .foregroundStyle(primaryText)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .padding(.vertical, 10)
@@ -419,7 +419,7 @@ struct ActivityPostcardView: View {
 
     private var ticketBadge: some View {
         Label(context.ticketEyebrow, systemImage: ticketIcon)
-            .font(.system(size: ticketBadgeFontSize, weight: .black, design: .rounded))
+            .font(visualStyle == .astir ? AstirTypography.metadata : .system(size: ticketBadgeFontSize, weight: .black, design: .rounded))
             .tracking(0.7)
             .foregroundStyle(visualStyle == .astir ? astirBrandMode.background : WanderTheme.textInk.color)
             .padding(.horizontal, 10)
@@ -485,7 +485,7 @@ struct ActivityPostcardView: View {
 
     private var destinationTitle: some View {
         Text(context.placeName)
-            .font(visualStyle == .astir ? AstirTheme.display(27) : WanderTypography.editorialTitle)
+            .font(visualStyle == .astir ? AstirTypography.sectionTitle : WanderTypography.editorialTitle)
             .foregroundStyle(primaryText)
             .lineLimit(2)
             .minimumScaleFactor(0.82)
@@ -497,7 +497,7 @@ struct ActivityPostcardView: View {
     private var ratingBadge: some View {
         if let rating = context.rating {
             Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
-                .font(.system(size: 13, weight: .black, design: .rounded))
+                .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color)
                 .padding(.horizontal, 9)
                 .frame(minHeight: 30)
@@ -533,7 +533,7 @@ struct ActivityPostcardView: View {
                 secondaryMetadata
             }
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(visualStyle == .astir ? AstirTypography.metadata : .system(size: 11, weight: .semibold))
         .foregroundStyle(secondaryText)
     }
 
@@ -584,12 +584,12 @@ struct ActivityPostcardView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(context.actor.displayName) \(context.attributionAction)")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(size: 14, weight: .bold))
                     .foregroundStyle(primaryText)
                     .lineLimit(2)
 
                 Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · someone you follow")
-                    .font(.caption.weight(.medium))
+                    .font(visualStyle == .astir ? AstirTypography.metadata : .caption.weight(.medium))
                     .foregroundStyle(secondaryText)
                     .lineLimit(2)
             }
@@ -705,6 +705,7 @@ private struct ActivityPostcardArtwork: View {
 }
 
 struct ActivityCommentsScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -739,8 +740,9 @@ struct ActivityCommentsScreen: View {
 
                 if isLoading, comments.isEmpty {
                     ProgressView("Loading comments…")
-                        .tint(WanderTheme.terracotta.color)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .tint(brandMode.accent)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: 140)
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
@@ -761,8 +763,8 @@ struct ActivityCommentsScreen: View {
 
                 if let commentError {
                     Text(commentError)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(WanderTheme.stateError.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, WanderTheme.spacing4)
                         .listRowInsets(EdgeInsets())
@@ -781,7 +783,7 @@ struct ActivityCommentsScreen: View {
                 }
             }
         }
-        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .background(brandMode.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer
         }
@@ -940,14 +942,14 @@ struct ActivityCommentsScreen: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "bubble.right")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accent)
             Text("Start the conversation")
-                .font(WanderTypography.editorialCardTitle)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text("Share what makes this place worth remembering.")
-                .font(.system(size: 14, weight: .medium))
+                .font(AstirTypography.bodySmall)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, minHeight: 180)
     }
@@ -955,41 +957,41 @@ struct ActivityCommentsScreen: View {
     private var composer: some View {
         VStack(spacing: 0) {
             Divider()
-                .overlay(WanderTheme.borderHairline.color)
+                .overlay(brandMode.border)
 
             HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
                 WanderAvatar(
                     initials: activityInitials(for: store.currentUser.displayName),
                     avatarURL: store.currentUser.avatarURL,
                     size: 36,
-                    color: WanderTheme.terracottaTint.color
+                    color: brandMode.accentWash
                 )
 
                 TextField("Add a comment…", text: $draft, axis: .vertical)
-                    .font(.system(size: 16))
+                    .font(AstirTypography.body)
                     .lineLimit(1...4)
                     .focused($composerFocused)
                     .submitLabel(.send)
                     .onSubmit(post)
                     .padding(.horizontal, WanderTheme.spacing3)
                     .padding(.vertical, 10)
-                    .background(WanderTheme.surfaceRaised.color)
+                    .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                     .overlay(
                         RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                            .stroke(WanderTheme.borderStrong.color, lineWidth: 1)
+                            .stroke(brandMode.border, lineWidth: 1)
                     )
 
                 Button("Post", action: post)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accent)
                     .frame(minWidth: 52, minHeight: 44)
                     .disabled(normalizedDraft.isEmpty || isPosting)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.vertical, WanderTheme.spacing2)
         }
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.background)
     }
 
     private var normalizedDraft: String {
@@ -1191,7 +1193,7 @@ private struct ActivityCommentsFullScreenImage: View {
             Image(systemName: systemImage)
                 .font(.system(size: 34, weight: .black))
             Text(title)
-                .font(.system(size: 15, weight: .black))
+                .font(AstirTypography.control)
         }
         .foregroundStyle(.white.opacity(0.76))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1200,6 +1202,7 @@ private struct ActivityCommentsFullScreenImage: View {
 }
 
 struct ActivityCommentsRouteScreen: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     let requestID: UUID
@@ -1225,8 +1228,8 @@ struct ActivityCommentsRouteScreen: View {
         }
         .navigationTitle("comments")
         .navigationBarTitleDisplayMode(.inline)
-        .tint(WanderTheme.textInk.color)
-        .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
+        .tint(brandMode.accent)
+        .toolbarBackground(brandMode.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .simultaneousGesture(
@@ -1255,21 +1258,21 @@ struct ActivityCommentsRouteScreen: View {
         VStack(spacing: WanderTheme.spacing4) {
             if resolutionError == nil || isRetrying {
                 ProgressView("Opening activity…")
-                    .tint(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .tint(brandMode.accent)
+                    .foregroundStyle(brandMode.secondaryText)
             } else {
                 Image(systemName: "exclamationmark.bubble")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accent)
 
                 Text("This activity couldn’t load")
-                    .font(WanderTypography.editorialCardTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
 
                 Text("Check your connection and try again.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AstirTypography.bodySmall)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 Button("Try again") {
                     Task { @MainActor in
@@ -1278,21 +1281,22 @@ struct ActivityCommentsRouteScreen: View {
                         isRetrying = false
                     }
                 }
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.surfaceRaised.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(minWidth: 132, minHeight: 44)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .disabled(isRetrying)
             }
         }
         .padding(WanderTheme.spacing6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .background(brandMode.background.ignoresSafeArea())
     }
 }
 
 private struct ActivityCommentRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let comment: ActivityComment
     var onDelete: (() -> Void)?
     var onReport: (() -> Void)?
@@ -1320,15 +1324,16 @@ private struct ActivityCommentRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: WanderTheme.spacing1) {
                     Text(comment.author.displayName)
-                        .font(.system(size: 14, weight: .black))
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(FeedPresentation.timestampText(for: comment.createdAt))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Text(comment.body)
-                    .font(.system(size: 15))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .opacity(comment.isPending ? 0.58 : 1)
@@ -1352,7 +1357,7 @@ private struct ActivityCommentRow: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
