@@ -297,6 +297,12 @@ extension AuthSessionProviding {
 
 @MainActor
 final class AuthSessionStore: ObservableObject, AuthSessionProviding {
+    private struct InFlightSessionRefresh {
+        let id: UUID
+        let startingUserID: String?
+        let task: Task<Void, Never>
+    }
+
     @Published private(set) var state: AuthState
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
@@ -313,24 +319,63 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     private let provider: AuthSessionProviding
     private var sessionObservationTask: Task<Void, Never>?
+    private var inFlightSessionRefresh: InFlightSessionRefresh?
     private var refreshGeneration = 0
+    private var terminalAuthMutationID: UUID?
     private var isNativeAuthAttemptActive = false
+
+    private var isTerminalAuthMutationInProgress: Bool {
+        terminalAuthMutationID != nil
+    }
 
     init(provider: AuthSessionProviding) {
         self.provider = provider
         self.state = provider.state
         sessionObservationTask = Task { @MainActor [weak self] in
             guard !Task.isCancelled else { return }
-            for await state in provider.sessionChanges() {
+            for await _ in provider.sessionChanges() {
                 guard !Task.isCancelled else { return }
-                self?.refreshGeneration &+= 1
-                self?.synchronizeState(state)
+                // Clerk can publish a transient client snapshot while its
+                // authoritative refresh is still in flight. Ignore those
+                // notifications until the refresh reconciles `provider.state`.
+                // Outside a refresh, treat stream values as notifications and
+                // read current provider state so a buffered stale payload cannot
+                // overwrite a newer authoritative result.
+                guard let self else { return }
+                if let inFlight = self.inFlightSessionRefresh {
+                    let observedState = provider.state
+                    if let startingUserID = inFlight.startingUserID,
+                       case .signedIn(let observedSession) = observedState,
+                       observedSession.userID != startingUserID {
+                        // A different authenticated account is not a transient
+                        // snapshot of the refresh we started. Invalidate that
+                        // work, expose the switch without validating it, then
+                        // run one authoritative refresh for the new account.
+                        self.refreshGeneration &+= 1
+                        inFlight.task.cancel()
+                        self.inFlightSessionRefresh = nil
+                        self.synchronizeState(observedState, validatesSession: false)
+                        _ = self.startSessionRefreshIfNeeded()
+                    }
+                    continue
+                }
+                guard !self.isTerminalAuthMutationInProgress else { continue }
+                let observedState = provider.state
+                let validatedUserID = self.isSessionValidated
+                    ? self.state.session?.userID
+                    : nil
+                self.synchronizeState(
+                    observedState,
+                    validatesSession: validatedUserID != nil
+                        && observedState.session?.userID == validatedUserID
+                )
             }
         }
     }
 
     deinit {
         sessionObservationTask?.cancel()
+        inFlightSessionRefresh?.task.cancel()
     }
 
     var isSignedIn: Bool {
@@ -357,18 +402,95 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func refreshSession() async {
+        guard var refresh = startSessionRefreshIfNeeded() else { return }
+        while true {
+            await refresh.task.value
+            guard !Task.isCancelled else { return }
+            guard let replacement = inFlightSessionRefresh,
+                  replacement.id != refresh.id
+            else { return }
+            // An observed account switch can invalidate the task this caller
+            // originally joined. Follow the replacement single-flight refresh
+            // so launch/admission waiters cannot return with the new account
+            // still unvalidated.
+            refresh = replacement
+        }
+    }
+
+    @discardableResult
+    private func startSessionRefreshIfNeeded() -> InFlightSessionRefresh? {
+        guard !isTerminalAuthMutationInProgress else { return nil }
+        if let inFlightSessionRefresh {
+            return inFlightSessionRefresh
+        }
+
         beginSessionValidation()
         refreshGeneration &+= 1
         let generation = refreshGeneration
+        let refreshID = UUID()
+        let startingUserID = state.session?.userID
+        let provider = self.provider
         #if DEBUG
-        WanderDebugLog.remote.debug("auth store refresh start current_state=\(self.state.debugSummary, privacy: .public)")
+        let startingStateSummary = state.debugSummary
         #endif
-        await provider.refreshSession()
-        guard !Task.isCancelled, generation == refreshGeneration else { return }
-        synchronizeState(provider.state)
-        #if DEBUG
-        WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
-        #endif
+        let task = Task { @MainActor [weak self] in
+            #if DEBUG
+            WanderDebugLog.remote.debug("auth store refresh start current_state=\(startingStateSummary, privacy: .public)")
+            #endif
+            await provider.refreshSession()
+            guard !Task.isCancelled,
+                  let self,
+                  generation == self.refreshGeneration,
+                  !self.isTerminalAuthMutationInProgress,
+                  self.inFlightSessionRefresh?.id == refreshID
+            else { return }
+            // Remove the slot before publishing the authoritative state. There
+            // is no actor suspension between these operations, so a buffered
+            // observation can only run afterward and will read provider.state.
+            self.inFlightSessionRefresh = nil
+            self.synchronizeState(provider.state)
+            #if DEBUG
+            WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
+            #endif
+        }
+        let inFlight = InFlightSessionRefresh(
+            id: refreshID,
+            startingUserID: startingUserID,
+            task: task
+        )
+        inFlightSessionRefresh = inFlight
+        return inFlight
+    }
+
+    /// Joins the foreground validation already in flight, or starts the same
+    /// single-flight refresh when an authenticated action wins the scheduling
+    /// race. No token is exposed until the expected account is validated.
+    func ensureSessionValidated(for expectedUserID: String) async throws {
+        if inFlightSessionRefresh != nil {
+            await refreshSession()
+            try Task.checkCancellation()
+        }
+        guard !isTerminalAuthMutationInProgress else {
+            throw AuthSessionError.notSignedIn
+        }
+        if isSessionValidated,
+           case .signedIn(let session) = state,
+           session.userID == expectedUserID {
+            return
+        }
+        guard state.session?.userID == expectedUserID else {
+            throw AuthSessionError.notSignedIn
+        }
+
+        await refreshSession()
+        try Task.checkCancellation()
+        guard !isTerminalAuthMutationInProgress,
+              isSessionValidated,
+              case .signedIn(let session) = state,
+              session.userID == expectedUserID
+        else {
+            throw AuthSessionError.notSignedIn
+        }
     }
 
     func requireSignIn(for intent: AuthGateIntent, action: () -> Void) {
@@ -618,11 +740,16 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func signOut() async throws {
-        beginSessionValidation()
+        guard let mutationID = beginTerminalAuthMutation() else {
+            throw AuthSessionError.sessionUnavailable
+        }
         nativeAuthDidDismiss()
         isSigningOut = true
         signOutError = nil
-        defer { isSigningOut = false }
+        defer {
+            isSigningOut = false
+            finishTerminalAuthMutation(mutationID)
+        }
 
         do {
             try await provider.signOut()
@@ -636,15 +763,40 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func deleteAccount() async throws {
-        beginSessionValidation()
+        guard let mutationID = beginTerminalAuthMutation() else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        defer { finishTerminalAuthMutation(mutationID) }
         nativeAuthDidDismiss()
-        try await provider.deleteAccount()
-        await provider.refreshSession()
-        synchronizeStateFromProvider()
+        do {
+            try await provider.deleteAccount()
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+        } catch {
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            throw error
+        }
     }
 
     private func synchronizeStateFromProvider() {
         synchronizeState(provider.state)
+    }
+
+    private func beginTerminalAuthMutation() -> UUID? {
+        guard terminalAuthMutationID == nil else { return nil }
+        let mutationID = UUID()
+        terminalAuthMutationID = mutationID
+        refreshGeneration &+= 1
+        inFlightSessionRefresh?.task.cancel()
+        inFlightSessionRefresh = nil
+        beginSessionValidation()
+        return mutationID
+    }
+
+    private func finishTerminalAuthMutation(_ mutationID: UUID) {
+        guard terminalAuthMutationID == mutationID else { return }
+        terminalAuthMutationID = nil
     }
 
     private func resetNativeAuthForm() {
@@ -684,10 +836,13 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         return true
     }
 
-    private func synchronizeState(_ state: AuthState) {
+    private func synchronizeState(
+        _ state: AuthState,
+        validatesSession: Bool = true
+    ) {
         self.state = state
         if case .signedIn = state {
-            isSessionValidated = true
+            isSessionValidated = validatesSession
         } else {
             isSessionValidated = false
         }

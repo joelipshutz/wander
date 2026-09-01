@@ -1,6 +1,6 @@
 # Setup
 
-Last updated: 2026-07-24
+Last updated: 2026-08-30
 
 ## Requirements
 
@@ -355,6 +355,76 @@ The `parse-discover-query` Edge Function sends only the raw query plus the fixed
 ```bash
 npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
+### Social import understanding
+
+REC-120 adds a feature-flagged production path for Instagram and TikTok import
+understanding. A signed-in iOS client sends only the supported social URL,
+platform, schema version, and stable client request id to the authenticated
+`social-import-understand` Edge Function. The function acquires bounded source
+evidence through Apify, sends only that evidence and bounded media to Gemini,
+and returns grounded place-name hints. For each grounded hint, the function
+also performs a bounded Google Places Text Search and returns up to three real
+POI candidates with a Google Place ID, structured address, and coordinates.
+The app ranks those candidates and keeps alternatives for review; MapKit is a
+fallback only when Google returns no usable candidate. Provider output is never
+saved until the normal import review and commit path accepts a coordinate-backed
+candidate.
+
+For Instagram captions, the function can also batch up to 20 public account
+handles through Apify's Instagram Profile Scraper while media is being
+ingested. It retains only an exact username-to-display-name alias, discards the
+rest of the profile payload, and uses that alias only when the caption's local
+grammar independently recommends the handle as a destination. This lets a
+compact handle such as `@hvojai` resolve to its public venue name without
+trusting an LLM acronym guess. The lookup has its own short deadline and charge
+cap, is skipped when the request has insufficient time remaining, and fails
+open to the ordinary Gemini path. The main social-import feature flag remains
+the operational kill switch. On Apify's free plan as of 2026-08-30, the profile
+actor is $2.60 per 1,000 profiles, so the bounded 20-handle maximum is about
+$0.052 before any plan discount.
+
+Keep all paid-provider credentials server-side. Never add any value to an
+xcconfig, the app bundle, logs, fixtures, PR text, or tracked evaluator runs:
+
+```bash
+npx supabase secrets set \
+  WANDER_APIFY_TOKEN=<server-token> \
+  WANDER_GEMINI_API_KEY=<server-key> \
+  WANDER_GEMINI_MODEL=gemini-3.5-flash \
+  WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy social-import-understand \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF" \
+  --no-verify-jwt \
+  --use-api
+```
+
+`--no-verify-jwt` delegates bearer validation to the function's existing
+`current_profile` contract; it does not make the function anonymous. The
+function fails closed before paid work unless the caller maps to a current
+profile, validates social hosts and media redirects, bounds request/media/model
+work, and admits the request through the database-backed per-account
+idempotency and concurrency/rate limits. Gemini video files are temporary and
+are deleted best-effort after understanding. Responses and logs contain only
+aggregate diagnostics and grounded hints, never raw provider payloads, media
+URLs, social URLs, captions, bearer tokens, or provider keys.
+
+The registered `social_import_apify_gemini_v1` feature flag defaults Off
+globally. Canary testers need an explicit hosted per-account On override; a
+device-side On cannot bypass the server gate. The Settings override can still
+force the feature Off, including in Debug and Simulator builds. After changing
+either override, fully quit and relaunch because behavior is snapshotted at
+cold launch.
+
+After changing this function or its admission RPCs, apply reviewed migrations,
+run the hosted smoke test, deploy the function, and verify an unauthenticated
+request receives `401` before enabling the flag:
+
+```bash
+npm --prefix scripts ci --ignore-scripts
+node scripts/supabase-smoke-test.mjs --linked
 ```
 
 ### Google Places venue photos

@@ -358,7 +358,8 @@ struct WanderRootView: View {
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
-        parser: any LLMFilterParser = DeterministicFilterParser()
+        parser: any LLMFilterParser = DeterministicFilterParser(),
+        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -396,7 +397,11 @@ struct WanderRootView: View {
             store.isDarkMapEnabled = true
         }
         _store = StateObject(wrappedValue: store)
-        let importStore = PlaceImportStore()
+        let importStore = PlaceImportStore(
+            resolver: DevicePlaceImportResolver(
+                socialUnderstandingRepository: socialImportUnderstandingRepository
+            )
+        )
         _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
             wrappedValue: PlaceSaveDraftStore(
@@ -1283,7 +1288,8 @@ struct WanderRootView: View {
                         await pushNotifications.notifyImportFinished(
                             batchIDs: result.batchIDs,
                             savedCount: result.savedCount,
-                            needsReviewCount: result.needsReviewCount
+                            needsReviewCount: result.needsReviewCount,
+                            sourceRetryCount: result.sourceRetryCount
                         )
                     }
                 }

@@ -1,8 +1,8 @@
 # REC-120 Instagram and TikTok importer technical evaluation
 
 Date: 2026-08-28
-Status: Credentialed Apify + Gemini + MapKit evaluation complete; launch gate not met
-Scope: evaluation tooling only; no production app, backend, or account mutation
+Status: Grounded Apify + Gemini replay complete; extraction promising, launch gate not met
+Scope: evaluation tooling plus bounded production fallback/matcher improvements; no backend or account mutation
 
 ## Executive conclusion
 
@@ -39,15 +39,23 @@ but strict completeness passed only 7/8 (87.5%). Local video keyframe OCR was
 especially noisy and did not recover the hidden venue name in the diagnostic
 reel; TikTok's embedded tagged-place metadata did.
 
-A credentialed `Apify + Gemini + MapKit` run now proves the complete evaluation
-path can acquire, understand, and resolve real posts, but it does not meet the
-launch bar. Across all eight cases, transport and strict acquisition
-completeness were both 100%, while Gemini understanding succeeded on 7/8 after
-one multi-place TikTok case exhausted three HTTP 503 attempts. Hint extraction
-reached 92.6% micro recall but only 39.7% macro precision, no post had an exact
-hint set, only 19.9% of hints selected a MapKit candidate, and mean end-to-end
-latency was 151.715 seconds. This is a measured candidate, not a winner or a
-launch-ready importer.
+A credentialed `Apify + Gemini + MapKit` run proves the complete evaluation
+path can acquire, understand, and resolve real posts. A no-paid-call replay of
+its frozen acquisition/model artifacts then applied schema validation, explicit
+model-media attestation, deterministic failure fallback, geography filtering,
+and the v5 MapKit mirror. That combined extraction found 121/121 required
+mentions with 97.7% micro precision, 100% micro recall, three scored extras,
+and 6/8 exact posts. The seven successful Gemini cases alone found 114/114
+required mentions; the failed multi-place TikTok call was recovered from its
+numbered caption, so 121/121 must not be described as Gemini-only.
+
+The launch bar is still not met. Gemini understanding itself succeeded on only
+7/8 cases, mean replay latency was 144.580 seconds, and MapKit retained just
+17/121 required names. Selected-name micro precision/recall was 86.4%/14.0%; all
+four single-place posts were exact after selection, but none of the four
+multi-place posts were exact. Extraction is now promising on this small corpus;
+physical POI resolution, repeated-run reliability, and corpus breadth are the
+remaining blockers.
 
 Bright Data, Google Video Intelligence, AWS, and Azure remain unmeasured with
 credentials in this evaluation. Their rows below continue to distinguish
@@ -61,8 +69,9 @@ documented capability from rec.me measurements.
   Data, or Apify adapters;
 - preserves the untouched provider response as raw JSON in a gitignored run;
 - normalizes captions, tagged POIs, accessibility text, ordered images, video,
-  transcript text produced by an understanding adapter, and scene descriptions
-  into one evidence contract;
+  transcript text and scene descriptions produced by explicit understanding
+  adapters into one evidence contract; vendor-model descriptions stay separately
+  typed and cannot become deterministic evidence;
 - probes every acquired media asset relevant to the case with bounded HTTPS,
   redirect, byte, and MIME checks; transport success remains separate from
   strict modality/media completeness;
@@ -75,6 +84,13 @@ documented capability from rec.me measurements.
   hint extraction, and final POI selection as separate stages; and
 - scores macro per-post quality, micro per-place quality, at-least-one success,
   exact-set success, forbidden mentions, latency, and provider errors.
+
+The same branch also makes three conservative production-path improvements:
+it parses proper names and action-grounded destinations from multi-line numbered
+captions or per-slide OCR, demotes exact explicit geography already carried as a
+durable venue's area, and recognizes distinctive creator-qualified venue names
+such as `Caroline's Seaside Cafe by Giuseppe`. It does not wire Apify, Gemini,
+reel frame sampling, or speech transcription into the iOS app.
 
 The committed corpus has 8 public posts, 121 required labels, 4 acceptable
 mentions, and 3 forbidden attribution/distractor labels. It covers captions,
@@ -90,7 +106,8 @@ The credentialed trial also forced several adapter corrections:
   redirects.
 - Apify's own AI video description is disabled, so the benchmark measures the
   shared Gemini understanding layer. Apify transcript artifacts remain disabled
-  and unscored.
+  and unscored. Any unexpected vendor-generated scene description is quarantined
+  from deterministic extraction and independent model grounding.
 - Gemini receives successfully fetched media parts before the untrusted-text
   prompt and uses the current nested JSON `responseFormat` contract. The
   unsupported `maxItems: 150` schema constraint was removed after a synthetic
@@ -99,6 +116,13 @@ The credentialed trial also forced several adapter corrections:
   bounded attempts and backoff. In the full run, retries recovered one initial
   transport timeout and one initial HTTP 503; the failed TikTok case returned
   HTTP 503 on all three attempts.
+- Successful structured output is split between independently grounded text
+  and model-attested image/video/speech evidence. Model-only media claims require
+  a matching successfully ingested asset, and independent matching uses token
+  boundaries. A model-authored evidence sentence cannot ground its own caption/
+  tagged-location hallucination. Schema-invalid JSON and failed model calls use
+  deterministic acquired evidence, and the result/summary mark that fallback
+  explicitly instead of reporting it as model success.
 
 ## Measured live results
 
@@ -110,27 +134,39 @@ Its hint exact-set rate was still 0%, and MapKit selected a candidate for only
 50% of hints. The eight-case run then exposed the reliability and resolution
 limits hidden by that smoke.
 
-| Run | Cases | Transport | Complete acquisition | Understanding | MapKit lookup health | MapKit selection | Mean latency |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Verified smoke | 2 | 100% | 100% | 100% | 87.5% | 50.0% | 60.531 s |
-| Full corpus | 8 | 100% | 100% | 87.5% | 61.4% | 19.9% | 151.715 s |
+| Run | Cases | Transport | Complete acquisition | Understanding | Fallback-assisted | MapKit lookup health | MapKit selection | Mean latency |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Verified smoke | 2 | 100% | 100% | 100% | 0% | 87.5% | 50.0% | 60.531 s |
+| Original full corpus | 8 | 100% | 100% | 87.5% | 0% | 61.4% | 19.9% | 151.715 s |
+| Grounded saved-artifact replay | 8 | 100% | 100% | 87.5% | 12.5% | 64.8% | 17.2% | 144.580 s |
 
 | Run | Hint macro P / R | Hint micro P / R | Required hits | Posts with a hint hit | Exact hint set | Selected-name macro P / R | Selected-name micro P / R |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Verified smoke | 37.5% / 100% | 33.3% / 100% | 2/2 | 2/2 | 0/2 | 75.0% / 100% | 66.7% / 100% |
-| Full corpus | 39.7% / 87.3% | 75.5% / 92.6% | 112/121 | 7/8 | 0/8 | 50.0% / 53.8% | 65.2% / 12.4% |
+| Original full corpus | 39.7% / 87.3% | 75.5% / 92.6% | 112/121 | 7/8 | 0/8 | 50.0% / 53.8% | 65.2% / 12.4% |
+| Grounded saved-artifact replay | 93.8% / 100% | 97.7% / 100% | 121/121 | 8/8 | 6/8 | 90.1% / 68.0% | 86.4% / 14.0% |
 
-The full run's selected-name post-success rate was 75% and selected-name exact
-set rate was 12.5%, with only 15/121 required names surviving MapKit selection.
+The grounded replay's selected-name post-success rate was 100% and exact-set
+rate was 50%, with only 17/121 required names surviving MapKit selection. All
+four single-place posts were exact; none of the four multi-place posts were.
 Selected-name scoring checks names and aliases only; it does not verify physical
 branch identity, address, provider ID, or coordinates.
 
-The final MapKit figures above are a v4 re-resolution of the saved Gemini hints,
-so they made no new Apify or Gemini calls. The batch helper applies production's
-ranking and per-query-limit order, paces searches, and retries only transient
-MapKit server/throttling errors. Without pacing, the 176-lookup replay produced
-136 `loadingThrottled` failures and an artificial 13.1% lookup-health result.
-The app's selection code remains authoritative; this helper is still a mirror.
+The grounded row is a post-hoc `grounded-hints-v3` rebuild from saved live
+acquisition and model artifacts plus a v5 MapKit re-resolution; it made no new
+Apify or Gemini calls. The manifest chains input/output result hashes and lists
+each transform that actually ran. The
+batch helper applies production ranking and per-query-limit order, paces
+searches, and retries only transient MapKit errors. The app's selection code
+remains authoritative; this helper is still a mirror.
+
+Of 128 grounded hint lookups, 83 were error-free (64.8%). The 45 errors were 37
+`placemarkNotFound` results and 8 throttling errors; lookup health therefore is
+not a pure provider-uptime metric. Seventy-six lookups returned at least one
+candidate, but only 22 selected one. Of the 54 candidate-bearing unselected
+hints, 47 were below the 0.82 threshold and 7 lacked the required 0.08 clear
+lead. The dense 100-place guide caused 95/104 final name misses, but excluding
+it still leaves selected-name recall at only 12/21 (57.1%).
 
 Measured full-run Apify actor usage summed to $0.1387. The seven successful
 Gemini responses reported 44,348 prompt tokens and 66,896 total tokens, implying
@@ -141,20 +177,22 @@ request, smoke run, diagnostic calls, and any unreported overhead, so it is a
 run estimate rather than a production unit cost. See the official
 [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
 
-The full credentialed result by expected-modality scenario was:
+The grounded replay by expected-modality scenario was:
 
 | Expected-modality scenario | Cases | Complete acquisition | Hint micro P / R | Required hits | Posts with a hit | Exact hint set |
 |---|---:|---:|---:|---:|---:|---:|
-| Caption | 5 | 100% | 36.8% / 63.2% | 12/19 | 4/5 | 0/5 |
-| Carousel image text | 2 | 100% | 83.6% / 98.1% | 106/108 | 2/2 | 0/2 |
-| Speech | 1 | 100% | 0% / 0% | 0/7 | 0/1 | 0/1 |
-| Tagged location | 1 | 100% | 25.0% / 100% | 1/1 | 1/1 | 0/1 |
-| Video text | 4 | 100% | 33.3% / 30.0% | 3/10 | 3/4 | 0/4 |
+| Caption | 5 | 100% | 88.5% / 100% | 19/19 | 5/5 | 3/5 |
+| Carousel image text | 2 | 100% | 99.1% / 100% | 108/108 | 2/2 | 1/2 |
+| Speech | 1 | 100% | 100% / 100% | 7/7 | 1/1 | 1/1 |
+| Tagged location | 1 | 100% | 100% / 100% | 1/1 | 1/1 | 1/1 |
+| Video text | 4 | 100% | 100% / 100% | 10/10 | 4/4 | 4/4 |
 
 These modality rows overlap and group whole cases; they do not attribute each
-correct label to one evidence channel. The zero speech row and weak video-text
-row are driven in part by the one multi-place TikTok request that exhausted all
-three Gemini retries, but that failure is itself part of end-to-end reliability.
+correct label to one evidence channel. In particular, the speech/video rows
+include the failed TikTok case recovered from its caption, so 100% here does not
+prove Gemini read every spoken or visible-video name. On the seven successful
+Gemini cases only, extraction found 114/114 required mentions with 97.5% micro
+precision and 100% recall; 1/8 cases was fallback-assisted.
 
 ### Current and local baselines
 
@@ -205,13 +243,26 @@ The most important observations are:
   multi-place TikTok case still failed after three HTTP 503 responses. A retry
   policy reduces transient loss; it does not turn repeated provider unavailability
   into success.
-- Gemini recovered 112/121 required names overall, including 106/108 labels in
-  the two carousel-image-text scenarios, but emitted enough extra hints that no
-  case had an exact hint set.
-- MapKit was the largest downstream attrition point: 61.4% of hint lookups were
-  healthy, 19.9% selected a candidate, and selected-name micro recall fell to
-  12.4%. This combines search health, ambiguity thresholds, and candidate
-  quality; the corpus cannot yet validate physical branch identity.
+- The original raw-candidate pass recovered 112/121 required names. The grounded
+  replay found 121/121: 114/114 on successful model cases plus 7/7 from explicit
+  deterministic fallback. It emitted three scored extras, and 6/8 posts had an
+  exact hint set.
+- The three scored extras were `Castle Crags Wilderness`, `Shasta-Trinity
+  National Forest`, and `Wind River Brewing`. All are named destinations in the
+  source evidence, so they may be corpus-label omissions rather than extraction
+  defects. They remain counted as false until the frozen labels are adjudicated.
+- Model candidates are not all independently verified. Caption and tagged-
+  location candidates must match source text outside the model's own evidence
+  sentence; image/video/speech-only candidates can be retained as explicitly
+  `model_attested_media_evidence` only when the run records a matching successful
+  media ingestion. Those bytes may have no independent OCR/STT transcript, so
+  this remains attestation rather than independent verification. POI validation
+  remains mandatory.
+- MapKit is the largest downstream attrition point: 64.8% of hint lookups were
+  error-free, 17.2% selected a candidate, and selected-name micro recall was
+  only 14.0%. This combines not-found results, eight throttles, confidence
+  thresholds, ambiguity, and candidate quality; the corpus cannot validate
+  physical branch identity.
 - The current deterministic path found only 16 of 121 labeled mentions. A good
   post-level score can hide catastrophic multi-place recall.
 - Promoting matching TikTok embedded JSON increased the Osaka case from 3/7 to
@@ -237,13 +288,13 @@ The most important observations are:
   Cave Springs case selected Castle Crags but missed Cave Springs while four
   hint lookups returned `MKErrorDomain` failures. This is a useful resolution
   diagnostic, not physical-POI or launch proof. That measured run used the v2
-  mirror. The committed v4 helper additionally ports production's pre-limit
+  mirror. The committed v5 helper additionally ports production's pre-limit
   result ranking, per-query-limit-before-global-dedup order, LA/Georgia
-  ambiguity rules, and District of Columbia region handling with executable
-  parity fixtures. It paces batch requests and retries transient MapKit errors
-  to avoid replay-induced throttling. It still copies evaluation logic rather
-  than invoking the production type directly, so production Swift remains
-  authoritative.
+  ambiguity rules, District of Columbia region handling, and distinctive
+  creator-qualified venue matching with executable parity fixtures. It paces
+  batch requests and retries transient MapKit errors to reduce replay-induced
+  throttling. It still copies evaluation logic rather than invoking the
+  production type directly, so production Swift remains authoritative.
 
 ## Root cause in the current app
 
@@ -266,6 +317,15 @@ The gaps are structural:
 - MapKit resolution is downstream. A successful scrape is not a successful
   import, and a correct visible name can still fail to resolve to a POI.
 
+This branch improves the existing path where evidence already reaches the app:
+numbered creator captions and numbered OCR text on an individual slide can now
+produce multiple bounded, proper-name hints without promoting instructions or
+incidental handles. Exact explicit geography duplicated as a venue's area is
+demoted, and the matcher can reconcile a distinctive provider base name with a
+creator-qualified form. These are safe local improvements, not the evaluated
+Apify/Gemini architecture. Reels still have no production frame sampling,
+speech transcript, persisted full-media manifest, or structured model evidence.
+
 ## Option evaluation
 
 | Option | Acquisition coverage | Visible slide text | Visible video text | Speech | rec.me live measurement | Assessment |
@@ -275,7 +335,7 @@ The gaps are structural:
 | Bright Data scrapers | Documented captions, Instagram carousel children, reel/TikTok video URLs | Requires downstream OCR | Requires downstream OCR/model | Not documented in selected schemas | No | Strong Instagram transport candidate. Bright Data's documented TikTok row does not show slideshow or understanding fields. |
 | Apify scrapers | Documented posts/reels, persisted reel video, TikTok video/slideshow assets | Requires downstream OCR/model | Actor AI description disabled; Gemini used downstream | Documented STT disabled and unmeasured here | Yes, acquisition | Reached 100% transport and strict completeness on 8/8, but this small public corpus is not a production reliability guarantee. |
 | Google Video Intelligence | Requires actual media bytes or GCS | N/A; use still OCR | Timestamped OCR | Timestamped en-US transcription | Adapter only | Good deterministic evidence service; expensive relative to Gemini and not a semantic POI extractor. |
-| Gemini video understanding | Requires acquired media bytes, Files/GCS, or a fetchable media URL | Joint image understanding | Joint visual/audio understanding | Yes | Yes, with Apify | Strong micro recall, but only 7/8 understanding success, 0/8 exact hint sets, and one request exhausted three 503 retries. Not launch-ready. |
+| Gemini video understanding | Requires acquired media bytes, Files/GCS, or a fetchable media URL | Joint image understanding | Joint visual/audio understanding | Yes | Yes, with Apify | Grounded replay reached 121/121 combined extraction and 6/8 exact hint sets, but Gemini itself was 7/8 and one case required caption fallback. Model-attested media evidence and tail reliability still need a larger benchmark. |
 | AWS Rekognition + Transcribe | Requires S3 | N/A; separate still path | Timestamped OCR | Separate Transcribe job | Setup-status only | Viable comparator but operationally heaviest: two jobs, storage, queueing, and another semantic stage. Apply the AI-service data-use opt-out before real content. |
 | Azure AI Video Indexer | Bytes or direct public/SAS media URL | N/A; separate still path | OCR on a shared timeline | Transcript and location named entities | Setup-status only | Best fourth managed comparator because OCR, speech, and location entities share one output timeline. Still needs business-POI resolution. |
 
@@ -403,6 +463,13 @@ matrix should be:
 6. Run AWS only if Azure/Google/Gemini miss a material class or an AWS platform
    constraint dominates the production choice.
 
+The grounded replay makes Apify + Gemini the front-runner worth hardening, but
+it does not justify skipping the benchmark matrix. The next dollar and hour
+should go first to the frozen 50-100-case corpus and repeated Apify + Gemini
+runs, then to Bright Data transport and Google Video Intelligence on the same
+assets. Azure remains the useful fourth video comparator; AWS can stay deferred
+unless those tests expose a class it uniquely addresses.
+
 Do not pay for every expensive analysis path on every import. A sensible cascade
 is platform POI/caption/alt text -> still OCR -> cheap semantic extraction ->
 video understanding only when no adequate place set is found.
@@ -441,9 +508,12 @@ The credentialed Apify/Gemini trial completed using process-scoped credentials;
 the runner did not write them into the repository or run artifacts. Its verified
 smoke and full-corpus outputs are in the gitignored
 `runs/apify-gemini-smoke-2026-08-28-verified/` and
-`runs/apify-gemini-full-2026-08-28/` directories. Bright Data, Google Video
-Intelligence, AWS, and Azure still need comparable credentialed cells before a
-provider decision.
+`runs/apify-gemini-full-2026-08-28/` directories. The post-review, no-paid-call
+replay is in `runs/apify-gemini-grounded-replay-2026-08-28/`; its manifest
+records chained result hashes, the exact applied transforms, fallback count, and the v5
+resolver. The final hint transform is `grounded-hints-v3`. Bright Data, Google
+Video Intelligence, AWS, and Azure still need
+comparable credentialed cells before a provider decision.
 
 Apify's [current general terms](https://docs.apify.com/legal/general-terms-and-conditions)
 say that personal accounts must be created by humans rather than automated
@@ -473,13 +543,17 @@ To repeat the measured cell without putting secrets in Git:
 
 ## Decision today
 
-Do not launch the current importer unchanged, and do not treat the credentialed
-cell as a ship decision. Apify is now the strongest measured acquisition option
-in this corpus, and Apify plus Gemini has strong micro hint recall, but the full
-path still had one failed understanding case, zero exact hint sets, 19.9% MapKit
-selection, 12.4% selected-name micro recall, and 151.715-second mean latency.
-Implement the bounded parser/media/auth/retry fixes as evaluation findings,
-then compare Bright Data and Google Video Intelligence on the same frozen
-corpus, repeat providers enough to measure tail reliability, and expand to the
-50-100-case launch benchmark. No option is launch-ready or a measured overall
-winner yet.
+Merge the bounded local parser, provenance, auth/retry, replay, and matcher
+improvements after review; they improve evidence already available to the app
+without committing rec.me to a vendor. Do not launch the importer or wire a
+production scraper/model solely from this eight-post result. Apify is the
+strongest measured acquisition option and the grounded Apify + Gemini path now
+has excellent extraction on this sample, but one model call still failed,
+multi-place POI selection was 0/4 exact, selected-name micro recall was 14.0%,
+and mean latency was 144.580 seconds.
+
+Proceed with the 50-100-case frozen benchmark and repeated Apify + Gemini runs,
+then measure Bright Data and Google Video Intelligence on the same inputs before
+the production-provider decision. Keep Azure as the fourth video comparator and
+defer AWS unless the first three expose a material uncovered scenario. No option
+is launch-ready or a measured overall winner yet.
