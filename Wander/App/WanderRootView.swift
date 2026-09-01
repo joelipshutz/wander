@@ -2384,6 +2384,9 @@ struct WanderRootView: View {
         usesSimulatorTestSession: Bool? = nil
     ) -> WanderFixtureMode {
         #if DEBUG
+        if arguments.contains("-WanderUseEphemeralEmptyFixtures") {
+            return .ephemeralEmpty
+        }
         if arguments.contains("-WanderUseStorefrontFixtures") {
             return .storefront
         }
@@ -2411,7 +2414,7 @@ struct WanderRootView: View {
 
     static func resolvedFixtures(mode: WanderFixtureMode) -> WanderFixtures {
         switch mode {
-        case .empty:
+        case .empty, .ephemeralEmpty:
             WanderFixtures.empty()
         case .demo:
             WanderFixtures.seed()
@@ -2514,7 +2517,7 @@ struct WanderRootView: View {
             analytics: analytics,
             persistence: persistence
         )
-        if fixtureMode == .empty, let initialSession {
+        if (fixtureMode == .empty || fixtureMode == .ephemeralEmpty), let initialSession {
             store.apply(authState: .signedIn(initialSession))
         }
         let storeFinishedAt = CFAbsoluteTimeGetCurrent()
@@ -2716,6 +2719,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
 
 enum WanderFixtureMode: Equatable {
     case empty
+    case ephemeralEmpty
     case demo
     case storefront
     case performance
