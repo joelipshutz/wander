@@ -777,6 +777,18 @@ struct MapSearchSelectionSession {
     }
 }
 
+struct MapDeferredNavigationGate {
+    private(set) var revision: UInt64 = 0
+
+    mutating func invalidate() {
+        revision &+= 1
+    }
+
+    func allows(_ capturedRevision: UInt64, isCancelled: Bool) -> Bool {
+        !isCancelled && capturedRevision == revision
+    }
+}
+
 final class MapCameraRegionTracker {
     private(set) var region: MKCoordinateRegion
     private(set) var interactionStartRegion: MKCoordinateRegion?
@@ -1181,6 +1193,7 @@ struct MapScreen: View {
     @State private var didResolveInitialCamera = false
     @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
+    @State private var deferredMapNavigationGate = MapDeferredNavigationGate()
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
     @State private var walkthroughFallbackMemory: VisiblePlace?
@@ -2301,6 +2314,7 @@ struct MapScreen: View {
               auth.isSignedIn,
               handlingNotificationRequestID != request.id
         else { return }
+        let navigationRevision = deferredMapNavigationGate.revision
         handlingNotificationRequestID = request.id
         defer {
             if handlingNotificationRequestID == request.id {
@@ -2310,12 +2324,20 @@ struct MapScreen: View {
 
         switch request.destination {
         case .place(let placeID):
-            await openNotificationPlace(placeID, requestID: request.id)
+            await openNotificationPlace(
+                placeID,
+                requestID: request.id,
+                navigationRevision: navigationRevision
+            )
         case .sharedVisit(let participantID, let generation):
             let resolution = await resolveSharedVisitDestinationWithRetry(
                 participantID: participantID,
                 generation: generation
             )
+            guard canApplyDeferredMapNavigation(
+                requestID: request.id,
+                revision: navigationRevision
+            ) else { return }
             guard case .resolved(let destination) = resolution else {
                 if resolution == .unavailable {
                     mapSearchMessage = "That shared check-in is no longer available."
@@ -2331,6 +2353,10 @@ struct MapScreen: View {
                     participantID: participantID,
                     generation: destination.currentGeneration
                 )
+                guard canApplyDeferredMapNavigation(
+                    requestID: request.id,
+                    revision: navigationRevision
+                ) else { return }
                 guard let invitation else {
                     mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                     return
@@ -2338,7 +2364,11 @@ struct MapScreen: View {
                 mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
                 pushNotifications.consumeNavigationRequest(id: request.id)
             } else if destination.status == SharedVisitParticipantStatus.accepted.rawValue {
-                await openNotificationPlace(destination.placeID, requestID: request.id)
+                await openNotificationPlace(
+                    destination.placeID,
+                    requestID: request.id,
+                    navigationRevision: navigationRevision
+                )
             } else {
                 mapSearchMessage = "That shared check-in is no longer available."
                 pushNotifications.consumeNavigationRequest(id: request.id)
@@ -2346,6 +2376,32 @@ struct MapScreen: View {
         default:
             return
         }
+    }
+
+    private func canApplyDeferredMapNavigation(
+        requestID: UUID,
+        revision: UInt64
+    ) -> Bool {
+        deferredMapNavigationGate.allows(
+            revision,
+            isCancelled: Task.isCancelled
+        )
+            && handlingNotificationRequestID == requestID
+            && pushNotifications.navigationRequest?.id == requestID
+    }
+
+    private func invalidateDeferredMapNavigationForUserInteraction() {
+        deferredMapNavigationGate.invalidate()
+        didResolveInitialCamera = true
+        if let request = pushNotifications.navigationRequest {
+            switch request.destination {
+            case .place, .sharedVisit:
+                pushNotifications.consumeNavigationRequest(id: request.id)
+            default:
+                break
+            }
+        }
+        handlingNotificationRequestID = nil
     }
 
     private func resolveSharedVisitDestinationWithRetry(
@@ -2393,7 +2449,11 @@ struct MapScreen: View {
         return nil
     }
 
-    private func openNotificationPlace(_ placeID: String, requestID: UUID) async {
+    private func openNotificationPlace(
+        _ placeID: String,
+        requestID: UUID,
+        navigationRevision: UInt64
+    ) async {
 
         let notificationLookupViewport = MapViewport(
             minLatitude: -90,
@@ -2402,6 +2462,10 @@ struct MapScreen: View {
             maxLongitude: 180
         )
         await store.refreshRemoteSocialSurfaces(in: notificationLookupViewport, backend: backend)
+        guard canApplyDeferredMapNavigation(
+            requestID: requestID,
+            revision: navigationRevision
+        ) else { return }
         if let visiblePlace = store.visiblePlaces().first(where: {
             $0.place.id == placeID || $0.place.localID == placeID || $0.place.serverID == placeID
         }) {
@@ -2419,7 +2483,12 @@ struct MapScreen: View {
         }
 
         do {
-            guard let candidate = try await backend.sharedPlace(id: placeID),
+            let resolvedCandidate = try await backend.sharedPlace(id: placeID)
+            guard canApplyDeferredMapNavigation(
+                requestID: requestID,
+                revision: navigationRevision
+            ) else { return }
+            guard let candidate = resolvedCandidate,
                   let latitude = candidate.latitude,
                   let longitude = candidate.longitude
             else {
@@ -2439,6 +2508,10 @@ struct MapScreen: View {
             centerMap(latitude: latitude, longitude: longitude)
             mapSearchMessage = "Shared place. Add it to keep it on your map."
         } catch {
+            guard canApplyDeferredMapNavigation(
+                requestID: requestID,
+                revision: navigationRevision
+            ) else { return }
             mapSearchMessage = "That shared place could not be opened. Try the link again."
         }
         pushNotifications.consumeNavigationRequest(id: requestID)
@@ -2658,6 +2731,7 @@ struct MapScreen: View {
     }
 
     private func clearMapSearchPreviewForEditing() {
+        invalidateDeferredMapNavigationForUserInteraction()
         didDismissInitialPlaceRoute = true
         mapSearchSelectionSession.suppressPreviewForEditing()
         clearMapSearchPreview()
@@ -2692,6 +2766,7 @@ struct MapScreen: View {
     }
 
     private func clearSearchTextForMapInteraction() {
+        invalidateDeferredMapNavigationForUserInteraction()
         mapSearchSelectionSession.finish()
         mapSearchSubmissionContext = nil
         submittedSavedSearchGroups = []
@@ -3808,6 +3883,7 @@ struct MapScreen: View {
     }
 
     private func submitMapSearch(_ requestedQuery: String) {
+        invalidateDeferredMapNavigationForUserInteraction()
         walkthroughs.perform(.mapSearch)
         mapSearchSelectionSession.finish()
         dismissKeyboard()
@@ -3861,6 +3937,7 @@ struct MapScreen: View {
     }
 
     private func cancelMapSearch() {
+        invalidateDeferredMapNavigationForUserInteraction()
         let restoredSelection = mapSearchSelectionSession.cancel(
             currentSelection: currentMapSearchSelection
         )
@@ -3916,6 +3993,7 @@ struct MapScreen: View {
     @MainActor
     private func handleMapSearchLaunchRequest(_ request: WanderMapSearchLaunchRequest?) async {
         guard let request else { return }
+        let navigationRevision = deferredMapNavigationGate.revision
         defer {
             if !Task.isCancelled {
                 onSearchLaunchRequestHandled(request.id)
@@ -3941,7 +4019,10 @@ struct MapScreen: View {
         }
 
         await centerMapOnCurrentCityIfNeeded()
-        guard !Task.isCancelled else { return }
+        guard deferredMapNavigationGate.allows(
+            navigationRevision,
+            isCancelled: Task.isCancelled
+        ) else { return }
         isMapSearchFocused = false
         suppressedTypeaheadQuery = Self.normalized(query)
         mapQuery = query
@@ -5424,6 +5505,7 @@ struct MapScreen: View {
     }
 
     private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        invalidateDeferredMapNavigationForUserInteraction()
         trackMapSearchSelection(suggestion)
         mapSearchSelectionSession.finish()
         dismissKeyboard()
@@ -5473,6 +5555,7 @@ struct MapScreen: View {
     }
 
     private func addTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        invalidateDeferredMapNavigationForUserInteraction()
         trackMapSearchSelection(suggestion)
         mapSearchSelectionSession.finish()
         dismissKeyboard()
