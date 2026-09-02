@@ -1059,6 +1059,98 @@ enum MapWalkthroughMemoryPolicy {
     }
 }
 
+struct NativeMapCameraRequest {
+    let region: MKCoordinateRegion
+    let revision: UInt64
+    let animated: Bool
+}
+
+enum NativeMapAnnotationKind: Equatable {
+    case saved(String)
+    case search(String)
+}
+
+struct NativeMapAnnotationDescriptor {
+    let id: String
+    let kind: NativeMapAnnotationKind
+    let title: String
+    let emoji: String
+    let coordinate: CLLocationCoordinate2D
+    let outlines: [MapPinOutline]
+    let isSearchResult: Bool
+    let isSelected: Bool
+    let accessibilityLabel: String
+    let bounceRevision: UInt64
+
+    var accessibilityIdentifier: String? {
+        switch kind {
+        case let .saved(groupKey):
+            return isSelected ? "map.pin.active.saved.\(groupKey)" : nil
+        case let .search(candidateID):
+            return isSelected
+                ? "map.pin.active.search.\(candidateID)"
+                : "map.pin.search.\(candidateID)"
+        }
+    }
+
+    var renderSignature: String {
+        [
+            emoji,
+            outlines.map(\.id).joined(separator: ","),
+            isSearchResult ? "search" : "saved",
+            isSelected ? "selected" : "inactive",
+            isSelected ? title : "",
+            String(bounceRevision)
+        ].joined(separator: "|")
+    }
+}
+
+enum NativeMapClusterZoomPolicy {
+    static let minimumLatitudeDelta: CLLocationDegrees = 0.012
+    static let minimumLongitudeDelta: CLLocationDegrees = 0.014
+    static let paddingScale = 1.8
+
+    static func region(
+        fitting coordinates: [CLLocationCoordinate2D]
+    ) -> MKCoordinateRegion? {
+        let validCoordinates = coordinates.filter(CLLocationCoordinate2DIsValid)
+        guard let first = validCoordinates.first else { return nil }
+
+        let latitudeBounds = validCoordinates.reduce(
+            (minimum: first.latitude, maximum: first.latitude)
+        ) { bounds, coordinate in
+            (
+                minimum: min(bounds.minimum, coordinate.latitude),
+                maximum: max(bounds.maximum, coordinate.latitude)
+            )
+        }
+        let longitudeBounds = validCoordinates.reduce(
+            (minimum: first.longitude, maximum: first.longitude)
+        ) { bounds, coordinate in
+            (
+                minimum: min(bounds.minimum, coordinate.longitude),
+                maximum: max(bounds.maximum, coordinate.longitude)
+            )
+        }
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: (latitudeBounds.minimum + latitudeBounds.maximum) / 2,
+                longitude: (longitudeBounds.minimum + longitudeBounds.maximum) / 2
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(
+                    minimumLatitudeDelta,
+                    (latitudeBounds.maximum - latitudeBounds.minimum) * paddingScale
+                ),
+                longitudeDelta: max(
+                    minimumLongitudeDelta,
+                    (longitudeBounds.maximum - longitudeBounds.minimum) * paddingScale
+                )
+            )
+        )
+    }
+}
+
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1072,7 +1164,8 @@ struct MapScreen: View {
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
-    @State private var selectedMapFeature: MapFeature?
+    @State private var selectedNativeMapFeatureID: String?
+    @State private var nativeMapFeatureClearRevision: UInt64 = 0
     @State private var nativeMapFeatureSelectionSuppressionUntil = Date.distantPast
     @State private var ignoreNextMapTap = false
     @State private var mapTapDismissalTask: Task<Void, Never>?
@@ -1111,9 +1204,6 @@ struct MapScreen: View {
     @State private var featuredViewportRefreshTask: Task<Void, Never>?
     @State private var isLoadingMapSources = true
     @State private var hasRevealedInitialMap = false
-    @State private var renderedAnnotationViewport: MapViewport
-    @State private var mapPinEntranceKeyState = MapPinEntranceKeyState()
-    @State private var mapPinEntranceTask: Task<Void, Never>?
     @State private var compactCardPhase = MapCompactCardPhase.hidden
     @State private var compactCardReadyIdentity: String?
     @State private var compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
@@ -1122,7 +1212,11 @@ struct MapScreen: View {
     @State private var nearbyOpacity: Double = 1
     @State private var compactCardMotionTask: Task<Void, Never>?
     @State private var droppedPinGeocodingTask: Task<Void, Never>?
-    @State private var position: MapCameraPosition = .region(Self.defaultRegion)
+    @State private var nativeCameraRequest = NativeMapCameraRequest(
+        region: Self.defaultRegion,
+        revision: 0,
+        animated: false
+    )
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
     @State private var mapCardViewerLocation: CLLocation? = nil
@@ -1306,7 +1400,6 @@ struct MapScreen: View {
         _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
         _routedVisiblePlaceGroup = State(initialValue: nil)
-        _renderedAnnotationViewport = State(initialValue: Self.initialRemoteViewport)
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -1401,25 +1494,8 @@ struct MapScreen: View {
         }?.key
     }
 
-    private var renderedVisiblePlaceGroups: [VisiblePlaceGroup] {
-        var groups = visiblePlaceGroups.filter { group in
-            MapViewportRefreshPolicy.contains(
-                group.primary,
-                in: renderedAnnotationViewport
-            )
-        }
-        if let selectedPlaceGroupKey,
-           !groups.contains(where: { $0.key == selectedPlaceGroupKey }),
-           let selectedGroup = visiblePlaceGroups.first(where: {
-               $0.key == selectedPlaceGroupKey
-           }) {
-            groups.append(selectedGroup)
-        }
-        return groups
-    }
-
     private var mapAnnotationPlaces: [VisiblePlace] {
-        renderedVisiblePlaceGroups.map(\.primary)
+        visiblePlaceGroups.map(\.primary)
     }
 
     private var visiblePlaceGroupKeys: [String] {
@@ -1483,7 +1559,7 @@ struct MapScreen: View {
 
     private func mapPinEntranceKeys(in region: MKCoordinateRegion) -> Set<String> {
         let viewport = MapViewportRefreshPolicy.viewport(for: region)
-        let savedKeys = renderedVisiblePlaceGroups.compactMap { group in
+        let savedKeys = visiblePlaceGroups.compactMap { group in
             MapViewportRefreshPolicy.contains(group.primary, in: viewport)
                 ? MapPinEntranceIdentity.saved(group.key)
                 : nil
@@ -1551,40 +1627,50 @@ struct MapScreen: View {
         let _ = MapPerformanceProbe.recordBodyEvaluation()
         #endif
         let annotationGroups = orderedVisiblePlaceGroups()
-        let indexedAnnotationGroups = Array(annotationGroups.enumerated())
-        let indexedSearchCandidates = Array(mappableSearchCandidates.enumerated())
-        let inactiveAnnotationGroups = indexedAnnotationGroups.filter { _, group in
-            !highlightsCompactSelection || group.key != selectedPlaceGroupKey
+        let nativeSavedAnnotations: [NativeMapAnnotationDescriptor] = annotationGroups.map { group in
+            let outlines = pinOutlines(for: group)
+            return NativeMapAnnotationDescriptor(
+                id: MapPinEntranceIdentity.saved(group.key),
+                kind: .saved(group.key),
+                title: group.primary.place.canonicalName,
+                emoji: group.primary.categoryEmoji,
+                coordinate: CLLocationCoordinate2D(
+                    latitude: group.primary.place.latitude,
+                    longitude: group.primary.place.longitude
+                ),
+                outlines: outlines,
+                isSearchResult: false,
+                isSelected: highlightsCompactSelection && group.key == selectedPlaceGroupKey,
+                accessibilityLabel: MapPinAccessibility.label(
+                    outlines: outlines,
+                    category: group.primary.effectiveCompactType,
+                    placeName: group.primary.place.canonicalName
+                ),
+                bounceRevision: group.key == selectedPlaceGroupKey
+                    ? activePinBounceRevision
+                    : 0
+            )
         }
-        let inactiveSearchCandidates = indexedSearchCandidates.filter { _, candidate in
-            !highlightsCompactSelection || candidate.id != selectedSearchCandidateID
+        let nativeSearchAnnotations: [NativeMapAnnotationDescriptor] = mappableSearchCandidates.compactMap { candidate -> NativeMapAnnotationDescriptor? in
+            guard let latitude = candidate.latitude,
+                  let longitude = candidate.longitude
+            else { return nil }
+            return NativeMapAnnotationDescriptor(
+                id: MapPinEntranceIdentity.search(candidate.id),
+                kind: .search(candidate.id),
+                title: candidate.name,
+                emoji: candidate.categoryEmoji,
+                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                outlines: [],
+                isSearchResult: true,
+                isSelected: highlightsCompactSelection && candidate.id == selectedSearchCandidateID,
+                accessibilityLabel: "Map search result, \(candidate.name)",
+                bounceRevision: candidate.id == selectedSearchCandidateID
+                    ? activePinBounceRevision
+                    : 0
+            )
         }
-        let activeAnnotationGroup = highlightsCompactSelection
-            ? annotationGroups.first(where: { $0.key == selectedPlaceGroupKey })
-            : nil
-        let activeSearchCandidate = highlightsCompactSelection ? selectedSearchCandidate : nil
-        let activeAnnotationGroups = activeAnnotationGroup.map { [$0] } ?? []
-        let activeSearchCandidates = activeSearchCandidate.map { [$0] } ?? []
-        let activePinFocusSelection: (id: String, coordinate: CLLocationCoordinate2D)? = {
-            if let activeAnnotationGroup {
-                return (
-                    id: "saved:\(activeAnnotationGroup.key)",
-                    coordinate: CLLocationCoordinate2D(
-                        latitude: activeAnnotationGroup.primary.place.latitude,
-                        longitude: activeAnnotationGroup.primary.place.longitude
-                    )
-                )
-            }
-            if let activeSearchCandidate,
-               let latitude = activeSearchCandidate.latitude,
-               let longitude = activeSearchCandidate.longitude {
-                return (
-                    id: "search:\(activeSearchCandidate.id)",
-                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-                )
-            }
-            return nil
-        }()
+        let nativeAnnotations = nativeSavedAnnotations + nativeSearchAnnotations
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
@@ -1593,275 +1679,76 @@ struct MapScreen: View {
         )
         NavigationStack {
             ZStack(alignment: .bottom) {
-                MapReader { proxy in
-                    Map(
-                        position: $position,
-                        interactionModes: .all,
-                        selection: $selectedMapFeature
-                    ) {
-                        if Self.canShowUserLocation {
-                            UserAnnotation()
-                        }
-
-                        ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
-                            let isTransitionVisible = mapPinEntranceKeyState.isPresented(
-                                MapPinEntranceIdentity.saved(group.key)
-                            )
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            let coordinate = CLLocationCoordinate2D(
-                                latitude: group.primary.place.latitude,
-                                longitude: group.primary.place.longitude
-                            )
-                            let focusConfiguration = MapPinFocusPolicy.configuration(
-                                for: coordinate,
-                                selectionID: activePinFocusSelection?.id,
-                                selectedCoordinate: activePinFocusSelection?.coordinate,
-                                regionSpan: currentSearchRegion.span
-                            )
-                            Annotation(
-                                group.primary.place.canonicalName,
-                                coordinate: coordinate
-                            ) {
-                                MapPlaceMarker(
-                                    visiblePlace: group.primary,
-                                    outlines: pinOutlines(for: group),
-                                    isSelected: false
-                                )
-                                .frame(minWidth: 44, minHeight: 44)
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityAction {
-                                    selectVisiblePlaceFromMapTap(group.primary)
-                                }
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: isTransitionVisible,
-                                        delay: entranceDelay
-                                    )
-                                )
-                                .modifier(
-                                    MapPinFocusModifier(configuration: focusConfiguration)
-                                )
-                                .allowsHitTesting(false)
-                            }
-                            .annotationTitles(.hidden)
-                        }
-
-                        ForEach(inactiveSearchCandidates, id: \.element.id) { index, candidate in
-                            if let latitude = candidate.latitude,
-                               let longitude = candidate.longitude {
-                                let isEntranceVisible = mapPinEntranceKeyState.isPresented(
-                                    MapPinEntranceIdentity.search(candidate.id)
-                                )
-                                let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                                let coordinate = CLLocationCoordinate2D(
-                                    latitude: latitude,
-                                    longitude: longitude
-                                )
-                                let focusConfiguration = MapPinFocusPolicy.configuration(
-                                    for: coordinate,
-                                    selectionID: activePinFocusSelection?.id,
-                                    selectedCoordinate: activePinFocusSelection?.coordinate,
-                                    regionSpan: currentSearchRegion.span
-                                )
-                                Annotation(
-                                    candidate.name,
-                                    coordinate: coordinate
-                                ) {
-                                    SearchResultMarker(
-                                        candidate: candidate,
-                                        isSelected: false
-                                    )
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .accessibilityIdentifier("map.pin.search.\(candidate.id)")
-                                    .accessibilityAddTraits(.isButton)
-                                    .accessibilityAction {
-                                        selectSearchCandidateFromMapTap(candidate)
-                                    }
-                                    .modifier(
-                                        MapPinEntranceModifier(
-                                            isVisible: isEntranceVisible,
-                                            delay: entranceDelay
-                                        )
-                                    )
-                                    .modifier(
-                                        MapPinFocusModifier(configuration: focusConfiguration)
-                                    )
-                                    .allowsHitTesting(false)
-                                }
-                                .annotationTitles(.hidden)
-                            }
-                        }
-
-                        // Selected pins must stay inside MapKit's annotation tree. A
-                        // MapProxy-positioned SwiftUI overlay cannot follow continuous
-                        // camera frames without forcing costly per-frame state updates.
-                        ForEach(activeAnnotationGroups, id: \.key) { group in
-                            let activeOutlines = pinOutlines(for: group)
-                            let isEntranceVisible = mapPinEntranceKeyState.isPresented(
-                                MapPinEntranceIdentity.saved(group.key)
-                            )
-                            Annotation(
-                                group.primary.place.canonicalName,
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
-                            ) {
-                                ActiveMapAnnotationContent(
-                                    title: group.primary.place.canonicalName,
-                                    outlineCount: activeOutlines.count
-                                ) {
-                                    MapPlaceMarker(
-                                        visiblePlace: group.primary,
-                                        outlines: activeOutlines,
-                                        isSelected: true
-                                    )
-                                    .modifier(
-                                        MapPinReselectionBounceModifier(
-                                            trigger: activePinBounceRevision
-                                        )
-                                    )
-                                }
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: isEntranceVisible,
-                                        delay: 0
-                                    )
-                                )
-                                .frame(minWidth: 44, minHeight: 44)
-                                .accessibilityIdentifier("map.pin.active.saved.\(group.key)")
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityAction {
-                                    replayActivePinBounce()
-                                }
-                                .allowsHitTesting(false)
-                            }
-                            .annotationTitles(.hidden)
-                        }
-
-                        ForEach(activeSearchCandidates, id: \.id) { candidate in
-                            if let latitude = candidate.latitude,
-                               let longitude = candidate.longitude {
-                                let isEntranceVisible = mapPinEntranceKeyState.isPresented(
-                                    MapPinEntranceIdentity.search(candidate.id)
-                                )
-                                Annotation(
-                                    candidate.name,
-                                    coordinate: CLLocationCoordinate2D(
-                                        latitude: latitude,
-                                        longitude: longitude
-                                    )
-                                ) {
-                                    ActiveMapAnnotationContent(
-                                        title: candidate.name,
-                                        outlineCount: MapPinVisualMetrics.searchResultOutlineCount
-                                    ) {
-                                        SearchResultMarker(candidate: candidate, isSelected: true)
-                                            .modifier(
-                                                MapPinReselectionBounceModifier(
-                                                    trigger: activePinBounceRevision
-                                                )
-                                            )
-                                    }
-                                    .modifier(
-                                        MapPinEntranceModifier(
-                                            isVisible: isEntranceVisible,
-                                            delay: 0
-                                        )
-                                    )
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .accessibilityIdentifier("map.pin.active.search.\(candidate.id)")
-                                    .accessibilityAddTraits(.isButton)
-                                    .accessibilityAction {
-                                        replayActivePinBounce()
-                                    }
-                                    .allowsHitTesting(false)
-                                }
-                                .annotationTitles(.hidden)
-                            }
-                        }
-
+                NativeMapView(
+                    annotations: nativeAnnotations,
+                    cameraRequest: nativeCameraRequest,
+                    nativeFeatureClearRevision: nativeMapFeatureClearRevision,
+                    showsUserLocation: Self.canShowUserLocation,
+                    isDark: store.isDarkMapEnabled,
+                    reduceMotion: reduceMotion,
+                    onAnnotationTap: handleNativeMapAnnotationTap,
+                    onEmptyMapTap: handleEmptyMapTap,
+                    onLongPress: handleNativeMapLongPress,
+                    onNativeFeatureSelection: handleNativeMapFeatureSelection,
+                    onCameraChange: handleMapCameraChange,
+                    onCameraInteractionEnd: { region in
+                        handleMapCameraInteractionEnd(region)
+                        handleFeaturedCameraChange(region)
                     }
-                    .mapStyle(
-                        .standard(
-                            elevation: .flat,
-                            emphasis: .muted,
-                            pointsOfInterest: .all
+                )
+                .tint(Self.currentLocationTint)
+                .ignoresSafeArea()
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: MapViewportHeightPreferenceKey.self,
+                            value: geometry.size.height
                         )
-                    )
-                    .environment(
-                        \.colorScheme,
-                        store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
-                    )
-                    .mapFeatureSelectionDisabled { feature in
-                        feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
-                    }
-                    .mapFeatureSelectionContent { _ in }
-                    .modifier(HideNativeMapFeatureAccessory())
-                    .tint(Self.currentLocationTint)
-                    .ignoresSafeArea()
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: MapViewportHeightPreferenceKey.self,
-                                value: geometry.size.height
-                            )
-                        }
-                    }
-                    .onChange(of: selectedMapFeature) { _, feature in
-                        handleMapFeatureSelection(feature)
-                    }
-                    .onMapCameraChange(frequency: .continuous) { context in
-                        handleMapCameraChange(context.region)
-                    }
-                    .onMapCameraChange(frequency: .onEnd) { context in
-                        handleMapCameraInteractionEnd(context.region)
-                        handleFeaturedCameraChange(context.region)
-                    }
-                    // MapKit owns movement gestures. This observer only reads
-                    // tap locations and never cancels or delays map touches.
-                    .overlay {
-                        MapGestureObserver(
-                            longPressMinimumDuration: 0.48,
-                            prioritizedAnnotationCoordinate: activePinFocusSelection?.coordinate,
-                            onTap: { point in
-                                handleMapTap(at: point, proxy: proxy)
-                            },
-                            onLongPress: { point in
-                                if handleMapLongPress(at: point, proxy: proxy) {
-                                    ignoreNextMapTap = true
-                                }
-                            }
-                        )
-                        .allowsHitTesting(false)
-                    }
-                    #if DEBUG
-                    .overlay(alignment: .topLeading) {
-                        if MapPerformanceProbe.isEnabled {
-                            Text(mapPerformanceProbeSnapshot)
-                                .font(.caption2)
-                                .opacity(0.001)
-                                .accessibilityIdentifier("map.performanceProbe")
-                                .accessibilityLabel("Map performance probe")
-                                .accessibilityValue(mapPerformanceProbeSnapshot)
-                                .allowsHitTesting(false)
-                        } else if Self.usesREC352AdaptiveMapSearchFixtures() {
-                            Text("\(mappableSearchCandidates.count)")
-                                .font(.caption2)
-                                .opacity(0.001)
-                                .accessibilityIdentifier("map.searchResultPinCount")
-                                .accessibilityLabel("Rendered search result count")
-                                .accessibilityValue("\(mappableSearchCandidates.count)")
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    #endif
-                    .onPreferenceChange(MapViewportHeightPreferenceKey.self) { height in
-                        guard height > 0 else { return }
-                        measuredMapViewportHeight = height
                     }
                 }
-
+                #if DEBUG
+                .overlay(alignment: .topLeading) {
+                    if MapPerformanceProbe.isEnabled {
+                        Text(mapPerformanceProbeSnapshot)
+                            .font(.caption2)
+                            .opacity(0.001)
+                            .accessibilityIdentifier("map.performanceProbe")
+                            .accessibilityLabel("Map performance probe")
+                            .accessibilityValue(mapPerformanceProbeSnapshot)
+                            .allowsHitTesting(false)
+                    } else if ProcessInfo.processInfo.arguments.contains(
+                        "-WanderMapPerformanceInteractionControls"
+                    ) {
+                        Button {
+                            Task { @MainActor in
+                                await Task.yield()
+                                guard let firstPlace = store.visiblePlaces().first else { return }
+                                selectVisiblePlaceFromMapTap(firstPlace)
+                            }
+                        } label: {
+                            Color.black.opacity(0.01)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 176, y: 320)
+                        .accessibilityIdentifier("map.performanceSelectFirstPin")
+                        .accessibilityLabel("Select first performance pin")
+                    } else if Self.usesREC352AdaptiveMapSearchFixtures() {
+                        Text("\(mappableSearchCandidates.count)")
+                            .font(.caption2)
+                            .opacity(0.001)
+                            .accessibilityIdentifier("map.searchResultPinCount")
+                            .accessibilityLabel("Rendered search result count")
+                            .accessibilityValue("\(mappableSearchCandidates.count)")
+                            .allowsHitTesting(false)
+                    }
+                }
+                #endif
+                .onPreferenceChange(MapViewportHeightPreferenceKey.self) { height in
+                    guard height > 0 else { return }
+                    measuredMapViewportHeight = height
+                }
                 VStack(spacing: 0) {
                     if !isMapSearchFocused {
                         WanderGlassButtonCluster {
@@ -2070,6 +1957,7 @@ struct MapScreen: View {
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
+                resolvePerformanceFixtureSelectionIfNeeded()
                 resolveInitialSearchIfNeeded()
                 Task { await refreshMapCardViewerLocation() }
             }
@@ -2111,6 +1999,7 @@ struct MapScreen: View {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
                 resolveInitialSelection()
+                resolvePerformanceFixtureSelectionIfNeeded()
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else {
@@ -2143,9 +2032,6 @@ struct MapScreen: View {
                     closeAttachedSaveFlow()
                 }
             }
-            .onChange(of: mapPinEntranceKeys, initial: true) { _, keys in
-                updateMapPinEntranceKeys(keys)
-            }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
                     if let routedVisiblePlace,
@@ -2160,6 +2046,7 @@ struct MapScreen: View {
                     }
                 }
                 resolveInitialSelection()
+                resolvePerformanceFixtureSelectionIfNeeded()
             }
             .onChange(of: mapQuery) { _, _ in
                 let shouldSuppressAutoSelection = suppressNextQueryAutoSelection
@@ -2193,7 +2080,6 @@ struct MapScreen: View {
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
-                mapPinEntranceTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
@@ -2427,8 +2313,26 @@ struct MapScreen: View {
             ),
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         )
-        position = .region(region)
+        requestMapCamera(region)
+    }
+
+    private func requestMapCamera(
+        _ region: MKCoordinateRegion,
+        animated: Bool = true
+    ) {
+        guard CLLocationCoordinate2DIsValid(region.center),
+              region.span.latitudeDelta.isFinite,
+              region.span.latitudeDelta > 0,
+              region.span.longitudeDelta.isFinite,
+              region.span.longitudeDelta > 0
+        else { return }
+
         cameraRegionTracker.synchronize(with: region)
+        nativeCameraRequest = NativeMapCameraRequest(
+            region: region,
+            revision: nativeCameraRequest.revision &+ 1,
+            animated: animated && !reduceMotion
+        )
     }
 
     private func selectMapSource(_ source: MapSource) {
@@ -2581,44 +2485,17 @@ struct MapScreen: View {
     }
 
     private func orderedVisiblePlaceGroups() -> [VisiblePlaceGroup] {
-        let densityBoundGroups = MapAnnotationDensityPolicy.groups(
-            renderedVisiblePlaceGroups,
-            centeredIn: currentSearchRegion,
-            selectedGroupKey: selectedPlaceGroupKey
-        )
         return Self.orderedAnnotationGroups(
-            densityBoundGroups,
+            visiblePlaceGroups,
             selectedGroupKey: selectedPlaceGroupKey
         )
-    }
-
-    private func updateMapPinEntranceKeys(_ keys: Set<String>) {
-        guard mapPinEntranceKeyState.needsUpdate(
-            for: keys,
-            reduceMotion: reduceMotion
-        ) else { return }
-
-        mapPinEntranceTask?.cancel()
-        mapPinEntranceTask = nil
-
-        guard let keysToPresent = mapPinEntranceKeyState.prepare(
-            for: keys,
-            reduceMotion: reduceMotion
-        ) else { return }
-
-        mapPinEntranceTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            mapPinEntranceKeyState.present(keysToPresent)
-            mapPinEntranceTask = nil
-        }
     }
 
     private func clearMapSelection() {
         compactCardMotionTask?.cancel()
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
-        selectedMapFeature = nil
+        clearNativeMapFeatureSelection()
         routedVisiblePlace = nil
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
@@ -2643,9 +2520,21 @@ struct MapScreen: View {
     private func clearNativeMapFeatureSelection() {
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
+        guard selectedNativeMapFeatureID != nil else { return }
+        selectedNativeMapFeatureID = nil
+        nativeMapFeatureClearRevision &+= 1
+    }
 
-        guard selectedMapFeature != nil else { return }
-        selectedMapFeature = nil
+    private func resolvePerformanceFixtureSelectionIfNeeded() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("-WanderMapPerformanceSelectedPin"),
+              arguments.contains("-WanderUsePerformanceFixtures"),
+              selectedPlaceGroupKey == nil,
+              let firstGroupKey = visiblePlaceGroupKeys.first
+        else { return }
+        selectedPlaceGroupKey = firstGroupKey
+        #endif
     }
 
     private func clearSearchTextForMapInteraction() {
@@ -2701,6 +2590,41 @@ struct MapScreen: View {
         activePinBounceRevision &+= 1
     }
 
+    private func handleNativeMapAnnotationTap(_ kind: NativeMapAnnotationKind) {
+        dismissMoreFilters()
+        cancelPendingMapTapDismissal()
+        nativeMapFeatureSelectionSuppressionUntil = Date.now.addingTimeInterval(
+            MapSelectionGesturePolicy.nativeFeatureTapSuppressionDuration
+        )
+
+        switch kind {
+        case let .saved(groupKey):
+            guard let group = visiblePlaceGroups.first(where: { $0.key == groupKey }) else {
+                return
+            }
+            if highlightsCompactSelection, selectedPlaceGroupKey == groupKey {
+                replayActivePinBounce()
+            } else {
+                selectVisiblePlaceFromMapTap(group.primary)
+            }
+        case let .search(candidateID):
+            guard let candidate = mappableSearchCandidates.first(where: {
+                $0.id == candidateID
+            }) else { return }
+            if highlightsCompactSelection, selectedSearchCandidateID == candidateID {
+                replayActivePinBounce()
+            } else {
+                selectSearchCandidateFromMapTap(candidate)
+            }
+        }
+    }
+
+    private func handleEmptyMapTap() {
+        dismissMoreFilters()
+        cancelPendingMapTapDismissal()
+        scheduleEmptyMapTapDismissal()
+    }
+
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
         dismissMoreFilters()
         cancelPendingMapTapDismissal()
@@ -2730,6 +2654,10 @@ struct MapScreen: View {
             }
             return
         }
+        scheduleEmptyMapTapDismissal()
+    }
+
+    private func scheduleEmptyMapTapDismissal() {
         let tapDate = Date.now
         guard tapDate >= mapTapDismissalSuppressionUntil else { return }
 
@@ -2763,7 +2691,7 @@ struct MapScreen: View {
 
             guard !Task.isCancelled,
                   revision == mapSelectionRevision,
-                  selectedMapFeature == nil,
+                  selectedNativeMapFeatureID == nil,
                   !cameraRegionTracker.isInteractionActive,
                   Date.now >= mapTapDismissalSuppressionUntil
             else {
@@ -2784,8 +2712,6 @@ struct MapScreen: View {
     }
 
     private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
-        updateRenderedAnnotationViewport(for: region)
-        updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))
         switch cameraRegionTracker.finishCameraChange(region) {
         case .stationary:
             break
@@ -2798,15 +2724,6 @@ struct MapScreen: View {
         #if DEBUG
         mapPerformanceProbeSnapshot = MapPerformanceProbe.finishCameraInteraction()
         #endif
-    }
-
-    private func updateRenderedAnnotationViewport(for region: MKCoordinateRegion) {
-        guard MapAnnotationViewportPolicy.shouldRefresh(
-            visibleRegion: region,
-            renderedViewport: renderedAnnotationViewport
-        ) else { return }
-
-        renderedAnnotationViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
     }
 
     private func registerMapZoom() {
@@ -2827,6 +2744,13 @@ struct MapScreen: View {
               CLLocationCoordinate2DIsValid(coordinate)
         else { return false }
 
+        handleNativeMapLongPress(coordinate)
+        return true
+    }
+
+    private func handleNativeMapLongPress(_ coordinate: CLLocationCoordinate2D) {
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+
         let candidate = Self.coordinateCandidate(at: coordinate)
         mapSelectionRevision += 1
         let revision = mapSelectionRevision
@@ -2846,7 +2770,6 @@ struct MapScreen: View {
                 selectionRevision: revision
             )
         }
-        return true
     }
 
     private func resolveDroppedPinLocality(
@@ -3066,8 +2989,7 @@ struct MapScreen: View {
                 longitude: coordinate.longitude
             )
         )
-        position = .region(region)
-        cameraRegionTracker.synchronize(with: region)
+        requestMapCamera(region, animated: false)
     }
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {
@@ -3430,14 +3352,7 @@ struct MapScreen: View {
             viewportHeight: measuredMapViewportHeight,
             obscuredBottomHeight: selectedPlaceRecenterClearance
         )
-        cameraRegionTracker.synchronize(with: region)
-        withAnimation(
-            reduceMotion
-                ? MapCompactCardMotionStyle.reducedMotionAnimation
-                : MapCompactCardMotionStyle.mapRecenterAnimation
-        ) {
-            position = .region(region)
-        }
+        requestMapCamera(region)
     }
 
     private func selectSavedResult(_ result: SaveResult) {
@@ -4148,27 +4063,20 @@ struct MapScreen: View {
             && requestAuthorizationContext == currentAuthorizationContext
     }
 
-    private func handleMapFeatureSelection(_ feature: MapFeature?) {
-        if feature != nil, Date.now < nativeMapFeatureSelectionSuppressionUntil {
+    private func handleNativeMapFeatureSelection(_ feature: MKMapFeatureAnnotation) {
+        if Date.now < nativeMapFeatureSelectionSuppressionUntil {
             clearNativeMapFeatureSelection()
             return
         }
-        if feature != nil {
-            dismissMoreFilters()
-        }
-        guard let feature else {
-            requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)
-            return
-        }
 
+        dismissMoreFilters()
         mapSelectionRevision += 1
+        selectedNativeMapFeatureID = mapFeatureSourceID(for: feature)
         resolveSelectedMapFeature(feature)
     }
 
-    private func resolveSelectedMapFeature(_ feature: MapFeature) {
-        guard feature.kind == .pointOfInterest,
-              let fallbackCandidate = placeCandidate(from: feature)
-        else {
+    private func resolveSelectedMapFeature(_ feature: MKMapFeatureAnnotation) {
+        guard let fallbackCandidate = placeCandidate(from: feature) else {
             clearMapSelection()
             return
         }
@@ -4176,7 +4084,7 @@ struct MapScreen: View {
         mapFeatureResolutionTask?.cancel()
         mapSearchMessage = "Loading place..."
 
-        let request = MKMapItemRequest(feature: feature)
+        let request = MKMapItemRequest(mapFeatureAnnotation: feature)
         let origin = currentMapCenterLocation()
         mapFeatureResolutionTask = Task { @MainActor in
             do {
@@ -4231,7 +4139,7 @@ struct MapScreen: View {
     }
 
     private func isNativeSelectedFeatureCandidate(_ candidate: PlaceCandidate) -> Bool {
-        guard selectedMapFeature != nil,
+        guard selectedNativeMapFeatureID != nil,
               selectedSearchCandidateID == candidate.id
         else { return false }
 
@@ -5575,14 +5483,7 @@ struct MapScreen: View {
             obscuredBottomHeight: MapControlLayout.submittedSearchResultsBottomClearance
         ) else { return }
 
-        cameraRegionTracker.synchronize(with: region)
-        withAnimation(
-            reduceMotion
-                ? MapCompactCardMotionStyle.reducedMotionAnimation
-                : MapCompactCardMotionStyle.mapRecenterAnimation
-        ) {
-            position = .region(region)
-        }
+        requestMapCamera(region)
     }
 
     private func centerSearchSelection(latitude: Double, longitude: Double) {
@@ -5595,14 +5496,7 @@ struct MapScreen: View {
             viewportHeight: measuredMapViewportHeight,
             obscuredBottomHeight: selectedPlaceRecenterClearance
         )
-        cameraRegionTracker.synchronize(with: region)
-        withAnimation(
-            reduceMotion
-                ? MapCompactCardMotionStyle.reducedMotionAnimation
-                : MapCompactCardMotionStyle.mapRecenterAnimation
-        ) {
-            position = .region(region)
-        }
+        requestMapCamera(region)
     }
 
     private func handleNearbyTap() {
@@ -5673,32 +5567,16 @@ struct MapScreen: View {
             let coordinate = await currentUserCoordinate()
             await MainActor.run {
                 isRecenteringOnUser = false
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                    if let coordinate {
-                        let center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                        position = .camera(
-                            MapCamera(
-                                centerCoordinate: center,
-                                distance: Self.recenterCameraDistance,
-                                heading: 0,
-                                pitch: 0
-                            )
-                        )
-                        cameraRegionTracker.synchronize(with: MKCoordinateRegion(
-                            center: center,
-                            latitudinalMeters: Self.recenterCameraDistance * 2,
-                            longitudinalMeters: Self.recenterCameraDistance * 2
-                        ))
-                    } else {
-                        position = .region(
-                            MKCoordinateRegion(
-                                center: Self.defaultRegion.center,
-                                latitudinalMeters: Self.recenterCameraDistance * 2,
-                                longitudinalMeters: Self.recenterCameraDistance * 2
-                            )
-                        )
-                    }
-                }
+                let center = coordinate.map {
+                    CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                } ?? Self.defaultRegion.center
+                requestMapCamera(
+                    MKCoordinateRegion(
+                        center: center,
+                        latitudinalMeters: Self.recenterCameraDistance * 2,
+                        longitudinalMeters: Self.recenterCameraDistance * 2
+                    )
+                )
             }
         }
     }
@@ -5794,6 +5672,53 @@ struct MapScreen: View {
 
     private func category(for item: MKMapItem) -> String {
         WanderPlaceCategory.primary(for: item.pointOfInterestCategory, name: item.name) ?? "place"
+    }
+
+    private func placeCandidate(from feature: MKMapFeatureAnnotation) -> PlaceCandidate? {
+        guard let title = feature.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              CLLocationCoordinate2DIsValid(feature.coordinate)
+        else { return nil }
+
+        let sourceID = mapFeatureSourceID(for: feature)
+        return PlaceCandidate(
+            id: sourceID,
+            name: title,
+            category: category(for: feature),
+            categorySource: PlaceCategorySource.provider.rawValue,
+            categoryConfidence: 0.78,
+            rawProviderType: feature.pointOfInterestCategory?.rawValue,
+            address: nil,
+            locality: nil,
+            region: nil,
+            country: nil,
+            latitude: feature.coordinate.latitude,
+            longitude: feature.coordinate.longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: sourceID,
+            distanceMeters: CLLocation(
+                latitude: feature.coordinate.latitude,
+                longitude: feature.coordinate.longitude
+            ).distance(from: currentMapCenterLocation()),
+            confidence: 0.78
+        )
+    }
+
+    private func mapFeatureSourceID(for feature: MKMapFeatureAnnotation) -> String {
+        let name = feature.title ?? "place"
+        let locationKey = MapSearchResultIdentity.locationKey(
+            name: name,
+            latitude: feature.coordinate.latitude,
+            longitude: feature.coordinate.longitude
+        )
+        return "mapkit_\(locationKey)"
+    }
+
+    private func category(for feature: MKMapFeatureAnnotation) -> String {
+        WanderPlaceCategory.primary(
+            for: feature.pointOfInterestCategory,
+            name: feature.title
+        ) ?? "place"
     }
 
     private func placeCandidate(from feature: MapFeature) -> PlaceCandidate? {
@@ -5981,6 +5906,735 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// A MapKit-owned annotation surface. MapKit virtualizes and reuses these views
+/// while the camera moves, so every place remains addressable without keeping a
+/// large animated SwiftUI view tree alive over the map renderer.
+private struct NativeMapView: UIViewRepresentable {
+    let annotations: [NativeMapAnnotationDescriptor]
+    let cameraRequest: NativeMapCameraRequest
+    let nativeFeatureClearRevision: UInt64
+    let showsUserLocation: Bool
+    let isDark: Bool
+    let reduceMotion: Bool
+    let onAnnotationTap: (NativeMapAnnotationKind) -> Void
+    let onEmptyMapTap: () -> Void
+    let onLongPress: (CLLocationCoordinate2D) -> Void
+    let onNativeFeatureSelection: (MKMapFeatureAnnotation) -> Void
+    let onCameraChange: (MKCoordinateRegion) -> Void
+    let onCameraInteractionEnd: (MKCoordinateRegion) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView(frame: .zero)
+        let configuration = MKStandardMapConfiguration(
+            elevationStyle: .flat,
+            emphasisStyle: .muted
+        )
+        configuration.pointOfInterestFilter = .includingAll
+        mapView.preferredConfiguration = configuration
+        mapView.selectableMapFeatures = [.pointsOfInterest]
+        mapView.delegate = context.coordinator
+        mapView.showsScale = false
+        mapView.showsCompass = false
+        mapView.showsTraffic = false
+        mapView.isPitchEnabled = true
+        mapView.isRotateEnabled = true
+        mapView.register(
+            NativeMapPinAnnotationView.self,
+            forAnnotationViewWithReuseIdentifier: NativeMapPinAnnotationView.reuseIdentifier
+        )
+        context.coordinator.attachGestureObservers(to: mapView)
+        context.coordinator.update(parent: self, mapView: mapView)
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.update(parent: self, mapView: mapView)
+    }
+
+    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+        coordinator.detachGestureObservers(from: mapView)
+        mapView.delegate = nil
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
+        private var parent: NativeMapView
+        private var annotationsByID: [String: NativeMapAnnotation] = [:]
+        private var lastCameraRevision: UInt64?
+        private var lastFeatureClearRevision: UInt64 = 0
+        private var suppressNextCompletedTap = false
+        private lazy var tapRecognizer: PassiveMapTapGestureRecognizer = {
+            let recognizer = PassiveMapTapGestureRecognizer()
+            recognizer.maximumMovement = MapHitTesting.passiveTapAllowableMovement
+            recognizer.onCompletedTap = { [weak self] point in
+                self?.handleCompletedTap(at: point)
+            }
+            configureForPassiveObservation(recognizer)
+            return recognizer
+        }()
+        private lazy var longPressRecognizer: UILongPressGestureRecognizer = {
+            let recognizer = UILongPressGestureRecognizer(
+                target: self,
+                action: #selector(handleLongPress(_:))
+            )
+            recognizer.minimumPressDuration = 0.48
+            recognizer.allowableMovement = 10
+            configureForPassiveObservation(recognizer)
+            return recognizer
+        }()
+
+        init(parent: NativeMapView) {
+            self.parent = parent
+        }
+
+        func update(parent: NativeMapView, mapView: MKMapView) {
+            self.parent = parent
+            mapView.showsUserLocation = parent.showsUserLocation
+            let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
+            if mapView.overrideUserInterfaceStyle != interfaceStyle {
+                mapView.overrideUserInterfaceStyle = interfaceStyle
+                NativeMapPinImageRenderer.clearCache()
+                refreshVisibleAnnotationViews(in: mapView)
+            }
+
+            synchronizeAnnotations(in: mapView)
+            applyNativeFeatureClearIfNeeded(to: mapView)
+            applyCameraRequestIfNeeded(to: mapView)
+            refreshVisibleAnnotationViews(in: mapView)
+            refreshAnnotationAccessibility(in: mapView)
+        }
+
+        func attachGestureObservers(to mapView: MKMapView) {
+            mapView.addGestureRecognizer(tapRecognizer)
+            mapView.addGestureRecognizer(longPressRecognizer)
+        }
+
+        func detachGestureObservers(from mapView: MKMapView) {
+            mapView.removeGestureRecognizer(tapRecognizer)
+            mapView.removeGestureRecognizer(longPressRecognizer)
+        }
+
+        func mapView(
+            _ mapView: MKMapView,
+            viewFor annotation: MKAnnotation
+        ) -> MKAnnotationView? {
+            if annotation is MKUserLocation || annotation is MKMapFeatureAnnotation {
+                return nil
+            }
+            if let cluster = annotation as? MKClusterAnnotation {
+                let reuseIdentifier = "recme.map.cluster"
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: reuseIdentifier
+                ) as? MKMarkerAnnotationView
+                    ?? MKMarkerAnnotationView(annotation: cluster, reuseIdentifier: reuseIdentifier)
+                view.annotation = cluster
+                view.canShowCallout = false
+                view.clusteringIdentifier = nil
+                view.collisionMode = .circle
+                view.displayPriority = .defaultHigh
+                view.markerTintColor = UIColor(WanderTheme.terracotta.color)
+                view.glyphText = "\(cluster.memberAnnotations.count)"
+                view.isAccessibilityElement = true
+                view.accessibilityLabel = "\(cluster.memberAnnotations.count) places"
+                view.accessibilityIdentifier = "map.cluster.\(cluster.memberAnnotations.count)"
+                view.accessibilityTraits = .button
+                return view
+            }
+            guard let annotation = annotation as? NativeMapAnnotation else { return nil }
+
+            let view = mapView.dequeueReusableAnnotationView(
+                withIdentifier: NativeMapPinAnnotationView.reuseIdentifier,
+                for: annotation
+            ) as! NativeMapPinAnnotationView
+            view.isAccessibilityElement = true
+            configure(view, for: annotation)
+            return view
+        }
+
+        func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            refreshAnnotationAccessibility(in: mapView)
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            if let feature = annotation as? MKMapFeatureAnnotation {
+                parent.onNativeFeatureSelection(feature)
+                return
+            }
+            if let cluster = annotation as? MKClusterAnnotation {
+                zoom(to: cluster, in: mapView)
+                return
+            }
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            parent.onCameraChange(mapView.region)
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            refreshAnnotationAccessibility(in: mapView)
+            parent.onCameraInteractionEnd(mapView.region)
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        private func configureForPassiveObservation(_ recognizer: UIGestureRecognizer) {
+            recognizer.cancelsTouchesInView = false
+            recognizer.delaysTouchesBegan = false
+            recognizer.delaysTouchesEnded = false
+            recognizer.delegate = self
+        }
+
+        private func synchronizeAnnotations(in mapView: MKMapView) {
+            let desiredIDs = Set(parent.annotations.map(\.id))
+            let staleAnnotations = annotationsByID.values.filter {
+                !desiredIDs.contains($0.stableID)
+            }
+            if !staleAnnotations.isEmpty {
+                mapView.removeAnnotations(staleAnnotations)
+                for annotation in staleAnnotations {
+                    annotationsByID.removeValue(forKey: annotation.stableID)
+                }
+            }
+
+            var addedAnnotations: [NativeMapAnnotation] = []
+            var replacedAnnotations: [NativeMapAnnotation] = []
+            addedAnnotations.reserveCapacity(
+                max(0, parent.annotations.count - annotationsByID.count)
+            )
+            for descriptor in parent.annotations {
+                if let annotation = annotationsByID[descriptor.id] {
+                    if annotation.descriptor.isSelected != descriptor.isSelected
+                        || annotation.descriptor.isSearchResult != descriptor.isSearchResult {
+                        replacedAnnotations.append(annotation)
+                        let replacement = NativeMapAnnotation(descriptor: descriptor)
+                        annotationsByID[descriptor.id] = replacement
+                        addedAnnotations.append(replacement)
+                        continue
+                    }
+                    annotation.update(from: descriptor)
+                    if let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView {
+                        configure(view, for: annotation)
+                    }
+                } else {
+                    let annotation = NativeMapAnnotation(descriptor: descriptor)
+                    annotationsByID[descriptor.id] = annotation
+                    addedAnnotations.append(annotation)
+                }
+            }
+            if !replacedAnnotations.isEmpty {
+                mapView.removeAnnotations(replacedAnnotations)
+            }
+            if !addedAnnotations.isEmpty {
+                mapView.addAnnotations(addedAnnotations)
+            }
+        }
+
+        private func applyNativeFeatureClearIfNeeded(to mapView: MKMapView) {
+            guard lastFeatureClearRevision != parent.nativeFeatureClearRevision else { return }
+            lastFeatureClearRevision = parent.nativeFeatureClearRevision
+            for annotation in mapView.selectedAnnotations where annotation is MKMapFeatureAnnotation {
+                mapView.deselectAnnotation(annotation, animated: false)
+            }
+        }
+
+        private func applyCameraRequestIfNeeded(to mapView: MKMapView) {
+            guard lastCameraRevision != parent.cameraRequest.revision else { return }
+            let isInitialRequest = lastCameraRevision == nil
+            lastCameraRevision = parent.cameraRequest.revision
+            mapView.setRegion(
+                parent.cameraRequest.region,
+                animated: isInitialRequest ? false : parent.cameraRequest.animated
+            )
+        }
+
+        private func refreshVisibleAnnotationViews(in mapView: MKMapView) {
+            for annotation in annotationsByID.values {
+                guard let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView else {
+                    continue
+                }
+                configure(view, for: annotation)
+            }
+        }
+
+        private func refreshAnnotationAccessibility(in mapView: MKMapView) {
+            let clusteredIDs = Set(
+                visibleAnnotations(in: mapView)
+                    .compactMap { $0 as? MKClusterAnnotation }
+                    .flatMap(\.memberAnnotations)
+                    .compactMap { ($0 as? NativeMapAnnotation)?.stableID }
+            )
+            for (stableID, annotation) in annotationsByID {
+                guard let view = mapView.view(for: annotation) else { continue }
+                view.isAccessibilityElement = !clusteredIDs.contains(stableID)
+            }
+        }
+
+        private func configure(
+            _ view: NativeMapPinAnnotationView,
+            for annotation: NativeMapAnnotation
+        ) {
+            view.configure(
+                descriptor: annotation.descriptor,
+                isDark: parent.isDark,
+                reduceMotion: parent.reduceMotion
+            )
+            view.onAccessibilityActivate = { [weak self, weak annotation] in
+                guard let self, let annotation else { return }
+                self.parent.onAnnotationTap(annotation.kind)
+            }
+        }
+
+        private func handleCompletedTap(at point: CGPoint) {
+            guard let mapView = tapRecognizer.view as? MKMapView else { return }
+            if suppressNextCompletedTap {
+                suppressNextCompletedTap = false
+                return
+            }
+            if let annotation = annotation(at: point, in: mapView) {
+                parent.onAnnotationTap(annotation.kind)
+                return
+            }
+            if cluster(at: point, in: mapView) != nil {
+                // MapKit's selection delegate owns cluster expansion. Avoid a
+                // second simultaneous camera request from the passive tap probe.
+                return
+            }
+            parent.onEmptyMapTap()
+        }
+
+        @objc
+        private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let mapView = recognizer.view as? MKMapView
+            else { return }
+            let point = recognizer.location(in: mapView)
+            guard annotation(at: point, in: mapView) == nil,
+                  cluster(at: point, in: mapView) == nil
+            else { return }
+
+            suppressNextCompletedTap = true
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+            parent.onLongPress(coordinate)
+        }
+
+        private func annotation(
+            at point: CGPoint,
+            in mapView: MKMapView
+        ) -> NativeMapAnnotation? {
+            visibleAnnotations(in: mapView)
+                .compactMap { annotation -> (NativeMapAnnotation, CGFloat)? in
+                    guard let annotation = annotation as? NativeMapAnnotation,
+                          let view = mapView.view(for: annotation),
+                          view.frame.insetBy(dx: -8, dy: -8).contains(point)
+                    else { return nil }
+                    let center = CGPoint(x: view.frame.midX, y: view.frame.midY)
+                    return (annotation, hypot(point.x - center.x, point.y - center.y))
+                }
+                .min { $0.1 < $1.1 }?
+                .0
+        }
+
+        private func cluster(
+            at point: CGPoint,
+            in mapView: MKMapView
+        ) -> MKClusterAnnotation? {
+            visibleAnnotations(in: mapView)
+                .compactMap { $0 as? MKClusterAnnotation }
+                .first { cluster in
+                    guard let view = mapView.view(for: cluster) else { return false }
+                    return view.frame.insetBy(dx: -8, dy: -8).contains(point)
+                }
+        }
+
+        private func visibleAnnotations(in mapView: MKMapView) -> [MKAnnotation] {
+            mapView.annotations(in: mapView.visibleMapRect).compactMap {
+                $0 as? MKAnnotation
+            }
+        }
+
+        private func zoom(to cluster: MKClusterAnnotation, in mapView: MKMapView) {
+            guard let region = NativeMapClusterZoomPolicy.region(
+                fitting: cluster.memberAnnotations.map(\.coordinate)
+            ) else { return }
+            mapView.deselectAnnotation(cluster, animated: false)
+            mapView.setRegion(region, animated: !parent.reduceMotion)
+        }
+    }
+}
+
+private final class NativeMapAnnotation: NSObject, MKAnnotation {
+    let stableID: String
+    private(set) var descriptor: NativeMapAnnotationDescriptor
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    var title: String? { descriptor.title }
+    var kind: NativeMapAnnotationKind { descriptor.kind }
+
+    init(descriptor: NativeMapAnnotationDescriptor) {
+        stableID = descriptor.id
+        self.descriptor = descriptor
+        coordinate = descriptor.coordinate
+        super.init()
+    }
+
+    func update(from descriptor: NativeMapAnnotationDescriptor) {
+        self.descriptor = descriptor
+        if !MapAnnotationPriorityPolicy.matches(coordinate, descriptor.coordinate) {
+            coordinate = descriptor.coordinate
+        }
+    }
+}
+
+private final class NativeMapPinAnnotationView: MKAnnotationView {
+    static let reuseIdentifier = "recme.map.pin"
+    var onAccessibilityActivate: (() -> Void)?
+    private var renderSignature = ""
+    private var placementSignature = ""
+    private var bounceRevision: UInt64 = 0
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        image = nil
+        renderSignature = ""
+        placementSignature = ""
+        bounceRevision = 0
+        onAccessibilityActivate = nil
+        alpha = 1
+        transform = .identity
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard let onAccessibilityActivate else {
+            return super.accessibilityActivate()
+        }
+        onAccessibilityActivate()
+        return true
+    }
+
+    func configure(
+        descriptor: NativeMapAnnotationDescriptor,
+        isDark: Bool,
+        reduceMotion: Bool
+    ) {
+        let nextSignature = "\(descriptor.renderSignature)|\(isDark ? "dark" : "light")"
+        if renderSignature != nextSignature {
+            image = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
+            renderSignature = nextSignature
+        }
+
+        let nextPlacementSignature = descriptor.isSelected
+            ? "selected"
+            : descriptor.isSearchResult ? "search" : "saved"
+        if placementSignature != nextPlacementSignature {
+            canShowCallout = false
+            collisionMode = .circle
+            clusteringIdentifier = descriptor.isSelected
+                ? nil
+                : descriptor.isSearchResult ? "recme.search" : "recme.saved"
+            displayPriority = descriptor.isSelected ? .required : .defaultHigh
+            zPriority = descriptor.isSelected ? .max : .defaultUnselected
+            selectedZPriority = .max
+            centerOffset = NativeMapPinImageRenderer.centerOffset(for: descriptor)
+            placementSignature = nextPlacementSignature
+        }
+        accessibilityLabel = descriptor.accessibilityLabel
+        accessibilityIdentifier = descriptor.accessibilityIdentifier
+        accessibilityTraits = .button
+
+        if descriptor.bounceRevision != bounceRevision {
+            bounceRevision = descriptor.bounceRevision
+            guard descriptor.bounceRevision > 0, !reduceMotion else { return }
+            transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+            UIView.animate(
+                withDuration: MapPinSelectionMotionStyle.duration,
+                delay: 0,
+                usingSpringWithDamping: 0.68,
+                initialSpringVelocity: 0.4,
+                options: [.beginFromCurrentState, .allowUserInteraction]
+            ) {
+                self.transform = .identity
+            }
+        }
+    }
+}
+
+@MainActor
+private enum NativeMapPinImageRenderer {
+    private static let imageCache = NSCache<NSString, UIImage>()
+
+    static func clearCache() {
+        imageCache.removeAllObjects()
+    }
+
+    static func centerOffset(for descriptor: NativeMapAnnotationDescriptor) -> CGPoint {
+        guard descriptor.isSelected else { return .zero }
+        let metrics = canvasMetrics(for: descriptor)
+        return CGPoint(x: 0, y: metrics.size.height / 2 - metrics.pinCenter.y)
+    }
+
+    static func image(
+        for descriptor: NativeMapAnnotationDescriptor,
+        isDark: Bool
+    ) -> UIImage {
+        let cacheKey = "\(descriptor.renderSignature)|\(isDark ? "dark" : "light")" as NSString
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let metrics = canvasMetrics(for: descriptor)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: metrics.size, format: format).image { context in
+            drawPin(
+                descriptor,
+                isDark: isDark,
+                center: metrics.pinCenter,
+                scale: metrics.pinScale,
+                context: context.cgContext
+            )
+            if descriptor.isSelected {
+                drawTitle(
+                    descriptor.title,
+                    isDark: isDark,
+                    centerX: metrics.size.width / 2,
+                    top: metrics.titleTop,
+                    context: context.cgContext
+                )
+            }
+        }
+        imageCache.setObject(image, forKey: cacheKey)
+        return image
+    }
+
+    private struct CanvasMetrics {
+        let size: CGSize
+        let pinCenter: CGPoint
+        let pinScale: CGFloat
+        let titleTop: CGFloat
+    }
+
+    private static func canvasMetrics(
+        for descriptor: NativeMapAnnotationDescriptor
+    ) -> CanvasMetrics {
+        let scale = descriptor.isSelected
+            ? MapPinSelectionMotionStyle.selectedScale
+            : MapPinSelectionMotionStyle.inactiveScale
+        let outlineExpansion: CGFloat = descriptor.isSearchResult || descriptor.outlines.count > 1
+            ? 7.5
+            : descriptor.outlines.isEmpty ? 0 : 1.5
+        let pinDiameter = (MapPinVisualMetrics.discDiameter + outlineExpansion * 2) * scale
+        let pinCanvas = max(58, ceil(pinDiameter + 14))
+        guard descriptor.isSelected else {
+            let size = CGSize(width: pinCanvas, height: pinCanvas)
+            return CanvasMetrics(
+                size: size,
+                pinCenter: CGPoint(x: size.width / 2, y: size.height / 2),
+                pinScale: scale,
+                titleTop: 0
+            )
+        }
+
+        let titleFont = UIFont.systemFont(
+            ofSize: MapPinVisualMetrics.activeTitleFontSize,
+            weight: .semibold
+        )
+        let titleWidth = min(
+            210,
+            ceil((descriptor.title as NSString).size(withAttributes: [.font: titleFont]).width + 12)
+        )
+        let width = max(pinCanvas, titleWidth)
+        let titleTop = pinCanvas + MapPinVisualMetrics.activeTitleClearance
+        return CanvasMetrics(
+            size: CGSize(
+                width: width,
+                height: titleTop + MapPinVisualMetrics.activeTitleLineHeight + 6
+            ),
+            pinCenter: CGPoint(x: width / 2, y: pinCanvas / 2),
+            pinScale: scale,
+            titleTop: titleTop
+        )
+    }
+
+    private static func drawPin(
+        _ descriptor: NativeMapAnnotationDescriptor,
+        isDark: Bool,
+        center: CGPoint,
+        scale: CGFloat,
+        context: CGContext
+    ) {
+        let discRadius = MapPinVisualMetrics.discDiameter / 2 * scale
+        let discRect = CGRect(
+            x: center.x - discRadius,
+            y: center.y - discRadius,
+            width: discRadius * 2,
+            height: discRadius * 2
+        )
+        let socialColor = UIColor(WanderTheme.pinSocial.color)
+        let raisedColor = UIColor(
+            isDark ? WanderMapAppearance.nightRaised.color : WanderTheme.surfaceRaised.color
+        )
+
+        context.saveGState()
+        context.setShadow(
+            offset: CGSize(width: 0, height: 2),
+            blur: 6,
+            color: UIColor(WanderTheme.textInk.color).withAlphaComponent(0.22).cgColor
+        )
+        context.setFillColor((descriptor.isSearchResult ? socialColor : raisedColor).cgColor)
+        context.fillEllipse(in: discRect)
+        context.restoreGState()
+
+        if descriptor.isSearchResult {
+            strokeCircle(
+                center: center,
+                radius: discRadius,
+                color: isDark ? UIColor.white.withAlphaComponent(0.88) : raisedColor,
+                lineWidth: MapPinVisualMetrics.outlineWidth * scale,
+                dash: [],
+                context: context
+            )
+            strokeCircle(
+                center: center,
+                radius: discRadius + 5 * scale,
+                color: socialColor,
+                lineWidth: 2 * scale,
+                dash: [4 * scale, 4 * scale],
+                context: context
+            )
+        } else {
+            for (index, outline) in descriptor.outlines.enumerated() {
+                let radius = discRadius + (index == 0 ? 0 : 6 * scale)
+                drawOutline(
+                    outline,
+                    center: center,
+                    radius: radius,
+                    lineWidth: MapPinVisualMetrics.outlineWidth * scale,
+                    context: context
+                )
+            }
+        }
+
+        let emojiFont = UIFont.systemFont(
+            ofSize: MapPinVisualMetrics.emojiDiameter * scale
+        )
+        let attributedEmoji = NSAttributedString(
+            string: descriptor.emoji,
+            attributes: [.font: emojiFont]
+        )
+        let emojiSize = attributedEmoji.size()
+        attributedEmoji.draw(
+            at: CGPoint(
+                x: center.x - emojiSize.width / 2,
+                y: center.y - emojiSize.height / 2
+            )
+        )
+    }
+
+    private static func drawOutline(
+        _ outline: MapPinOutline,
+        center: CGPoint,
+        radius: CGFloat,
+        lineWidth: CGFloat,
+        context: CGContext
+    ) {
+        let color = UIColor(outline.ownership.color)
+        if outline.secondaryStatus == nil {
+            strokeCircle(
+                center: center,
+                radius: radius,
+                color: color,
+                lineWidth: lineWidth,
+                dash: outline.dashPattern,
+                context: context
+            )
+            return
+        }
+
+        for arc in outline.arcs {
+            context.saveGState()
+            context.setStrokeColor(color.cgColor)
+            context.setLineWidth(lineWidth)
+            context.setLineCap(.round)
+            context.setLineDash(phase: 0, lengths: arc.dashPattern)
+            let rotation = arc.rotationDegrees * .pi / 180
+            context.addArc(
+                center: center,
+                radius: radius,
+                startAngle: rotation + Double(arc.trimFrom) * 2 * .pi,
+                endAngle: rotation + Double(arc.trimTo) * 2 * .pi,
+                clockwise: false
+            )
+            context.strokePath()
+            context.restoreGState()
+        }
+    }
+
+    private static func strokeCircle(
+        center: CGPoint,
+        radius: CGFloat,
+        color: UIColor,
+        lineWidth: CGFloat,
+        dash: [CGFloat],
+        context: CGContext
+    ) {
+        context.saveGState()
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(lineWidth)
+        context.setLineCap(.round)
+        context.setLineDash(phase: 0, lengths: dash)
+        context.strokeEllipse(
+            in: CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            )
+        )
+        context.restoreGState()
+    }
+
+    private static func drawTitle(
+        _ title: String,
+        isDark: Bool,
+        centerX: CGFloat,
+        top: CGFloat,
+        context: CGContext
+    ) {
+        let font = UIFont.systemFont(
+            ofSize: MapPinVisualMetrics.activeTitleFontSize,
+            weight: .semibold
+        )
+        let foreground = UIColor(
+            isDark ? WanderMapAppearance.nightText.color : WanderTheme.textInk.color
+        )
+        let shadow = NSShadow()
+        shadow.shadowColor = isDark
+            ? UIColor.black.withAlphaComponent(0.96)
+            : UIColor.white.withAlphaComponent(0.96)
+        shadow.shadowBlurRadius = 2
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: foreground,
+            .shadow: shadow
+        ]
+        let string = title as NSString
+        let size = string.size(withAttributes: attributes)
+        string.draw(
+            at: CGPoint(x: centerX - size.width / 2, y: top),
+            withAttributes: attributes
+        )
     }
 }
 
@@ -6946,56 +7600,6 @@ enum MapViewportRefreshPolicy {
             maxLatitude: min(90, center.latitude + latitudeRadius),
             maxLongitude: min(180, center.longitude + longitudeRadius)
         )
-    }
-}
-
-enum MapAnnotationDensityPolicy {
-    // SwiftUI-backed annotations are expensive to composite while MapKit moves.
-    // Bound dense, prefetched surfaces; zooming into an area naturally reveals
-    // every nearby group once the viewport falls below this limit.
-    static let maximumRenderedGroupCount = 64
-
-    static func groups(
-        _ groups: [VisiblePlaceGroup],
-        centeredIn region: MKCoordinateRegion,
-        selectedGroupKey: String?
-    ) -> [VisiblePlaceGroup] {
-        guard groups.count > maximumRenderedGroupCount else { return groups }
-
-        let selectedGroup = selectedGroupKey.flatMap { key in
-            groups.first(where: { $0.key == key })
-        }
-        let latitudeSpan = max(abs(region.span.latitudeDelta), .leastNonzeroMagnitude)
-        let longitudeSpan = max(abs(region.span.longitudeDelta), .leastNonzeroMagnitude)
-        let rankedGroups = groups.enumerated()
-            .filter { $0.element.key != selectedGroupKey }
-            .map { offset, group in
-                let latitudeDistance = (
-                    group.primary.place.latitude - region.center.latitude
-                ) / latitudeSpan
-                let longitudeDistance = (
-                    group.primary.place.longitude - region.center.longitude
-                ) / longitudeSpan
-                return (
-                    offset: offset,
-                    group: group,
-                    distanceSquared: latitudeDistance * latitudeDistance
-                        + longitudeDistance * longitudeDistance
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.distanceSquared != rhs.distanceSquared {
-                    return lhs.distanceSquared < rhs.distanceSquared
-                }
-                return lhs.offset < rhs.offset
-            }
-
-        let unselectedBudget = maximumRenderedGroupCount - (selectedGroup == nil ? 0 : 1)
-        var result = rankedGroups.prefix(unselectedBudget).map(\.group)
-        if let selectedGroup {
-            result.append(selectedGroup)
-        }
-        return result
     }
 }
 

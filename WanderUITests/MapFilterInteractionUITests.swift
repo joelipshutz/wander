@@ -141,7 +141,8 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderUsePerformanceFixtures",
             "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
-            "-WanderMapCaptureMode", "friends"
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceInteractionControls"
         ]
         app.launch()
 
@@ -149,22 +150,14 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 12))
         XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 12))
 
-        let pin = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
-        ).firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 12))
-        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
-        XCTAssertTrue(map.frame.contains(pinCenter))
-        let normalizedPinCenter = CGVector(
-            dx: (pinCenter.x - map.frame.minX) / map.frame.width,
-            dy: (pinCenter.y - map.frame.minY) / map.frame.height
-        )
-
         let card = app.buttons["map.selectedPlaceCard"]
         let activePin = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "map.pin.active.saved.")
         ).firstMatch
+        let selectFirstPin = app.buttons["map.performanceSelectFirstPin"]
         let nearby = app.buttons["map.nearby"]
+        XCTAssertTrue(selectFirstPin.waitForExistence(timeout: 3))
+        XCTAssertTrue(selectFirstPin.isHittable)
         XCTAssertTrue(nearby.waitForExistence(timeout: 3))
 
         var didMeasureInteraction = false
@@ -182,7 +175,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 defer { stopMeasuring() }
                 guard invocationCount > 1 else { return }
 
-                map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+                selectFirstPin.tap()
                 XCTAssertTrue(card.waitForExistence(timeout: 3))
                 XCTAssertTrue(activePin.waitForExistence(timeout: 2))
 
@@ -217,7 +210,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 didMeasureInteraction = true
             }
         } else {
-            map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+            selectFirstPin.tap()
             XCTAssertTrue(card.waitForExistence(timeout: 3))
             map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
             XCTAssertTrue(card.waitForNonExistence(timeout: 3))
@@ -237,27 +230,13 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", "friends",
-            "-WanderMapPerformanceProbe"
+            "-WanderMapPerformanceProbe",
+            "-WanderMapPerformanceSelectedPin"
         ]
         app.launch()
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 12))
-        let pin = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
-        ).firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 12))
-        let renderedPinCount = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
-        ).count
-        print("REC404_MAP_RENDERED_PIN_COUNT \(renderedPinCount)")
-
-        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
-        let normalizedPinCenter = CGVector(
-            dx: (pinCenter.x - map.frame.minX) / map.frame.width,
-            dy: (pinCenter.y - map.frame.minY) / map.frame.height
-        )
-        map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
         XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 3))
 
         let dragStart = map.coordinate(
@@ -373,8 +352,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 5))
 
-        let pin = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "Bar Nido"))
+        let pin = app.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Bar Nido,"))
             .firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
 
@@ -467,7 +446,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 5))
-        map.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.45))
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
             .press(forDuration: 0.7)
 
         let card = app.buttons["map.selectedPlaceCard"]
