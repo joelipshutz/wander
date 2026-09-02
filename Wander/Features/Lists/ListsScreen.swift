@@ -4627,12 +4627,7 @@ private struct ListEditorSheet: View {
             content()
                 .padding(WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-                .background(brandMode.recessedBackground)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                        .stroke(brandMode.border, lineWidth: 1)
-                )
+                .astirGlassSurface(cornerRadius: WanderTheme.radiusLarge)
         }
     }
 
@@ -4652,12 +4647,7 @@ private struct ListEditorSheet: View {
         .tint(brandMode.accent)
         .disabled(store.isPrivateProfile)
         .padding(WanderTheme.spacing3)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
+        .astirGlassSurface(cornerRadius: WanderTheme.radiusLarge)
         .walkthroughTarget(.listEditorPrivacy)
     }
 
@@ -4748,12 +4738,7 @@ private struct ListEditorSheet: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
+        .astirGlassSurface(cornerRadius: WanderTheme.radiusLarge)
         .walkthroughTarget(.listEditorCollaborators)
     }
 
