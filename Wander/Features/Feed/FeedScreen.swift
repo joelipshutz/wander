@@ -214,27 +214,29 @@ struct FeedScreen: View {
 
     private var floatingHeaderContent: some View {
         VStack(spacing: WanderTheme.spacing2) {
-            HStack {
-                AstirMastheadLockup()
-                Spacer(minLength: WanderTheme.spacing4)
-            }
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                AstirMastheadLockup(presentation: .localizedBlur)
 
-            switch selectedSurface {
-            case .places:
-                FeedSearchLauncher(
-                    placeholders: tickerSuggestions,
-                    isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
-                    action: openDiscoverSearch
-                )
-                .feedSearchMatchedGeometry(
-                    in: searchTransitionNamespace,
-                    isSource: !isShowingSearch
-                )
-                .walkthroughTarget(.feedDiscoverSearch)
-            case .people:
-                FeedPeopleSearchField(text: $peopleQuery)
-                    .focused($peopleSearchFieldFocused)
-                    .walkthroughTarget(.feedPeopleSearch)
+                Group {
+                    switch selectedSurface {
+                    case .places:
+                        FeedSearchLauncher(
+                            placeholders: tickerSuggestions,
+                            isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                            action: openDiscoverSearch
+                        )
+                        .feedSearchMatchedGeometry(
+                            in: searchTransitionNamespace,
+                            isSource: !isShowingSearch
+                        )
+                        .walkthroughTarget(.feedDiscoverSearch)
+                    case .people:
+                        FeedPeopleSearchField(text: $peopleQuery)
+                            .focused($peopleSearchFieldFocused)
+                            .walkthroughTarget(.feedPeopleSearch)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
 
             HStack(spacing: WanderTheme.spacing2) {
