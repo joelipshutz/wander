@@ -1954,6 +1954,7 @@ struct MapScreen: View {
                                         guard mapSearchFocusRequestID == requestID else { return }
                                         mapSearchFocusRequestID = nil
                                     },
+                                    onClear: clearMapSearch,
                                     onSubmit: submitMapSearch
                                 )
                                 .walkthroughTarget(
@@ -3756,6 +3757,12 @@ struct MapScreen: View {
             requestedQuery,
             searchRegion: currentSearchRegion
         )
+    }
+
+    private func clearMapSearch() {
+        mapSearchSelectionSession.finish()
+        invalidateMapSearchRequest()
+        clearMapSelectionAndSearch()
     }
 
     private func startSubmittedMapSearch(
@@ -7343,6 +7350,7 @@ private struct SearchBar: View {
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
+    let onClear: () -> Void
     let onSubmit: (String) -> Void
     @Environment(\.wanderMapAppearance) private var appearance
     @State private var draftQuery: String
@@ -7353,12 +7361,14 @@ private struct SearchBar: View {
         isFocused: FocusState<Bool>.Binding,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
+        onClear: @escaping () -> Void,
         onSubmit: @escaping (String) -> Void
     ) {
         _query = query
         self.isFocused = isFocused
         self.focusRequestID = focusRequestID
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onClear = onClear
         self.onSubmit = onSubmit
         _draftQuery = State(initialValue: query.wrappedValue)
     }
@@ -7399,14 +7409,16 @@ private struct SearchBar: View {
             if !draftQuery.isEmpty {
                 Button {
                     queryCommitTask?.cancel()
+                    queryCommitTask = nil
                     draftQuery = ""
-                    query = ""
+                    onClear()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(appearance.faintText)
                 }
                 .accessibilityLabel("Clear map search")
+                .accessibilityIdentifier("map.searchClear")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)

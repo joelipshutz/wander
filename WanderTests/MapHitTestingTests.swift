@@ -836,6 +836,46 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
+    func testClearingMapSearchInvalidatesTheRequestAndClearsSelection() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let clearStart = try XCTUnwrap(map.range(of: "private func clearMapSearch()"))
+        let clearEnd = try XCTUnwrap(
+            map.range(
+                of: "private func startSubmittedMapSearch(",
+                range: clearStart.upperBound..<map.endIndex
+            )
+        )
+        let clearing = map[clearStart.lowerBound..<clearEnd.lowerBound]
+
+        XCTAssertTrue(clearing.contains("mapSearchSelectionSession.finish()"))
+        XCTAssertTrue(clearing.contains("invalidateMapSearchRequest()"))
+        XCTAssertTrue(clearing.contains("clearMapSelectionAndSearch()"))
+        XCTAssertLessThan(
+            try XCTUnwrap(clearing.range(of: "invalidateMapSearchRequest()")).lowerBound,
+            try XCTUnwrap(clearing.range(of: "clearMapSelectionAndSearch()")).lowerBound
+        )
+
+        let searchBar = try XCTUnwrap(
+            map.components(separatedBy: "private struct SearchBar: View {").last?
+                .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
+        )
+        let clearButton = try XCTUnwrap(
+            searchBar.components(separatedBy: "if !draftQuery.isEmpty {").last?
+                .components(separatedBy: "} label: {").first
+        )
+
+        XCTAssertTrue(map.contains("onClear: clearMapSearch"))
+        XCTAssertTrue(searchBar.contains("let onClear: () -> Void"))
+        XCTAssertTrue(searchBar.contains(".accessibilityIdentifier(\"map.searchClear\")"))
+        XCTAssertTrue(clearButton.contains("onClear()"))
+        XCTAssertFalse(clearButton.contains("query = \"\""))
+    }
+
     func testMapSearchPipelineReusesImmediateProjectionWorkWithoutFreshLocationLookup() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -193,6 +193,23 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertFalse(card.waitForExistence(timeout: 2))
     }
 
+    func testClearingSubmittedMapSearchLeavesNoPlaceCard() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables\n")
+
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+
+        app.buttons["map.searchClear"].tap()
+
+        XCTAssertFalse(card.waitForExistence(timeout: 2))
+    }
+
     func testMapCardAndSearchDockShareSafeAreaAwareContainerInsets() {
         let app = XCUIApplication()
         app.launchArguments = [
