@@ -647,6 +647,127 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertFalse(schedule.contains("seenTitles"))
     }
 
+    func testMapSearchTypeaheadEditsClearPreviewWithoutImplicitSelection() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        let queryChangeStart = try XCTUnwrap(
+            map.range(of: ".onChange(of: mapQuery) { _, _ in")
+        )
+        let queryChangeEnd = try XCTUnwrap(
+            map.range(
+                of: ".onChange(of: walkthroughs.currentStep?.target",
+                range: queryChangeStart.upperBound..<map.endIndex
+            )
+        )
+        let queryChange = map[queryChangeStart.lowerBound..<queryChangeEnd.lowerBound]
+
+        XCTAssertTrue(queryChange.contains("handleMapQueryChange()"))
+        XCTAssertFalse(queryChange.contains("visiblePlaceGroupKeys.first"))
+        XCTAssertFalse(queryChange.contains("selectedPlaceGroupKey ="))
+
+        let previewClearStart = try XCTUnwrap(
+            map.range(of: "private func clearMapSearchPreviewForEditing()")
+        )
+        let previewClearEnd = try XCTUnwrap(
+            map.range(
+                of: "private func clearMapSearchPreview()",
+                range: previewClearStart.upperBound..<map.endIndex
+            )
+        )
+        let previewClear = map[previewClearStart.lowerBound..<previewClearEnd.lowerBound]
+
+        XCTAssertTrue(previewClear.contains("mapSearchSelectionSession.suppressPreviewForEditing()"))
+        XCTAssertTrue(previewClear.contains("didDismissInitialPlaceRoute = true"))
+        XCTAssertTrue(previewClear.contains("clearMapSearchPreview()"))
+        XCTAssertFalse(previewClear.contains("routedVisiblePlace = nil"))
+
+        let commonClearStart = previewClearEnd
+        let commonClearEnd = try XCTUnwrap(
+            map.range(
+                of: "private func clearNativeMapFeatureSelection()",
+                range: commonClearStart.upperBound..<map.endIndex
+            )
+        )
+        let commonClear = map[commonClearStart.lowerBound..<commonClearEnd.lowerBound]
+        XCTAssertTrue(commonClear.contains("invalidateMapSearchRequest()"))
+        XCTAssertTrue(commonClear.contains("selectedPlaceGroupKey = nil"))
+        XCTAssertTrue(commonClear.contains("selectedSearchCandidateID = nil"))
+        XCTAssertTrue(commonClear.contains("mapSearchCandidates = []"))
+        XCTAssertTrue(commonClear.contains("submittedSavedSearchGroups = []"))
+        XCTAssertTrue(commonClear.contains("resetCompactCardPresentation()"))
+        XCTAssertFalse(commonClear.contains("routedVisiblePlace = nil"))
+
+        let authorizationStart = try XCTUnwrap(
+            map.range(of: "private func handleMapSearchAuthorizationChange()")
+        )
+        let authorizationEnd = try XCTUnwrap(
+            map.range(
+                of: "private func orderedVisiblePlaceGroups()",
+                range: authorizationStart.upperBound..<map.endIndex
+            )
+        )
+        let authorization = map[authorizationStart.lowerBound..<authorizationEnd.lowerBound]
+        XCTAssertTrue(
+            authorization.contains("mapSearchSelectionSession.isPreviewSuppressed")
+        )
+
+        let searchBarCallStart = try XCTUnwrap(map.range(of: "SearchBar("))
+        let searchBarCallEnd = try XCTUnwrap(
+            map.range(
+                of: ".walkthroughTarget(",
+                range: searchBarCallStart.upperBound..<map.endIndex
+            )
+        )
+        let searchBarCall = map[searchBarCallStart.lowerBound..<searchBarCallEnd.lowerBound]
+        XCTAssertTrue(
+            searchBarCall.contains("onQueryEdited: clearMapSearchPreviewForEditing")
+        )
+        XCTAssertTrue(searchBarCall.contains("onClear: clearMapSelectionAndSearch"))
+
+        let searchBar = try XCTUnwrap(
+            map.components(separatedBy: "private struct SearchBar: View {").last?
+                .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
+        )
+        XCTAssertTrue(searchBar.contains("onQueryEdited()"))
+        XCTAssertTrue(searchBar.contains("draftQuery = \"\"\n                    onClear()"))
+        XCTAssertTrue(searchBar.contains(".accessibilityIdentifier(\"map.searchClear\")"))
+        XCTAssertTrue(searchBar.contains(".onChange(of: isFocused.wrappedValue)"))
+        XCTAssertTrue(searchBar.contains("cancelPendingQueryCommitAndSyncDraft()"))
+        XCTAssertTrue(searchBar.contains("queryCommitTask?.cancel()"))
+        XCTAssertTrue(searchBar.contains("draftQuery = query"))
+
+        let initialSelectionStart = try XCTUnwrap(
+            map.range(of: "private func resolveInitialSelection()")
+        )
+        let initialSelectionEnd = try XCTUnwrap(
+            map.range(
+                of: "private func refreshInitialMapSources()",
+                range: initialSelectionStart.upperBound..<map.endIndex
+            )
+        )
+        let initialSelection = map[
+            initialSelectionStart.lowerBound..<initialSelectionEnd.lowerBound
+        ]
+        XCTAssertTrue(initialSelection.contains("guard !didDismissInitialPlaceRoute"))
+
+        let fullClearStart = try XCTUnwrap(
+            map.range(of: "private func clearMapSelectionAndSearch()")
+        )
+        let fullClearEnd = try XCTUnwrap(
+            map.range(
+                of: "private func clearMapSearchPreviewForEditing()",
+                range: fullClearStart.upperBound..<map.endIndex
+            )
+        )
+        let fullClear = map[fullClearStart.lowerBound..<fullClearEnd.lowerBound]
+        XCTAssertTrue(fullClear.contains("didDismissInitialPlaceRoute = true"))
+    }
+
     func testMoreRefinementChangeInvalidatesClearsAndRerunsOriginalSubmittedRegion() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -759,6 +880,61 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertFalse(session.isActive)
     }
 
+    func testCancelingMapSearchRestoresAnExternalCandidatePayload() {
+        let externalCandidate = PlaceCandidate(
+            id: "mapkit_long_tables",
+            name: "Long Tables Cafe",
+            category: "coffee",
+            latitude: 34.0775,
+            longitude: -118.2608,
+            confidence: 1
+        )
+        let entrySelection = MapSearchSelectionSnapshot(
+            selectedPlaceGroupKey: nil,
+            selectedSearchCandidateID: externalCandidate.id,
+            mapSearchCandidates: [externalCandidate]
+        )
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selection: entrySelection)
+        session.suppressPreviewForEditing()
+        let restoredSelection = session.cancel(
+            currentSelection: MapSearchSelectionSnapshot(selectedPlaceGroupKey: nil)
+        )
+
+        XCTAssertEqual(restoredSelection.selectedSearchCandidateID, externalCandidate.id)
+        XCTAssertEqual(restoredSelection.mapSearchCandidates, [externalCandidate])
+        XCTAssertFalse(session.isActive)
+        XCTAssertFalse(session.isPreviewSuppressed)
+    }
+
+    @MainActor
+    func testCancelingMapSearchRestoresSubmittedCategoryGroups() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let submittedGroup = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: store.visiblePlaces(),
+                currentUserID: store.currentUser.id
+            ).first
+        )
+        let entrySelection = MapSearchSelectionSnapshot(
+            selectedPlaceGroupKey: submittedGroup.key,
+            submittedSavedSearchGroups: [submittedGroup]
+        )
+        var session = MapSearchSelectionSession()
+
+        session.focusDidChange(isFocused: true, selection: entrySelection)
+        session.suppressPreviewForEditing()
+        let restoredSelection = session.cancel(
+            currentSelection: MapSearchSelectionSnapshot(selectedPlaceGroupKey: nil)
+        )
+
+        XCTAssertEqual(restoredSelection.selectedPlaceGroupKey, submittedGroup.key)
+        XCTAssertEqual(restoredSelection.submittedSavedSearchGroups.map(\.key), [submittedGroup.key])
+        XCTAssertFalse(session.isActive)
+        XCTAssertFalse(session.isPreviewSuppressed)
+    }
+
     func testCancelingMapSearchKeepsSelectionEmptyWhenSearchStartedEmpty() {
         var session = MapSearchSelectionSession()
 
@@ -828,10 +1004,28 @@ final class MapHitTestingTests: XCTestCase {
         let cancellation = map[cancelStart.lowerBound..<cancelEnd.lowerBound]
 
         XCTAssertTrue(cancellation.contains("mapSearchSelectionSession.cancel("))
-        XCTAssertTrue(cancellation.contains("suppressNextQueryAutoSelection = true"))
-        XCTAssertTrue(cancellation.contains("selectedPlaceGroupKey = restoredPlaceGroupKey"))
+        XCTAssertFalse(cancellation.contains("suppressNextQueryAutoSelection"))
+        XCTAssertTrue(
+            cancellation.contains(
+                "selectedPlaceGroupKey = restoredSelection.selectedPlaceGroupKey"
+            )
+        )
+        XCTAssertTrue(
+            cancellation.contains(
+                "mapSearchCandidates = restoredSelection.mapSearchCandidates"
+            )
+        )
+        XCTAssertTrue(
+            cancellation.contains(
+                "submittedSavedSearchGroups = restoredSelection.submittedSavedSearchGroups"
+            )
+        )
         XCTAssertLessThan(
-            try XCTUnwrap(cancellation.range(of: "selectedPlaceGroupKey = restoredPlaceGroupKey")).lowerBound,
+            try XCTUnwrap(
+                cancellation.range(
+                    of: "selectedPlaceGroupKey = restoredSelection.selectedPlaceGroupKey"
+                )
+            ).lowerBound,
             try XCTUnwrap(cancellation.range(of: "isMapSearchFocused = false")).lowerBound
         )
     }

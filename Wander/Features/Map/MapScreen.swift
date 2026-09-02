@@ -702,22 +702,68 @@ enum MapSearchResultIdentity {
     }
 }
 
-struct MapSearchSelectionSession: Equatable {
+struct MapSearchSelectionSnapshot {
+    let selectedPlaceGroupKey: String?
+    let selectedSearchCandidateID: String?
+    let mapSearchCandidates: [PlaceCandidate]
+    let submittedSavedSearchGroups: [VisiblePlaceGroup]
+
+    init(
+        selectedPlaceGroupKey: String?,
+        selectedSearchCandidateID: String? = nil,
+        mapSearchCandidates: [PlaceCandidate] = [],
+        submittedSavedSearchGroups: [VisiblePlaceGroup] = []
+    ) {
+        self.selectedPlaceGroupKey = selectedPlaceGroupKey
+        self.selectedSearchCandidateID = selectedSearchCandidateID
+        self.mapSearchCandidates = mapSearchCandidates
+        self.submittedSavedSearchGroups = submittedSavedSearchGroups
+    }
+}
+
+struct MapSearchSelectionSession {
     private(set) var isActive = false
-    private var selectedPlaceGroupKeyAtEntry: String?
+    private(set) var isPreviewSuppressed = false
+    private var selectionAtEntry: MapSearchSelectionSnapshot?
+
+    mutating func focusDidChange(
+        isFocused: Bool,
+        selection: MapSearchSelectionSnapshot
+    ) {
+        guard isFocused, !isActive else { return }
+        isActive = true
+        selectionAtEntry = selection
+    }
 
     mutating func focusDidChange(
         isFocused: Bool,
         selectedPlaceGroupKey: String?
     ) {
-        guard isFocused, !isActive else { return }
-        isActive = true
-        selectedPlaceGroupKeyAtEntry = selectedPlaceGroupKey
+        focusDidChange(
+            isFocused: isFocused,
+            selection: MapSearchSelectionSnapshot(
+                selectedPlaceGroupKey: selectedPlaceGroupKey
+            )
+        )
+    }
+
+    mutating func suppressPreviewForEditing() {
+        isPreviewSuppressed = true
+    }
+
+    mutating func cancel(
+        currentSelection: MapSearchSelectionSnapshot
+    ) -> MapSearchSelectionSnapshot {
+        defer { reset() }
+        return isActive ? selectionAtEntry ?? currentSelection : currentSelection
     }
 
     mutating func cancel(currentSelectedPlaceGroupKey: String?) -> String? {
-        defer { reset() }
-        return isActive ? selectedPlaceGroupKeyAtEntry : currentSelectedPlaceGroupKey
+        cancel(
+            currentSelection: MapSearchSelectionSnapshot(
+                selectedPlaceGroupKey: currentSelectedPlaceGroupKey
+            )
+        ).selectedPlaceGroupKey
     }
 
     mutating func finish() {
@@ -726,7 +772,8 @@ struct MapSearchSelectionSession: Equatable {
 
     private mutating func reset() {
         isActive = false
-        selectedPlaceGroupKeyAtEntry = nil
+        isPreviewSuppressed = false
+        selectionAtEntry = nil
     }
 }
 
@@ -1129,8 +1176,8 @@ struct MapScreen: View {
     @State private var isLocationEducationPresented = false
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
-    @State private var suppressNextQueryAutoSelection = false
     @State private var mapSearchSelectionSession = MapSearchSelectionSession()
+    @State private var didDismissInitialPlaceRoute = false
     @State private var didResolveInitialCamera = false
     @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
@@ -1954,6 +2001,8 @@ struct MapScreen: View {
                                         guard mapSearchFocusRequestID == requestID else { return }
                                         mapSearchFocusRequestID = nil
                                     },
+                                    onQueryEdited: clearMapSearchPreviewForEditing,
+                                    onClear: clearMapSelectionAndSearch,
                                     onSubmit: submitMapSearch
                                 )
                                 .walkthroughTarget(
@@ -2076,7 +2125,7 @@ struct MapScreen: View {
             .onChange(of: isMapSearchFocused) { _, isFocused in
                 mapSearchSelectionSession.focusDidChange(
                     isFocused: isFocused,
-                    selectedPlaceGroupKey: selectedPlaceGroupKey
+                    selection: currentMapSearchSelection
                 )
                 if isFocused {
                     dismissMoreFilters()
@@ -2148,17 +2197,7 @@ struct MapScreen: View {
                 resolveInitialSelection()
             }
             .onChange(of: mapQuery) { _, _ in
-                let shouldSuppressAutoSelection = suppressNextQueryAutoSelection
                 handleMapQueryChange()
-                if shouldSuppressAutoSelection {
-                    suppressNextQueryAutoSelection = false
-                    return
-                }
-                if let firstGroupKey = visiblePlaceGroupKeys.first,
-                   !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
-                    selectedPlaceGroupKey = firstGroupKey
-                    isPlaceProfilePresented = false
-                }
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .mapMemory {
@@ -2531,7 +2570,9 @@ struct MapScreen: View {
         if routedVisiblePlace != nil {
             routedVisiblePlace = authorizedRoutedPlace
             routedVisiblePlaceGroup = authorizedRoutedGroup
-            if let authorizedRoutedGroup {
+            if mapSearchSelectionSession.isPreviewSuppressed {
+                selectedPlaceGroupKey = nil
+            } else if let authorizedRoutedGroup {
                 selectedPlaceGroupKey = authorizedRoutedGroup.key
             } else {
                 selectedPlaceGroupKey = nil
@@ -2608,11 +2649,32 @@ struct MapScreen: View {
     }
 
     private func clearMapSelectionAndSearch() {
+        didDismissInitialPlaceRoute = true
+        mapSearchSelectionSession.finish()
+        clearMapSearchPreview()
+        routedVisiblePlace = nil
+        routedVisiblePlaceGroup = nil
+        clearSearchTextForMapInteraction()
+    }
+
+    private func clearMapSearchPreviewForEditing() {
+        didDismissInitialPlaceRoute = true
+        mapSearchSelectionSession.suppressPreviewForEditing()
+        clearMapSearchPreview()
+    }
+
+    private func clearMapSearchPreview() {
+        invalidateMapSearchRequest()
         mapSelectionRevision += 1
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
-        routedVisiblePlace = nil
-        clearSearchTextForMapInteraction()
+        clearNativeMapFeatureSelection()
+        mapSearchSubmissionContext = nil
+        typeaheadTask?.cancel()
+        typeaheadTask = nil
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+        submittedSavedSearchGroups = []
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
         mapSearchCandidates = []
@@ -2630,6 +2692,7 @@ struct MapScreen: View {
     }
 
     private func clearSearchTextForMapInteraction() {
+        mapSearchSelectionSession.finish()
         mapSearchSubmissionContext = nil
         submittedSavedSearchGroups = []
         typeaheadTask?.cancel()
@@ -2639,7 +2702,6 @@ struct MapScreen: View {
         suppressedTypeaheadQuery = ""
 
         if !mapQuery.isEmpty {
-            suppressNextQueryAutoSelection = true
             mapQuery = ""
         }
 
@@ -2892,7 +2954,8 @@ struct MapScreen: View {
     }
 
     private func resolveInitialSelection() {
-        guard selectedPlaceGroupKey == nil,
+        guard !didDismissInitialPlaceRoute,
+              selectedPlaceGroupKey == nil,
               let initialPlaceQuery
         else { return }
 
@@ -3798,24 +3861,23 @@ struct MapScreen: View {
     }
 
     private func cancelMapSearch() {
-        let restoredPlaceGroupKey = mapSearchSelectionSession.cancel(
-            currentSelectedPlaceGroupKey: selectedPlaceGroupKey
+        let restoredSelection = mapSearchSelectionSession.cancel(
+            currentSelection: currentMapSearchSelection
         )
         typeaheadTask?.cancel()
+        typeaheadTask = nil
         typeaheadSuggestions = []
         isLoadingTypeahead = false
         mapSearchMessage = nil
         mapSearchSubmissionContext = nil
+        suppressedTypeaheadQuery = ""
         if !mapQuery.isEmpty {
-            suppressNextQueryAutoSelection = true
             mapQuery = ""
-        } else {
-            suppressNextQueryAutoSelection = false
         }
-        mapSearchCandidates = []
-        submittedSavedSearchGroups = []
-        selectedSearchCandidateID = nil
-        selectedPlaceGroupKey = restoredPlaceGroupKey
+        mapSearchCandidates = restoredSelection.mapSearchCandidates
+        submittedSavedSearchGroups = restoredSelection.submittedSavedSearchGroups
+        selectedSearchCandidateID = restoredSelection.selectedSearchCandidateID
+        selectedPlaceGroupKey = restoredSelection.selectedPlaceGroupKey
         isPlaceProfilePresented = false
         isMapSearchFocused = false
         dismissKeyboard()
@@ -3872,7 +3934,6 @@ struct MapScreen: View {
         guard let query = request.query else {
             suppressedTypeaheadQuery = nil
             if !mapQuery.isEmpty {
-                suppressNextQueryAutoSelection = true
                 mapQuery = ""
             }
             mapSearchFocusRequestID = request.id
@@ -3883,7 +3944,6 @@ struct MapScreen: View {
         guard !Task.isCancelled else { return }
         isMapSearchFocused = false
         suppressedTypeaheadQuery = Self.normalized(query)
-        suppressNextQueryAutoSelection = true
         mapQuery = query
         let requestRevision = beginMapSearchRequest()
         let searchRegion = currentSearchRegion
@@ -5269,7 +5329,6 @@ struct MapScreen: View {
     }
 
     private func handleMapQueryChange() {
-        submittedSavedSearchGroups = []
         let normalized = Self.normalized(mapQuery)
         let isSuppressedProgrammaticQuery = normalized == suppressedTypeaheadQuery
         if !isSuppressedProgrammaticQuery {
@@ -5286,6 +5345,7 @@ struct MapScreen: View {
             return
         }
 
+        submittedSavedSearchGroups = []
         suppressedTypeaheadQuery = nil
         mapSearchCandidates = []
         selectedSearchCandidateID = nil
@@ -5496,6 +5556,15 @@ struct MapScreen: View {
                 "stage": stage,
                 "rank": rankBucket
             ]
+        )
+    }
+
+    private var currentMapSearchSelection: MapSearchSelectionSnapshot {
+        MapSearchSelectionSnapshot(
+            selectedPlaceGroupKey: selectedPlaceGroupKey,
+            selectedSearchCandidateID: selectedSearchCandidateID,
+            mapSearchCandidates: mapSearchCandidates,
+            submittedSavedSearchGroups: submittedSavedSearchGroups
         )
     }
 
@@ -7343,6 +7412,8 @@ private struct SearchBar: View {
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
+    let onQueryEdited: () -> Void
+    let onClear: () -> Void
     let onSubmit: (String) -> Void
     @Environment(\.wanderMapAppearance) private var appearance
     @State private var draftQuery: String
@@ -7353,12 +7424,16 @@ private struct SearchBar: View {
         isFocused: FocusState<Bool>.Binding,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
+        onQueryEdited: @escaping () -> Void,
+        onClear: @escaping () -> Void,
         onSubmit: @escaping (String) -> Void
     ) {
         _query = query
         self.isFocused = isFocused
         self.focusRequestID = focusRequestID
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onQueryEdited = onQueryEdited
+        self.onClear = onClear
         self.onSubmit = onSubmit
         _draftQuery = State(initialValue: query.wrappedValue)
     }
@@ -7400,13 +7475,14 @@ private struct SearchBar: View {
                 Button {
                     queryCommitTask?.cancel()
                     draftQuery = ""
-                    query = ""
+                    onClear()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(appearance.faintText)
                 }
                 .accessibilityLabel("Clear map search")
+                .accessibilityIdentifier("map.searchClear")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
@@ -7431,7 +7507,12 @@ private struct SearchBar: View {
         .onChange(of: query) { _, value in
             guard value != draftQuery else { return }
             queryCommitTask?.cancel()
+            queryCommitTask = nil
             draftQuery = value
+        }
+        .onChange(of: isFocused.wrappedValue) { _, focused in
+            guard !focused else { return }
+            cancelPendingQueryCommitAndSyncDraft()
         }
         .onDisappear {
             queryCommitTask?.cancel()
@@ -7441,6 +7522,7 @@ private struct SearchBar: View {
     private func scheduleDraftQueryCommit(_ value: String) {
         queryCommitTask?.cancel()
         guard value != query else { return }
+        onQueryEdited()
         queryCommitTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
             guard !Task.isCancelled, draftQuery == value else { return }
@@ -7453,6 +7535,13 @@ private struct SearchBar: View {
         queryCommitTask?.cancel()
         queryCommitTask = nil
         query = value
+    }
+
+    private func cancelPendingQueryCommitAndSyncDraft() {
+        queryCommitTask?.cancel()
+        queryCommitTask = nil
+        guard draftQuery != query else { return }
+        draftQuery = query
     }
 
     @MainActor
