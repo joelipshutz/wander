@@ -629,7 +629,17 @@ private struct WanderSelectedGlassModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if isSelected {
-            content.wanderGlassCapsule(tone: .selected)
+            if #available(iOS 26.0, *) {
+                content
+                    .wanderGlassCapsule(tone: .selected)
+                    // The default materialize transition can move the glass
+                    // before its tint arrives, briefly leaving the selected
+                    // segment white on device. Selection already supplies the
+                    // state transition, so commit the material and tint together.
+                    .glassEffectTransition(.identity)
+            } else {
+                content.wanderGlassCapsule(tone: .selected)
+            }
         } else {
             content
         }
