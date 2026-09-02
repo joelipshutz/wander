@@ -467,10 +467,17 @@ final class NavigationContractTests: XCTestCase {
             after: "private var floatingHeaderContent: some View",
             before: "private var placesSurface: some View"
         )
+        let mastheadPosition = try XCTUnwrap(
+            floatingHeader.range(of: "AstirMastheadLockup(presentation: .localizedBlur)")
+        )
         let searchPosition = try XCTUnwrap(floatingHeader.range(of: "switch selectedSurface"))
         let controlsPosition = try XCTUnwrap(
-            floatingHeader.range(of: "HStack(spacing: WanderTheme.spacing2) {")
+            floatingHeader.range(
+                of: "HStack(spacing: WanderTheme.spacing2) {",
+                range: searchPosition.upperBound..<floatingHeader.endIndex
+            )
         )
+        XCTAssertLessThan(mastheadPosition.lowerBound, searchPosition.lowerBound)
         XCTAssertLessThan(searchPosition.lowerBound, controlsPosition.lowerBound)
         XCTAssertTrue(floatingHeader.contains("FeedSearchLauncher("))
         XCTAssertTrue(floatingHeader.contains("FeedPeopleSearchField(text: $peopleQuery)"))
