@@ -149,6 +149,8 @@ struct WanderApp: App {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderActivityShareMockup") {
                 ActivitySharePreviewMockupRoot()
+            } else if let importWorkflowMockupPage = ImportWorkflowMockupPage.resolved() {
+                ImportWorkflowMockupRoot(page: importWorkflowMockupPage)
             } else if PlaceImportManualReviewMockupPage.isPresented {
                 PlaceImportManualReviewMockupRoot()
             } else if PlaceImportAdaptiveMockupPage.isPresented {
