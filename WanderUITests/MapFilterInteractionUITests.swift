@@ -229,6 +229,89 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(nearby.isHittable)
     }
 
+    func testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceProbe"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 12))
+        let pin = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
+        ).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 12))
+        let renderedPinCount = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
+        ).count
+        print("REC404_MAP_RENDERED_PIN_COUNT \(renderedPinCount)")
+
+        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
+        let normalizedPinCenter = CGVector(
+            dx: (pinCenter.x - map.frame.minX) / map.frame.width,
+            dy: (pinCenter.y - map.frame.minY) / map.frame.height
+        )
+        map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 3))
+
+        let dragStart = map.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.72, dy: 0.42)
+        )
+        let dragEnd = map.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.28, dy: 0.56)
+        )
+        let probe = app.descendants(matching: .any)["map.performanceProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 3))
+        let populatedProbe = NSPredicate(format: "value CONTAINS %@", "camera=")
+        var didMeasurePan = false
+        var invocationCount = 0
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        options.invocationOptions = [.manuallyStart, .manuallyStop]
+        measure(
+            metrics: [XCTClockMetric(), XCTCPUMetric(application: app)],
+            options: options
+        ) {
+            invocationCount += 1
+            startMeasuring()
+            defer { stopMeasuring() }
+            guard invocationCount > 1 else { return }
+
+            dragStart.press(
+                forDuration: 0.08,
+                thenDragTo: dragEnd,
+                withVelocity: .fast,
+                thenHoldForDuration: 0.08
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(
+                    for: [
+                        XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)
+                    ],
+                    timeout: 3
+                ),
+                .completed
+            )
+            didMeasurePan = true
+        }
+        XCTAssertTrue(didMeasurePan)
+
+        let snapshot = String(describing: probe.value)
+        print("REC404_MAP_PERFORMANCE_PROBE \(snapshot)")
+        add(XCTAttachment(string: snapshot))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-404 dense map after selected-pin pan"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testSingleScreenTapOnMapPinSelectsThatPlace() {
         let app = XCUIApplication()
         app.launchArguments = [

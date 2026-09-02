@@ -1138,6 +1138,9 @@ struct MapScreen: View {
     @State private var mapSearchFocusRequestID: UUID?
     @State private var walkthroughFallbackMemory: VisiblePlace?
     @State private var measuredMapSearchDockHeight = MapControlLayout.searchDockClearance
+    #if DEBUG
+    @State private var mapPerformanceProbeSnapshot = ""
+    #endif
     @FocusState private var isMapSearchFocused: Bool
     @State private var renderProjectionCache = MapRenderProjectionCache<
         MapRenderProjectionKey,
@@ -1544,6 +1547,9 @@ struct MapScreen: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = MapPerformanceProbe.recordBodyEvaluation()
+        #endif
         let annotationGroups = orderedVisiblePlaceGroups()
         let indexedAnnotationGroups = Array(annotationGroups.enumerated())
         let indexedSearchCandidates = Array(mappableSearchCandidates.enumerated())
@@ -1831,7 +1837,15 @@ struct MapScreen: View {
                     }
                     #if DEBUG
                     .overlay(alignment: .topLeading) {
-                        if Self.usesREC352AdaptiveMapSearchFixtures() {
+                        if MapPerformanceProbe.isEnabled {
+                            Text(mapPerformanceProbeSnapshot)
+                                .font(.caption2)
+                                .opacity(0.001)
+                                .accessibilityIdentifier("map.performanceProbe")
+                                .accessibilityLabel("Map performance probe")
+                                .accessibilityValue(mapPerformanceProbeSnapshot)
+                                .allowsHitTesting(false)
+                        } else if Self.usesREC352AdaptiveMapSearchFixtures() {
                             Text("\(mappableSearchCandidates.count)")
                                 .font(.caption2)
                                 .opacity(0.001)
@@ -2567,8 +2581,13 @@ struct MapScreen: View {
     }
 
     private func orderedVisiblePlaceGroups() -> [VisiblePlaceGroup] {
-        Self.orderedAnnotationGroups(
+        let densityBoundGroups = MapAnnotationDensityPolicy.groups(
             renderedVisiblePlaceGroups,
+            centeredIn: currentSearchRegion,
+            selectedGroupKey: selectedPlaceGroupKey
+        )
+        return Self.orderedAnnotationGroups(
+            densityBoundGroups,
             selectedGroupKey: selectedPlaceGroupKey
         )
     }
@@ -2758,6 +2777,9 @@ struct MapScreen: View {
     }
 
     private func handleMapCameraChange(_ region: MKCoordinateRegion) {
+        #if DEBUG
+        MapPerformanceProbe.recordCameraChange()
+        #endif
         cameraRegionTracker.recordCameraChange(region)
     }
 
@@ -2773,6 +2795,9 @@ struct MapScreen: View {
             cancelPendingMapTapDismissal()
             requestCompactSelectionDismissal(trigger: .oneFingerPan)
         }
+        #if DEBUG
+        mapPerformanceProbeSnapshot = MapPerformanceProbe.finishCameraInteraction()
+        #endif
     }
 
     private func updateRenderedAnnotationViewport(for region: MKCoordinateRegion) {
@@ -6072,6 +6097,7 @@ private final class MapGestureAnchorView: UIView {
 private final class PassiveMapTapGestureRecognizer: UIGestureRecognizer {
     var maximumMovement: CGFloat = 10
     var onCompletedTap: ((CGPoint) -> Void)?
+    var onMovementExceeded: (() -> Void)?
 
     private var initialLocation: CGPoint?
 
@@ -6081,6 +6107,9 @@ private final class PassiveMapTapGestureRecognizer: UIGestureRecognizer {
               event.allTouches?.count == 1,
               let touch = touches.first
         else {
+            if event.allTouches?.count != 1 {
+                onMovementExceeded?()
+            }
             state = .failed
             return
         }
@@ -6099,6 +6128,7 @@ private final class PassiveMapTapGestureRecognizer: UIGestureRecognizer {
             currentLocation.x - initialLocation.x,
             currentLocation.y - initialLocation.y
         ) > maximumMovement {
+            onMovementExceeded?()
             state = .failed
         }
     }
@@ -6158,6 +6188,9 @@ private struct MapGestureObserver: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: MapGestureAnchorView, context: Context) {
+        #if DEBUG
+        MapPerformanceProbe.recordGestureObserverUpdate()
+        #endif
         context.coordinator.update(observer: self, anchorView: uiView)
     }
 
@@ -6184,6 +6217,9 @@ private struct MapGestureObserver: UIViewRepresentable {
             recognizer.onCompletedTap = { [weak self] point in
                 self?.handleCompletedTap(at: point)
             }
+            recognizer.onMovementExceeded = { [weak self] in
+                self?.cancelPendingAnnotationPriorityRefresh()
+            }
             configureForPassiveObservation(recognizer)
             return recognizer
         }()
@@ -6207,10 +6243,16 @@ private struct MapGestureObserver: UIViewRepresentable {
             observer: MapGestureObserver,
             anchorView: MapGestureAnchorView
         ) {
+            let priorityCoordinateChanged = !MapAnnotationPriorityPolicy.matches(
+                self.observer.prioritizedAnnotationCoordinate,
+                observer.prioritizedAnnotationCoordinate
+            )
             self.observer = observer
             longPressRecognizer.minimumPressDuration = observer.longPressMinimumDuration
             attachIfNeeded(to: anchorView)
-            scheduleAnnotationPriorityRefresh()
+            if priorityCoordinateChanged {
+                scheduleAnnotationPriorityRefresh()
+            }
         }
 
         func attachIfNeeded(to anchorView: MapGestureAnchorView) {
@@ -6223,7 +6265,6 @@ private struct MapGestureObserver: UIViewRepresentable {
             if let mapView,
                mapView.window === window,
                Self.overlapArea(of: mapView, with: anchorFrame, in: window) > 0 {
-                scheduleAnnotationPriorityRefresh()
                 return
             }
             guard let resolvedMapView = Self.bestMapView(in: window, matching: anchorView) else {
@@ -6318,6 +6359,11 @@ private struct MapGestureObserver: UIViewRepresentable {
             }
         }
 
+        private func cancelPendingAnnotationPriorityRefresh() {
+            annotationPriorityRefreshTask?.cancel()
+            annotationPriorityRefreshTask = nil
+        }
+
         private func refreshAnnotationPriority() {
             restorePrioritizedAnnotationView()
             guard let mapView,
@@ -6326,7 +6372,21 @@ private struct MapGestureObserver: UIViewRepresentable {
 
             // SwiftUI's Map does not expose annotation z-priority. Promote the
             // selected native annotation through the underlying public MapKit API.
-            for annotation in mapView.annotations where !(annotation is MKUserLocation) {
+            // Limit the native lookup to candidates at the selected coordinate.
+            let nearbyAnnotations = mapView.annotations(
+                in: MapAnnotationPriorityPolicy.queryRect(
+                    centeredAt: selectedCoordinate
+                )
+            )
+            #if DEBUG
+            MapPerformanceProbe.recordAnnotationPriorityRefresh(
+                annotationCount: nearbyAnnotations.count
+            )
+            #endif
+            for candidate in nearbyAnnotations {
+                guard let annotation = candidate as? MKAnnotation,
+                      !(annotation is MKUserLocation)
+                else { continue }
                 guard MapAnnotationPriorityPolicy.matches(
                     annotation.coordinate,
                     selectedCoordinate: selectedCoordinate
@@ -6383,6 +6443,63 @@ private struct MapGestureObserver: UIViewRepresentable {
         }
     }
 }
+
+#if DEBUG
+@MainActor
+private enum MapPerformanceProbe {
+    static let isEnabled = ProcessInfo.processInfo.arguments.contains(
+        "-WanderMapPerformanceProbe"
+    )
+
+    private static var isCameraInteractionActive = false
+    private static var bodyEvaluationCount = 0
+    private static var cameraChangeCount = 0
+    private static var gestureObserverUpdateCount = 0
+    private static var annotationPriorityRefreshCount = 0
+    private static var annotationVisitCount = 0
+
+    static func recordBodyEvaluation() {
+        guard isEnabled, isCameraInteractionActive else { return }
+        bodyEvaluationCount += 1
+    }
+
+    static func recordCameraChange() {
+        guard isEnabled else { return }
+        if !isCameraInteractionActive {
+            isCameraInteractionActive = true
+            bodyEvaluationCount = 0
+            cameraChangeCount = 0
+            gestureObserverUpdateCount = 0
+            annotationPriorityRefreshCount = 0
+            annotationVisitCount = 0
+        }
+        cameraChangeCount += 1
+    }
+
+    static func recordGestureObserverUpdate() {
+        guard isEnabled, isCameraInteractionActive else { return }
+        gestureObserverUpdateCount += 1
+    }
+
+    static func recordAnnotationPriorityRefresh(annotationCount: Int) {
+        guard isEnabled, isCameraInteractionActive else { return }
+        annotationPriorityRefreshCount += 1
+        annotationVisitCount += annotationCount
+    }
+
+    static func finishCameraInteraction() -> String {
+        guard isEnabled else { return "" }
+        isCameraInteractionActive = false
+        return [
+            "body=\(bodyEvaluationCount)",
+            "camera=\(cameraChangeCount)",
+            "observer=\(gestureObserverUpdateCount)",
+            "refresh=\(annotationPriorityRefreshCount)",
+            "visits=\(annotationVisitCount)"
+        ].joined(separator: ";")
+    }
+}
+#endif
 
 enum MapHitTesting {
     static let markerTapRadius: CGFloat = 34
@@ -6829,6 +6946,56 @@ enum MapViewportRefreshPolicy {
             maxLatitude: min(90, center.latitude + latitudeRadius),
             maxLongitude: min(180, center.longitude + longitudeRadius)
         )
+    }
+}
+
+enum MapAnnotationDensityPolicy {
+    // SwiftUI-backed annotations are expensive to composite while MapKit moves.
+    // Bound dense, prefetched surfaces; zooming into an area naturally reveals
+    // every nearby group once the viewport falls below this limit.
+    static let maximumRenderedGroupCount = 64
+
+    static func groups(
+        _ groups: [VisiblePlaceGroup],
+        centeredIn region: MKCoordinateRegion,
+        selectedGroupKey: String?
+    ) -> [VisiblePlaceGroup] {
+        guard groups.count > maximumRenderedGroupCount else { return groups }
+
+        let selectedGroup = selectedGroupKey.flatMap { key in
+            groups.first(where: { $0.key == key })
+        }
+        let latitudeSpan = max(abs(region.span.latitudeDelta), .leastNonzeroMagnitude)
+        let longitudeSpan = max(abs(region.span.longitudeDelta), .leastNonzeroMagnitude)
+        let rankedGroups = groups.enumerated()
+            .filter { $0.element.key != selectedGroupKey }
+            .map { offset, group in
+                let latitudeDistance = (
+                    group.primary.place.latitude - region.center.latitude
+                ) / latitudeSpan
+                let longitudeDistance = (
+                    group.primary.place.longitude - region.center.longitude
+                ) / longitudeSpan
+                return (
+                    offset: offset,
+                    group: group,
+                    distanceSquared: latitudeDistance * latitudeDistance
+                        + longitudeDistance * longitudeDistance
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.distanceSquared != rhs.distanceSquared {
+                    return lhs.distanceSquared < rhs.distanceSquared
+                }
+                return lhs.offset < rhs.offset
+            }
+
+        let unselectedBudget = maximumRenderedGroupCount - (selectedGroup == nil ? 0 : 1)
+        var result = rankedGroups.prefix(unselectedBudget).map(\.group)
+        if let selectedGroup {
+            result.append(selectedGroup)
+        }
+        return result
     }
 }
 
@@ -8474,6 +8641,7 @@ enum MapSelectionLifetimePolicy {
 
 enum MapAnnotationPriorityPolicy {
     static let coordinateTolerance = 0.000_000_1
+    static let queryRadiusMeters: CLLocationDistance = 2
 
     static func matches(
         _ coordinate: CLLocationCoordinate2D,
@@ -8483,6 +8651,34 @@ enum MapAnnotationPriorityPolicy {
             && CLLocationCoordinate2DIsValid(selectedCoordinate)
             && abs(coordinate.latitude - selectedCoordinate.latitude) <= coordinateTolerance
             && abs(coordinate.longitude - selectedCoordinate.longitude) <= coordinateTolerance
+    }
+
+    static func matches(
+        _ coordinate: CLLocationCoordinate2D?,
+        _ otherCoordinate: CLLocationCoordinate2D?
+    ) -> Bool {
+        switch (coordinate, otherCoordinate) {
+        case (nil, nil):
+            true
+        case let (coordinate?, otherCoordinate?):
+            matches(coordinate, selectedCoordinate: otherCoordinate)
+        default:
+            false
+        }
+    }
+
+    static func queryRect(centeredAt coordinate: CLLocationCoordinate2D) -> MKMapRect {
+        let center = MKMapPoint(coordinate)
+        let radius = max(
+            1,
+            MKMapPointsPerMeterAtLatitude(coordinate.latitude) * queryRadiusMeters
+        )
+        return MKMapRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        )
     }
 }
 

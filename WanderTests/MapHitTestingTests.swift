@@ -1898,6 +1898,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
         XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
         XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
+        XCTAssertTrue(map.contains("MapAnnotationPriorityPolicy.queryRect("))
+        XCTAssertTrue(map.contains("cancelPendingAnnotationPriorityRefresh()"))
+        XCTAssertFalse(map.contains("for annotation in mapView.annotations where"))
     }
 
     func testNativeAnnotationPriorityMatchesOnlyTheSelectedCoordinate() {
@@ -1929,6 +1932,71 @@ final class MapSelectionMotionTests: XCTestCase {
                 selectedCoordinate: selected
             )
         )
+
+        let localQueryRect = MapAnnotationPriorityPolicy.queryRect(centeredAt: selected)
+        XCTAssertTrue(localQueryRect.contains(MKMapPoint(selected)))
+        XCTAssertFalse(localQueryRect.contains(MKMapPoint(anotherPin)))
+    }
+
+    func testDenseAnnotationPolicyCapsRenderedGroupsAndRetainsSelection() {
+        let currentUser = densityProfile()
+        let places = (0..<100).map { index in
+            densityVisiblePlace(
+                owner: currentUser,
+                name: "Dense Place \(index)",
+                category: "coffee",
+                latitude: 34.02 + Double(index / 10) * 0.005,
+                longitude: -118.30 + Double(index % 10) * 0.005,
+                providerID: "mapkit_dense_\(index)",
+                status: .been
+            )
+        }
+        let groups = VisiblePlaceGrouping.groups(
+            from: places,
+            currentUserID: currentUser.id
+        )
+        let selectedKey = groups.last?.key
+        let rendered = MapAnnotationDensityPolicy.groups(
+            groups,
+            centeredIn: MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 34.045, longitude: -118.275),
+                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+            ),
+            selectedGroupKey: selectedKey
+        )
+
+        XCTAssertEqual(rendered.count, MapAnnotationDensityPolicy.maximumRenderedGroupCount)
+        XCTAssertEqual(Set(rendered.map(\.key)).count, rendered.count)
+        XCTAssertTrue(rendered.contains(where: { $0.key == selectedKey }))
+    }
+
+    func testDenseAnnotationPolicyLeavesSparseViewportUnchanged() {
+        let currentUser = densityProfile()
+        let places = (0..<8).map { index in
+            densityVisiblePlace(
+                owner: currentUser,
+                name: "Sparse Place \(index)",
+                category: "park",
+                latitude: 34.02 + Double(index) * 0.002,
+                longitude: -118.30 + Double(index) * 0.002,
+                providerID: "mapkit_sparse_\(index)",
+                status: .been
+            )
+        }
+        let groups = VisiblePlaceGrouping.groups(
+            from: places,
+            currentUserID: currentUser.id
+        )
+        let rendered = MapAnnotationDensityPolicy.groups(
+            groups,
+            centeredIn: MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 34.04, longitude: -118.28),
+                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+            ),
+            selectedGroupKey: nil
+        )
+
+        XCTAssertEqual(rendered.map(\.key), groups.map(\.key))
     }
 
     func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
@@ -1998,6 +2066,54 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
         XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
+    }
+
+    private func densityProfile() -> LocalProfile {
+        LocalProfile(
+            localID: "local_user_joe",
+            serverID: "user_joe",
+            handle: "joe",
+            displayName: "Joe",
+            syncState: .synced
+        )
+    }
+
+    private func densityVisiblePlace(
+        owner: LocalProfile,
+        name: String,
+        category: String,
+        latitude: Double,
+        longitude: Double,
+        providerID: String,
+        status: PlaceStatus
+    ) -> VisiblePlace {
+        let place = LocalPlace(
+            localID: "local_place_\(providerID)",
+            serverID: "place_\(providerID)",
+            canonicalName: name,
+            category: category,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: providerID,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_\(providerID)",
+            serverID: "up_\(providerID)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            sourceType: "test",
+            syncState: .synced
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
     }
 }
 
