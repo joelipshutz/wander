@@ -1592,8 +1592,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("NativeMapView("))
         XCTAssertTrue(map.contains("private final class NativeMapAnnotation: NSObject, MKAnnotation"))
         XCTAssertTrue(map.contains("mapView.addAnnotations(addedAnnotations)"))
-        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max"))
-        XCTAssertTrue(map.contains("clusteringIdentifier = descriptor.isSelected"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
     }
@@ -1612,7 +1613,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("UIView.animate("))
         XCTAssertTrue(map.contains("self.transform = .identity"))
     }
-    func testNativeAnnotationsAreDiffedAndReusedWithoutViewportBatchSwaps() throws {
+    func testNativeAnnotationsAreDiffedReusedAndBufferedAroundTheViewport() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1624,7 +1625,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.addAnnotations(addedAnnotations)"))
         XCTAssertTrue(map.contains("mapView.removeAnnotations(staleAnnotations)"))
         XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
-        XCTAssertTrue(map.contains("forAnnotationViewWithReuseIdentifier: NativeMapPinAnnotationView.reuseIdentifier"))
+        XCTAssertTrue(map.contains("for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers"))
+        XCTAssertTrue(map.contains("let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID"))
+        XCTAssertTrue(map.contains("private var renderedViewport: MapViewport?"))
+        XCTAssertTrue(map.contains("MapAnnotationViewportPolicy.shouldRefresh("))
+        XCTAssertTrue(map.contains("descriptor.isSelected"))
         XCTAssertFalse(map.contains("@State private var renderedAnnotationViewport"))
         XCTAssertFalse(map.contains("MapAnnotationDensityPolicy"))
     }
@@ -1721,9 +1726,9 @@ final class MapSelectionMotionTests: XCTestCase {
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
         XCTAssertTrue(map.contains("isSelected: highlightsCompactSelection"))
-        XCTAssertTrue(map.contains("clusteringIdentifier = descriptor.isSelected"))
-        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max"))
-        XCTAssertTrue(map.contains("displayPriority = descriptor.isSelected ? .required"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
+        XCTAssertTrue(map.contains("displayPriority = .required"))
         XCTAssertTrue(map.contains("drawTitle("))
         XCTAssertTrue(map.contains("scheduleEmptyMapTapDismissal()"))
     }

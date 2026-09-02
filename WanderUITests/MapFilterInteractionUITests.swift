@@ -291,6 +291,79 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testPerformanceFixtureTracesDenseMapPanZoomAndClusterChurn() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceProbe",
+            "-WanderMapPerformanceCameraControls",
+            "-WanderMapPerformanceSelectedPin"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 3))
+
+        let probe = app.descendants(matching: .any)["map.performanceProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 3))
+
+        func metric(_ name: String, in snapshot: String) -> Int? {
+            snapshot
+                .split(separator: ";")
+                .first { $0.hasPrefix("\(name)=") }
+                .flatMap { Int($0.dropFirst(name.count + 1)) }
+        }
+
+        func perform(_ label: String, button: XCUIElement) {
+            let previousValue = probe.value as? String ?? ""
+            XCTAssertTrue(button.isHittable)
+            button.tap()
+            let populatedProbe = NSPredicate(
+                format: "value != %@ AND value CONTAINS %@",
+                previousValue,
+                "camera="
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(
+                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)],
+                    timeout: 3
+                ),
+                .completed
+            )
+            let snapshot = probe.value as? String ?? ""
+            print("REC404_MAP_CLUSTER_TRACE \(label) \(snapshot)")
+            XCTAssertEqual(
+                metric("nativeA11yVisits", in: snapshot),
+                0,
+                "Camera movement must not rescan MapKit's annotation accessibility tree"
+            )
+            XCTAssertLessThanOrEqual(
+                metric("nativeSyncVisits", in: snapshot) ?? .max,
+                200,
+                "The 780-place fixture must stay viewport-buffered inside MapKit"
+            )
+            XCTAssertLessThan(
+                metric("maxFrameGapMs", in: snapshot) ?? .max,
+                100,
+                "Dense-map camera animation must not freeze for a visible fraction of a second"
+            )
+        }
+
+        let zoomOut = app.buttons["map.performanceZoomOut"]
+        let zoomIn = app.buttons["map.performanceZoomIn"]
+        XCTAssertTrue(zoomOut.waitForExistence(timeout: 3))
+        XCTAssertTrue(zoomIn.waitForExistence(timeout: 3))
+
+        perform("zoom-out-1", button: zoomOut)
+        perform("zoom-out-2", button: zoomOut)
+        perform("zoom-in", button: zoomIn)
+    }
+
     func testSingleScreenTapOnMapPinSelectsThatPlace() {
         let app = XCUIApplication()
         app.launchArguments = [
