@@ -179,8 +179,21 @@ extension View {
 struct AstirMastheadLockup: View {
     @Environment(\.astirBrandMode) private var brandMode
     var isCompact = false
+    var presentation: AstirMastheadPresentation = .glass
 
     var body: some View {
+        masthead
+            .modifier(
+                AstirMastheadPresentationModifier(
+                    presentation: presentation,
+                    isCompact: isCompact
+                )
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Astir, Ocean Park")
+    }
+
+    private var masthead: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("ASTIR")
                 .font(AstirTheme.wordmark(isCompact ? 18 : 22))
@@ -190,11 +203,51 @@ struct AstirMastheadLockup: View {
                 .tracking(isCompact ? 1.8 : 2.3)
         }
         .foregroundStyle(brandMode.primaryText)
-        .padding(.horizontal, isCompact ? 12 : 14)
-        .padding(.vertical, isCompact ? 8 : 10)
-        .astirGlassSurface(cornerRadius: isCompact ? 15 : 18, castsShadow: true)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Astir, Ocean Park")
+    }
+}
+
+enum AstirMastheadPresentation {
+    case glass
+    case localizedBlur
+}
+
+private struct AstirMastheadPresentationModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.astirBrandMode) private var brandMode
+    let presentation: AstirMastheadPresentation
+    let isCompact: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch presentation {
+        case .glass:
+            content
+                .padding(.horizontal, isCompact ? 12 : 14)
+                .padding(.vertical, isCompact ? 8 : 10)
+                .astirGlassSurface(cornerRadius: isCompact ? 15 : 18, castsShadow: true)
+        case .localizedBlur:
+            content
+                .padding(.horizontal, isCompact ? 7 : 9)
+                .padding(.vertical, isCompact ? 5 : 7)
+                .background {
+                    Rectangle()
+                        .fill(
+                            reduceTransparency
+                                ? AnyShapeStyle(brandMode.background.opacity(0.82))
+                                : AnyShapeStyle(.ultraThinMaterial)
+                        )
+                        .mask {
+                            RadialGradient(
+                                colors: [.black, .black.opacity(0.72), .clear],
+                                center: .center,
+                                startRadius: 2,
+                                endRadius: isCompact ? 46 : 58
+                            )
+                        }
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+        }
     }
 }
 
