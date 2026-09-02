@@ -21,6 +21,7 @@ final class MapPlaceCardUITests: XCTestCase {
         let renderedResultCount = app.descendants(matching: .any)["map.searchResultPinCount"]
         XCTAssertTrue(renderedResultCount.waitForExistence(timeout: 2))
         XCTAssertEqual(renderedResultCount.value as? String, "0")
+        XCTAssertFalse(app.buttons["map.selectedPlaceCard"].exists)
         capture("REC-352 adaptive coffee typeahead")
 
         searchField.typeText("\n")
@@ -55,11 +56,12 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(savedResult.waitForExistence(timeout: 5))
         XCTAssertTrue(externalResult.waitForExistence(timeout: 5))
         XCTAssertLessThan(savedResult.frame.minY, externalResult.frame.minY)
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertFalse(card.exists)
         capture("REC-352 Larchmont typeahead")
 
         searchField.typeText("\n")
 
-        let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertTrue(card.label.contains("Larchmont Noodles"))
         XCTAssertFalse(card.label.contains("Larchmont Noodles & Ramen"))
@@ -90,6 +92,127 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(card.label.contains("Long Tables Cafe"))
         XCTAssertFalse(card.label.contains("Fern Desk Coffee"))
         capture("REC-352 contextual submitted")
+    }
+
+    func testTappingMapTypeaheadSuggestionExplicitlySelectsItsPreviewAndPin() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+        let selectedPin = app.descendants(matching: .any)[
+            "map.pin.active.search.rec352_mapkit_long_tables_cafe"
+        ]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        let externalSuggestion = typeaheadPanel.staticTexts["Long Tables Cafe"].firstMatch
+        XCTAssertTrue(externalSuggestion.waitForExistence(timeout: 5))
+        XCTAssertFalse(card.exists)
+        XCTAssertFalse(selectedPin.exists)
+
+        externalSuggestion.tap()
+
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+        XCTAssertTrue(selectedPin.waitForExistence(timeout: 5))
+    }
+
+    func testMapTypeaheadHidesAnExistingPreviewAndCancelRestoresIt() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace", "Woodcat Coffee",
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        let searchField = app.textFields["map.searchField"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("Woodcat Coffee"))
+
+        searchField.tap()
+        searchField.typeText("Woodcat")
+
+        let typeaheadPanel = app.descendants(matching: .any)["map.typeaheadPanel"]
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 5))
+        XCTAssertTrue(typeaheadPanel.staticTexts["Woodcat Coffee"].firstMatch.exists)
+        XCTAssertTrue(card.waitForNonExistence(timeout: 2))
+
+        app.buttons["map.searchCancel"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.label.contains("Woodcat Coffee"))
+    }
+
+    func testClearingACompletedMapSearchLeavesNoPlacePreview() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables\n")
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+
+        let clearButton = app.buttons["map.searchClear"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 2))
+        clearButton.tap()
+
+        XCTAssertTrue(card.waitForNonExistence(timeout: 3))
+    }
+
+    func testClearingTypeaheadDoesNotRestoreAnInitialPlacePreview() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace", "Woodcat Coffee",
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        let searchField = app.textFields["map.searchField"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("Woodcat Coffee"))
+
+        searchField.tap()
+        searchField.typeText("Woodcat")
+        XCTAssertTrue(card.waitForNonExistence(timeout: 3))
+
+        let clearButton = app.buttons["map.searchClear"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 2))
+        clearButton.tap()
+
+        XCTAssertTrue(card.waitForNonExistence(timeout: 3))
+    }
+
+    func testCancelingMapTypeaheadRestoresAnExternalPlacePreview() {
+        let app = launchREC352SearchFixture()
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("long tables\n")
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+
+        searchField.tap()
+        searchField.typeText(" cafe")
+        XCTAssertTrue(card.waitForNonExistence(timeout: 3))
+
+        let cancelButton = app.buttons["map.searchCancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
+        cancelButton.tap()
+
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
     }
 
     func testSubmittingMapSearchSelectsTheHighestRankedTrustedPlaceImmediately() {
