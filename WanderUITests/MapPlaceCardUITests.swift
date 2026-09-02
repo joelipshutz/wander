@@ -166,6 +166,36 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(card.waitForNonExistence(timeout: 3))
     }
 
+    func testClearingACompletedMapSearchDoesNotRestoreThePriorPlacePreview() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapSearchFixtures", "rec352",
+            "-WanderMapPlace", "Woodcat Coffee",
+        ]
+        app.launch()
+
+        let searchField = app.textFields["map.searchField"]
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("Woodcat Coffee"))
+
+        searchField.tap()
+        searchField.typeText("long tables\n")
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Long Tables Cafe"))
+
+        let clearButton = app.buttons["map.searchClear"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 2))
+        clearButton.tap()
+
+        XCTAssertTrue(card.waitForNonExistence(timeout: 3))
+        XCTAssertFalse(card.label.contains("Woodcat Coffee"))
+    }
+
     func testClearingTypeaheadDoesNotRestoreAnInitialPlacePreview() {
         let app = XCUIApplication()
         app.launchArguments = [

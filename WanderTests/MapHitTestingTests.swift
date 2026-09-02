@@ -681,6 +681,9 @@ final class MapHitTestingTests: XCTestCase {
         )
         let previewClear = map[previewClearStart.lowerBound..<previewClearEnd.lowerBound]
 
+        XCTAssertTrue(
+            previewClear.contains("invalidateDeferredMapNavigationForUserInteraction()")
+        )
         XCTAssertTrue(previewClear.contains("mapSearchSelectionSession.suppressPreviewForEditing()"))
         XCTAssertTrue(previewClear.contains("didDismissInitialPlaceRoute = true"))
         XCTAssertTrue(previewClear.contains("clearMapSearchPreview()"))
@@ -766,6 +769,76 @@ final class MapHitTestingTests: XCTestCase {
         )
         let fullClear = map[fullClearStart.lowerBound..<fullClearEnd.lowerBound]
         XCTAssertTrue(fullClear.contains("didDismissInitialPlaceRoute = true"))
+    }
+
+    func testAsyncMapRoutesCheckUserIntentAfterAwaitBeforeMutatingSelection() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        let notificationStart = try XCTUnwrap(
+            map.range(of: "private func openNotificationPlace(")
+        )
+        let notificationEnd = try XCTUnwrap(
+            map.range(
+                of: "private func centerMap(latitude:",
+                range: notificationStart.upperBound..<map.endIndex
+            )
+        )
+        let notificationRoute = String(
+            map[notificationStart.lowerBound..<notificationEnd.lowerBound]
+        )
+        XCTAssertTrue(notificationRoute.contains("await store.refreshRemoteSocialSurfaces"))
+        XCTAssertTrue(notificationRoute.contains("try await backend.sharedPlace"))
+        XCTAssertGreaterThanOrEqual(
+            notificationRoute.components(separatedBy: "canApplyDeferredMapNavigation(").count,
+            4
+        )
+
+        let launchStart = try XCTUnwrap(
+            map.range(of: "private func handleMapSearchLaunchRequest(")
+        )
+        let launchEnd = try XCTUnwrap(
+            map.range(
+                of: "private func runMapSearch(",
+                range: launchStart.upperBound..<map.endIndex
+            )
+        )
+        let launchRoute = map[launchStart.lowerBound..<launchEnd.lowerBound]
+        XCTAssertTrue(launchRoute.contains("await centerMapOnCurrentCityIfNeeded()"))
+        XCTAssertTrue(launchRoute.contains("deferredMapNavigationGate.allows("))
+
+        let invalidationStart = try XCTUnwrap(
+            map.range(of: "private func invalidateDeferredMapNavigationForUserInteraction()")
+        )
+        let invalidationEnd = try XCTUnwrap(
+            map.range(
+                of: "private func resolveSharedVisitDestinationWithRetry(",
+                range: invalidationStart.upperBound..<map.endIndex
+            )
+        )
+        let invalidation = map[invalidationStart.lowerBound..<invalidationEnd.lowerBound]
+        XCTAssertTrue(invalidation.contains("deferredMapNavigationGate.invalidate()"))
+        XCTAssertTrue(invalidation.contains("didResolveInitialCamera = true"))
+        XCTAssertTrue(invalidation.contains("case .place, .sharedVisit:"))
+
+        for userIntentHandler in [
+            "private func clearMapSearchPreviewForEditing()",
+            "private func clearSearchTextForMapInteraction()",
+            "private func submitMapSearch(_ requestedQuery: String)",
+            "private func cancelMapSearch()",
+            "private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion)",
+        ] {
+            let handlerStart = try XCTUnwrap(map.range(of: userIntentHandler))
+            let handlerPrefix = map[handlerStart.lowerBound...].prefix(500)
+            XCTAssertTrue(
+                handlerPrefix.contains("invalidateDeferredMapNavigationForUserInteraction()"),
+                "Expected \(userIntentHandler) to supersede deferred map navigation"
+            )
+        }
     }
 
     func testMoreRefinementChangeInvalidatesClearsAndRerunsOriginalSubmittedRegion() throws {
@@ -865,6 +938,19 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertTrue(MapSearchPerformancePolicy.shouldFetchFeatured(for: .featured))
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .friends))
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .you))
+    }
+
+    func testDeferredMapNavigationGateRejectsCancelledOrSupersededWork() {
+        var gate = MapDeferredNavigationGate()
+        let capturedRevision = gate.revision
+
+        XCTAssertTrue(gate.allows(capturedRevision, isCancelled: false))
+        XCTAssertFalse(gate.allows(capturedRevision, isCancelled: true))
+
+        gate.invalidate()
+
+        XCTAssertFalse(gate.allows(capturedRevision, isCancelled: false))
+        XCTAssertTrue(gate.allows(gate.revision, isCancelled: false))
     }
 
     func testCancelingMapSearchRestoresTheSelectionCapturedAtSearchEntry() {
