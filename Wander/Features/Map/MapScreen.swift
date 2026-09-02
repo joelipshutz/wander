@@ -6186,6 +6186,7 @@ private struct NativeMapView: UIViewRepresentable {
         private var descriptorSnapshotByID: [String: NativeMapAnnotationDescriptor] = [:]
         private var pinViewReferencesByID: [String: WeakNativeMapPinAnnotationView] = [:]
         private var renderedViewport: MapViewport?
+        private var annotationAccessibilityRefreshScheduled = false
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
         private var suppressNextCompletedTap = false
@@ -6281,19 +6282,13 @@ private struct NativeMapView: UIViewRepresentable {
             #endif
             for view in views {
                 guard let pinView = view as? NativeMapPinAnnotationView else { continue }
-                pinView.isAccessibilityElement = true
+                // MapKit can deliver a member view and its replacement cluster
+                // in separate delegate calls. Keep it out of the accessibility
+                // tree until the coalesced visible-set refresh resolves the
+                // final cluster membership for this layout pass.
+                pinView.isAccessibilityElement = false
             }
-            for clusterView in views {
-                guard let cluster = clusterView.annotation as? MKClusterAnnotation else { continue }
-                for member in cluster.memberAnnotations {
-                    guard let annotation = member as? NativeMapAnnotation,
-                          let pinView = pinViewReferencesByID[annotation.stableID]?.value,
-                          (pinView.annotation as? NativeMapAnnotation)?.stableID
-                            == annotation.stableID
-                    else { continue }
-                    pinView.isAccessibilityElement = false
-                }
-            }
+            scheduleVisibleAnnotationAccessibilityRefresh(in: mapView)
         }
 
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
@@ -6450,6 +6445,49 @@ private struct NativeMapView: UIViewRepresentable {
                     continue
                 }
                 configure(view, for: annotation)
+            }
+        }
+
+        private func scheduleVisibleAnnotationAccessibilityRefresh(in mapView: MKMapView) {
+            guard !annotationAccessibilityRefreshScheduled else { return }
+            annotationAccessibilityRefreshScheduled = true
+            DispatchQueue.main.async { [weak self, weak mapView] in
+                guard let self else { return }
+                self.annotationAccessibilityRefreshScheduled = false
+                guard let mapView else { return }
+                self.refreshVisibleAnnotationAccessibility(in: mapView)
+            }
+        }
+
+        private func refreshVisibleAnnotationAccessibility(in mapView: MKMapView) {
+            let visible = visibleAnnotations(in: mapView)
+            let nativeAnnotations = visible.compactMap { $0 as? NativeMapAnnotation }
+            let clusteredAnnotations = visible.compactMap { $0 as? MKClusterAnnotation }
+                .flatMap(\.memberAnnotations)
+                .compactMap { $0 as? NativeMapAnnotation }
+            #if DEBUG
+            let probeStart = ProcessInfo.processInfo.systemUptime
+            defer {
+                MapPerformanceProbe.recordNativeAccessibilityRefresh(
+                    annotationCount: nativeAnnotations.count + clusteredAnnotations.count,
+                    duration: ProcessInfo.processInfo.systemUptime - probeStart
+                )
+            }
+            #endif
+
+            for annotation in nativeAnnotations {
+                guard let pinView = pinViewReferencesByID[annotation.stableID]?.value,
+                      (pinView.annotation as? NativeMapAnnotation)?.stableID
+                        == annotation.stableID
+                else { continue }
+                pinView.isAccessibilityElement = true
+            }
+            for annotation in clusteredAnnotations {
+                guard let pinView = pinViewReferencesByID[annotation.stableID]?.value,
+                      (pinView.annotation as? NativeMapAnnotation)?.stableID
+                        == annotation.stableID
+                else { continue }
+                pinView.isAccessibilityElement = false
             }
         }
 

@@ -337,10 +337,10 @@ final class MapFilterInteractionUITests: XCTestCase {
             )
             let snapshot = probe.value as? String ?? ""
             print("REC404_MAP_CLUSTER_TRACE \(label) \(snapshot)")
-            XCTAssertEqual(
-                metric("nativeA11yVisits", in: snapshot),
-                0,
-                "Camera movement must not rescan MapKit's annotation accessibility tree"
+            XCTAssertLessThanOrEqual(
+                metric("nativeA11yVisits", in: snapshot) ?? .max,
+                200,
+                "Accessibility maintenance must stay bounded to the viewport-buffered set"
             )
             XCTAssertLessThanOrEqual(
                 metric("nativeSyncVisits", in: snapshot) ?? .max,

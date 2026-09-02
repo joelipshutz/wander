@@ -2060,7 +2060,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(continuousHandler.contains("registerMapZoom"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("MapSelectionLifetimePolicy.shouldDismiss"))
-        XCTAssertTrue(map.contains("clusteringIdentifier = descriptor.isSelected"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
@@ -2100,7 +2101,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("isSelected ? title : \"\""))
         XCTAssertTrue(map.contains("private static let imageCache = NSCache<NSString, UIImage>()"))
         XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
-        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
     }
@@ -2454,7 +2456,9 @@ final class MapFilterSelectionTests: XCTestCase {
                 "if !isPlaceProfilePresented && !isMapSearchFocused"
             )
         )
-        XCTAssertTrue(map.contains("mapSearchDockClearance + nearbyLift"))
+        XCTAssertTrue(
+            map.contains("mapSearchDockClearance - WanderTheme.spacing2 + nearbyLift")
+        )
     }
 
     func testMoreSectionsMatchTheActiveSource() {
@@ -2551,7 +2555,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(map.contains("visibleTransitionGroupKeys"))
         XCTAssertFalse(map.contains("transitionMapPins("))
         XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
-        XCTAssertTrue(map.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(map.contains("private final class NativeMapPinAnnotationView"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
         XCTAssertTrue(map.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
@@ -2568,7 +2572,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(pinModifier.contains(".onChange(of: isVisible)"))
         XCTAssertTrue(pinModifier.contains("presentation.setVisible(visible)"))
         XCTAssertTrue(pinModifier.contains("withAnimation("))
-        XCTAssertTrue(map.contains("MapGestureObserver("))
+        XCTAssertTrue(map.contains("attachGestureObservers(to mapView: MKMapView)"))
         XCTAssertFalse(map.contains("@State private var mapPressLocation"))
         XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
