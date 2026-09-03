@@ -10219,6 +10219,181 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.visiblePlaceGroupBuildCount, 2)
     }
 
+    func testRestoredLegacyListMembershipMatchesCurrentCollaborationBehavior() async throws {
+        for legacy in [true, false] {
+            let persistence = makeTemporaryPersistence()
+            defer { try? FileManager.default.removeItem(at: persistence.directory) }
+            let fixtures = makeListCompatibilityFixtures(legacy: legacy, owner: false)
+            let firstStore = WanderStore(fixtures: fixtures, persistence: persistence.persistence)
+            persistence.persistence.save(WanderStoreSnapshot(store: firstStore))
+            firstStore.flushPersistence()
+            let store = WanderStore(fixtures: .empty(), persistence: persistence.persistence)
+            let list = try XCTUnwrap(store.placeLists.first)
+
+            XCTAssertEqual(store.visiblePlaceLists(scope: .mine).map(\.id), [list.id])
+            XCTAssertEqual(store.visiblePlaceLists(scope: .collabs).map(\.id), [list.id])
+            XCTAssertTrue(store.visiblePlaceLists(scope: .friends).isEmpty)
+            XCTAssertEqual(store.collaborators(for: list).map(\.id), [store.currentUser.id])
+            XCTAssertEqual(store.collaborators(for: list).count, 1)
+            XCTAssertEqual(store.collaboratorIndexBuildCount, 1)
+            XCTAssertTrue(store.canAddPlaces(to: list))
+            XCTAssertTrue(store.canLeave(list))
+            XCTAssertFalse(store.canManage(list))
+            XCTAssertFalse(store.removePlace(placeID: "place_circuit_coffee", from: list))
+
+            let left = await store.leavePlaceList(list, backend: nil)
+            XCTAssertTrue(left)
+            XCTAssertFalse(store.canAddPlaces(to: list))
+            XCTAssertTrue(store.collaborators(for: list).isEmpty)
+            XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).isEmpty)
+            XCTAssertEqual(store.visiblePlaceLists(scope: .friends).map(\.id), [list.id])
+            XCTAssertEqual(store.collaboratorIndexBuildCount, 2)
+        }
+    }
+
+    func testRestoredLegacyAndCurrentOwnersCanEditAndRemoveListPlaces() async throws {
+        for legacy in [true, false] {
+            let persistence = makeTemporaryPersistence()
+            defer { try? FileManager.default.removeItem(at: persistence.directory) }
+            let fixtures = makeListCompatibilityFixtures(legacy: legacy, owner: true)
+            let firstStore = WanderStore(fixtures: fixtures, persistence: persistence.persistence)
+            persistence.persistence.save(WanderStoreSnapshot(store: firstStore))
+            firstStore.flushPersistence()
+            let store = WanderStore(fixtures: .empty(), persistence: persistence.persistence)
+            let list = try XCTUnwrap(store.placeLists.first)
+
+            XCTAssertTrue(store.canManage(list))
+            XCTAssertTrue(store.canAddPlaces(to: list))
+            XCTAssertFalse(store.canLeave(list))
+            XCTAssertEqual(store.visiblePlaceLists(scope: .collabs).map(\.id), [list.id])
+            XCTAssertEqual(store.collaborators(for: list).map(\.id), ["user_ryan"])
+            XCTAssertTrue(store.updatePlaceList(
+                id: list.localID, name: "Updated list", description: "",
+                visibility: .followers, collaboratorUserIDs: ["user_ryan"]
+            ))
+            XCTAssertTrue(store.removePlace(placeID: "place_circuit_coffee", from: list))
+            let repository = FakePlaceListRepository(upsertResult: list.id)
+            let syncedCount = await store.syncPendingPlaceLists(
+                backend: WanderBackend(placeListRepository: repository)
+            )
+            XCTAssertEqual(syncedCount, 1)
+            XCTAssertEqual(repository.collaboratorRequests.map(\.userIDs), [["user_ryan"]])
+            XCTAssertEqual(repository.removedItems.map(\.itemID), ["22222222-2222-4222-8222-222222222222"])
+            store.flushPersistence()
+
+            let relaunched = WanderStore(fixtures: .empty(), persistence: persistence.persistence)
+            let updatedList = try XCTUnwrap(relaunched.placeLists.first)
+            XCTAssertEqual(updatedList.name, "Updated list")
+            XCTAssertTrue(relaunched.visiblePlaces(in: updatedList).isEmpty)
+            XCTAssertTrue(relaunched.canManage(updatedList))
+        }
+    }
+
+    func testLegacyListReferenceRepairIsSelectiveAndPersistedOnlyOnce() throws {
+        for legacy in [true, false] {
+            let fixtures = makeListCompatibilityFixtures(legacy: legacy, owner: true, removedMember: true)
+            let original = WanderStore(fixtures: fixtures)
+            var snapshot = WanderStoreSnapshot(store: original)
+            var writes = 0
+            let persistence = WanderStorePersistence(
+                load: { snapshot },
+                save: { snapshot = $0; writes += 1 }
+            )
+            let restored = WanderStore(fixtures: .empty(), persistence: persistence)
+            let list = try XCTUnwrap(restored.placeLists.first)
+            var expectedMembers = original.placeListMembers
+            var expectedItems = original.placeListItems
+            expectedMembers[0].listID = list.id
+            expectedItems[0].listID = list.id
+
+            XCTAssertEqual(restored.placeLists, original.placeLists)
+            XCTAssertEqual(restored.placeListMembers, expectedMembers)
+            XCTAssertEqual(restored.placeListItems, expectedItems)
+            XCTAssertEqual(writes, legacy ? 1 : 0)
+            XCTAssertTrue(restored.collaborators(for: list).isEmpty)
+
+            let relaunched = WanderStore(fixtures: .empty(), persistence: persistence)
+            XCTAssertEqual(relaunched.placeListMembers, expectedMembers)
+            XCTAssertEqual(relaunched.placeListItems, expectedItems)
+            XCTAssertEqual(writes, legacy ? 1 : 0, "Already-current lists must not be rewritten")
+        }
+    }
+
+    func testLegacyListAliasesDoNotRestoreFormerCollaboratorAccess() throws {
+        let fixtures = makeListCompatibilityFixtures(legacy: true, owner: false, removedMember: true)
+        let store = WanderStore(fixtures: fixtures)
+        let list = try XCTUnwrap(store.placeLists.first)
+
+        XCTAssertEqual(store.visiblePlaceLists(scope: .friends).map(\.id), [list.id])
+        XCTAssertTrue(store.visiblePlaceLists(scope: .mine).isEmpty)
+        XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).isEmpty)
+        XCTAssertTrue(store.collaborators(for: list).isEmpty)
+        XCTAssertFalse(store.canAddPlaces(to: list))
+        XCTAssertFalse(store.canLeave(list))
+        XCTAssertFalse(store.canManage(list))
+        XCTAssertFalse(store.removePlace(placeID: "place_circuit_coffee", from: list))
+        XCTAssertFalse(store.updatePlaceList(
+            id: list.localID, name: "Unauthorized", description: "",
+            visibility: .followers, collaboratorUserIDs: []
+        ))
+    }
+
+    func testLegacyCollaboratorAliasesDeduplicateProfilesAndRespectBlocks() throws {
+        let fixtures = makeListCompatibilityFixtures(legacy: true, owner: true, duplicateMember: true)
+        let store = WanderStore(fixtures: fixtures)
+        let list = try XCTUnwrap(store.placeLists.first)
+
+        XCTAssertEqual(store.collaborators(for: list).map(\.id), ["user_ryan"])
+        store.block(userID: "user_ryan")
+        XCTAssertTrue(store.collaborators(for: list).isEmpty)
+    }
+
+    private func makeListCompatibilityFixtures(
+        legacy: Bool,
+        owner: Bool,
+        removedMember: Bool = false,
+        duplicateMember: Bool = false
+    ) -> WanderFixtures {
+        let seed = WanderFixtures.seed()
+        let date = legacy ? Date(timeIntervalSince1970: 1_750_000_000) : Date.now
+        let list = LocalPlaceList(
+            localID: "local_compatibility_list",
+            serverID: "11111111-1111-4111-8111-111111111111",
+            ownerUserID: owner ? seed.currentUser.id : "user_ryan",
+            name: "Compatibility list", description: "",
+            syncState: .synced, createdAt: date, updatedAt: date
+        )
+        let member = LocalPlaceListMember(
+            localID: "local_compatibility_member",
+            listID: legacy ? list.localID : list.id,
+            userID: owner ? "user_ryan" : seed.currentUser.id,
+            role: .collaborator, createdAt: date,
+            deletedAt: removedMember ? .now : nil
+        )
+        var members = [member]
+        if duplicateMember {
+            members.append(LocalPlaceListMember(
+                localID: "remote_compatibility_member", listID: list.id,
+                userID: member.userID, role: .collaborator, createdAt: date
+            ))
+        }
+        return WanderFixtures(
+            currentUser: seed.currentUser, profiles: seed.profiles,
+            places: seed.places, userPlaces: seed.userPlaces,
+            placeAttributes: seed.placeAttributes, follows: seed.follows, blocks: seed.blocks,
+            placeLists: [list], placeListMembers: members,
+            placeListItems: [LocalPlaceListItem(
+                localID: "local_compatibility_item",
+                serverID: "22222222-2222-4222-8222-222222222222",
+                listID: legacy ? list.localID : list.id,
+                placeID: "place_circuit_coffee", ownerUserPlaceID: "up_joe_circuit_coffee",
+                addedByUserID: list.ownerUserID, syncState: .synced,
+                createdAt: date, updatedAt: date
+            )],
+            contactProvider: seed.contactProvider
+        )
+    }
+
     func testListProjectionPrefersExactSocialSourceSaveOverEarlierCurrentUserSave() throws {
         let store = makeStore()
         let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_demo_laptop" })
