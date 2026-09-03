@@ -273,21 +273,197 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
-struct PlaceProfileVerticalContainer<Content: View>: View {
+struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
+    let isPresented: Bool
+    let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
+        isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
+        self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
 
-    var body: some View {
-        GeometryReader { proxy in
-            content
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .background(WanderTheme.surfaceBone.color)
+    func makeUIViewController(context: Context) -> PlaceProfileSlidingHostingController<Content> {
+        PlaceProfileSlidingHostingController(
+            rootView: content,
+            isPresented: isPresented,
+            onTransitionCompleted: onTransitionCompleted
+        )
+    }
+
+    func updateUIViewController(
+        _ controller: PlaceProfileSlidingHostingController<Content>,
+        context: Context
+    ) {
+        controller.onTransitionCompleted = onTransitionCompleted
+        if controller.isPresented == isPresented {
+            controller.updateRootView(content)
+        } else {
+            controller.setPresented(isPresented, animated: true)
         }
+    }
+}
+
+@MainActor
+final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
+    private let hostingController: UIHostingController<Content>
+    private var hostingConstraints: [NSLayoutConstraint] = []
+    private var animator: UIViewPropertyAnimator?
+    private var pendingRootView: Content?
+    private var appliesInitialPosition = true
+    private(set) var isPresented: Bool
+    var onTransitionCompleted: @MainActor (Bool) -> Void
+
+    init(
+        rootView: Content,
+        isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void
+    ) {
+        hostingController = UIHostingController(rootView: rootView)
+        self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        updateAccessibilityVisibility(isPresented: isPresented)
+        hostingController.view.backgroundColor = UIColor(WanderTheme.surfaceBone.color)
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hostingController)
+        attachHostingViewIfNeeded()
+        hostingController.didMove(toParent: self)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard view.bounds.height > 0 else { return }
+        if appliesInitialPosition {
+            appliesInitialPosition = false
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
+        } else if !isPresented, animator == nil {
+            hostingController.view.transform = targetTransform(isPresented: false)
+        }
+    }
+
+    func updateRootView(_ rootView: Content) {
+        if animator != nil {
+            pendingRootView = rootView
+        } else {
+            hostingController.rootView = rootView
+        }
+    }
+
+    func setPresented(_ isPresented: Bool, animated: Bool) {
+        guard self.isPresented != isPresented else { return }
+        self.isPresented = isPresented
+        if isPresented {
+            attachHostingViewIfNeeded()
+            hostingController.view.isHidden = false
+        }
+        updateAccessibilityVisibility(isPresented: isPresented)
+        view.layoutIfNeeded()
+        configureRasterization(isEnabled: true)
+        if let animator {
+            self.animator = nil
+            animator.stopAnimation(false)
+            animator.finishAnimation(at: .current)
+        }
+
+        guard animated, view.bounds.height > 0 else {
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
+            onTransitionCompleted(isPresented)
+            return
+        }
+
+        let timing = isPresented
+            ? UICubicTimingParameters(
+                controlPoint1: CGPoint(x: 0.22, y: 1),
+                controlPoint2: CGPoint(x: 0.36, y: 1)
+            )
+            : UICubicTimingParameters(
+                controlPoint1: CGPoint(x: 0.4, y: 0),
+                controlPoint2: CGPoint(x: 0.6, y: 1)
+            )
+        let animator = UIViewPropertyAnimator(
+            duration: PlaceProfileVerticalMotionStyle.duration,
+            timingParameters: timing
+        )
+        animator.addAnimations { [weak self] in
+            guard let self else { return }
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+        }
+        animator.addCompletion { [weak self, weak animator] _ in
+            guard let self, self.animator === animator else { return }
+            hostingController.view.transform = targetTransform(isPresented: isPresented)
+            self.animator = nil
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
+            if let pendingRootView {
+                self.pendingRootView = nil
+                hostingController.rootView = pendingRootView
+            }
+            onTransitionCompleted(isPresented)
+        }
+        self.animator = animator
+        animator.startAnimation()
+    }
+
+    private func targetTransform(isPresented: Bool) -> CGAffineTransform {
+        isPresented
+            ? .identity
+            : CGAffineTransform(translationX: 0, y: view.bounds.height)
+    }
+
+    private func configureRasterization(isEnabled: Bool) {
+        let displayScale = view.window?.screen.scale ?? view.traitCollection.displayScale
+        hostingController.view.layer.rasterizationScale = max(displayScale, 1)
+        hostingController.view.layer.shouldRasterize = isEnabled
+    }
+
+    private func attachHostingViewIfNeeded() {
+        guard hostingController.view.superview == nil else { return }
+        view.addSubview(hostingController.view)
+        hostingConstraints = [
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ]
+        NSLayoutConstraint.activate(hostingConstraints)
+    }
+
+    private func detachHostingView() {
+        NSLayoutConstraint.deactivate(hostingConstraints)
+        hostingConstraints.removeAll()
+        hostingController.view.removeFromSuperview()
+    }
+
+    private func updateAccessibilityVisibility(isPresented: Bool) {
+        view.accessibilityElementsHidden = !isPresented
+        view.accessibilityViewIsModal = isPresented
+        hostingController.view.accessibilityElementsHidden = !isPresented
     }
 }
 
@@ -302,6 +478,41 @@ enum PlaceProfilePreviewPhotoPolicy {
 
 enum PlaceProfileMapLayout {
     static let previewCardHeight: CGFloat = 232
+}
+
+@MainActor
+final class PlaceProfilePreviewCardPressSession {
+    private var startedAt: TimeInterval?
+
+    func beginIfNeeded(at uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        if startedAt == nil {
+            startedAt = uptime
+        }
+    }
+
+    func finish(at uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) -> TimeInterval {
+        defer { startedAt = nil }
+        return startedAt.map { max(0, uptime - $0) } ?? 0
+    }
+
+    func cancel() {
+        startedAt = nil
+    }
+}
+
+enum PlaceProfilePreviewCardPressPolicy {
+    static let maximumDuration: TimeInterval = 0.45
+    static let maximumTranslation: CGFloat = 18
+
+    static func shouldOpen(
+        actionInProgress: Bool,
+        duration: TimeInterval,
+        translation: CGFloat
+    ) -> Bool {
+        !actionInProgress
+            && duration < maximumDuration
+            && translation < maximumTranslation
+    }
 }
 
 private struct PlaceProfilePreviewCard: View {
@@ -325,7 +536,7 @@ private struct PlaceProfilePreviewCard: View {
     @State private var isShareSheetPresented = false
     @State private var activeCardAction: PlaceCardPreviewAction?
     @State private var isCardPressed = false
-    @State private var cardPressStartedAt: Date?
+    @State private var cardPressSession = PlaceProfilePreviewCardPressSession()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
 
@@ -407,21 +618,22 @@ private struct PlaceProfilePreviewCard: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard activeCardAction == nil else {
+                    cardPressSession.cancel()
                     isCardPressed = false
                     return
                 }
-                if cardPressStartedAt == nil {
-                    cardPressStartedAt = Date()
-                }
-                isCardPressed = hypot(value.translation.width, value.translation.height) < 18
+                cardPressSession.beginIfNeeded()
+                isCardPressed = hypot(value.translation.width, value.translation.height)
+                    < PlaceProfilePreviewCardPressPolicy.maximumTranslation
             }
             .onEnded { value in
-                let pressDuration = cardPressStartedAt.map { Date().timeIntervalSince($0) } ?? .infinity
+                let pressDuration = cardPressSession.finish()
                 let translation = hypot(value.translation.width, value.translation.height)
-                let shouldOpen = activeCardAction == nil
-                    && pressDuration < 0.45
-                    && translation < 18
-                cardPressStartedAt = nil
+                let shouldOpen = PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                    actionInProgress: activeCardAction != nil,
+                    duration: pressDuration,
+                    translation: translation
+                )
                 isCardPressed = false
                 if shouldOpen {
                     onOpen()

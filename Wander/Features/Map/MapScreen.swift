@@ -1138,6 +1138,9 @@ struct NativeMapAnnotationDescriptor: Equatable {
     let outlines: [MapPinOutline]
     let isSearchResult: Bool
     let isSelected: Bool
+    let opacity: CGFloat
+    let animatesEntrance: Bool
+    let entranceDelay: TimeInterval
     let accessibilityLabel: String
     let bounceRevision: UInt64
 
@@ -1176,54 +1179,11 @@ struct NativeMapAnnotationDescriptor: Equatable {
             && lhs.outlines == rhs.outlines
             && lhs.isSearchResult == rhs.isSearchResult
             && lhs.isSelected == rhs.isSelected
+            && lhs.opacity == rhs.opacity
+            && lhs.animatesEntrance == rhs.animatesEntrance
+            && lhs.entranceDelay == rhs.entranceDelay
             && lhs.accessibilityLabel == rhs.accessibilityLabel
             && lhs.bounceRevision == rhs.bounceRevision
-    }
-}
-
-enum NativeMapClusterZoomPolicy {
-    static let minimumLatitudeDelta: CLLocationDegrees = 0.012
-    static let minimumLongitudeDelta: CLLocationDegrees = 0.014
-    static let paddingScale = 1.8
-
-    static func region(
-        fitting coordinates: [CLLocationCoordinate2D]
-    ) -> MKCoordinateRegion? {
-        let validCoordinates = coordinates.filter(CLLocationCoordinate2DIsValid)
-        guard let first = validCoordinates.first else { return nil }
-
-        let latitudeBounds = validCoordinates.reduce(
-            (minimum: first.latitude, maximum: first.latitude)
-        ) { bounds, coordinate in
-            (
-                minimum: min(bounds.minimum, coordinate.latitude),
-                maximum: max(bounds.maximum, coordinate.latitude)
-            )
-        }
-        let longitudeBounds = validCoordinates.reduce(
-            (minimum: first.longitude, maximum: first.longitude)
-        ) { bounds, coordinate in
-            (
-                minimum: min(bounds.minimum, coordinate.longitude),
-                maximum: max(bounds.maximum, coordinate.longitude)
-            )
-        }
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (latitudeBounds.minimum + latitudeBounds.maximum) / 2,
-                longitude: (longitudeBounds.minimum + longitudeBounds.maximum) / 2
-            ),
-            span: MKCoordinateSpan(
-                latitudeDelta: max(
-                    minimumLatitudeDelta,
-                    (latitudeBounds.maximum - latitudeBounds.minimum) * paddingScale
-                ),
-                longitudeDelta: max(
-                    minimumLongitudeDelta,
-                    (longitudeBounds.maximum - longitudeBounds.minimum) * paddingScale
-                )
-            )
-        )
     }
 }
 
@@ -1254,6 +1214,11 @@ struct MapScreen: View {
     @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
+    @State private var isPlaceProfileMounted: Bool
+    @State private var placeProfilePreloadTask: Task<Void, Never>?
+    @State private var placeProfilePresentationID: UUID?
+    @State private var placeProfileDismissalID: UUID?
+    @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
     @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
@@ -1470,6 +1435,7 @@ struct MapScreen: View {
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _isPlaceProfileMounted = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _mapSearchMessage = State(initialValue: Self.resolvedInitialMapSearchMessage())
         _mapFilterState = State(initialValue: initialMapFilterState)
@@ -1704,20 +1670,49 @@ struct MapScreen: View {
         let _ = MapPerformanceProbe.recordBodyEvaluation()
         #endif
         let annotationGroups = orderedVisiblePlaceGroups()
-        let nativeSavedAnnotations: [NativeMapAnnotationDescriptor] = annotationGroups.map { group in
+        let annotationCount = annotationGroups.count + mappableSearchCandidates.count
+        let activePinCoordinate: CLLocationCoordinate2D? = {
+            if let selectedPlace {
+                return CLLocationCoordinate2D(
+                    latitude: selectedPlace.place.latitude,
+                    longitude: selectedPlace.place.longitude
+                )
+            }
+            if let selectedSearchCandidate,
+               let latitude = selectedSearchCandidate.latitude,
+               let longitude = selectedSearchCandidate.longitude {
+                return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            }
+            return nil
+        }()
+        let nativeSavedAnnotations: [NativeMapAnnotationDescriptor] = annotationGroups.enumerated().map { index, group in
             let outlines = pinOutlines(for: group)
+            let coordinate = CLLocationCoordinate2D(
+                latitude: group.primary.place.latitude,
+                longitude: group.primary.place.longitude
+            )
+            let isSelected = highlightsCompactSelection && group.key == selectedPlaceGroupKey
             return NativeMapAnnotationDescriptor(
                 id: MapPinEntranceIdentity.saved(group.key),
                 kind: .saved(group.key),
                 title: group.primary.place.canonicalName,
                 emoji: group.primary.categoryEmoji,
-                coordinate: CLLocationCoordinate2D(
-                    latitude: group.primary.place.latitude,
-                    longitude: group.primary.place.longitude
-                ),
+                coordinate: coordinate,
                 outlines: outlines,
                 isSearchResult: false,
-                isSelected: highlightsCompactSelection && group.key == selectedPlaceGroupKey,
+                isSelected: isSelected,
+                opacity: isSelected ? 1 : CGFloat(
+                    MapPinFocusPolicy.opacity(
+                        for: coordinate,
+                        selectedCoordinate: highlightsCompactSelection ? activePinCoordinate : nil,
+                        regionSpan: currentSearchRegion.span
+                    )
+                ),
+                animatesEntrance: isSelected || MapPinEntranceStyle.shouldAnimate(
+                    index: index,
+                    totalCount: annotationCount
+                ),
+                entranceDelay: MapPinEntranceStyle.staggerDelay(for: index),
                 accessibilityLabel: MapPinAccessibility.label(
                     outlines: outlines,
                     category: group.primary.effectiveCompactType,
@@ -1728,19 +1723,34 @@ struct MapScreen: View {
                     : 0
             )
         }
-        let nativeSearchAnnotations: [NativeMapAnnotationDescriptor] = mappableSearchCandidates.compactMap { candidate -> NativeMapAnnotationDescriptor? in
+        let nativeSearchAnnotations: [NativeMapAnnotationDescriptor] = mappableSearchCandidates.enumerated().compactMap { index, candidate -> NativeMapAnnotationDescriptor? in
             guard let latitude = candidate.latitude,
                   let longitude = candidate.longitude
             else { return nil }
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            let isSelected = highlightsCompactSelection && candidate.id == selectedSearchCandidateID
+            let entranceIndex = annotationGroups.count + index
             return NativeMapAnnotationDescriptor(
                 id: MapPinEntranceIdentity.search(candidate.id),
                 kind: .search(candidate.id),
                 title: candidate.name,
                 emoji: candidate.categoryEmoji,
-                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                coordinate: coordinate,
                 outlines: [],
                 isSearchResult: true,
-                isSelected: highlightsCompactSelection && candidate.id == selectedSearchCandidateID,
+                isSelected: isSelected,
+                opacity: isSelected ? 1 : CGFloat(
+                    MapPinFocusPolicy.opacity(
+                        for: coordinate,
+                        selectedCoordinate: highlightsCompactSelection ? activePinCoordinate : nil,
+                        regionSpan: currentSearchRegion.span
+                    )
+                ),
+                animatesEntrance: isSelected || MapPinEntranceStyle.shouldAnimate(
+                    index: entranceIndex,
+                    totalCount: annotationCount
+                ),
+                entranceDelay: MapPinEntranceStyle.staggerDelay(for: entranceIndex),
                 accessibilityLabel: "Map search result, \(candidate.name)",
                 bounceRevision: candidate.id == selectedSearchCandidateID
                     ? activePinBounceRevision
@@ -2176,6 +2186,7 @@ struct MapScreen: View {
                 featuredViewportRefreshTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
+                placeProfilePreloadTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -2196,8 +2207,8 @@ struct MapScreen: View {
             \.wanderMapAppearance,
             store.isDarkMapEnabled ? WanderMapAppearance.dark : WanderMapAppearance.light
         )
-        .allowsHitTesting(!isPlaceProfileOverlayVisible)
-        .accessibilityHidden(isPlaceProfileOverlayVisible)
+        .allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)
+        .accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)
         .overlay {
             selectedPlaceProfileOverlay
         }
@@ -2221,7 +2232,13 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
+            placeProfilePreloadTask?.cancel()
+            placeProfilePreloadTask = nil
             isPlaceProfilePresented = false
+            isPlaceProfileMounted = false
+            placeProfilePresentationID = nil
+            placeProfileDismissalID = nil
+            placeProfileDismissalCompletion = nil
         }
         .walkthroughPresenterScrim(
             isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
@@ -3359,12 +3376,34 @@ struct MapScreen: View {
     }
 
     private func handleCompactCardReady(for identity: String) {
-        guard identity == compactSelectionIdentity,
-              compactCardReadyIdentity != identity
-        else { return }
+        guard identity == compactSelectionIdentity else { return }
 
-        compactCardReadyIdentity = identity
-        presentCompactCard()
+        if compactCardReadyIdentity != identity {
+            compactCardReadyIdentity = identity
+            presentCompactCard()
+        }
+        preloadSelectedPlaceProfile(for: identity)
+    }
+
+    private func preloadSelectedPlaceProfile(for identity: String) {
+        guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
+        placeProfilePreloadTask?.cancel()
+        placeProfilePreloadTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled,
+                  identity == compactSelectionIdentity,
+                  hasSelectedProfile,
+                  !isPlaceProfileMounted,
+                  !isPlaceProfilePresented
+            else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isPlaceProfileMounted = true
+            }
+            placeProfilePreloadTask = nil
+        }
     }
 
     private func presentCompactCard() {
@@ -3632,27 +3671,31 @@ struct MapScreen: View {
 
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
-        if isPlaceProfileOverlayVisible {
-            PlaceProfileVerticalContainer {
+        if isPlaceProfileMounted && hasSelectedProfile {
+            PlaceProfileVerticalContainer(
+                isPresented: isPlaceProfilePresented,
+                onTransitionCompleted: handlePlaceProfileTransitionCompleted
+            ) {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
                 .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
             }
             .ignoresSafeArea()
+            .allowsHitTesting(isPlaceProfilePresented)
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isModal)
+            .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 collapseSelectedPlaceProfile()
             }
-            .transition(.move(edge: .bottom))
             .zIndex(100)
         }
     }
 
-    private var isPlaceProfileOverlayVisible: Bool {
-        isPlaceProfilePresented && hasSelectedProfile
+    private var isPlaceProfileOverlayBlockingInteraction: Bool {
+        hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)
     }
 
     private func presentWalkthroughPlaceMemory() {
@@ -3709,9 +3752,8 @@ struct MapScreen: View {
         openSelectedPlaceProfile()
     }
 
-    private func closeWalkthroughPlaceDetail() {
+    private func clearSelectedPlaceProfile() {
         closeAttachedSaveFlow()
-        isPlaceProfilePresented = false
         guard walkthroughs.activeSurface == .placeDetail
                 || walkthroughs.requestedSurface == .map
                 || walkthroughs.requestedSurface == .feed
@@ -3820,12 +3862,35 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
+        placeProfilePreloadTask?.cancel()
+        placeProfilePreloadTask = nil
+        placeProfilePresentationID = nil
+        placeProfileDismissalID = nil
+        placeProfileDismissalCompletion = nil
         walkthroughs.perform(.mapMemory)
         if reduceMotion {
+            isPlaceProfileMounted = true
             isPlaceProfilePresented = true
+        } else if isPlaceProfileMounted {
+            setPlaceProfilePresentedWithoutSwiftUIAnimation(true)
         } else {
-            withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
-                isPlaceProfilePresented = true
+            let presentationID = UUID()
+            placeProfilePresentationID = presentationID
+
+            var mountTransaction = Transaction()
+            mountTransaction.disablesAnimations = true
+            withTransaction(mountTransaction) {
+                isPlaceProfileMounted = true
+            }
+
+            Task { @MainActor in
+                await Task.yield()
+                guard placeProfilePresentationID == presentationID,
+                      isPlaceProfileMounted,
+                      hasSelectedProfile
+                else { return }
+                placeProfilePresentationID = nil
+                setPlaceProfilePresentedWithoutSwiftUIAnimation(true)
             }
         }
     }
@@ -3835,17 +3900,40 @@ struct MapScreen: View {
     ) {
         guard isPlaceProfilePresented else { return }
 
+        let dismissalID = UUID()
+        placeProfileDismissalID = dismissalID
+        placeProfileDismissalCompletion = completion
+
         guard !reduceMotion else {
-            closeWalkthroughPlaceDetail()
-            completion?()
+            isPlaceProfilePresented = false
+            finishPlaceProfileDismissal(id: dismissalID)
             return
         }
 
-        withAnimation(PlaceProfileVerticalMotionStyle.dismissalAnimation) {
-            closeWalkthroughPlaceDetail()
-        } completion: {
-            completion?()
+        setPlaceProfilePresentedWithoutSwiftUIAnimation(false)
+    }
+
+    private func handlePlaceProfileTransitionCompleted(isPresented: Bool) {
+        guard !isPresented, let dismissalID = placeProfileDismissalID else { return }
+        finishPlaceProfileDismissal(id: dismissalID)
+    }
+
+    private func setPlaceProfilePresentedWithoutSwiftUIAnimation(_ isPresented: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isPlaceProfilePresented = isPresented
         }
+    }
+
+    private func finishPlaceProfileDismissal(id: UUID) {
+        guard placeProfileDismissalID == id, !isPlaceProfilePresented else { return }
+        let completion = placeProfileDismissalCompletion
+        placeProfilePresentationID = nil
+        placeProfileDismissalID = nil
+        placeProfileDismissalCompletion = nil
+        clearSelectedPlaceProfile()
+        completion?()
     }
 
     private func saveActionSnapshot(
@@ -6161,10 +6249,6 @@ private struct NativeMapView: UIViewRepresentable {
                 forAnnotationViewWithReuseIdentifier: reuseIdentifier
             )
         }
-        mapView.register(
-            NativeMapClusterAnnotationView.self,
-            forAnnotationViewWithReuseIdentifier: NativeMapClusterAnnotationView.reuseIdentifier
-        )
         context.coordinator.attachGestureObservers(to: mapView)
         context.coordinator.update(parent: self, mapView: mapView)
         return mapView
@@ -6254,14 +6338,6 @@ private struct NativeMapView: UIViewRepresentable {
             if annotation is MKUserLocation || annotation is MKMapFeatureAnnotation {
                 return nil
             }
-            if let cluster = annotation as? MKClusterAnnotation {
-                let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: NativeMapClusterAnnotationView.reuseIdentifier,
-                    for: cluster
-                ) as! NativeMapClusterAnnotationView
-                view.configure(memberCount: cluster.memberAnnotations.count)
-                return view
-            }
             guard let annotation = annotation as? NativeMapAnnotation else { return nil }
 
             let view = mapView.dequeueReusableAnnotationView(
@@ -6294,10 +6370,6 @@ private struct NativeMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
             if let feature = annotation as? MKMapFeatureAnnotation {
                 parent.onNativeFeatureSelection(feature)
-                return
-            }
-            if let cluster = annotation as? MKClusterAnnotation {
-                zoom(to: cluster, in: mapView)
                 return
             }
         }
@@ -6374,22 +6446,12 @@ private struct NativeMapView: UIViewRepresentable {
             }
 
             var addedAnnotations: [NativeMapAnnotation] = []
-            var replacedAnnotations: [NativeMapAnnotation] = []
             addedAnnotations.reserveCapacity(
                 max(0, renderedDescriptors.count - annotationsByID.count)
             )
             for descriptor in renderedDescriptors {
                 if let annotation = annotationsByID[descriptor.id] {
                     guard annotation.descriptor != descriptor else { continue }
-                    if NativeMapPinAnnotationView.reuseIdentifier(
-                        for: annotation.descriptor
-                    ) != NativeMapPinAnnotationView.reuseIdentifier(for: descriptor) {
-                        replacedAnnotations.append(annotation)
-                        let replacement = NativeMapAnnotation(descriptor: descriptor)
-                        annotationsByID[descriptor.id] = replacement
-                        addedAnnotations.append(replacement)
-                        continue
-                    }
                     annotation.update(from: descriptor)
                     if let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView {
                         configure(view, for: annotation)
@@ -6399,9 +6461,6 @@ private struct NativeMapView: UIViewRepresentable {
                     annotationsByID[descriptor.id] = annotation
                     addedAnnotations.append(annotation)
                 }
-            }
-            if !replacedAnnotations.isEmpty {
-                mapView.removeAnnotations(replacedAnnotations)
             }
             if !addedAnnotations.isEmpty {
                 mapView.addAnnotations(addedAnnotations)
@@ -6462,14 +6521,11 @@ private struct NativeMapView: UIViewRepresentable {
         private func refreshVisibleAnnotationAccessibility(in mapView: MKMapView) {
             let visible = visibleAnnotations(in: mapView)
             let nativeAnnotations = visible.compactMap { $0 as? NativeMapAnnotation }
-            let clusteredAnnotations = visible.compactMap { $0 as? MKClusterAnnotation }
-                .flatMap(\.memberAnnotations)
-                .compactMap { $0 as? NativeMapAnnotation }
             #if DEBUG
             let probeStart = ProcessInfo.processInfo.systemUptime
             defer {
                 MapPerformanceProbe.recordNativeAccessibilityRefresh(
-                    annotationCount: nativeAnnotations.count + clusteredAnnotations.count,
+                    annotationCount: nativeAnnotations.count,
                     duration: ProcessInfo.processInfo.systemUptime - probeStart
                 )
             }
@@ -6481,13 +6537,6 @@ private struct NativeMapView: UIViewRepresentable {
                         == annotation.stableID
                 else { continue }
                 pinView.isAccessibilityElement = true
-            }
-            for annotation in clusteredAnnotations {
-                guard let pinView = pinViewReferencesByID[annotation.stableID]?.value,
-                      (pinView.annotation as? NativeMapAnnotation)?.stableID
-                        == annotation.stableID
-                else { continue }
-                pinView.isAccessibilityElement = false
             }
         }
 
@@ -6516,11 +6565,6 @@ private struct NativeMapView: UIViewRepresentable {
                 parent.onAnnotationTap(annotation.kind)
                 return
             }
-            if cluster(at: point, in: mapView) != nil {
-                // MapKit's selection delegate owns cluster expansion. Avoid a
-                // second simultaneous camera request from the passive tap probe.
-                return
-            }
             parent.onEmptyMapTap()
         }
 
@@ -6530,9 +6574,7 @@ private struct NativeMapView: UIViewRepresentable {
                   let mapView = recognizer.view as? MKMapView
             else { return }
             let point = recognizer.location(in: mapView)
-            guard annotation(at: point, in: mapView) == nil,
-                  cluster(at: point, in: mapView) == nil
-            else { return }
+            guard annotation(at: point, in: mapView) == nil else { return }
 
             suppressNextCompletedTap = true
             let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
@@ -6545,28 +6587,27 @@ private struct NativeMapView: UIViewRepresentable {
             in mapView: MKMapView
         ) -> NativeMapAnnotation? {
             visibleAnnotations(in: mapView)
-                .compactMap { annotation -> (NativeMapAnnotation, CGFloat)? in
+                .compactMap { annotation -> (NativeMapAnnotation, Bool, CGFloat)? in
                     guard let annotation = annotation as? NativeMapAnnotation,
-                          let view = mapView.view(for: annotation),
-                          view.frame.insetBy(dx: -8, dy: -8).contains(point)
+                          let view = mapView.view(for: annotation)
                     else { return nil }
-                    let center = CGPoint(x: view.frame.midX, y: view.frame.midY)
-                    return (annotation, hypot(point.x - center.x, point.y - center.y))
+                    let hitFrame = view.convert(view.bounds, to: mapView)
+                        .insetBy(dx: -8, dy: -8)
+                    guard hitFrame.contains(point) else { return nil }
+                    let center = CGPoint(x: hitFrame.midX, y: hitFrame.midY)
+                    return (
+                        annotation,
+                        annotation.descriptor.isSelected,
+                        hypot(point.x - center.x, point.y - center.y)
+                    )
                 }
-                .min { $0.1 < $1.1 }?
+                .min { lhs, rhs in
+                    if lhs.1 != rhs.1 {
+                        return lhs.1 && !rhs.1
+                    }
+                    return lhs.2 < rhs.2
+                }?
                 .0
-        }
-
-        private func cluster(
-            at point: CGPoint,
-            in mapView: MKMapView
-        ) -> MKClusterAnnotation? {
-            visibleAnnotations(in: mapView)
-                .compactMap { $0 as? MKClusterAnnotation }
-                .first { cluster in
-                    guard let view = mapView.view(for: cluster) else { return false }
-                    return view.frame.insetBy(dx: -8, dy: -8).contains(point)
-                }
         }
 
         private func visibleAnnotations(in mapView: MKMapView) -> [MKAnnotation] {
@@ -6575,13 +6616,6 @@ private struct NativeMapView: UIViewRepresentable {
             }
         }
 
-        private func zoom(to cluster: MKClusterAnnotation, in mapView: MKMapView) {
-            guard let region = NativeMapClusterZoomPolicy.region(
-                fitting: cluster.memberAnnotations.map(\.coordinate)
-            ) else { return }
-            mapView.deselectAnnotation(cluster, animated: false)
-            mapView.setRegion(region, animated: !parent.reduceMotion)
-        }
     }
 }
 
@@ -6610,32 +6644,28 @@ private final class NativeMapAnnotation: NSObject, MKAnnotation {
 private final class NativeMapPinAnnotationView: MKAnnotationView {
     static let savedReuseIdentifier = "recme.map.pin.saved"
     static let searchReuseIdentifier = "recme.map.pin.search"
-    static let selectedReuseIdentifier = "recme.map.pin.selected"
     static let reuseIdentifiers = [
         savedReuseIdentifier,
-        searchReuseIdentifier,
-        selectedReuseIdentifier
+        searchReuseIdentifier
     ]
 
     static func reuseIdentifier(for descriptor: NativeMapAnnotationDescriptor) -> String {
-        if descriptor.isSelected {
-            return selectedReuseIdentifier
-        }
         return descriptor.isSearchResult ? searchReuseIdentifier : savedReuseIdentifier
     }
 
     var onAccessibilityActivate: (() -> Void)?
     private var renderSignature = ""
     private var bounceRevision: UInt64 = 0
+    private var presentedAnnotationID: String?
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        applyStablePlacement(reuseIdentifier: reuseIdentifier)
+        applyStablePlacement()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        applyStablePlacement(reuseIdentifier: reuseIdentifier)
+        applyStablePlacement()
     }
 
     override func prepareForReuse() {
@@ -6643,6 +6673,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         image = nil
         renderSignature = ""
         bounceRevision = 0
+        presentedAnnotationID = nil
         onAccessibilityActivate = nil
         isAccessibilityElement = false
         alpha = 1
@@ -6662,6 +6693,9 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         isDark: Bool,
         reduceMotion: Bool
     ) {
+        let shouldAnimateEntrance = presentedAnnotationID != descriptor.id
+            && descriptor.animatesEntrance
+        presentedAnnotationID = descriptor.id
         let nextSignature = "\(descriptor.renderSignature)|\(isDark ? "dark" : "light")"
         if renderSignature != nextSignature {
             image = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
@@ -6672,6 +6706,23 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         accessibilityLabel = descriptor.accessibilityLabel
         accessibilityIdentifier = descriptor.accessibilityIdentifier
         accessibilityTraits = .button
+        clusteringIdentifier = nil
+        displayPriority = descriptor.isSelected ? .required : .defaultHigh
+        zPriority = descriptor.isSelected ? .max : .defaultUnselected
+        selectedZPriority = .max
+
+        if shouldAnimateEntrance {
+            bounceRevision = descriptor.bounceRevision
+            animateEntrance(
+                toOpacity: descriptor.opacity,
+                delay: descriptor.entranceDelay,
+                reduceMotion: reduceMotion
+            )
+            return
+        }
+
+        alpha = descriptor.opacity
+        transform = .identity
 
         if descriptor.bounceRevision != bounceRevision {
             bounceRevision = descriptor.bounceRevision
@@ -6689,27 +6740,46 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         }
     }
 
-    private func applyStablePlacement(reuseIdentifier: String?) {
+    private func animateEntrance(
+        toOpacity opacity: CGFloat,
+        delay: TimeInterval,
+        reduceMotion: Bool
+    ) {
+        guard !reduceMotion else {
+            alpha = opacity
+            transform = .identity
+            return
+        }
+
+        alpha = 0
+        transform = CGAffineTransform(
+            translationX: 0,
+            y: MapPinEntranceStyle.hiddenVerticalOffset
+        ).scaledBy(
+            x: MapPinEntranceStyle.hiddenScale,
+            y: MapPinEntranceStyle.hiddenScale
+        )
+        UIView.animate(
+            withDuration: MapPinEntranceStyle.springDuration,
+            delay: delay,
+            usingSpringWithDamping: 0.64,
+            initialSpringVelocity: 0.36,
+            options: [.beginFromCurrentState, .allowUserInteraction]
+        ) {
+            self.alpha = opacity
+            self.transform = .identity
+        }
+    }
+
+    private func applyStablePlacement() {
         canShowCallout = false
         collisionMode = .circle
+        clusteringIdentifier = nil
         isAccessibilityElement = false
         accessibilityTraits = .button
         selectedZPriority = .max
-
-        switch reuseIdentifier {
-        case Self.selectedReuseIdentifier:
-            clusteringIdentifier = nil
-            displayPriority = .required
-            zPriority = .max
-        case Self.searchReuseIdentifier:
-            clusteringIdentifier = "recme.search"
-            displayPriority = .defaultHigh
-            zPriority = .defaultUnselected
-        default:
-            clusteringIdentifier = "recme.saved"
-            displayPriority = .defaultHigh
-            zPriority = .defaultUnselected
-        }
+        displayPriority = .defaultHigh
+        zPriority = .defaultUnselected
     }
 }
 
@@ -6718,36 +6788,6 @@ private final class WeakNativeMapPinAnnotationView {
 
     init(_ value: NativeMapPinAnnotationView) {
         self.value = value
-    }
-}
-
-private final class NativeMapClusterAnnotationView: MKMarkerAnnotationView {
-    static let reuseIdentifier = "recme.map.cluster"
-
-    override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        applyStablePlacement()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        applyStablePlacement()
-    }
-
-    func configure(memberCount: Int) {
-        glyphText = "\(memberCount)"
-        accessibilityLabel = "\(memberCount) places"
-        accessibilityIdentifier = "map.cluster.\(memberCount)"
-    }
-
-    private func applyStablePlacement() {
-        canShowCallout = false
-        clusteringIdentifier = nil
-        collisionMode = .circle
-        displayPriority = .defaultHigh
-        markerTintColor = UIColor(WanderTheme.terracotta.color)
-        isAccessibilityElement = true
-        accessibilityTraits = .button
     }
 }
 
@@ -7744,6 +7784,7 @@ enum MapMoreFilterMotionStyle {
 }
 
 enum MapPinEntranceStyle {
+    static let maximumAnimatedPinCount = 12
     static let fadeOutDuration: TimeInterval = 0.06
     static let springDuration: TimeInterval = 0.28
     static let staggerInterval: TimeInterval = 0.015
@@ -7758,6 +7799,10 @@ enum MapPinEntranceStyle {
 
     static func staggerDelay(for index: Int) -> TimeInterval {
         min(TimeInterval(max(0, index)) * staggerInterval, maximumStagger)
+    }
+
+    static func shouldAnimate(index: Int, totalCount: Int) -> Bool {
+        totalCount > 0 && index >= 0 && index < min(totalCount, maximumAnimatedPinCount)
     }
 }
 

@@ -1398,7 +1398,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("let keepsPresentedCardMounted = previous != nil"))
         XCTAssertFalse(mapScreen.contains("replacementFadeOutDuration"))
         XCTAssertTrue(mapScreen.contains("private func replayActivePinBounce()"))
-        XCTAssertTrue(mapScreen.contains("MapPinReselectionBounceModifier("))
+        XCTAssertTrue(mapScreen.contains("if descriptor.bounceRevision != bounceRevision"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressSession"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressPolicy.shouldOpen("))
+        XCTAssertFalse(placeProfile.contains("cardPressStartedAt"))
         XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
@@ -3776,30 +3779,69 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
-        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented && hasSelectedProfile"))
+        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains("if isPlaceProfileMounted && hasSelectedProfile {"))
+        XCTAssertTrue(mapScreen.contains("hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)"))
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
+        XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
-        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .bottom))"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.presentationAnimation"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.dismissalAnimation"))
+        XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
+        XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
+        XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
+        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
         XCTAssertTrue(mapScreen.contains("usesInteractiveHorizontalDismissal: true"))
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable"))
+        XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
+        XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
+        XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: true)"))
+        XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
+        XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.transform = targetTransform(isPresented: isPresented)"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.layer.shouldRasterize = isEnabled"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.removeFromSuperview()"))
+        XCTAssertTrue(placeProfile.contains("view.accessibilityElementsHidden = !isPresented"))
         XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
         XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
         XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
+    }
+
+    @MainActor
+    func testPlacePreviewCardPressSessionAcceptsTheInitialQuickTap() {
+        let session = PlaceProfilePreviewCardPressSession()
+
+        XCTAssertEqual(session.finish(at: 10), 0)
+        XCTAssertTrue(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: 0,
+                translation: 0
+            )
+        )
+
+        session.beginIfNeeded(at: 10)
+        XCTAssertEqual(session.finish(at: 10.8), 0.8, accuracy: 0.001)
+        XCTAssertFalse(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: 0.8,
+                translation: 0
+            )
+        )
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
