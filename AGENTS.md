@@ -431,7 +431,7 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 ## Testing Rules
 
 - Every milestone should land with matching tests.
-- Run the full `xcodebuild test` command above before committing implementation changes.
+- Run the full `scripts/run-ios-tests.sh` command above before committing implementation changes.
 - In Codex, sandboxed `xcodebuild test` commonly fails before exercising app code because
   CoreSimulator services, `~/Library/Logs/CoreSimulator`, or SwiftPM dependency fetching are
   blocked. When that happens, rerun the same `scripts/run-ios-tests.sh` command with escalated
