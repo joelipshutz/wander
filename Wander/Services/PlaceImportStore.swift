@@ -198,6 +198,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         source: PlaceImportSource,
         seed: PlaceImportSeed
     ) async throws -> PlaceImportResolution {
+        var sourceSeed = seed
         var recognition = SocialMediaRecognition(
             recognizedTexts: [],
             attemptedCount: 0,
@@ -340,6 +341,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 )
             }
             recognition = try await recognizeSocialMedia(in: metadata)
+            sourceSeed.sourceThumbnailURLString = (
+                metadata.mediaItems.compactMap(\.imageURL).first
+                    ?? metadata.thumbnailURL
+            )?.absoluteString
             let localMediaCount = metadata.mediaItems.isEmpty
                 ? (metadata.thumbnailURL == nil ? 0 : 1)
                 : metadata.mediaItems.count
@@ -358,7 +363,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return try await resolveSocialHints(
             hints,
             source: source,
-            seed: seed,
+            seed: sourceSeed,
             recognition: recognition,
             discoveredMediaCount: discoveredMediaCount,
             understandingPath: understandingPath,
@@ -949,7 +954,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
             sourceProviderPlaceID: candidate?.sourceProviderPlaceID,
-            socialCaptionHint: original.socialCaptionHint
+            socialCaptionHint: original.socialCaptionHint,
+            sourceThumbnailURLString: original.sourceThumbnailURLString
         )
     }
 
@@ -1211,6 +1217,7 @@ final class PlaceImportStore: ObservableObject {
                     sourceURLString: sourceURLString,
                     sourceLine: item.seed.sourceLine,
                     socialCaptionHint: item.seed.socialCaptionHint,
+                    sourceThumbnailURLString: item.seed.sourceThumbnailURLString,
                     socialUnderstandingRequestID: item.seed.socialUnderstandingRequestID
                 )
             }
@@ -1218,6 +1225,7 @@ final class PlaceImportStore: ObservableObject {
             upgraded.state = .queued
             upgraded.candidates = []
             upgraded.selectedCandidateID = nil
+            upgraded.selectedCandidateIDsRaw = nil
             upgraded.helpMessage = nil
             upgraded.duplicateUserPlaceID = nil
             upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
@@ -1469,7 +1477,61 @@ final class PlaceImportStore: ObservableObject {
         else { return }
         items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
+        items[index].selectedCandidateIDsRaw = [candidateID]
         items[index].state = .ready
+        items[index].helpMessage = nil
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
+    }
+
+    /// Gives every candidate-bearing source row a useful default while keeping
+    /// lower-confidence alternatives visible and independently selectable.
+    func prepareCandidateSelections(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        guard !ids.isEmpty else { return }
+        var changedBatchIDs = Set<String>()
+        for index in items.indices where ids.contains(items[index].batchID) {
+            guard !items[index].isSourceRetry,
+                  !items[index].candidates.isEmpty,
+                  ![.duplicate, .saved, .dismissed].contains(items[index].state),
+                  items[index].selectedCandidates.isEmpty
+            else { continue }
+            let primaryID = items[index].candidates[0].id
+            items[index].selectedCandidateID = primaryID
+            items[index].selectedCandidateIDsRaw = [primaryID]
+            items[index].state = .ready
+            items[index].isSelectedForImport = true
+            items[index].helpMessage = nil
+            items[index].updatedAt = .now
+            changedBatchIDs.insert(items[index].batchID)
+        }
+        for batchID in changedBatchIDs {
+            synchronizeBatch(batchID, persist: false)
+        }
+        if !changedBatchIDs.isEmpty { persist() }
+    }
+
+    /// Toggles one of at most five possible Apple Maps matches. Status and
+    /// optional details remain owned by the source row and therefore apply to
+    /// every selected match.
+    func toggleCandidateSelection(itemID: String, candidateID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].candidates.prefix(5).contains(where: { $0.id == candidateID }),
+              ![.duplicate, .saved, .dismissed].contains(items[index].state)
+        else { return }
+
+        var selectedIDs = items[index].selectedCandidateIDs
+        if let selectedIndex = selectedIDs.firstIndex(of: candidateID) {
+            selectedIDs.remove(at: selectedIndex)
+        } else {
+            selectedIDs.append(candidateID)
+        }
+        let candidateOrder = items[index].candidates.map(\.id)
+        selectedIDs = candidateOrder.filter(Set(selectedIDs).contains)
+        items[index].selectedCandidateIDsRaw = selectedIDs
+        items[index].selectedCandidateID = selectedIDs.first
+        items[index].state = .ready
+        items[index].isSelectedForImport = !selectedIDs.isEmpty
         items[index].helpMessage = nil
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
@@ -1586,6 +1648,7 @@ final class PlaceImportStore: ObservableObject {
         items[index].state = .queued
         items[index].candidates = []
         items[index].selectedCandidateID = nil
+        items[index].selectedCandidateIDsRaw = nil
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
@@ -1651,6 +1714,7 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
 
@@ -1711,11 +1775,13 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].pendingManualSearch = nil
         items[index].candidates = candidates
         items[index].selectedCandidateID = selectedCandidateID
+        items[index].selectedCandidateIDsRaw = [selectedCandidateID]
         items[index].state = .ready
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
@@ -1741,10 +1807,12 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil
+        items[index].selectedCandidateIDsRaw = nil
         items[index].state = .queued
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
@@ -1894,6 +1962,7 @@ final class PlaceImportStore: ObservableObject {
                 if items[index].state != .duplicate || items[index].duplicateUserPlaceID != existing.userPlaceID {
                     items[index].state = .duplicate
                     items[index].selectedCandidateID = candidate.id
+                    items[index].selectedCandidateIDsRaw = [candidate.id]
                     items[index].duplicateUserPlaceID = existing.userPlaceID
                     items[index].helpMessage = nil
                     items[index].updatedAt = .now
@@ -2167,6 +2236,7 @@ final class PlaceImportStore: ObservableObject {
             }
             items[index].candidates = candidates
             items[index].selectedCandidateID = selectedCandidateID
+            items[index].selectedCandidateIDsRaw = selectedCandidateID.map { [$0] }
             if selectedCandidateID != nil {
                 items[index].state = .ready
                 items[index].helpMessage = nil
@@ -2181,6 +2251,7 @@ final class PlaceImportStore: ObservableObject {
         case .needsHelp(let message):
             items[index].candidates = []
             items[index].selectedCandidateID = nil
+            items[index].selectedCandidateIDsRaw = nil
             items[index].state = .needsHelp
             items[index].helpMessage = message
         case .retrySocialUnderstanding(let requestID):
@@ -2188,6 +2259,7 @@ final class PlaceImportStore: ObservableObject {
             items[index].state = .queued
             items[index].candidates = []
             items[index].selectedCandidateID = nil
+            items[index].selectedCandidateIDsRaw = nil
             items[index].helpMessage = nil
         case .expanded(let seeds, let sourceName):
             let original = items[index]
@@ -2313,6 +2385,7 @@ final class PlaceImportStore: ObservableObject {
                 items[existingIndex].state = items[index].state
                 items[existingIndex].candidates = items[index].candidates
                 items[existingIndex].selectedCandidateID = items[index].selectedCandidateID
+                items[existingIndex].selectedCandidateIDsRaw = items[index].selectedCandidateIDsRaw
                 items[existingIndex].helpMessage = items[index].helpMessage
                 items[existingIndex].duplicateUserPlaceID = items[index].duplicateUserPlaceID
                 items[existingIndex].resolverVersion = items[index].resolverVersion

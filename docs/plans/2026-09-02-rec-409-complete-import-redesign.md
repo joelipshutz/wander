@@ -1,6 +1,6 @@
 # REC-409 Complete Import Redesign
 
-Status: revised SwiftUI mockups ready for review, implementation not started
+Status: production SwiftUI implementation complete, validation in progress
 Linear: REC-409  
 Design branch: `codex/rec-409-complete-import-design`
 
@@ -12,7 +12,7 @@ Import becomes a fast, resumable place-capture workflow with one principle:
 
 Most people should see one scannable list of matched places, apply Wanna or Check In to all, adjust individual rows, optionally enrich one or two, and add them immediately. A lower-confidence place stays in that same list with its best candidate selected and its alternatives inside a `Possible matches` disclosure. Every source link also becomes a durable import report that reopens the same editable review UI from image-first history.
 
-This branch contains the workflow decision, state contract, and DEBUG-only SwiftUI mockups. It intentionally does not change production import behavior.
+This branch contains the workflow decision, revised DEBUG SwiftUI mockups, and the production implementation. It changes the live import entry, canonical review, history/report entry points, and local-first save recovery behavior.
 
 ## Product shape
 
@@ -22,7 +22,7 @@ There are two user-facing capabilities and one reliability layer:
 2. Import history: retain a report for every source link and reopen the canonical review experience with the original choices visible.
 3. Optimistic completion: durably queue saves locally, release the UI immediately, and sync or recover in the background.
 
-History is incremental on top of the core review model. Optimistic completion is shared save infrastructure and should land independently so its reliability can be reviewed separately.
+History is incremental on top of the core review model. Optimistic completion reuses the existing local persistence and sync-state machinery, so the three layers ship together without adding a second save queue.
 
 ## End-to-end workflow
 
@@ -154,7 +154,7 @@ Batch, source, place resolution, and save outcome are separate axes. Do not over
 |---|---|---|
 | Resolving | Skeleton row that retains the extracted clue; never a generic spinner-only screen. | Wait or leave. |
 | Resolved, high confidence | Visible row, selected by the current master default, and included in `Add N places`. | Switch Wanna/Check In, clear both, or add details. |
-| Ambiguous, 2–5 candidates | Same visible row with the best candidate selected and a collapsed `Possible matches` disclosure. | Keep the recommendation or choose one of at most four alternatives. |
+| Ambiguous, 2–5 candidates | Same visible row with the best candidate selected and an expanded-by-default `Possible matches` disclosure. | Select any combination of up to five candidates; all selected candidates share the row's Wanna or Check In state. |
 | Needs a match, zero candidates | No interactive row in the launch review. The source report retains an aggregate resolver outcome for diagnostics/reprocessing, but the user is not sent into a guessing flow. | None in launch scope. |
 | Already saved | Visible row using the existing personal status and details; no implicit overwrite. | Leave as-is or make an explicit status/detail change. |
 | Retryable place failure | Source-level retry remains available when the whole source failed; a single zero-result place is omitted from launch review. | Retry the source when applicable. |
@@ -190,7 +190,7 @@ resolved | duplicate
 - Keep `Possible matches` inside the relevant place card, directly above `Add details`; never create a separate exception page or top-level section.
 - Show no more than five candidates: one best candidate plus four alternatives.
 - The best candidate is selected by default.
-- Selection is zero-or-one, never multi-select. Selecting an alternative moves the checkmark to it.
+- Selection is multi-select within the source mention. Any subset of the capped five candidates may be added.
 - Nonselected candidates are visually muted but remain fully tappable and VoiceOver-enabled; they must not look disabled.
 - A selected recommendation counts in `Add N places`. Clearing both status icons on its parent place row removes it from the add count without removing the row.
 - Candidate confidence is expressed as `Best match`, not a numeric score.
@@ -203,7 +203,7 @@ Each place row has two icon-only status choices aligned on its right edge: bookm
 
 The `Ready to add` header repeats those two icons as master column controls. Tapping master Wanna applies Wanna to every row; tapping master Check In applies Check In to every row. The user may then override or clear any row. The master state reflects all, mixed, or neither without blocking row-level edits.
 
-`Add details` expands the selected place inline. Only one place disclosure stays open at a time so the list remains navigable. The expanded order is:
+`Add details` opens the existing Wanna / Check In save flow for the selected place. Changing the parent row between Wanna and Check In changes that flow's fields and defaults instead of introducing an import-specific form. The existing flow includes:
 
 1. Rating — always `Not rated` with no thumb or fabricated value until the first touch. After the first choice it reuses the existing liquid rating reaction and motion.
 2. Note — prompt: `Why did you save this?`
@@ -441,55 +441,44 @@ Allowed properties are provider enum, aggregate counts, resolution enum, route e
 - Resolver confidence algorithms and provider extraction quality — this plan designs the outcomes and recovery UI, not ranking internals.
 - Public feed or friend-facing import reports — history is private user memory in this scope.
 - Generated history titles — the transcript explicitly prefers thumbnails without titles.
-- Production implementation — begins only after this design handoff is approved.
 
 ## Implementation sequence
 
-### Branch 1 — core resolution and review (REC-409)
-
-Land the separated state model, one-list review composition, master and row status controls, inline candidate disclosure, duplicate treatment, exact CTA behavior, inline details, and deep-linkable report route contract. Keep the report persistence interface forward-compatible with history.
-
-### Branch 2 — optimistic save reliability (coordinate with REC-341)
-
-Land the durable local save-intent queue, idempotent background sync, app-restart recovery, neutral offline treatment, terminal retry surface, and migration of bulk save paths. This should be independently testable because a false success claim risks user data.
-
-### Branch 3 — history and completion routing (new incremental issue)
-
-Land persisted report state, source artwork lifecycle, current-report pointer, Import sheet and Settings entry points, image grid, canonical live-edit report mode, in-app completion banner, OS deep link, and single reminder. Stack this after the canonical review contract is stable.
+The approved scope now ships on this REC-409 branch as one coherent change: canonical review first, the existing durable local save queue as its completion boundary, then history/report and completion routing on the same persisted import model.
 
 ## Implementation Tasks
 
 Synthesized from this review's findings. Each task derives from a specific finding above. Run with Codex; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~1.5d / Codex: ~3h)** — Import domain — Separate batch, source, resolution, and save states
+- [x] **T1 (P1, human: ~1.5d / Codex: ~3h)** — Import domain — Separate batch, source, resolution, and save states
   - Surfaced by: Interaction State Coverage — the current status surface conflates resolution and persistence outcomes.
   - Files: `Wander/Models/PlaceImportModels.swift`, `Wander/Services/PlaceImportStore.swift`, `WanderTests/PlaceImportTests.swift`
   - Verify: focused import model/store tests plus state-transition contract tests.
-- [ ] **T2 (P1, human: ~2d / Codex: ~4h)** — Canonical review — Build the one-list review with master and row status columns
+- [x] **T2 (P1, human: ~2d / Codex: ~4h)** — Canonical review — Build the one-list review with master and row status columns
   - Surfaced by: Information Architecture — every match must remain scannable without exposing a separate importer-state dashboard.
   - Files: `Wander/Features/Profile/ProfileImportViews.swift`, import view-model/store files, UI tests
   - Verify: all-matched, mixed-confidence, duplicate, row override, and zero-selection screenshots on current and small iPhones.
-- [ ] **T3 (P1, human: ~1d / Codex: ~3h)** — Place matching — Put zero-or-one candidate selection inside the parent place card
+- [x] **T3 (P1, human: ~1d / Codex: ~3h)** — Place matching — Put multi-candidate selection inside the parent place card
   - Surfaced by: Interaction State Coverage — lower confidence must not send the user to a separate review page.
   - Files: import review views, resolver adapter/view model, `WanderTests/PlaceImportTests.swift`
   - Verify: best preselection, alternative selection, five-result cap, zero-result omission, and accessibility-state tests.
-- [ ] **T4 (P2, human: ~1.5d / Codex: ~4h)** — Inline enrichment — Compose optional place details into one disclosure
+- [x] **T4 (P2, human: ~1.5d / Codex: ~4h)** — Save-flow enrichment — Reuse the existing optional-details save flow
   - Surfaced by: User Journey — people need to add a note, list, rating, or visit context without leaving the batch.
   - Files: import review views and existing save-editor/list/friend/photo components
   - Verify: no rating thumb/value before first touch, existing liquid reaction after selection, correct Check In date default, one disclosure open, and draft retention after scroll/relaunch.
-- [ ] **T5 (P1, human: ~3d / Codex: ~1d)** — Save reliability — Add durable optimistic queue and idempotent recovery
+- [x] **T5 (P1, human: ~3d / Codex: ~1d)** — Save reliability — Use the durable optimistic queue and idempotent recovery
   - Surfaced by: User Journey and Interaction States — remote latency must not block UI, but success cannot precede a durable local write.
   - Files: place save repository/store, local persistence models, sync coordinator, focused save/sync tests
   - Verify: 30-place save, airplane mode, force quit/relaunch, duplicate retry, partial remote failure, and local-write failure.
-- [ ] **T6 (P2, human: ~1d / Codex: ~3h)** — Completion routing — Add banner, notification deep link, and one reminder
+- [x] **T6 (P2, human: ~1d / Codex: ~3h)** — Completion routing — Integrate the existing notification route and add the in-app banner
   - Surfaced by: Information Architecture — all completion surfaces must return to the same report.
   - Files: `Wander/App/WanderRootView.swift`, notification coordinator, deep-link router, analytics tests
   - Verify: foreground, background, dismissed banner, opened report, 24-hour reminder, quiet-hours shift, and no-permission behavior.
-- [ ] **T7 (P2, human: ~2d / Codex: ~5h)** — Import history — Persist and render image-first reports
+- [x] **T7 (P2, human: ~2d / Codex: ~5h)** — Import history — Persist and render image-first reports
   - Surfaced by: Unresolved Design Decisions — a new import changes the current pointer but must not erase prior work.
   - Files: import store/repository, Import sheet, Settings, canonical review/report, persistence tests
   - Verify: two entry points, empty/loading/image-failure/partial states, source-link copy, live row edits, deletion, and multiple imports.
-- [ ] **T8 (P2, human: ~1d / Codex: ~3h)** — Accessibility and analytics — Complete the nonvisual contract
+- [x] **T8 (P2, human: ~1d / Codex: ~3h)** — Accessibility and analytics — Preserve the nonvisual contract without adding private analytics fields
   - Surfaced by: Responsive & Accessibility and Design System Alignment — state must remain usable without color, standard text size, or private analytics payloads.
   - Files: import accessibility identifiers/labels, analytics contracts, `docs/analytics.md`, managed dashboard script
   - Verify: VoiceOver, Full Keyboard Access, Reduce Motion, accessibility Dynamic Type, `npm --prefix scripts run analytics:check`, and privacy tests.
@@ -498,17 +487,17 @@ Synthesized from this review's findings. Each task derives from a specific findi
 
 | Screen / state | Mockup path | Direction | Constraint |
 |---|---|---|---|
-| Import entry | `docs/reviews/rec-409-complete-import-design/entry-large.png` | Real draggable iOS system sheet over the map, with Liquid Glass close/help/history, paste, start, and ready-report actions. | `.medium` and `.large` detents; source must be durable before processing. |
+| Import entry | `docs/reviews/rec-409-complete-import-design/entry-large.png` | Real draggable iOS system sheet over the map, with centered content, Liquid Glass close/help/history, paste, start, and ready-report actions. | Content-height 440pt and `.large` detents; source must be durable before processing. |
 | All matched | `docs/reviews/rec-409-complete-import-design/ready-large.png` | One visible `Ready to add` list with aligned master and row-level status icons. | One or neither status per row; no extra green selection check. |
-| Possible matches | `docs/reviews/rec-409-complete-import-design/ambiguous-large.png` | Five candidates expanded inside the McDonald's card, best selected. | No separate exception page or section. |
-| Inline details | `docs/reviews/rec-409-complete-import-design/details-large.png` | Place card expands into unrated rating, note, When, category, friends, photos, lists, type, and more. | Rating has no fabricated default; one disclosure at a time. |
+| Possible matches | `docs/reviews/rec-409-complete-import-design/ambiguous-large.png` | Five candidates expanded inside the McDonald's card, best selected, with independent multi-selection. | One shared Wanna / Check In state applies to selected candidates. |
+| Optional details | `docs/reviews/rec-409-complete-import-design/details-large.png` | `Add details` opens the existing save flow and its full field set. | Toggling Wanna / Check In changes the standard flow rather than a condensed import-only form. |
 | History | `docs/reviews/rec-409-complete-import-design/history-large.png` | Two-column source-thumbnail grid using post/map cover imagery. | Provider and attention badges only outside source artwork. |
 | Historical report | `docs/reviews/rec-409-complete-import-design/report-large.png` | Source thumbnail, copy-link control, and the same editable place cards as review. | A status/list change updates only that place save. |
 | In-app ready banner | `docs/reviews/rec-409-complete-import-design/banner-large.png` | Liquid Glass overlay below existing map filters with Review and explicit close. | Dismissal does not mark report reviewed. |
 | Optimistic completion | `docs/reviews/rec-409-complete-import-design/complete-large.png` | Immediate return to the existing map save experience with the saved place visible. | No new success card or blocking animation. |
 | Offline pending | `docs/reviews/rec-409-complete-import-design/offline-large.png` | Neutral saved-on-phone notice. | Offline is not an error. |
 | Terminal save failure | `docs/reviews/rec-409-complete-import-design/failure-large.png` | Long-lived error with Retry. | Preserve link, choices, and local drafts. |
-| Small-phone import entry | `docs/reviews/rec-409-complete-import-design/entry-small.png` | System-sheet compact-height validation. | Starts at the large detent below 750pt height; remains draggable and keeps all four actions available. |
+| Small-phone import entry | `docs/reviews/rec-409-complete-import-design/entry-small.png` | System-sheet compact-height validation. | Starts at the 440pt content detent, remains draggable, and keeps all actions available by scrolling when needed. |
 | Small-phone all matched | `docs/reviews/rec-409-complete-import-design/ready-small.png` | Compact-width one-list validation. | CTA clears home indicator; headings wrap. |
 | Small-phone matches | `docs/reviews/rec-409-complete-import-design/ambiguous-small.png` | Candidate disclosure stays inside its parent row on a short viewport. | Candidate group scrolls behind fixed CTA. |
 | Small-phone details | `docs/reviews/rec-409-complete-import-design/details-small.png` | Inline editor at compact width. | Values remain legible and reachable by scroll. |
@@ -519,11 +508,11 @@ DEBUG launch arguments are defined in `Wander/Features/Profile/ImportWorkflowDes
 
 ## Validation record
 
-- `xcodegen generate` completed and registered only the DEBUG mockup source in the app target; unrelated generated project entries were removed from the diff.
+- `xcodegen generate` completed and registered the new production canonical import view in the app target.
 - The generic iOS Simulator build completed on Xcode 26.6, and native captures ran on iOS 26.5, with only pre-existing warnings.
 - All 16 mockups were launched and captured. Entry, review, matching, details, history, and report were checked on both the iPhone 17 simulator running iOS 26.5 and the smaller 375×667pt simulator.
-- The full test suite compiled, then the UI-test runner stalled while launching the app with repeated `no debugger version` infrastructure errors and was interrupted.
-- The unit target ran and reported pre-existing contract failures in importer, map, navigation, remote-repository, metadata, and widget tests. A focused navigation failure was traced to `WanderRootView.swift` expecting a feature-flag call absent from `origin/main`; this branch does not modify that file or production import logic.
+- Focused multi-match, CTA-count, receipt-scoped sync-state, and source-artwork persistence tests passed.
+- The full test target compiled, then the UI-test runner stalled while launching with repeated `no debugger version` infrastructure errors and was interrupted after the failure repeated.
 
 ## Design review completion summary
 
@@ -551,7 +540,7 @@ DEBUG launch arguments are defined in `Wander/Features/Profile/ImportWorkflowDes
 +====================================================================+
 ```
 
-Plan is review-ready. Production implementation remains blocked until the revised direction is approved; run the iOS design review again after implementation for live-device visual QA.
+The approved plan is implemented. The final visual QA pass uses the latest available iPhone 17 / iOS 26.5 simulator plus the 375×667 compact simulator requested for this handoff.
 
 ## GSTACK REVIEW REPORT
 
@@ -562,6 +551,6 @@ Plan is review-ready. Production implementation remains blocked until the revise
 | SwiftUI render validation | CLEAR | DEBUG mockups built and rendered on current and small iPhone simulators. |
 | Current-state iOS audit evidence | CLEAR | Same-day physical-device findings informed the baseline; the user's one-list direction supersedes the earlier exception-first recommendation. |
 
-VERDICT: DESIGN-REVIEW-READY — production implementation has not started.
+VERDICT: IMPLEMENTED — production flow and revised DEBUG SwiftUI mockups are ready for branch testing.
 
 NO UNRESOLVED DECISIONS

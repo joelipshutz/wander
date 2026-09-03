@@ -332,6 +332,7 @@ struct WanderRootView: View {
     @State private var surfacedImportCompletionBatchIDs: Set<String> = []
     @State private var activeImportCompletionNotice: PlaceImportCompletionNotice?
     @State private var importCompletionBannerTask: Task<Void, Never>?
+    @State private var dismissedImportSaveSyncNoticeIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
@@ -517,6 +518,7 @@ struct WanderRootView: View {
             }
         }
         .environmentObject(store)
+        .environmentObject(importStore)
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
@@ -569,6 +571,22 @@ struct WanderRootView: View {
                         )
                     }
 
+                    if let notice = activeImportSaveSyncNotice {
+                        PlaceImportSaveSyncBanner(
+                            notice: notice,
+                            isOffline: isImportSyncOffline,
+                            retryAction: retryImportedPlaceSaves,
+                            dismissAction: {
+                                dismissedImportSaveSyncNoticeIDs.insert(notice.id)
+                            }
+                        )
+                        .transition(
+                            accessibilityReduceMotion
+                                ? .opacity
+                                : .move(edge: .top).combined(with: .opacity)
+                        )
+                    }
+
                     if let invitation = sharedVisitBannerInvitation {
                         SharedVisitNotificationBanner(invitation: invitation) {
                             openSharedVisitFromBanner(invitation)
@@ -581,7 +599,7 @@ struct WanderRootView: View {
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.top, proxy.safeAreaInsets.top + WanderTheme.spacing2)
+                .padding(.top, proxy.safeAreaInsets.top + 64)
                 .zIndex(10)
             }
         }
@@ -607,23 +625,50 @@ struct WanderRootView: View {
         Label(tab.title, systemImage: tab.systemImage)
     }
 
+    private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
+        let syncStates = store.currentUserVisiblePlaces.reduce(into: [String: SyncState]()) { result, visible in
+            result[visible.userPlace.id] = visible.userPlace.syncState
+        }
+        guard let notice = PlaceImportSaveSyncNotice.resolved(
+            batches: importStore.batches,
+            syncStatesByUserPlaceID: syncStates
+        ), !dismissedImportSaveSyncNoticeIDs.contains(notice.id)
+        else { return nil }
+        return notice
+    }
+
+    private func retryImportedPlaceSaves() {
+        guard auth.isSignedIn else {
+            auth.presentGate(for: .syncPlace)
+            return
+        }
+        Task { @MainActor in
+            _ = await store.retryFailedOwnPlaceSyncs(backend: backend)
+            _ = await store.syncPendingPlaceLists(backend: backend)
+        }
+    }
+
+    private var isImportSyncOffline: Bool {
+        if case .offline = auth.state {
+            return true
+        }
+        return false
+    }
+
     private var presentedRoot: some View {
         tabRoot
-        .overlay {
-            if isPresentingImportHub {
-                PlaceImportHubOverlay(
+        .sheet(isPresented: $isPresentingImportHub) {
+            NavigationStack {
+                PlaceImportHubScreen(
                     importStore: importStore,
                     completionAction: beginInteractivePlaceImport,
                     inboxAction: openImportInboxFromHub,
                     cancelAction: dismissImportHub
                 )
-                .transition(
-                    accessibilityReduceMotion
-                        ? .opacity
-                        : .move(edge: .bottom).combined(with: .opacity)
-                )
-                .zIndex(200)
             }
+            .presentationDetents([.height(AddSheetLayout.importEntryHeight), .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .walkthroughPresenterScrim(
             isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
@@ -693,6 +738,7 @@ struct WanderRootView: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                         .environmentObject(pushNotifications)
+                        .environmentObject(importStore)
                 }
             }
         }

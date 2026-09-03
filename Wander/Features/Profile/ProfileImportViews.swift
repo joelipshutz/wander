@@ -94,7 +94,14 @@ struct PlaceImportHubScreen: View {
     var body: some View {
         ScrollView {
             VStack(spacing: WanderTheme.spacing3) {
+                Text("Import places")
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+
                 PlaceImportSourceIconStack(iconSize: 46)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 VStack(spacing: WanderTheme.spacing1) {
                     Text("Bring your places with you")
@@ -188,12 +195,13 @@ struct PlaceImportHubScreen: View {
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing2)
-            .padding(.bottom, WanderTheme.spacing6)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing4)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
-        .navigationTitle("Import places")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .alert("Import could not start", isPresented: errorBinding) {
@@ -203,20 +211,28 @@ struct PlaceImportHubScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
+                Button {
                     if let cancelAction {
                         cancelAction()
                     } else {
                         dismiss()
                     }
+                } label: {
+                    Image(systemName: "xmark")
                 }
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .accessibilityLabel("Close import")
             }
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: inboxAction) {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .accessibilityLabel("Import history")
+
                 Button {
                     openURL(ImportHelpDestination.url)
                 } label: {
-                    Image(systemName: "questionmark.circle")
+                    Image(systemName: "questionmark")
                 }
                 .accessibilityLabel("Import Help")
                 .accessibilityHint("Shows where to find links in each supported app")

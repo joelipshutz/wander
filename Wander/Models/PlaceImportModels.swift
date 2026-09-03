@@ -76,16 +76,17 @@ struct PlaceImportReviewPlan: Equatable {
         totalCount = placeItems.count
         selectedCount = selectedItems.count
         processingCount = activeItems.filter { [.queued, .resolving].contains($0.state) }.count
-        readyCount = placeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }.count
+        readyCount = placeItems.filter { $0.state == .ready && !$0.selectedCandidates.isEmpty }.count
         duplicateCount = placeItems.filter {
             $0.state == .duplicate && $0.duplicateUserPlaceID != nil
         }.count
         needsHelpCount = placeItems.filter {
             [.ambiguous, .needsHelp, .failed].contains($0.state)
         }.count
-        selectedReadyCount = selectedItems.filter {
-            $0.state == .ready && $0.selectedCandidate != nil
-        }.count
+        selectedReadyCount = selectedItems.reduce(into: 0) { count, item in
+            guard item.state == .ready else { return }
+            count += item.selectedCandidates.count
+        }
         selectedDuplicateCount = selectedItems.filter {
             $0.state == .duplicate && $0.duplicateUserPlaceID != nil
         }.count
@@ -126,7 +127,7 @@ struct PlaceImportReviewPlan: Equatable {
 
     var primaryActionTitle: String? {
         guard processingCount == 0, committableCount > 0 else { return nil }
-        if surface == .quickAdd {
+        if surface == .quickAdd, committableCount == 1 {
             return quickAddStatus == .been ? "Add as Been" : "Add as Wanna"
         }
         if surface == .duplicate {
@@ -245,6 +246,65 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
             sourceRetryCount: sourceRetryCount,
             sourceName: sourceName
         )
+    }
+}
+
+enum PlaceImportSaveSyncNoticeKind: Equatable {
+    case pending
+    case failed
+}
+
+/// A receipt-scoped view of the durable save queue. This intentionally keys
+/// off the user-place IDs punched locally during import, so retry can never
+/// re-run extraction or replace a newer import.
+struct PlaceImportSaveSyncNotice: Equatable, Identifiable {
+    let receiptID: String
+    let userPlaceIDs: [String]
+    let kind: PlaceImportSaveSyncNoticeKind
+
+    var id: String { "\(receiptID)|\(kind == .failed ? "failed" : "pending")" }
+    var count: Int { userPlaceIDs.count }
+
+    static func resolved(
+        batches: [PlaceImportBatch],
+        syncStatesByUserPlaceID: [String: SyncState],
+        excludingReceiptIDs: Set<String> = []
+    ) -> PlaceImportSaveSyncNotice? {
+        let receipts = batches
+            .compactMap(\.receipt)
+            .filter { !excludingReceiptIDs.contains($0.id) }
+            .sorted { $0.createdAt > $1.createdAt }
+
+        for receipt in receipts {
+            let ids = Array(Set(receipt.entries.compactMap(\.userPlaceID))).sorted()
+            let failed = ids.filter {
+                guard let state = syncStatesByUserPlaceID[$0] else { return false }
+                return state == .failed || state == .serverDenied
+            }
+            if !failed.isEmpty {
+                return PlaceImportSaveSyncNotice(
+                    receiptID: receipt.id,
+                    userPlaceIDs: failed,
+                    kind: .failed
+                )
+            }
+
+            let pending = ids.filter {
+                guard let state = syncStatesByUserPlaceID[$0] else { return false }
+                return state == .localOnly
+                    || state == .pendingCreate
+                    || state == .pendingUpdate
+                    || state == .pendingDelete
+            }
+            if !pending.isEmpty {
+                return PlaceImportSaveSyncNotice(
+                    receiptID: receipt.id,
+                    userPlaceIDs: pending,
+                    kind: .pending
+                )
+            }
+        }
+        return nil
     }
 }
 
@@ -394,6 +454,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
     let socialCaptionHint: String?
+    var sourceThumbnailURLString: String?
     var socialUnderstandingRequestID: String?
 
     init(
@@ -408,6 +469,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         sourceProvider: String? = nil,
         sourceProviderPlaceID: String? = nil,
         socialCaptionHint: String? = nil,
+        sourceThumbnailURLString: String? = nil,
         socialUnderstandingRequestID: String? = nil
     ) {
         self.id = id
@@ -421,6 +483,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.socialCaptionHint = socialCaptionHint
+        self.sourceThumbnailURLString = sourceThumbnailURLString
         self.socialUnderstandingRequestID = socialUnderstandingRequestID
     }
 
@@ -500,6 +563,9 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var state: PlaceImportItemState
     var candidates: [PlaceCandidate]
     var selectedCandidateID: String?
+    /// Ordered candidate selections for a source place. Optional keeps import
+    /// snapshots written before multi-match selection backward compatible.
+    var selectedCandidateIDsRaw: [String]?
     var helpMessage: String?
     var savedUserPlaceID: String?
     var duplicateUserPlaceID: String?
@@ -522,6 +588,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         state: PlaceImportItemState = .queued,
         candidates: [PlaceCandidate] = [],
         selectedCandidateID: String? = nil,
+        selectedCandidateIDs: [String]? = nil,
         helpMessage: String? = nil,
         savedUserPlaceID: String? = nil,
         duplicateUserPlaceID: String? = nil,
@@ -543,6 +610,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.state = state
         self.candidates = candidates
         self.selectedCandidateID = selectedCandidateID
+        selectedCandidateIDsRaw = selectedCandidateIDs
         self.helpMessage = helpMessage
         self.savedUserPlaceID = savedUserPlaceID
         self.duplicateUserPlaceID = duplicateUserPlaceID
@@ -579,11 +647,30 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     }
 
     var selectedCandidate: PlaceCandidate? {
-        if let selectedCandidateID,
-           let selected = candidates.first(where: { $0.id == selectedCandidateID }) {
-            return selected
+        selectedCandidates.first
+    }
+
+    /// Every Apple Maps result the person chose for this one source mention.
+    /// A single-selection snapshot naturally upgrades to a one-element array.
+    var selectedCandidates: [PlaceCandidate] {
+        let selectedIDs: [String]
+        if let selectedCandidateIDsRaw, !selectedCandidateIDsRaw.isEmpty {
+            selectedIDs = selectedCandidateIDsRaw
+        } else if let selectedCandidateID {
+            selectedIDs = [selectedCandidateID]
+        } else if state == .ready, candidates.count == 1 {
+            selectedIDs = [candidates[0].id]
+        } else {
+            selectedIDs = []
         }
-        return state == .ready && candidates.count == 1 ? candidates[0] : nil
+        let order = Dictionary(uniqueKeysWithValues: selectedIDs.enumerated().map { ($1, $0) })
+        return candidates
+            .filter { order[$0.id] != nil }
+            .sorted { (order[$0.id] ?? 0) < (order[$1.id] ?? 0) }
+    }
+
+    var selectedCandidateIDs: [String] {
+        selectedCandidates.map(\.id)
     }
 
     var stagedStatus: PlaceStatus {

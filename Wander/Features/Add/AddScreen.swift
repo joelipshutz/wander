@@ -111,7 +111,9 @@ enum AddCameraPreviewLayout {
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
     static let pendingReviewRestingHeight: CGFloat = 570
-    static let importEntryHeight: CGFloat = 410
+    /// Content-height resting detent for the import entry. The native sheet can
+    /// still be dragged to full height for keyboard or accessibility needs.
+    static let importEntryHeight: CGFloat = 440
     static let importCompletionHeight: CGFloat = 710
 
     static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
@@ -435,7 +437,7 @@ struct AddScreen: View {
                 }
             }
             .navigationDestination(isPresented: $showsImportReview) {
-                PlaceImportAdaptiveReviewScreen(
+                PlaceImportCanonicalReviewScreen(
                     importStore: importStore,
                     batchIDs: importReviewBatchIDs,
                     onDone: onClose
@@ -445,7 +447,7 @@ struct AddScreen: View {
                 .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
-                PlaceImportInboxScreen(importStore: importStore)
+                PlaceImportHistoryScreen(importStore: importStore)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)

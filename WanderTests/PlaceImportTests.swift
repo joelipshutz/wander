@@ -1085,6 +1085,195 @@ final class GoogleMapsSharedListImporterTests: XCTestCase {
     }
 }
 
+@MainActor
+final class PlaceImportMultiMatchSelectionTests: XCTestCase {
+    func testPossibleMatchesDefaultToBestAndRemainMultiSelectableAcrossReload() throws {
+        let first = placeImportCandidate(name: "Jade Rabbit Downtown")
+        let second = placeImportCandidate(name: "Jade Rabbit Eastside")
+        let third = placeImportCandidate(name: "Jade Rabbit North")
+        let batch = PlaceImportBatch(
+            id: "multi-match-batch",
+            source: .instagram,
+            sourceName: "Instagram",
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "jade-rabbit-source",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Jade Rabbit",
+                nameHint: "Jade Rabbit",
+                areaHint: "Portland",
+                sourceURLString: "https://www.instagram.com/p/example/",
+                sourceLine: 0
+            ),
+            state: .ambiguous,
+            candidates: [first, second, third]
+        )
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+        )
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+
+        store?.prepareCandidateSelections(batchIDs: [batch.id])
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [first.id])
+        XCTAssertEqual(store?.item(id: item.id)?.state, .ready)
+
+        store?.toggleCandidateSelection(itemID: item.id, candidateID: second.id)
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [first.id, second.id])
+
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [first.id, second.id])
+
+        store?.toggleCandidateSelection(itemID: item.id, candidateID: first.id)
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [second.id])
+        XCTAssertEqual(store?.item(id: item.id)?.stagedStatus, .wannaGo)
+
+        store?.setStagedStatus(.been, itemID: item.id)
+        XCTAssertEqual(store?.item(id: item.id)?.stagedStatus, .been)
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [second.id])
+    }
+
+    func testReviewPlanCountsConcreteCandidateSelectionsInCTA() {
+        let first = placeImportCandidate(name: "Jade Rabbit Downtown")
+        let second = placeImportCandidate(name: "Jade Rabbit Eastside")
+        let item = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Jade Rabbit",
+                nameHint: "Jade Rabbit",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [first, second],
+            selectedCandidateID: first.id,
+            selectedCandidateIDs: [first.id, second.id]
+        )
+
+        let review = PlaceImportReviewPlan(items: [item])
+
+        XCTAssertEqual(review.committableCount, 2)
+        XCTAssertEqual(review.primaryActionTitle, "Add 2 places")
+    }
+}
+
+final class PlaceImportSaveSyncNoticeTests: XCTestCase {
+    func testSocialSourceThumbnailSurvivesPersistenceRoundTrip() throws {
+        let seed = PlaceImportSeed(
+            rawText: "https://www.instagram.com/p/example/",
+            nameHint: "Bar Chelou",
+            areaHint: "Pasadena",
+            sourceURLString: "https://www.instagram.com/p/example/",
+            sourceLine: 0,
+            sourceThumbnailURLString: "https://cdn.example.com/post.jpg"
+        )
+
+        let data = try JSONEncoder().encode(seed)
+        let restored = try JSONDecoder().decode(PlaceImportSeed.self, from: data)
+
+        XCTAssertEqual(restored.sourceThumbnailURLString, "https://cdn.example.com/post.jpg")
+    }
+
+    func testNoticeIsScopedToReceiptPlaceIDsAndPrefersFailure() {
+        let receipt = PlaceImportReceipt(
+            id: "receipt",
+            batchID: "batch",
+            sourceName: nil,
+            entries: [
+                PlaceImportReceiptEntry(
+                    itemID: "one",
+                    displayName: "One",
+                    displayArea: nil,
+                    status: .wannaGo,
+                    outcome: .added,
+                    userPlaceID: "save-one"
+                ),
+                PlaceImportReceiptEntry(
+                    itemID: "two",
+                    displayName: "Two",
+                    displayArea: nil,
+                    status: .been,
+                    outcome: .added,
+                    userPlaceID: "save-two"
+                )
+            ],
+            destinationListID: nil
+        )
+        let batch = PlaceImportBatch(
+            id: "batch",
+            source: .instagram,
+            sourceName: nil,
+            state: .complete,
+            totalCount: 2,
+            processedCount: 2,
+            receipt: receipt
+        )
+
+        let notice = PlaceImportSaveSyncNotice.resolved(
+            batches: [batch],
+            syncStatesByUserPlaceID: [
+                "save-one": .pendingCreate,
+                "save-two": .failed,
+                "unrelated-save": .failed
+            ]
+        )
+
+        XCTAssertEqual(notice?.kind, .failed)
+        XCTAssertEqual(notice?.userPlaceIDs, ["save-two"])
+    }
+
+    func testPendingNoticeDisappearsAfterEveryReceiptSaveSyncs() {
+        let receipt = PlaceImportReceipt(
+            id: "receipt",
+            batchID: "batch",
+            sourceName: nil,
+            entries: [
+                PlaceImportReceiptEntry(
+                    itemID: "one",
+                    displayName: "One",
+                    displayArea: nil,
+                    status: .wannaGo,
+                    outcome: .added,
+                    userPlaceID: "save-one"
+                )
+            ],
+            destinationListID: nil
+        )
+        let batch = PlaceImportBatch(
+            id: "batch",
+            source: .googleMaps,
+            sourceName: nil,
+            state: .complete,
+            totalCount: 1,
+            processedCount: 1,
+            receipt: receipt
+        )
+
+        XCTAssertEqual(
+            PlaceImportSaveSyncNotice.resolved(
+                batches: [batch],
+                syncStatesByUserPlaceID: ["save-one": .pendingCreate]
+            )?.kind,
+            .pending
+        )
+        XCTAssertNil(
+            PlaceImportSaveSyncNotice.resolved(
+                batches: [batch],
+                syncStatesByUserPlaceID: ["save-one": .synced]
+            )
+        )
+    }
+}
+
 final class PlaceImportReviewPlanTests: XCTestCase {
     func testAdaptiveRoutingUsesTotalCandidateBoundaries() {
         XCTAssertEqual(plan(ready: 1).surface, .quickAdd)

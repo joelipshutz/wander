@@ -250,26 +250,25 @@ private extension ImportMockPlace {
 
 private struct ImportEntryMockup: View {
     @State private var presentsSheet = false
-    @State private var selectedDetent: PresentationDetent = .medium
+    @State private var selectedDetent: PresentationDetent = .height(440)
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             ImportMockMapBackground(asset: "OnboardingMapDiary")
                 .overlay(alignment: .top) {
                     ImportMockMapChrome()
                         .padding(.top, 8)
                 }
                 .task {
-                    selectedDetent = proxy.size.height < 750 ? .large : .medium
                     presentsSheet = true
                 }
                 .sheet(isPresented: $presentsSheet) {
                     ImportEntrySheetContent()
-                        .presentationDetents([.medium, .large], selection: $selectedDetent)
+                        .presentationDetents([.height(440), .large], selection: $selectedDetent)
                         .presentationDragIndicator(.visible)
                         .presentationCornerRadius(WanderTheme.radiusSheet)
                         .presentationBackground(.ultraThinMaterial)
-                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                        .presentationBackgroundInteraction(.enabled(upThrough: .height(440)))
                         .presentationContentInteraction(.resizes)
                 }
         }
@@ -307,23 +306,23 @@ private struct ImportEntrySheetContent: View {
                 }
             }
 
-            HStack(spacing: WanderTheme.spacing3) {
+            VStack(spacing: WanderTheme.spacing2) {
                 ImportMockSourceIconStack(iconSize: 36)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 2) {
                     Text("Bring your places with you")
                         .font(.system(size: 20, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Instagram, Google Maps, TikTok, and more")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer(minLength: 0)
             }
 
             HStack(spacing: WanderTheme.spacing2) {
@@ -394,7 +393,7 @@ private struct ImportReviewMockup: View {
     @State private var statuses: [String: ImportMockStatus]
     @State private var expandedMatches: Set<String>
     @State private var expandedDetails: Set<String>
-    @State private var selectedCandidateID = "colorado"
+    @State private var selectedCandidateIDs: Set<String> = ["colorado"]
 
     init(mode: ImportReviewMockupMode) {
         self.mode = mode
@@ -425,7 +424,10 @@ private struct ImportReviewMockup: View {
     }
 
     private var selectedCount: Int {
-        statuses.values.filter { $0 != .none }.count
+        orderedPlaces.reduce(into: 0) { count, place in
+            guard statuses[place.id] != ImportMockStatus.none else { return }
+            count += place.candidates.isEmpty ? 1 : selectedCandidateIDs.count
+        }
     }
 
     var body: some View {
@@ -455,7 +457,7 @@ private struct ImportReviewMockup: View {
                             status: statusBinding(for: place),
                             showsMatches: matchesBinding(for: place),
                             showsDetails: detailsBinding(for: place),
-                            selectedCandidateID: $selectedCandidateID,
+                            selectedCandidateIDs: $selectedCandidateIDs,
                             showsListSummary: false
                         )
                     }
@@ -491,7 +493,6 @@ private struct ImportReviewMockup: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
                 .padding(.bottom, WanderTheme.spacing2)
-                .background(.ultraThinMaterial)
             }
         }
     }
@@ -588,10 +589,10 @@ private struct ImportReviewSectionHeader: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .trailing, spacing: 3) {
-                Text("APPLY TO ALL")
+                Text("Apply to all")
                     .font(.system(size: 9, weight: .black))
-                    .tracking(0.7)
                     .foregroundStyle(WanderTheme.textFaint.color)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 ImportStatusControls(
                     status: .constant(wannaSelected ? .wanna : checkInSelected ? .checkIn : .none),
@@ -604,7 +605,17 @@ private struct ImportReviewSectionHeader: View {
                     },
                     accessibilityPrefix: "Apply to all"
                 )
+
+                HStack(spacing: 6) {
+                    Text("Wanna")
+                        .frame(width: 42)
+                    Text("Check In")
+                        .frame(width: 42)
+                }
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
             }
+            .padding(.trailing, WanderTheme.spacing3)
         }
     }
 }
@@ -614,7 +625,7 @@ private struct ImportPlaceCard: View {
     @Binding var status: ImportMockStatus
     @Binding var showsMatches: Bool
     @Binding var showsDetails: Bool
-    @Binding var selectedCandidateID: String
+    @Binding var selectedCandidateIDs: Set<String>
     let showsListSummary: Bool
 
     var body: some View {
@@ -686,7 +697,7 @@ private struct ImportPlaceCard: View {
                         .overlay(WanderTheme.borderHairline.color)
                     ImportCandidateList(
                         candidates: place.candidates,
-                        selectedCandidateID: $selectedCandidateID
+                        selectedCandidateIDs: $selectedCandidateIDs
                     )
                 }
             }
@@ -794,21 +805,25 @@ private struct ImportStatusControls: View {
 
 private struct ImportCandidateList: View {
     let candidates: [ImportMockCandidate]
-    @Binding var selectedCandidateID: String
+    @Binding var selectedCandidateIDs: Set<String>
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(candidates) { candidate in
                 Button {
-                    selectedCandidateID = candidate.id
+                    if selectedCandidateIDs.contains(candidate.id) {
+                        selectedCandidateIDs.remove(candidate.id)
+                    } else {
+                        selectedCandidateIDs.insert(candidate.id)
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing2) {
-                        Image(systemName: selectedCandidateID == candidate.id
-                            ? "circle.inset.filled"
+                        Image(systemName: selectedCandidateIDs.contains(candidate.id)
+                            ? "checkmark.circle.fill"
                             : "circle")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(
-                                selectedCandidateID == candidate.id
+                                selectedCandidateIDs.contains(candidate.id)
                                     ? WanderTheme.terracotta.color
                                     : WanderTheme.borderStrong.color
                             )
@@ -836,7 +851,7 @@ private struct ImportCandidateList: View {
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 54)
                     .background(
-                        selectedCandidateID == candidate.id
+                        selectedCandidateIDs.contains(candidate.id)
                             ? WanderTheme.terracottaTint.color.opacity(0.5)
                             : Color.clear
                     )
@@ -844,7 +859,7 @@ private struct ImportCandidateList: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(
-                    selectedCandidateID == candidate.id ? "Selected" : "Not selected"
+                    selectedCandidateIDs.contains(candidate.id) ? "Selected" : "Not selected"
                 )
 
                 if candidate.id != candidates.last?.id {
@@ -1154,7 +1169,7 @@ private struct ImportReportMockup: View {
         "mart-collective": .wanna
     ]
     @State private var expandedDetails: Set<String> = []
-    @State private var selectedCandidateID = "colorado"
+    @State private var selectedCandidateIDs: Set<String> = ["colorado"]
 
     private let reportPlaces = Array(ImportMockPlace.all.prefix(4))
 
@@ -1220,7 +1235,7 @@ private struct ImportReportMockup: View {
                             status: reportStatusBinding(for: place),
                             showsMatches: .constant(false),
                             showsDetails: reportDetailsBinding(for: place),
-                            selectedCandidateID: $selectedCandidateID,
+                            selectedCandidateIDs: $selectedCandidateIDs,
                             showsListSummary: true
                         )
                     }
