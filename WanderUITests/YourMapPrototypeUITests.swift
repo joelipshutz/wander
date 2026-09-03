@@ -56,6 +56,36 @@ final class YourMapPrototypeUITests: XCTestCase {
         )
     }
 
+    func testSnapshotCreatesListAndOpensEditablePlaces() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderResetWalkthroughs", "-WanderInitialTab", "profile"]
+        app.launch()
+        let preview = app.buttons["profile.yourMap.preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        preview.tap()
+        let snapshot = app.buttons["yourMap.snapshot"]
+        XCTAssertTrue(snapshot.waitForExistence(timeout: 10))
+        let pin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin.")).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 10))
+        capture("REC-413 Explore snapshot control")
+        snapshot.tap()
+        let toast = app.buttons["yourMap.viewSnapshotList"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 10))
+        capture("REC-413 Snapshot saved toast")
+        toast.tap()
+        XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields.firstMatch.value as? String != nil)
+        let title = app.textFields.firstMatch
+        title.tap()
+        let existing = title.value as? String ?? ""
+        title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count) + "Snapshot test\n")
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["listEditor.addPlaces"].waitForExistence(timeout: 5))
+        capture("REC-413 Snapshot list editor")
+        app.buttons["listEditor.addPlaces"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

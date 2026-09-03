@@ -3,6 +3,14 @@ import SwiftUI
 import UIKit
 
 struct YourMapPrototypeScreen: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @StateObject private var snapshotCapture = MapSnapshotCapture()
+    @State private var isCapturingSnapshot = false
+    @State private var snapshotListID: String?
+    @State private var editingSnapshotListID: String?
+    @State private var snapshotError: String?
+
     let dataset: YourMapPrototypeDataset
     let viewerID: String?
     let mapTitle: String
@@ -78,6 +86,22 @@ struct YourMapPrototypeScreen: View {
                 dismiss: { showsSharePreview = false }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { editingSnapshotListID != nil },
+            set: { if !$0 { editingSnapshotListID = nil } }
+        )) {
+            if let editingSnapshotListID {
+                SnapshotListEditorScreen(listID: editingSnapshotListID)
+            }
+        }
+        .alert("Couldn’t save snapshot", isPresented: Binding(
+            get: { snapshotError != nil },
+            set: { if !$0 { snapshotError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(snapshotError ?? "Please try again.")
+        }
         .navigationTitle(mode == .map ? mapTitle : "Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -110,7 +134,7 @@ struct YourMapPrototypeScreen: View {
     }
 
     private var renderedPlaces: [YourMapPrototypePlace] {
-        Array(filteredPlaces.prefix(80))
+        filteredPlaces
     }
 
     private var insights: YourMapPrototypeInsights {
@@ -147,6 +171,7 @@ struct YourMapPrototypeScreen: View {
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraRegion = context.region
             }
+            .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
             .ignoresSafeArea()
             .overlay {
                 if filteredPlaces.isEmpty {
@@ -159,6 +184,9 @@ struct YourMapPrototypeScreen: View {
                 .zIndex(30)
 
             VStack(spacing: 0) {
+                if let snapshotListID {
+                    snapshotToast(listID: snapshotListID)
+                }
                 mapHeader
                 Spacer(minLength: WanderTheme.spacing4)
                 modePicker
@@ -195,6 +223,28 @@ struct YourMapPrototypeScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             Spacer(minLength: 0)
 
+            if pinOwnership == .currentUser {
+                Button(action: saveMapSnapshot) {
+                    Group {
+                        if isCapturingSnapshot {
+                            ProgressView()
+                        } else {
+                            Label("Snapshot", systemImage: "camera")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                }
+                .buttonStyle(.plain)
+                .disabled(isCapturingSnapshot)
+                .accessibilityLabel("Save map snapshot as a list")
+                .accessibilityHint("Includes the saved Check-in and Wanna pins in this view")
+                .accessibilityIdentifier("yourMap.snapshot")
+            }
+
             Button {
                 showsFilters = true
             } label: {
@@ -229,6 +279,52 @@ struct YourMapPrototypeScreen: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private func saveMapSnapshot() {
+        guard !isCapturingSnapshot else { return }
+        isCapturingSnapshot = true
+        do {
+            let capture = try snapshotCapture.capture(places: filteredPlaces)
+            guard let list = store.createMapSnapshotList(placeIDs: capture.placeIDs, coverData: capture.jpegData) else {
+                throw MapSnapshotCapture.CaptureError.empty
+            }
+            snapshotListID = list.localID
+            UIAccessibility.post(notification: .announcement, argument: "Snapshot list saved. View snapshot list.")
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                isCapturingSnapshot = false
+                _ = await store.syncPendingPlaceLists(backend: backend)
+            }
+        } catch {
+            snapshotError = error.localizedDescription
+            isCapturingSnapshot = false
+        }
+    }
+
+    private func snapshotToast(listID: String) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Button {
+                editingSnapshotListID = listID
+                snapshotListID = nil
+            } label: {
+                Label("View snapshot list", systemImage: "checkmark.circle.fill")
+                    .font(.system(.subheadline, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+            }
+            .accessibilityIdentifier("yourMap.viewSnapshotList")
+            Button { snapshotListID = nil } label: {
+                Image(systemName: "xmark")
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .accessibilityLabel("Dismiss snapshot confirmation")
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing2)
     }
 
     private var modePicker: some View {
@@ -1359,7 +1455,7 @@ private enum YourMapPrototypeRatingOption: String, CaseIterable, Identifiable {
     }
 }
 
-private extension YourMapPrototypePlace {
+extension YourMapPrototypePlace {
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

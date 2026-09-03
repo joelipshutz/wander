@@ -1,5 +1,6 @@
 import CoreLocation
 import XCTest
+import UIKit
 @testable import Wander
 
 private enum TestError: Error {
@@ -10612,6 +10613,51 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.placeListMembers.first?.deletedAt)
     }
 
+    func testSnapshotListAnalyticsContainsOnlyCoarseProperties() throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: .seed(), analytics: analytics)
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let own = store.currentUserVisiblePlaces
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: own.map { $0.place.id }, coverData: data))
+        let created = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListCreated }
+        let added = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListItemAdded }
+        XCTAssertEqual(created.count, 1)
+        XCTAssertEqual(added.count, store.visiblePlaces(in: list).count)
+        for event in added {
+            XCTAssertEqual(event.properties, ["surface": "map_snapshot", "list_role": "owner", "companion_save": "none"])
+        }
+        let normalized = analytics.events.filter { $0.name == "engagement_action_performed" && $0.properties["surface"] == "map_snapshot" }
+        XCTAssertEqual(normalized.count, added.count)
+    }
+
+    func testSnapshotCoverFailureKeepsLocalCoverAndRetriesWithoutNewList() async throws {
+        let store = makeStore()
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }.jpegData(compressionQuality: 0.8)!
+        let created = try XCTUnwrap(store.createMapSnapshotList(
+            placeIDs: store.currentUserVisiblePlaces.map { $0.place.id }, coverData: data
+        ))
+        let repository = FakePlaceListRepository()
+        repository.failSnapshotUpload = true
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        let failed = try XCTUnwrap(store.placeLists.first { $0.localID == created.localID })
+        XCTAssertEqual(failed.syncState, .failed)
+        XCTAssertEqual(failed.snapshotCoverData, data)
+        XCTAssertNil(failed.snapshotCoverPath)
+        repository.failSnapshotUpload = false
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        let synced = try XCTUnwrap(store.placeLists.first { $0.localID == created.localID })
+        XCTAssertEqual(synced.syncState, .synced)
+        XCTAssertEqual(synced.snapshotCoverPath, "\(synced.id)/snapshot.jpg")
+        XCTAssertEqual(synced.snapshotCoverData, data)
+        XCTAssertEqual(repository.snapshotUploadCount, 2)
+        XCTAssertEqual(repository.upsertedDrafts.last?.id, synced.serverID)
+        XCTAssertEqual(store.placeLists.filter { $0.localID == created.localID }.count, 1)
+    }
+
     func testSyncPendingPlaceListsCreatesRemoteListAndCollaborators() async {
         let store = makeStore()
         let remoteListID = "11111111-1111-4111-8111-111111111111"
@@ -11646,6 +11692,15 @@ private final class FakeListSuggestionRepository: ListSuggestionRepository {
 
 @MainActor
 private final class FakePlaceListRepository: PlaceListRepository {
+    var failSnapshotUpload = false
+    private(set) var snapshotUploadCount = 0
+
+    func uploadSnapshotCover(listID: String, jpegData: Data) async throws -> String {
+        snapshotUploadCount += 1
+        if failSnapshotUpload { throw TestError.expected }
+        return "\(listID)/snapshot.jpg"
+    }
+
     struct CollaboratorRequest: Equatable {
         let listID: String
         let userIDs: [String]

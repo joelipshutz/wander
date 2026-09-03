@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import UIKit
 
 struct UnresolvedDraft: Identifiable, Equatable {
     let id: String
@@ -2810,6 +2811,32 @@ final class WanderStore: ObservableObject {
         return true
     }
 
+    /// The capture fixes membership before saving. This synchronous batch creates
+    /// one list without changing the status, visits, or notes of its source saves.
+    func createMapSnapshotList(placeIDs: [String], coverData: Data, now: Date = .now) -> LocalPlaceList? {
+        guard !coverData.isEmpty, coverData.count <= LocalPlaceList.maximumSnapshotCoverBytes,
+              UIImage(data: coverData) != nil else { return nil }
+        let requested = Set(placeIDs)
+        let owned = currentUserVisiblePlaces.filter { requested.contains($0.place.id) }
+        guard !owned.isEmpty else { return nil }
+        return performBatchedLocalMutations {
+            guard let list = createPlaceList(
+                name: "Map snapshot · \(now.formatted(date: .abbreviated, time: .shortened))",
+                description: "",
+                visibility: .stealth
+            ), let index = placeLists.firstIndex(where: { $0.localID == list.localID }) else { return nil }
+            placeLists[index].snapshotCoverData = coverData
+            for place in owned {
+                let result = addCurrentUserPlace(userPlaceID: place.userPlace.id, to: list)
+                if result.outcome == .added {
+                    trackListPlaceAdded(to: list, companionSave: .none, surface: "map_snapshot")
+                }
+            }
+            persist()
+            return placeLists[index]
+        }
+    }
+
     @discardableResult
     func createPlaceList(
         name: String,
@@ -3181,6 +3208,13 @@ final class WanderStore: ObservableObject {
                 .map(\.id)
             for itemID in itemIDs {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
+            }
+
+            if let data = list.snapshotCoverData, list.snapshotCoverPath == nil {
+                let path = try await backend.uploadListSnapshotCover(listID: remoteListID, jpegData: data)
+                if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
+                    placeLists[currentIndex].snapshotCoverPath = path
+                }
             }
 
             if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }),
@@ -9639,7 +9673,14 @@ final class WanderStore: ObservableObject {
             placeLists[index].name = remoteList.name
             placeLists[index].description = remoteList.description
             placeLists[index].visibilityRaw = remoteList.visibilityRaw
-            placeLists[index].syncStateRaw = SyncState.synced.rawValue
+            let pendingCover = placeLists[index].snapshotCoverData != nil
+                && placeLists[index].snapshotCoverPath == nil && remoteList.snapshotCoverPath == nil
+            placeLists[index].syncStateRaw = pendingCover ? SyncState.pendingUpdate.rawValue : SyncState.synced.rawValue
+            // Summary RPCs omit the cover; detail supplies it. Never discard a
+            // locally captured cover while its upload is pending or retrying.
+            if let path = remoteList.snapshotCoverPath {
+                placeLists[index].snapshotCoverPath = path
+            }
             placeLists[index].cachedItemCount = remoteList.cachedItemCount
             placeLists[index].createdAt = remoteList.createdAt
             placeLists[index].updatedAt = remoteList.updatedAt
