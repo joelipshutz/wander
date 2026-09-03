@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(30);
+select plan(40);
 
 select is(
   (
@@ -60,6 +60,22 @@ select ok(
     where oid = 'public.sync_calendar_reservations(jsonb,timestamp with time zone,timestamp with time zone)'::regprocedure
   ),
   'calendar sync is a security-definer RPC with a pinned search path'
+);
+
+select ok(
+  (
+    select not prosecdef
+      and provolatile = 's'
+      and 'search_path=pg_catalog, extensions' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'app.calendar_reservation_group_key(text,text,text,timestamp with time zone,text)'::regprocedure
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'app.calendar_reservation_group_key(text,text,text,timestamp with time zone,text)',
+    'execute'
+  ),
+  'calendar grouping is a stable internal helper with a pinned search path'
 );
 
 select ok(
@@ -143,7 +159,9 @@ select ok(
 insert into public.profiles (id, handle, display_name)
 values
   ('user_calendar_owner', 'calendarowner', 'Calendar Owner'),
-  ('user_calendar_stranger', 'calendarstranger', 'Calendar Stranger');
+  ('user_calendar_stranger', 'calendarstranger', 'Calendar Stranger'),
+  ('user_calendar_repeat', 'calendarrepeat', 'Calendar Repeat'),
+  ('user_calendar_parallel', 'calendarparallel', 'Calendar Parallel');
 
 insert into public.places (
   canonical_name, category, primary_category, latitude, longitude,
@@ -315,6 +333,250 @@ select is(
   false,
   'calendar completion is idempotent'
 );
+
+select set_config('request.jwt.claim.sub', 'user_calendar_repeat', true);
+
+select is(
+  (
+    public.update_notification_preferences(
+      '{"push_enabled":true,"reservation_reminders_enabled":true}'::jsonb
+    )
+  ).reservation_reminders_enabled,
+  true,
+  'the repeat-sync fixture can receive reservation reminders'
+);
+
+create temporary table duplicate_calendar_sync_result as
+select public.sync_calendar_reservations(
+  jsonb_build_array(
+    jsonb_build_object(
+      'occurrence_key', repeat('c', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 12 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 14 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    ),
+    jsonb_build_object(
+      'occurrence_key', repeat('d', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 13 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 15 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    )
+  ),
+  now(),
+  now() + interval '7 days'
+) as payload;
+
+select is(
+  (
+    select (payload->>'synced_count')::integer = 2
+      and (payload->>'queued_count')::integer = 2
+    from duplicate_calendar_sync_result
+  ),
+  true,
+  'two same-place same-day reservations queue one shared two-stage waterfall'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.calendar_reservations
+    where user_id = 'user_calendar_repeat'
+  ),
+  2,
+  'same-place grouping preserves both privacy-minimal reservation rows'
+);
+
+select ok(
+  (
+    select count(*) = 2
+      and count(distinct dedupe_key) = 2
+      and bool_and(dedupe_key like 'calendar_reservation:%:group:%')
+    from public.notification_events
+    where recipient_user_id = 'user_calendar_repeat'
+      and source = 'calendar_reservation'
+  ),
+  'same-place grouping emits only one lifetime key for each prompt stage'
+);
+
+select set_config('request.jwt.claim.sub', 'user_calendar_parallel', true);
+select public.update_notification_preferences(
+  '{"push_enabled":true,"reservation_reminders_enabled":true}'::jsonb
+);
+select public.sync_calendar_reservations(
+  jsonb_build_array(
+    jsonb_build_object(
+      'occurrence_key', repeat('c', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 12 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 14 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    ),
+    jsonb_build_object(
+      'occurrence_key', repeat('d', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 13 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 15 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    )
+  ),
+  now(),
+  now() + interval '7 days'
+);
+
+reset role;
+select ok(
+  (
+    select count(*) = 4
+      and count(distinct dedupe_key) = 4
+      and count(*) filter (where recipient_user_id = 'user_calendar_repeat') = 2
+      and count(*) filter (where recipient_user_id = 'user_calendar_parallel') = 2
+    from public.notification_events
+    where recipient_user_id in ('user_calendar_repeat', 'user_calendar_parallel')
+      and source = 'calendar_reservation'
+  ),
+  'same-place same-day waterfalls remain isolated between recipient accounts'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_calendar_repeat', true);
+
+create temporary table calendar_group_rehome_result as
+select public.sync_calendar_reservations(
+  jsonb_build_array(jsonb_build_object(
+    'occurrence_key', repeat('d', 64),
+    'canonical_name', 'Elephante',
+    'locality', 'Santa Monica',
+    'source_provider', 'mapkit',
+    'source_provider_place_id', 'calendar-elephante',
+    'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 13 hours') at time zone 'UTC',
+    'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 15 hours') at time zone 'UTC',
+    'event_timezone', 'UTC'
+  )),
+  now(),
+  now() + interval '7 days'
+) as payload;
+
+select is(
+  (select (payload->>'cancelled_count')::integer from calendar_group_rehome_result),
+  1,
+  'removing one duplicate occurrence cancels only that reservation row'
+);
+
+select ok(
+  (
+    select count(*) = 2
+      and bool_and(
+        conflict_group = 'calendar_reservation:' || (
+          select id
+          from public.calendar_reservations
+          where user_id = 'user_calendar_repeat'
+            and occurrence_key = repeat('d', 64)
+        )
+      )
+    from public.notification_events
+    where recipient_user_id = 'user_calendar_repeat'
+      and source = 'calendar_reservation'
+      and status = 'pending'
+  ),
+  'the shared prompts remain pending and route through the active duplicate'
+);
+
+reset role;
+update public.notification_events
+set status = 'sent',
+    delivered_at = now(),
+    claim_expires_at = null,
+    claim_token = null,
+    updated_at = now()
+where recipient_user_id = 'user_calendar_repeat'
+  and source = 'calendar_reservation';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_calendar_repeat', true);
+
+create temporary table terminal_calendar_resync_result as
+select public.sync_calendar_reservations(
+  jsonb_build_array(jsonb_build_object(
+    'occurrence_key', repeat('d', 64),
+    'canonical_name', 'Elephante',
+    'locality', 'Santa Monica',
+    'source_provider', 'mapkit',
+    'source_provider_place_id', 'calendar-elephante',
+    'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 13 hours') at time zone 'UTC',
+    'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 15 hours') at time zone 'UTC',
+    'event_timezone', 'UTC'
+  )),
+  now(),
+  now() + interval '7 days'
+) as payload;
+
+select is(
+  (
+    select (payload->>'queued_count')::integer = 0
+      and (
+        select count(*)
+        from public.notification_events
+        where recipient_user_id = 'user_calendar_repeat'
+          and source = 'calendar_reservation'
+      ) = 2
+    from terminal_calendar_resync_result
+  ),
+  true,
+  'a foreground sync cannot recreate stages after their events are sent'
+);
+
+select public.sync_calendar_reservations(
+  jsonb_build_array(
+    jsonb_build_object(
+      'occurrence_key', repeat('d', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 13 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '2 days 15 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    ),
+    jsonb_build_object(
+      'occurrence_key', repeat('e', 64),
+      'canonical_name', 'Elephante',
+      'locality', 'Santa Monica',
+      'source_provider', 'mapkit',
+      'source_provider_place_id', 'calendar-elephante',
+      'start_at', (date_trunc('day', now() at time zone 'UTC') + interval '3 days 12 hours') at time zone 'UTC',
+      'end_at', (date_trunc('day', now() at time zone 'UTC') + interval '3 days 14 hours') at time zone 'UTC',
+      'event_timezone', 'UTC'
+    )
+  ),
+  now(),
+  now() + interval '7 days'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.notification_events
+    where recipient_user_id = 'user_calendar_repeat'
+      and source = 'calendar_reservation'
+  ),
+  4,
+  'the same place on a different local date receives its own two-stage waterfall'
+);
+
+select set_config('request.jwt.claim.sub', 'user_calendar_owner', true);
 
 select public.reconcile_client_notification_intents(
   'wanna_go_reminder',
