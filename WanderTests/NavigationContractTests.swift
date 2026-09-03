@@ -3864,7 +3864,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discoverScreen.contains("guard currentUserSave(matching: visiblePlace) == nil"))
         XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlace("))
         XCTAssertTrue(discoverScreen.contains("status: .wannaGo"))
-        XCTAssertTrue(discoverScreen.contains("store.addVisiblePlace("))
+        XCTAssertTrue(discoverScreen.contains(".sheet(item: $listSelectionPlace"))
+        XCTAssertTrue(discoverScreen.contains("MapPlaceListPickerSheet("))
     }
 
     func testDiscoverUnboundedRowsAreLazyAndPlaceSearchIsSubmitDriven() throws {
