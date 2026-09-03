@@ -2,6 +2,39 @@ import XCTest
 
 @MainActor
 final class YourMapPrototypeUITests: XCTestCase {
+    func testCreateMapLinkOpensNativeShareSheet() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab", "profile",
+        ]
+        app.launch()
+
+        let preview = app.buttons["profile.yourMap.preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        preview.tap()
+        app.buttons["Share this lens"].tap()
+
+        let createLink = app.buttons["yourMap.prototype.createShare"]
+        XCTAssertTrue(createLink.waitForExistence(timeout: 5))
+        for format in ["Static", "Live"] {
+            if !createLink.isHittable { app.swipeUp() }
+            app.segmentedControls["yourMap.prototype.shareFormat"].buttons[format].tap()
+            XCTAssertFalse(app.staticTexts["Anyone with the link"].exists)
+            XCTAssertFalse(app.buttons["yourMap.prototype.copyShareLink"].exists)
+            capture("REC-419 \(format) share preview")
+
+            createLink.tap()
+            let shareSheet = app.otherElements["ActivityListView"]
+            XCTAssertTrue(shareSheet.waitForExistence(timeout: 5))
+            capture("REC-419 \(format) native share sheet")
+            app.buttons["Close"].firstMatch.tap()
+            XCTAssertTrue(createLink.waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["yourMap.prototype.copyShareLink"].exists)
+        }
+    }
+
     func testPinSelectionAndSavedLensDeletion() {
         let app = XCUIApplication()
         app.launchArguments = [

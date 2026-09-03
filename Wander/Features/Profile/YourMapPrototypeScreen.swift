@@ -860,6 +860,7 @@ private struct YourMapPrototypeSharePreview: View {
 
     @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
     @State private var createdLink: YourMapPrototypeShareLink?
+    @State private var showsShareSheet = false
     @State private var didCopyLink = false
 
     private var insights: YourMapPrototypeInsights {
@@ -884,11 +885,6 @@ private struct YourMapPrototypeSharePreview: View {
             ScrollView {
                 VStack(spacing: WanderTheme.spacing3) {
                     shareStoryCard
-                    privacyRow(
-                        title: "Anyone with the link",
-                        detail: "No account is required to open and explore this map.",
-                        systemImage: "link"
-                    )
 
                     Picker("Share format", selection: $format) {
                         ForEach(YourMapPrototypeShareFormat.allCases) { option in
@@ -910,8 +906,12 @@ private struct YourMapPrototypeSharePreview: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Button {
-                        createdLink = YourMapPrototypeShareLink.make(format: format)
-                        didCopyLink = false
+                        let link = YourMapPrototypeShareLink.make(format: format)
+                        createdLink = link
+                        UIPasteboard.general.url = link.url
+                        didCopyLink = true
+                        UIAccessibility.post(notification: .announcement, argument: "Copied")
+                        showsShareSheet = true
                     } label: {
                         Label("Create share link", systemImage: "link")
                             .font(WanderTypography.control)
@@ -921,11 +921,6 @@ private struct YourMapPrototypeSharePreview: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("yourMap.prototype.createShare")
-
-                    if let createdLink {
-                        createdLinkCard(createdLink)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
 
                     privacyRow(
                         title: "Private notes stay private",
@@ -941,6 +936,38 @@ private struct YourMapPrototypeSharePreview: View {
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
         .accessibilityIdentifier("yourMap.prototype.sharePreview")
+        .overlay(alignment: .top) {
+            if didCopyLink {
+                Label("Copied", systemImage: "checkmark")
+                    .font(WanderTypography.control)
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.vertical, WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color, in: Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                    .padding(.top, WanderTheme.spacing2)
+                    .accessibilityIdentifier("yourMap.prototype.copiedToast")
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: didCopyLink) {
+            guard didCopyLink else { return }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            didCopyLink = false
+        }
+        .sheet(isPresented: $showsShareSheet, onDismiss: { didCopyLink = false }) {
+            if let createdLink {
+                WanderShareSheet(content: .place(
+                    item: createdLink.url,
+                    name: lensTitle,
+                    message: "Explore my saved places on rec.me"
+                ))
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     private var shareStoryCard: some View {
@@ -993,38 +1020,6 @@ private struct YourMapPrototypeSharePreview: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
-    }
-
-    private func createdLinkCard(_ link: YourMapPrototypeShareLink) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("Your \(link.format.title.lowercased()) link is ready", systemImage: "checkmark.circle.fill")
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.categoryMoss.color)
-
-            Text(link.url.absoluteString)
-                .font(WanderTypography.metadata.monospaced())
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Button {
-                UIPasteboard.general.url = link.url
-                didCopyLink = true
-            } label: {
-                Label(didCopyLink ? "Copied" : "Copy link", systemImage: didCopyLink ? "checkmark" : "doc.on.doc")
-                    .font(WanderTypography.control)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.terracottaTint.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("yourMap.prototype.copyShareLink")
-        }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.categoryMoss.color.opacity(0.5)))
     }
 
     private var lensTitle: String {
