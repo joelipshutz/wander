@@ -128,8 +128,15 @@ async function runCalendarReservationNotificationSmokeChecks(
   strangerUserID,
 ) {
   const occurrenceKey = "c".repeat(64);
+  const duplicateOccurrenceKey = "d".repeat(64);
+  const terminalOccurrenceKey = "e".repeat(64);
   const startAt = new Date(Date.now() + (36 * 60 * 60 * 1000));
+  startAt.setUTCHours(20, 0, 0, 0);
   const endAt = new Date(startAt.getTime() + (2 * 60 * 60 * 1000));
+  const duplicateStartAt = new Date(startAt.getTime() + (60 * 60 * 1000));
+  const duplicateEndAt = new Date(duplicateStartAt.getTime() + (2 * 60 * 60 * 1000));
+  const terminalStartAt = new Date(startAt.getTime() + (24 * 60 * 60 * 1000));
+  const terminalEndAt = new Date(terminalStartAt.getTime() + (2 * 60 * 60 * 1000));
   const windowStart = new Date(Date.now() - (24 * 60 * 60 * 1000));
   const windowEnd = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000));
 
@@ -163,8 +170,12 @@ async function runCalendarReservationNotificationSmokeChecks(
         'search_path=public, app' = any(coalesce(complete.proconfig, array[]::text[])) as complete_path,
         reconcile.prosecdef as reconcile_definer,
         'search_path=public, app' = any(coalesce(reconcile.proconfig, array[]::text[])) as reconcile_path,
+        not group_key.prosecdef as group_key_invoker,
+        group_key.provolatile = 's' as group_key_stable,
+        'search_path=pg_catalog, extensions' = any(coalesce(group_key.proconfig, array[]::text[])) as group_key_path,
         has_function_privilege('authenticated', sync.oid, 'execute') as sync_authenticated,
         not has_function_privilege('anon', sync.oid, 'execute') as sync_anon_denied,
+        not has_function_privilege('authenticated', group_key.oid, 'execute') as group_key_client_denied,
         not has_function_privilege(
           'authenticated',
           'app.queue_notification_intent(text,text,text,text,text,jsonb,text,timestamp with time zone,timestamp with time zone,text,smallint,text,text)',
@@ -174,10 +185,12 @@ async function runCalendarReservationNotificationSmokeChecks(
       cross join pg_proc prompt
       cross join pg_proc complete
       cross join pg_proc reconcile
+      cross join pg_proc group_key
       where sync.oid = 'public.sync_calendar_reservations(jsonb,timestamp with time zone,timestamp with time zone)'::regprocedure
         and prompt.oid = 'public.get_calendar_reservation(uuid)'::regprocedure
         and complete.oid = 'public.complete_calendar_reservation(uuid)'::regprocedure
         and reconcile.oid = 'public.reconcile_client_notification_intents(text,jsonb)'::regprocedure
+        and group_key.oid = 'app.calendar_reservation_group_key(text,text,text,timestamp with time zone,text)'::regprocedure
     `,
     [],
     (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
@@ -197,16 +210,28 @@ async function runCalendarReservationNotificationSmokeChecks(
     (result) => result.rows[0]?.enabled === true,
   );
 
-  const productionReservationPayload = [{
-    occurrence_key: occurrenceKey,
-    canonical_name: "Codex Calendar Reservation",
-    locality: "Santa Monica",
-    source_provider: "mapkit",
-    source_provider_place_id: "codex-calendar-reservation",
-    start_at: startAt.toISOString(),
-    end_at: endAt.toISOString(),
-    event_timezone: "America/Los_Angeles",
-  }];
+  const productionReservationPayload = [
+    {
+      occurrence_key: occurrenceKey,
+      canonical_name: "Codex Calendar Reservation",
+      locality: "Santa Monica",
+      source_provider: "mapkit",
+      source_provider_place_id: "codex-calendar-reservation",
+      start_at: startAt.toISOString(),
+      end_at: endAt.toISOString(),
+      event_timezone: "America/Los_Angeles",
+    },
+    {
+      occurrence_key: duplicateOccurrenceKey,
+      canonical_name: "Codex Calendar Reservation",
+      locality: "Santa Monica",
+      source_provider: "mapkit",
+      source_provider_place_id: "codex-calendar-reservation",
+      start_at: duplicateStartAt.toISOString(),
+      end_at: duplicateEndAt.toISOString(),
+      event_timezone: "America/Los_Angeles",
+    },
+  ];
   await expectQuery(
     client,
     "authenticated calendar sync accepts the exact privacy-minimal iOS payload",
@@ -222,7 +247,7 @@ async function runCalendarReservationNotificationSmokeChecks(
       windowStart.toISOString(),
       windowEnd.toISOString(),
     ],
-    (result) => result.rows[0]?.result?.synced_count === 1
+    (result) => result.rows[0]?.result?.synced_count === 2
       && result.rows[0]?.result?.queued_count === 2,
   );
 
@@ -231,23 +256,34 @@ async function runCalendarReservationNotificationSmokeChecks(
     "calendar sync stores no raw EventKit content and queues both governed stages",
     `
       select
-        reservation.canonical_name,
-        reservation.resolved_place_id is not null as resolved_place,
+        (
+          select count(*)::integer
+          from public.calendar_reservations reservation
+          where reservation.user_id = $1
+            and reservation.occurrence_key in ($2, $3)
+        ) as reservation_count,
+        (
+          select bool_and(reservation.resolved_place_id is not null)
+          from public.calendar_reservations reservation
+          where reservation.user_id = $1
+            and reservation.occurrence_key in ($2, $3)
+        ) as resolved_places,
         count(event.id)::integer as event_count,
+        count(distinct event.dedupe_key)::integer as dedupe_count,
+        bool_and(event.dedupe_key like 'calendar_reservation:%:group:%') as grouped_dedupe,
         bool_and(event.source = 'calendar_reservation') as governed_source,
         bool_and(event.data - array['reservation_id', 'prompt_stage'] = '{}'::jsonb) as safe_payload
-      from public.calendar_reservations reservation
-      join public.notification_events event
-        on event.conflict_group = 'calendar_reservation:' || reservation.id
-      where reservation.user_id = $1
-        and reservation.occurrence_key = $2
-      group by reservation.id
+      from public.notification_events event
+      where event.recipient_user_id = $1
+        and event.source = 'calendar_reservation'
     `,
-    [smokeUserID, occurrenceKey],
+    [smokeUserID, occurrenceKey, duplicateOccurrenceKey],
     (result) => result.rows.length === 1
-      && result.rows[0].canonical_name === "Codex Calendar Reservation"
-      && result.rows[0].resolved_place === true
+      && result.rows[0].reservation_count === 2
+      && result.rows[0].resolved_places === true
       && result.rows[0].event_count === 2
+      && result.rows[0].dedupe_count === 2
+      && result.rows[0].grouped_dedupe === true
       && result.rows[0].governed_source === true
       && result.rows[0].safe_payload === true,
   );
@@ -299,6 +335,94 @@ async function runCalendarReservationNotificationSmokeChecks(
     `,
     [smokeUserID, reservationID],
     (result) => result.rows[0]?.skipped_count === 2,
+  );
+
+  const terminalReservationPayload = [{
+    occurrence_key: terminalOccurrenceKey,
+    canonical_name: "Codex Calendar Reservation",
+    locality: "Santa Monica",
+    source_provider: "mapkit",
+    source_provider_place_id: "codex-calendar-reservation",
+    start_at: terminalStartAt.toISOString(),
+    end_at: terminalEndAt.toISOString(),
+    event_timezone: "America/Los_Angeles",
+  }];
+  await expectQuery(
+    client,
+    "a new reservation-local date queues its own two stages",
+    `
+      select public.sync_calendar_reservations(
+        $1::jsonb,
+        $2::timestamptz,
+        $3::timestamptz
+      ) as result
+    `,
+    [
+      JSON.stringify(terminalReservationPayload),
+      windowStart.toISOString(),
+      windowEnd.toISOString(),
+    ],
+    (result) => result.rows[0]?.result?.queued_count === 2,
+  );
+
+  const terminalReservationIDResult = await client.query(
+    `
+      select id
+      from public.calendar_reservations
+      where user_id = $1 and occurrence_key = $2
+    `,
+    [smokeUserID, terminalOccurrenceKey],
+  );
+  const terminalReservationID = terminalReservationIDResult.rows[0]?.id;
+  if (!terminalReservationID) {
+    throw new Error("calendar terminal-state smoke fixture did not return an id");
+  }
+
+  await client.query("reset role");
+  await client.query(
+    `
+      update public.notification_events
+      set status = 'sent',
+          delivered_at = now(),
+          claim_expires_at = null,
+          claim_token = null,
+          updated_at = now()
+      where recipient_user_id = $1
+        and source = 'calendar_reservation'
+        and data->>'reservation_id' = $2
+    `,
+    [smokeUserID, terminalReservationID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+
+  await expectQuery(
+    client,
+    "calendar stages remain lifetime-idempotent after terminal delivery",
+    `
+      with resync as (
+        select public.sync_calendar_reservations(
+          $1::jsonb,
+          $2::timestamptz,
+          $3::timestamptz
+        ) as result
+      )
+      select
+        (select (result->>'queued_count')::integer from resync) as queued_count,
+        count(*)::integer as event_count
+      from public.notification_events
+      where recipient_user_id = $4
+        and source = 'calendar_reservation'
+        and data->>'reservation_id' = $5
+    `,
+    [
+      JSON.stringify(terminalReservationPayload),
+      windowStart.toISOString(),
+      windowEnd.toISOString(),
+      smokeUserID,
+      terminalReservationID,
+    ],
+    (result) => result.rows[0]?.queued_count === 0
+      && result.rows[0]?.event_count === 2,
   );
 
   await expectQuery(

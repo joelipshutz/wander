@@ -1287,7 +1287,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(
             searchCentering.contains("obscuredBottomHeight: selectedPlaceRecenterClearance")
         )
-        XCTAssertTrue(searchCentering.contains("cameraRegionTracker.synchronize(with: region)"))
+        XCTAssertTrue(searchCentering.contains("requestMapCamera(region)"))
     }
 
     func testSelectedCoordinateCentersInsideTheUnobscuredMapHeight() {
@@ -1868,51 +1868,17 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        let nativeMapStart = try XCTUnwrap(map.range(of: "                    Map(\n"))
-        let nativeMapEnd = try XCTUnwrap(
-            map.range(of: "                    .mapStyle(", range: nativeMapStart.upperBound..<map.endIndex)
-        )
-        let nativeMapContent = map[nativeMapStart.lowerBound..<nativeMapEnd.lowerBound]
 
-        XCTAssertTrue(nativeMapContent.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertTrue(nativeMapContent.contains("ForEach(activeSearchCandidates, id: \\.id)"))
+        XCTAssertTrue(map.contains("NativeMapView("))
+        XCTAssertTrue(map.contains("private final class NativeMapAnnotation: NSObject, MKAnnotation"))
+        XCTAssertTrue(map.contains("mapView.addAnnotations(addedAnnotations)"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
     }
-
-    func testNewNativeActiveAnnotationsKeepTheOneShotEntranceBounce() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let map = try String(
-            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
-        )
-        let savedStart = try XCTUnwrap(
-            map.range(of: "                        ForEach(activeAnnotationGroups, id: \\.key)")
-        )
-        let searchStart = try XCTUnwrap(
-            map.range(
-                of: "                        ForEach(activeSearchCandidates, id: \\.id)",
-                range: savedStart.upperBound..<map.endIndex
-            )
-        )
-        let nativeMapEnd = try XCTUnwrap(
-            map.range(of: "                    .mapStyle(", range: searchStart.upperBound..<map.endIndex)
-        )
-        let savedActiveAnnotation = map[savedStart.lowerBound..<searchStart.lowerBound]
-        let searchActiveAnnotation = map[searchStart.lowerBound..<nativeMapEnd.lowerBound]
-
-        XCTAssertTrue(savedActiveAnnotation.contains("MapPinEntranceModifier("))
-        XCTAssertTrue(searchActiveAnnotation.contains("MapPinEntranceModifier("))
-        XCTAssertTrue(savedActiveAnnotation.contains("isVisible: isEntranceVisible"))
-        XCTAssertTrue(searchActiveAnnotation.contains("isVisible: isEntranceVisible"))
-        XCTAssertTrue(savedActiveAnnotation.contains("MapPinReselectionBounceModifier("))
-        XCTAssertTrue(searchActiveAnnotation.contains("MapPinReselectionBounceModifier("))
-        XCTAssertFalse(savedActiveAnnotation.contains(".position("))
-        XCTAssertFalse(searchActiveAnnotation.contains(".position("))
-    }
-
-    func testViewportAndFilterArrivalsUseExplicitEntranceIdentityState() throws {
+    func testNativeActiveAnnotationsKeepTheOneShotReselectionBounce() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1920,19 +1886,33 @@ final class MapSelectionMotionTests: XCTestCase {
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
 
-        XCTAssertTrue(
-            map.contains("@State private var mapPinEntranceKeyState = MapPinEntranceKeyState()")
-        )
-        XCTAssertTrue(map.contains(".onChange(of: mapPinEntranceKeys, initial: true)"))
-        XCTAssertTrue(map.contains("mapPinEntranceKeyState.isPresented("))
-        XCTAssertTrue(
-            map.contains("updateMapPinEntranceKeys(mapPinEntranceKeys(in: region))")
-        )
-        XCTAssertTrue(map.contains("updateRenderedAnnotationViewport(for: region)"))
-        XCTAssertFalse(map.contains("visibleTransitionGroupKeys"))
-        XCTAssertFalse(map.contains("transitionMapPins("))
+        XCTAssertTrue(map.contains("bounceRevision: group.key == selectedPlaceGroupKey"))
+        XCTAssertTrue(map.contains("bounceRevision: candidate.id == selectedSearchCandidateID"))
+        XCTAssertTrue(map.contains("if descriptor.bounceRevision != bounceRevision"))
+        XCTAssertTrue(map.contains("transform = CGAffineTransform(scaleX: 0.82, y: 0.82)"))
+        XCTAssertTrue(map.contains("UIView.animate("))
+        XCTAssertTrue(map.contains("self.transform = .identity"))
     }
+    func testNativeAnnotationsAreDiffedReusedAndBufferedAroundTheViewport() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
 
+        XCTAssertTrue(map.contains("private var annotationsByID: [String: NativeMapAnnotation]"))
+        XCTAssertTrue(map.contains("mapView.addAnnotations(addedAnnotations)"))
+        XCTAssertTrue(map.contains("mapView.removeAnnotations(staleAnnotations)"))
+        XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
+        XCTAssertTrue(map.contains("for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers"))
+        XCTAssertTrue(map.contains("let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID"))
+        XCTAssertTrue(map.contains("private var renderedViewport: MapViewport?"))
+        XCTAssertTrue(map.contains("MapAnnotationViewportPolicy.shouldRefresh("))
+        XCTAssertTrue(map.contains("descriptor.isSelected"))
+        XCTAssertFalse(map.contains("@State private var renderedAnnotationViewport"))
+        XCTAssertFalse(map.contains("MapAnnotationDensityPolicy"))
+    }
     func testEntranceIdentityStateStagesOnlyPinsNewToTheViewport() throws {
         let retained = MapPinEntranceIdentity.saved("retained")
         let entering = MapPinEntranceIdentity.saved("entering")
@@ -2025,14 +2005,13 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
-        XCTAssertTrue(map.contains("prioritizedAnnotationCoordinate: activePinFocusSelection?.coordinate"))
-        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
-        XCTAssertGreaterThan(MapAnnotationPriorityPolicy.coordinateTolerance, 0)
-        XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
+        XCTAssertTrue(map.contains("isSelected: highlightsCompactSelection"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
+        XCTAssertTrue(map.contains("displayPriority = .required"))
+        XCTAssertTrue(map.contains("drawTitle("))
+        XCTAssertTrue(map.contains("scheduleEmptyMapTapDismissal()"))
     }
-
     func testMapInteractionSourceLeavesNativeGesturesUnblockedAndKeepsPanDismissal() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -2043,11 +2022,6 @@ final class MapSelectionMotionTests: XCTestCase {
         let card = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
-        let nativeMapStart = try XCTUnwrap(map.range(of: "                    Map(\n"))
-        let nativeMapEnd = try XCTUnwrap(
-            map.range(of: "                    .mapStyle(", range: nativeMapStart.upperBound..<map.endIndex)
-        )
-        let nativeMapContent = map[nativeMapStart.lowerBound..<nativeMapEnd.lowerBound]
         let continuousHandlerStart = try XCTUnwrap(
             map.range(of: "    private func handleMapCameraChange(")
         )
@@ -2061,88 +2035,42 @@ final class MapSelectionMotionTests: XCTestCase {
             continuousHandlerStart.lowerBound..<continuousHandlerEnd.lowerBound
         ]
 
-        XCTAssertTrue(map.contains("interactionModes: .all"))
-        XCTAssertFalse(nativeMapContent.contains("Button {"))
-        XCTAssertTrue(nativeMapContent.contains(".allowsHitTesting(false)"))
-        XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
-        XCTAssertTrue(map.contains("nativeMapFeatureSelectionSuppressionUntil"))
-        XCTAssertFalse(map.contains(".onTapGesture(coordinateSpace: .local)"))
-        XCTAssertFalse(map.contains("DragGesture(minimumDistance: 0, coordinateSpace: .local)"))
-        XCTAssertFalse(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
-        XCTAssertFalse(map.contains("MagnifyGesture(minimumScaleDelta:"))
-        XCTAssertTrue(map.contains("MapGestureObserver("))
-        XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
+        XCTAssertTrue(map.contains("NativeMapView("))
+        XCTAssertTrue(map.contains("MKMapView(frame: .zero)"))
+        XCTAssertTrue(map.contains("mapView.selectableMapFeatures = [.pointsOfInterest]"))
+        XCTAssertTrue(map.contains("mapView.showsUserLocation = parent.showsUserLocation"))
         XCTAssertTrue(map.contains("PassiveMapTapGestureRecognizer"))
-        XCTAssertTrue(map.contains("recognizer.onCompletedTap = { [weak self] point in"))
-        XCTAssertTrue(
-            map.contains(
-                "recognizer.maximumMovement = MapHitTesting.passiveTapAllowableMovement"
-            )
-        )
-        XCTAssertTrue(map.contains("state = .failed"))
-        XCTAssertTrue(map.contains("callback?(completedLocation)"))
-        XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
-        XCTAssertTrue(map.contains("recognizer.numberOfTouchesRequired = 1"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
         XCTAssertTrue(map.contains("recognizer.delaysTouchesBegan = false"))
         XCTAssertTrue(map.contains("shouldRecognizeSimultaneouslyWith otherGestureRecognizer"))
-        XCTAssertTrue(map.contains("observer.onTap(point)"))
-        XCTAssertTrue(map.contains("observer.onLongPress(recognizer.location(in: mapView))"))
-        XCTAssertFalse(map.contains("observer.onTap(recognizer.location(in: anchorView))"))
-        XCTAssertTrue(map.contains("registerMapZoom()"))
-        XCTAssertTrue(map.contains("tapDate.timeIntervalSince(previousMapTapDate)"))
-        XCTAssertTrue(map.contains("let tapRegion = currentSearchRegion"))
-        XCTAssertTrue(map.contains("Date.now >= mapTapDismissalSuppressionUntil"))
-        XCTAssertTrue(map.contains("handleMapCameraChange(context.region)"))
-        XCTAssertTrue(map.contains("handleMapCameraInteractionEnd(context.region)"))
-        XCTAssertTrue(map.contains(".onMapCameraChange(frequency: .onEnd)"))
+        XCTAssertTrue(map.contains("parent.onLongPress(coordinate)"))
+        XCTAssertTrue(map.contains("parent.onEmptyMapTap()"))
+        XCTAssertTrue(map.contains("parent.onNativeFeatureSelection(feature)"))
+        XCTAssertTrue(map.contains("parent.onAnnotationTap(annotation.kind)"))
+        XCTAssertTrue(map.contains("mapViewDidChangeVisibleRegion"))
+        XCTAssertTrue(map.contains("regionDidChangeAnimated"))
+        XCTAssertTrue(map.contains("parent.onCameraChange(mapView.region)"))
+        XCTAssertTrue(map.contains("parent.onCameraInteractionEnd(mapView.region)"))
         XCTAssertTrue(map.contains("@State private var cameraRegionTracker"))
-        XCTAssertFalse(map.contains("@State private var currentSearchRegion"))
         XCTAssertTrue(map.contains("cameraRegionTracker.recordCameraChange(region)"))
         XCTAssertTrue(map.contains("cameraRegionTracker.finishCameraChange(region)"))
         XCTAssertFalse(continuousHandler.contains("Task"))
         XCTAssertFalse(continuousHandler.contains("withAnimation"))
         XCTAssertFalse(continuousHandler.contains("store."))
         XCTAssertFalse(continuousHandler.contains("registerMapZoom"))
-        XCTAssertFalse(continuousHandler.contains("updateMapPinEntranceKeys"))
-        XCTAssertFalse(continuousHandler.contains("renderedAnnotationViewport"))
-        XCTAssertFalse(map.contains("@State private var mapInteractionStartRegion"))
-        XCTAssertFalse(map.contains("@State private var mapInteractionDidZoom"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
-        XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
-        XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
-        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
-        XCTAssertTrue(map.contains("prioritizedAnnotationCoordinate: activePinFocusSelection?.coordinate"))
-        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
-        XCTAssertTrue(
-            map.contains(
-                "pointsOfInterest: .all"
-            )
-        )
-        XCTAssertGreaterThanOrEqual(
-            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
-            2
-        )
-        XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
+        XCTAssertTrue(map.contains("MapSelectionLifetimePolicy.shouldDismiss"))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
-        XCTAssertFalse(map.contains("replacementFadeOutDuration"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
-        XCTAssertTrue(map.contains("retainingGroup: routedVisiblePlaceGroup"))
-        XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
-        XCTAssertTrue(map.contains("MapActivePinRetention.groupKey("))
-        XCTAssertFalse(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))
-        XCTAssertTrue(map.contains("compactCardContentOpacity"))
-        XCTAssertTrue(map.contains("nearbyFadeAnimation"))
-        XCTAssertTrue(map.contains("nearbyReturnFadeAnimation"))
+        XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
         XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
         XCTAssertTrue(card.contains("Label(\"Copy coordinates\", systemImage: \"doc.on.doc\")"))
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
     }
-
     func testPassiveSingleTapObserverRecognizesImmediatelyWithoutBlockingMapMovement() {
         XCTAssertEqual(MapHitTesting.passiveTapAllowableMovement, 10)
     }
@@ -2161,7 +2089,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
     }
 
-    func testInactiveMapAnnotationsHideCompetingTitlesAndActiveSelectionUsesNativeMapLayer() throws {
+    func testInactiveNativeAnnotationsHideTitlesAndReuseStaticImages() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -2169,17 +2097,15 @@ final class MapSelectionMotionTests: XCTestCase {
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
 
-        XCTAssertGreaterThanOrEqual(
-            map.components(separatedBy: ".annotationTitles(.hidden)").count - 1,
-            4
-        )
+        XCTAssertTrue(map.contains("canShowCallout = false"))
+        XCTAssertTrue(map.contains("isSelected ? title : \"\""))
+        XCTAssertTrue(map.contains("private static let imageCache = NSCache<NSString, UIImage>()"))
+        XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
+        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
+        XCTAssertTrue(map.contains("zPriority = .max"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
-        XCTAssertTrue(map.contains("ForEach(activeAnnotationGroups, id: \\.key)"))
-        XCTAssertTrue(map.contains("ForEach(activeSearchCandidates, id: \\.id)"))
-        XCTAssertTrue(map.contains("annotationView.zPriority = .max"))
     }
-
     func testNativeAnnotationPriorityMatchesOnlyTheSelectedCoordinate() {
         let selected = CLLocationCoordinate2D(latitude: 33.770_050_1, longitude: -118.193_739_5)
         let withinTolerance = CLLocationCoordinate2D(
@@ -2209,8 +2135,64 @@ final class MapSelectionMotionTests: XCTestCase {
                 selectedCoordinate: selected
             )
         )
+
+        let localQueryRect = MapAnnotationPriorityPolicy.queryRect(centeredAt: selected)
+        XCTAssertTrue(localQueryRect.contains(MKMapPoint(selected)))
+        XCTAssertFalse(localQueryRect.contains(MKMapPoint(anotherPin)))
     }
 
+    @MainActor
+    func testDenseNativeAnnotationPolicyRetainsEveryGroupAndSelection() {
+        let currentUser = densityProfile()
+        let places = (0..<100).map { index in
+            densityVisiblePlace(
+                owner: currentUser,
+                name: "Dense Place \(index)",
+                category: "coffee",
+                latitude: 34.02 + Double(index / 10) * 0.005,
+                longitude: -118.30 + Double(index % 10) * 0.005,
+                providerID: "mapkit_dense_\(index)",
+                status: .been
+            )
+        }
+        let groups = VisiblePlaceGrouping.groups(
+            from: places,
+            currentUserID: currentUser.id
+        )
+        let selectedKey = groups.last?.key
+        let rendered = MapScreen.orderedAnnotationGroups(
+            groups,
+            selectedGroupKey: selectedKey
+        )
+
+        XCTAssertEqual(rendered.count, groups.count)
+        XCTAssertEqual(Set(rendered.map(\.key)).count, groups.count)
+        XCTAssertEqual(rendered.last?.key, selectedKey)
+    }
+    func testClusterZoomKeepsCoLocatedPlacesAtNeighborhoodScale() throws {
+        let coordinate = CLLocationCoordinate2D(
+            latitude: 34.095_315,
+            longitude: -118.228_921
+        )
+        let colocated = Array(repeating: coordinate, count: 7)
+
+        let region = try XCTUnwrap(
+            NativeMapClusterZoomPolicy.region(fitting: colocated)
+        )
+
+        XCTAssertEqual(
+            region.span.latitudeDelta,
+            NativeMapClusterZoomPolicy.minimumLatitudeDelta,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            region.span.longitudeDelta,
+            NativeMapClusterZoomPolicy.minimumLongitudeDelta,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(region.center.latitude, coordinate.latitude, accuracy: 0.000_001)
+        XCTAssertEqual(region.center.longitude, coordinate.longitude, accuracy: 0.000_001)
+    }
     func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -2278,6 +2260,54 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
         XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
+    }
+
+    private func densityProfile() -> LocalProfile {
+        LocalProfile(
+            localID: "local_user_joe",
+            serverID: "user_joe",
+            handle: "joe",
+            displayName: "Joe",
+            syncState: .synced
+        )
+    }
+
+    private func densityVisiblePlace(
+        owner: LocalProfile,
+        name: String,
+        category: String,
+        latitude: Double,
+        longitude: Double,
+        providerID: String,
+        status: PlaceStatus
+    ) -> VisiblePlace {
+        let place = LocalPlace(
+            localID: "local_place_\(providerID)",
+            serverID: "place_\(providerID)",
+            canonicalName: name,
+            category: category,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: providerID,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_\(providerID)",
+            serverID: "up_\(providerID)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            sourceType: "test",
+            syncState: .synced
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
     }
 }
 
@@ -2426,7 +2456,9 @@ final class MapFilterSelectionTests: XCTestCase {
                 "if !isPlaceProfilePresented && !isMapSearchFocused"
             )
         )
-        XCTAssertTrue(map.contains("mapSearchDockClearance + nearbyLift"))
+        XCTAssertTrue(
+            map.contains("mapSearchDockClearance - WanderTheme.spacing2 + nearbyLift")
+        )
     }
 
     func testMoreSectionsMatchTheActiveSource() {
@@ -2523,7 +2555,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(map.contains("visibleTransitionGroupKeys"))
         XCTAssertFalse(map.contains("transitionMapPins("))
         XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
-        XCTAssertTrue(map.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(map.contains("private final class NativeMapPinAnnotationView"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
         XCTAssertTrue(map.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
@@ -2540,7 +2572,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(pinModifier.contains(".onChange(of: isVisible)"))
         XCTAssertTrue(pinModifier.contains("presentation.setVisible(visible)"))
         XCTAssertTrue(pinModifier.contains("withAnimation("))
-        XCTAssertTrue(map.contains("MapGestureObserver("))
+        XCTAssertTrue(map.contains("attachGestureObservers(to mapView: MKMapView)"))
         XCTAssertFalse(map.contains("@State private var mapPressLocation"))
         XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
