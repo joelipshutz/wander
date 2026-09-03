@@ -29,6 +29,71 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
     }
 }
 
+final class PlaceImportHistoryPresentationTests: XCTestCase {
+    func testQueuedAndProcessingImportsStayLabeledAsMatching() {
+        let queued = PlaceImportBatch(
+            id: "queued",
+            source: .instagram,
+            sourceName: nil,
+            state: .queued,
+            totalCount: 1
+        )
+        let processing = PlaceImportBatch(
+            id: "processing",
+            source: .tiktok,
+            sourceName: nil,
+            state: .processing,
+            totalCount: 1
+        )
+
+        XCTAssertEqual(
+            PlaceImportHistoryPresentation.statusLabel(batch: queued, items: []),
+            "Matching…"
+        )
+        XCTAssertEqual(
+            PlaceImportHistoryPresentation.statusLabel(batch: processing, items: []),
+            "Matching…"
+        )
+    }
+
+    func testReadyImportIsOnlyPresentedAsReadyAfterMatchingFinishes() {
+        let ready = PlaceImportBatch(
+            id: "ready",
+            source: .snapchat,
+            sourceName: nil,
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+
+        XCTAssertEqual(
+            PlaceImportHistoryPresentation.statusLabel(batch: ready, items: []),
+            "Ready to review"
+        )
+    }
+
+    func testUnfinishedItemPreventsAPrematureReadyLabel() {
+        let batch = PlaceImportBatch(
+            id: "in-flight", source: .instagram, sourceName: nil,
+            state: .ready, totalCount: 1
+        )
+        let item = PlaceImportItem(
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Coffee", nameHint: "Coffee", areaHint: nil,
+                sourceURLString: nil, sourceLine: 1
+            ),
+            state: .resolving
+        )
+
+        XCTAssertEqual(
+            PlaceImportHistoryPresentation.statusLabel(batch: batch, items: [item]),
+            "Matching…"
+        )
+    }
+}
+
 final class PlaceImportReceiptMigrationTests: XCTestCase {
     func testGenericSocialNamedNeedsReviewPlacesSurviveReceiptDecode() throws {
         let instagramPlace = PlaceImportReceiptEntry(
@@ -1034,6 +1099,16 @@ final class PlaceImportParserTests: XCTestCase {
         XCTAssertEqual(seeds[0].sourceURLString, "https://www.instagram.com/p/Db--aE4DIh1/")
         XCTAssertNil(seeds[0].nameHint)
         XCTAssertEqual(PlaceImportSourceDetector.source(for: seeds[0]), .instagram)
+    }
+
+    func testDetectsSnapchatLinksAsSnapchatImports() throws {
+        let sourceURL = "https://www.snapchat.com/p/example"
+
+        let seeds = try PlaceImportParser.parse(source: .textNotes, text: sourceURL)
+
+        XCTAssertEqual(seeds.count, 1)
+        XCTAssertEqual(seeds[0].sourceURLString, sourceURL)
+        XCTAssertEqual(PlaceImportSourceDetector.source(for: seeds[0]), .snapchat)
     }
 }
 

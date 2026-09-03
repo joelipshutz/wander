@@ -296,6 +296,7 @@ struct WanderRootView: View {
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
     @State private var isPresentingImportHub: Bool
+    @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
     @State private var addSheetDetent: PresentationDetent
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
@@ -663,10 +664,15 @@ struct WanderRootView: View {
                     importStore: importStore,
                     completionAction: beginInteractivePlaceImport,
                     inboxAction: openImportInboxFromHub,
-                    cancelAction: dismissImportHub
+                    cancelAction: dismissImportHub,
+                    onContentHeightChange: { contentHeight in
+                        // Include the native toolbar and drag handle above the
+                        // measured content; keep .large available for dragging.
+                        importHubRestingHeight = ceil(contentHeight) + 64
+                    }
                 )
             }
-            .presentationDetents([.height(AddSheetLayout.importEntryHeight), .large])
+            .presentationDetents([.height(importHubRestingHeight), .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(WanderTheme.canvasWarm.color)
         }

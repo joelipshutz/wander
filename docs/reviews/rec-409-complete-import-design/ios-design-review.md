@@ -2,9 +2,39 @@
 
 Date: 2026-09-03  
 Runtime: iPhone 17 and 375×667 compact simulator, iOS 26.5  
-Scope: final production direction plus DEBUG SwiftUI state gallery
+Scope: production-view follow-up plus the earlier DEBUG SwiftUI state gallery
 
-The named iOS design-review rubric was run against simulator captures because this handoff explicitly requires the newest iOS simulator. No dimension scored below 7.
+## Implementation follow-up — September 3
+
+Status: **NOT READY for end-to-end handoff**. The app UI follow-up is implemented; the Share extension's true closed-app processing/notification path still requires the server-job and retention decision in `docs/open-questions.md`.
+
+The new captures below render the actual production review, inline save editor, history, and import sheet, with deterministic fixture records/photos. Fixture photography demonstrates the real photo-loading component; it is not evidence that each named fixture venue has that photograph. The earlier gallery farther below remains a design reference, not an end-to-end test.
+
+| Production screen | iPhone 17 | Compact 375×667 |
+|---|---|---|
+| Content-sized draggable entry | [Capture](implementation-Entry-large.png) | [Capture](implementation-Entry-small.png) |
+| Photo-backed review; neutral check-in trim | [Capture](implementation-Review-large.png) | [Capture](implementation-Review-small.png) |
+| Actual save components expanded inline | [Capture](implementation-Details-large.png) | [Capture](implementation-Details-small.png) |
+| Fixed-size history tiles and monochrome source marks | [Capture](implementation-History-large.png) | [Capture](implementation-History-small.png) |
+| Processing rather than premature ready state | [Capture](implementation-Processing-large.png) | [Capture](implementation-Processing-small.png) |
+
+Visual corrections verified: no orange outline on Check In, no duplicate lower history button, no opaque underlay behind the review action, contained Google Maps artwork, and no clipped clipboard action on the compact phone. The entry detent now measures its content plus native toolbar space and retains `.large` for dragging. Instagram, TikTok, Snapchat, and Google Maps use shared brand assets rendered as templates; Text/Notes uses Apple's native Notes symbol.
+
+The requested iOS design-review skill's real-device connection could not run: the physical iPhone was unavailable. Its visual rubric was applied to iOS 26.5 simulator captures instead. No hardware, host-app Share extension, VoiceOver, or full UI-runner pass is claimed. The extension builds and its durable-capture contract is tested, but it currently honestly says matching begins on the next rec.me launch.
+
+Xcode was opened to this isolated worktree; its Branch Chooser was verified as `codex/rec-409-complete-import-design`.
+
+### Validation
+
+- App and Share extension compile on the iOS 26.5 simulator. Project generation passed; generated project changes add only the shared brand asset catalog.
+- Final focused run: **29 tests passed, zero failed**, including state labels, source detection, durable Share capture, multi-match selections, offline-save notices, full inline details, and the shared editor contracts.
+- Full unit target: **1,704 passed / 1,715 executed; 11 failed**. This is not a passing suite. Remaining failures cover two terminal/no-candidate resolver expectations, two social locality match cases, two remote social timeout expectations, four unrelated navigation/source contracts, and the widget launch-routing contract. Their behavior was not repaired by this UI follow-up; baseline equivalence has not been re-run on a clean checkout.
+- Full app/UI-test gate: blocked by the repeating Xcode UI-runner initialization failure. Physical-device Share-host, background execution, push delivery, and VoiceOver remain unverified.
+- No hosted migration, authentication change, deployment, merge, or TestFlight upload was performed.
+
+## Earlier design-gallery rubric
+
+The earlier gallery review below scored the proposed design, not the completeness of the follow-up implementation.
 
 | Dimension | Score | Evidence |
 |---|---:|---|
@@ -43,4 +73,4 @@ Biggest leverage fix completed during review: source post thumbnail URLs now per
 ![Compact history](history-small.png)
 ![Compact report](report-small.png)
 
-Status: DONE_WITH_CONCERNS. Visual and focused contract validation pass. The full XCTest target compiled, but Xcode's UI-test runner repeatedly failed to materialize with `no debugger version`; the run was interrupted after the infrastructure error repeated.
+Earlier gallery validation: focused contract checks passed. The combined XCTest/UI-test run compiled, but Xcode's UI-test runner repeatedly failed to materialize with `no debugger version`; it was interrupted after the infrastructure error repeated. See the implementation status above for the current handoff boundary.

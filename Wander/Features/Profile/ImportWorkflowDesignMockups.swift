@@ -1,6 +1,103 @@
 #if DEBUG
 import SwiftUI
 
+/// Captures the production import views with deterministic data and the same
+/// photo repository used by the map screenshot harness.
+enum ImportImplementationCapturePage: String, CaseIterable {
+    case review, details, history, processing
+
+    static func resolved() -> Self? {
+        allCases.first {
+            ProcessInfo.processInfo.arguments.contains(
+                "-WanderImportImplementation" + $0.rawValue.capitalized
+            )
+        }
+    }
+}
+
+struct ImportImplementationCaptureRoot: View {
+    let page: ImportImplementationCapturePage
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+    @StateObject private var walkthroughs = FirstVisitWalkthroughCoordinator(isEnabled: false)
+    @StateObject private var importStore: PlaceImportStore
+
+    init(page: ImportImplementationCapturePage) {
+        self.page = page
+        let persistence = EphemeralPlaceImportPersistence()
+        try? persistence.save(Self.snapshot)
+        _importStore = StateObject(wrappedValue: PlaceImportStore(persistence: persistence))
+    }
+
+    var body: some View {
+        NavigationStack {
+            if page == .history {
+                PlaceImportHistoryScreen(importStore: importStore)
+            } else {
+                PlaceImportCanonicalReviewScreen(
+                    importStore: importStore,
+                    batchIDs: [page == .processing ? "capture-snapchat" : "capture-instagram"],
+                    onDone: {},
+                    initiallyExpandedDetailItemID: page == .details ? "capture-instagram-0" : nil
+                )
+            }
+        }
+        .environmentObject(store)
+        .environmentObject(walkthroughs)
+        .preferredColorScheme(.light)
+    }
+
+    private static var snapshot: PlaceImportSnapshot {
+        let sources: [PlaceImportSource] = [.instagram, .googleMaps, .tiktok, .snapchat, .textNotes]
+        let batches = sources.enumerated().map { index, source in
+            PlaceImportBatch(
+                id: "capture-\(source.rawValue)",
+                source: source,
+                sourceName: nil,
+                createdAt: Date(timeIntervalSince1970: 1_788_450_000 - Double(index * 86_400)),
+                state: source == .snapchat ? .processing : .ready,
+                totalCount: 2,
+                processedCount: source == .snapchat ? 0 : 2
+            )
+        }
+        let items = sources.flatMap { source in
+            (0..<2).map { index in
+                let name = index == 0 ? "Maru Coffee" : "Jade Rabbit"
+                let candidates = (0..<(index == 0 ? 1 : 3)).map { candidateIndex in
+                    PlaceCandidate(
+                        id: "capture-\(source.rawValue)-\(index)-\(candidateIndex)",
+                        name: name,
+                        category: index == 0 ? "coffee shop" : "restaurant",
+                        address: candidateIndex == 0 ? "1936 Hillhurst Avenue" : "\(200 + candidateIndex) Main Street",
+                        locality: "Los Angeles",
+                        region: "CA",
+                        latitude: 34.104 + Double(candidateIndex) * 0.01,
+                        longitude: -118.287,
+                        sourceProvider: "mapkit",
+                        confidence: 0.96 - Double(candidateIndex) * 0.1
+                    )
+                }
+                return PlaceImportItem(
+                    id: "capture-\(source.rawValue)-\(index)",
+                    batchID: "capture-\(source.rawValue)",
+                    source: source,
+                    seed: PlaceImportSeed(
+                        rawText: name,
+                        nameHint: name,
+                        areaHint: "Los Angeles",
+                        sourceURLString: nil,
+                        sourceLine: index + 1
+                    ),
+                    state: source == .snapchat ? .queued : (index == 0 ? .ready : .ambiguous),
+                    candidates: source == .snapchat ? [] : candidates,
+                    selectedCandidateID: source == .snapchat ? nil : candidates.first?.id,
+                    stagedStatus: index == 0 ? .been : .wannaGo
+                )
+            }
+        }
+        return PlaceImportSnapshot(batches: batches, items: items)
+    }
+}
+
 enum ImportWorkflowMockupPage: String, CaseIterable {
     case entry
     case ready
@@ -782,11 +879,17 @@ private struct ImportStatusControls: View {
                 .font(.system(size: 15, weight: .black))
                 .foregroundStyle(
                     status == choice
-                        ? WanderTheme.terracottaDark.color
+                        ? (choice == .checkIn
+                            ? WanderTheme.stateSuccess.color
+                            : WanderTheme.terracottaDark.color)
                         : WanderTheme.textMuted.color
                 )
                 .frame(width: 42, height: 42)
-                .wanderGlassCapsule(tone: status == choice ? .selected : .neutral)
+                .wanderGlassCapsule(
+                    tone: choice == .checkIn
+                        ? .neutral
+                        : (status == choice ? .selected : .neutral)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

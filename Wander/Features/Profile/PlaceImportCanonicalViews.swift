@@ -1,13 +1,6 @@
 import SwiftUI
 import UIKit
 
-private struct CanonicalImportSaveRoute: Identifiable {
-    let id = UUID()
-    let itemID: String
-    let candidateID: String
-    let context: MapPlaceSaveContext
-}
-
 /// The launch import review: every resolved place stays visible, uncertain
 /// source mentions expose up to five independently selectable candidates, and
 /// the source row owns one shared Wanna / Check In state.
@@ -15,13 +8,18 @@ struct PlaceImportCanonicalReviewScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchIDs: [String]
     let onDone: () -> Void
+    var initiallyExpandedDetailItemID: String? = nil
 
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
-    @State private var saveRoute: CanonicalImportSaveRoute?
     @State private var expandedMatchItemIDs: Set<String> = []
+    @State private var expandedDetailItemIDs: Set<String> = []
+    @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
+    @State private var stagedDetailSubmissions: [String: MapPlaceSaveSubmission] = [:]
     @State private var isCommitting = false
+    @State private var showsCommitError = false
+    @State private var didExpandInitialDetails = false
 
     var body: some View {
         ScrollView {
@@ -66,20 +64,20 @@ struct PlaceImportCanonicalReviewScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             floatingCommitButton
         }
-        .sheet(item: $saveRoute, onDismiss: {
-            store.saveFlowDidDismiss(.saveSheet)
-        }) { route in
-            MapPlaceSaveFlowSheet(context: route.context) { submission in
-                await saveOptionalDetails(submission, route: route)
-            } onRemove: { _ in
-                false
-            }
-            .environmentObject(store)
+        .alert("Couldn’t add places", isPresented: $showsCommitError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("A place’s details could not be saved. Review its details and try again. Any places already saved are safe.")
         }
         .task(id: selectionPreparationSignature) {
             importStore.prepareCandidateSelections(batchIDs: batchIDs)
             importStore.reconcileDuplicates(with: existingPlaces)
             expandedMatchItemIDs.formUnion(possibleMatchItems.map(\.id))
+            if !didExpandInitialDetails,
+               let item = displayItems.first(where: { $0.id == initiallyExpandedDetailItemID }) {
+                didExpandInitialDetails = true
+                toggleDetails(item, candidate: item.selectedCandidate)
+            }
         }
     }
 
@@ -136,6 +134,9 @@ struct PlaceImportCanonicalReviewScreen: View {
                 withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
                     importStore.setIncludedInImport(true, itemIDs: displayItems.map(\.id))
                     importStore.setStagedStatus(status, itemIDs: displayItems.map(\.id))
+                    for item in displayItems {
+                        updateDetailStatus(status, itemID: item.id)
+                    }
                     for item in displayItems where item.selectedCandidates.isEmpty {
                         if let candidateID = item.candidates.first?.id {
                             importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
@@ -190,15 +191,27 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
 
             Button {
-                beginDetails(item, candidate: item.selectedCandidate)
+                toggleDetails(item, candidate: item.selectedCandidate)
             } label: {
-                Label("Add details", systemImage: "chevron.down")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .frame(minHeight: WanderTheme.tapMinimum)
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text("Add details")
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
+                }
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
             .disabled(item.selectedCandidate == nil)
+
+            if detailDrafts[item.id] != nil {
+                inlineDetails(item)
+                    .frame(height: expandedDetailItemIDs.contains(item.id) ? nil : 0, alignment: .top)
+                    .clipped()
+                    .opacity(expandedDetailItemIDs.contains(item.id) ? 1 : 0)
+                    .accessibilityHidden(!expandedDetailItemIDs.contains(item.id))
+            }
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
@@ -271,15 +284,27 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
 
             Button {
-                beginDetails(item, candidate: item.selectedCandidate)
+                toggleDetails(item, candidate: item.selectedCandidate)
             } label: {
-                Label("Add details", systemImage: "chevron.down")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .frame(minHeight: WanderTheme.tapMinimum)
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text("Add details")
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
+                }
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
             .disabled(item.selectedCandidate == nil)
+
+            if detailDrafts[item.id] != nil {
+                inlineDetails(item)
+                    .frame(height: expandedDetailItemIDs.contains(item.id) ? nil : 0, alignment: .top)
+                    .clipped()
+                    .opacity(expandedDetailItemIDs.contains(item.id) ? 1 : 0)
+                    .accessibilityHidden(!expandedDetailItemIDs.contains(item.id))
+            }
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
@@ -364,7 +389,9 @@ struct PlaceImportCanonicalReviewScreen: View {
                 .foregroundStyle(isSelected ? Color.white : statusColor(status))
                 .background(isSelected ? statusColor(status) : Color.clear)
                 .clipShape(Circle())
-                .wanderGlassCapsule(tone: isSelected ? .selected : .neutral)
+                .wanderGlassCapsule(
+                    tone: status == .been ? .neutral : (isSelected ? .selected : .neutral)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
@@ -382,7 +409,6 @@ struct PlaceImportCanonicalReviewScreen: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
         .padding(.bottom, WanderTheme.spacing2)
-        .shadow(color: Color.black.opacity(0.22), radius: 16, y: 7)
     }
 
     private var commitButtonTitle: String {
@@ -397,6 +423,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             } else {
                 importStore.setIncludedInImport(true, itemID: item.id)
                 importStore.setStagedStatus(status, itemID: item.id)
+                updateDetailStatus(status, itemID: item.id)
                 if item.selectedCandidates.isEmpty, let candidateID = item.candidates.first?.id {
                     importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
                 }
@@ -404,58 +431,78 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
     }
 
-    private func beginDetails(_ item: PlaceImportItem, candidate: PlaceCandidate?) {
+    private func toggleDetails(_ item: PlaceImportItem, candidate: PlaceCandidate?) {
         guard let candidate else { return }
-        let visiblePlace = MapPlaceSaveContext.currentUserSave(
-            matching: candidate,
-            in: store.currentUserVisiblePlaces
-        )
-        let context: MapPlaceSaveContext
-        if let visiblePlace {
-            if visiblePlace.userPlace.status == .been,
-               let visit = store.visits(for: visiblePlace.userPlace.id).first {
-                context = .editVisit(visit, visiblePlace: visiblePlace)
-            } else {
-                context = .editWant(
-                    visiblePlace,
-                    attributes: store.attributes(for: visiblePlace.userPlace.id)
-                )
+        withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
+            if expandedDetailItemIDs.contains(item.id) {
+                expandedDetailItemIDs.remove(item.id)
+                return
             }
-        } else {
-            context = .importCandidate(
-                candidate,
-                sourceType: item.source.canonicalAddSourceType,
-                status: item.stagedStatus,
-                defaultVisibility: store.effectiveDefaultVisibility,
-                ratingScore: item.stagedRatingScore,
-                note: item.stagedNote ?? ""
-            )
+            let context = detailContext(for: item, candidate: candidate)
+            if detailDrafts[item.id] == nil,
+               let draft = PlaceSaveDraft.restorableFlow(
+                   ownerUserID: store.currentUser.id,
+                   context: context
+               ) {
+                detailDrafts[item.id] = draft
+            }
+            expandedDetailItemIDs.insert(item.id)
         }
-        store.saveFlowDidPresent(.saveSheet)
-        saveRoute = CanonicalImportSaveRoute(
-            itemID: item.id,
-            candidateID: candidate.id,
-            context: context
+    }
+
+    @ViewBuilder
+    private func inlineDetails(_ item: PlaceImportItem) -> some View {
+        if let candidate = item.selectedCandidate,
+           let draft = detailDrafts[item.id] {
+            MapPlaceSaveEditor(
+                context: detailContext(for: item, candidate: candidate),
+                draft: draft,
+                onDraftChange: { draftID, form, submittedAt in
+                    guard var updated = detailDrafts[item.id], updated.id == draftID else { return }
+                    updated.form = form
+                    updated.updatedAt = .now
+                    updated.submittedAt = submittedAt
+                    detailDrafts[item.id] = updated
+                    importStore.setStagedStatus(form.selectedStatus, itemID: item.id)
+                    importStore.setStagedNote(form.note, itemID: item.id)
+                    importStore.setStagedRatingScore(form.selectedRatingScore, itemID: item.id)
+                    importStore.setStagedVisitedAt(form.visitedAt, itemID: item.id)
+                },
+                onSave: { _ in nil },
+                onRemove: { _ in false },
+                onClose: {},
+                onSaveCompleted: { _ in },
+                presentation: .inlineStaging,
+                onSubmissionChange: { submission in
+                    stagedDetailSubmissions[item.id] = submission
+                }
+            )
+            .id("\(item.id):\(candidate.id):\(draft.form.selectedStatus.rawValue)")
+            .padding(.top, WanderTheme.spacing1)
+        }
+    }
+
+    private func detailContext(
+        for item: PlaceImportItem,
+        candidate: PlaceCandidate
+    ) -> MapPlaceSaveContext {
+        .importCandidate(
+            candidate,
+            sourceType: item.source.canonicalAddSourceType,
+            status: detailDrafts[item.id]?.form.selectedStatus ?? item.stagedStatus,
+            defaultVisibility: detailDrafts[item.id]?.form.selectedVisibility
+                ?? store.effectiveDefaultVisibility,
+            ratingScore: detailDrafts[item.id]?.form.selectedRatingScore
+                ?? item.stagedRatingScore,
+            note: detailDrafts[item.id]?.form.note ?? item.stagedNote ?? ""
         )
     }
 
-    @MainActor
-    private func saveOptionalDetails(
-        _ submission: MapPlaceSaveSubmission,
-        route: CanonicalImportSaveRoute
-    ) async -> SaveResult? {
-        guard let result = await persistAddPlaceSaveSubmission(
-            submission,
-            store: store,
-            backend: nil
-        ) else { return nil }
-        importStore.setStagedStatus(submission.status, itemID: route.itemID)
-        importStore.setStagedNote(submission.note, itemID: route.itemID)
-        importStore.setStagedRatingScore(submission.ratingScore, itemID: route.itemID)
-        importStore.setStagedVisitedAt(submission.visitedAt, itemID: route.itemID)
-        importStore.setIncludedInImport(true, itemID: route.itemID)
-        store.flushPersistence()
-        return result
+    private func updateDetailStatus(_ status: PlaceStatus, itemID: String) {
+        guard var draft = detailDrafts[itemID] else { return }
+        draft.form.selectedStatus = status
+        draft.updatedAt = .now
+        detailDrafts[itemID] = draft
     }
 
     private func commit() {
@@ -473,8 +520,8 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
 
         isCommitting = true
-        var receipts: [PlaceImportReceiptEntry] = []
-        importStore.performBatchedMutations {
+        Task { @MainActor in
+            var receipts: [PlaceImportReceiptEntry] = []
             for batch in scopedBatches {
                 let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
                 let destination = destinationList(for: batch, itemCount: batchItems.count)
@@ -493,15 +540,34 @@ struct PlaceImportCanonicalReviewScreen: View {
                     for candidate in selected {
                         let existing = store.existingImportSave(matching: candidate)
                         let status = item.stagedStatus
-                        let result = store.saveImportedCandidate(
-                            candidate,
-                            status: status,
-                            visibility: .selfOnly,
-                            note: item.stagedNote,
-                            sourceType: item.source.canonicalAddSourceType,
-                            ratingScore: status == .been ? item.stagedRatingScore : nil,
-                            visitedAt: item.stagedVisitedAt ?? .now
-                        )
+                        let result: SaveResult
+                        if let stagedSubmission = stagedDetailSubmissions[item.id] {
+                            guard let stagedResult = await persistImportedPlaceSaveSubmission(
+                               stagedSubmission.replacingImportCandidate(
+                                   candidate,
+                                   sourceType: item.source.canonicalAddSourceType,
+                                   status: status
+                               ),
+                               sourceType: item.source.canonicalAddSourceType,
+                               store: store,
+                               backend: nil
+                            ) else {
+                                isCommitting = false
+                                showsCommitError = true
+                                return
+                            }
+                            result = stagedResult
+                        } else {
+                            result = store.saveImportedCandidate(
+                                candidate,
+                                status: status,
+                                visibility: .selfOnly,
+                                note: item.stagedNote,
+                                sourceType: item.source.canonicalAddSourceType,
+                                ratingScore: status == .been ? item.stagedRatingScore : nil,
+                                visitedAt: item.stagedVisitedAt ?? .now
+                            )
+                        }
                         if let destination {
                             _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
                         }
@@ -529,15 +595,16 @@ struct PlaceImportCanonicalReviewScreen: View {
                 )
                 receipts.append(contentsOf: entries)
             }
-        }
-        store.flushPersistence()
-        isCommitting = false
-        onDone()
+            store.flushPersistence()
+            isCommitting = false
+            onDone()
 
-        guard auth.isSignedIn, !receipts.isEmpty else { return }
-        Task { @MainActor in
-            _ = await store.syncUnsyncedOwnPlaces(backend: backend)
-            _ = await store.syncPendingPlaceLists(backend: backend)
+            guard auth.isSignedIn, !receipts.isEmpty else { return }
+            Task { @MainActor in
+                _ = await store.syncUnsyncedOwnPlaces(backend: backend)
+                _ = await store.syncPendingPlaceLists(backend: backend)
+                _ = await store.retryPendingSharedVisitInvites(backend: backend)
+            }
         }
     }
 
@@ -643,24 +710,14 @@ private struct CanonicalImportThumbnail: View {
     let size: CGFloat
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .fill(item.source.canonicalTint)
-            WanderCategoryEmoji(
-                emoji: item.selectedCandidate?.categoryEmoji ?? item.candidates.first?.categoryEmoji ?? "📍",
-                size: max(22, size * 0.44)
-            )
-        }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .accessibilityHidden(true)
+        PlaceImportPhotoThumb(item: item, loadsRemotePhoto: true, size: size)
     }
 }
 
 extension PlaceImportSource {
     var canonicalAddSourceType: AddSourceType {
         switch self {
-        case .googleMaps, .instagram, .tiktok: .link
+        case .googleMaps, .instagram, .tiktok, .snapchat: .link
         case .textNotes: .manual
         }
     }
@@ -670,6 +727,7 @@ extension PlaceImportSource {
         case .googleMaps: WanderTheme.skyTint.color
         case .instagram: WanderTheme.terracottaTint.color
         case .tiktok: WanderTheme.surfaceSand.color
+        case .snapchat: Color.white
         case .textNotes: WanderTheme.categorySage.color.opacity(0.24)
         }
     }
@@ -762,9 +820,7 @@ private struct PlaceImportHistoryTile: View {
                 }
 
             HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: batch.source.canonicalSystemImage)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(batch.source.canonicalAccent)
+                CanonicalImportSourceMark(source: batch.source, color: .black, size: 13)
                 Text(batch.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -776,7 +832,7 @@ private struct PlaceImportHistoryTile: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(batch.source.canonicalName) import, \(placeCount) places")
+        .accessibilityLabel("\(batch.source.canonicalName) import, \(placeCount) places, \(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))")
     }
 
     private var placeCount: Int {
@@ -789,34 +845,37 @@ private struct PlaceImportHistoryArtwork: View {
     let items: [PlaceImportItem]
 
     var body: some View {
-        ZStack {
-            batch.source.canonicalTint
-            sourceArtwork
+        GeometryReader { proxy in
+            ZStack {
+                batch.source.canonicalTint
+                sourceArtwork
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
 
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.58)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.58)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
 
-            VStack {
-                HStack {
+                VStack {
+                    HStack {
+                        Spacer()
+                        CanonicalImportSourceMark(source: batch.source, color: .white, size: 18)
+                            .frame(width: 36, height: 36)
+                            .background(Color.black.opacity(0.48), in: Circle())
+                    }
                     Spacer()
-                    Image(systemName: batch.source.canonicalSystemImage)
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.black.opacity(0.48), in: Circle())
+                    HStack(alignment: .bottom) {
+                        Text(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundStyle(.white)
+                        Spacer()
+                    }
                 }
-                Spacer()
-                HStack(alignment: .bottom) {
-                    Text(batch.receipt == nil ? "Ready to review" : "\(placeCount) places")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(.white)
-                    Spacer()
-                }
+                .padding(WanderTheme.spacing3)
             }
-            .padding(WanderTheme.spacing3)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
     }
@@ -851,22 +910,25 @@ private struct PlaceImportHistoryArtwork: View {
                 .scaledToFill()
         } else {
             GeometryReader { proxy in
+                let columnCount = artItems.count == 1 ? 1 : 2
+                let rowCount = artItems.count > 2 ? 2 : 1
+                let cellWidth = (proxy.size.width - CGFloat(columnCount - 1) * 2) / CGFloat(columnCount)
+                let cellHeight = (proxy.size.height - CGFloat(rowCount - 1) * 2) / CGFloat(rowCount)
                 let columns = [
-                    GridItem(.flexible(), spacing: 2),
                     GridItem(.flexible(), spacing: 2)
-                ]
+                ] + (columnCount == 2 ? [GridItem(.flexible(), spacing: 2)] : [])
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(Array(artItems.prefix(4))) { item in
-                        ZStack {
-                            item.source.canonicalTint
-                            WanderCategoryEmoji(
-                                emoji: item.selectedCandidate?.categoryEmoji
-                                    ?? item.candidates.first?.categoryEmoji
-                                    ?? "📍",
-                                size: 30
-                            )
-                        }
-                        .frame(height: (proxy.size.height - 2) / 2)
+                        PlaceImportPhotoThumb(
+                            item: item,
+                            loadsRemotePhoto: true,
+                            size: max(cellWidth, cellHeight),
+                            cornerRadius: 0
+                        )
+                        .frame(width: cellWidth, height: cellHeight)
+                        .clipped()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                     }
                 }
             }
@@ -883,11 +945,31 @@ private struct PlaceImportHistoryArtwork: View {
     private var placeCount: Int {
         batch.receipt?.entries.count ?? artItems.count
     }
+
 }
 
-private struct ImportReportSaveRoute: Identifiable {
-    let id = UUID()
-    let context: MapPlaceSaveContext
+private struct CanonicalImportSourceMark: View {
+    let source: PlaceImportSource
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let assetName = source.brandAssetName {
+                Image(assetName)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+            } else {
+                Image(systemName: "note.text")
+                    .resizable()
+                    .scaledToFit()
+            }
+        }
+        .foregroundStyle(color)
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
 }
 
 struct PlaceImportReportScreen: View {
@@ -897,7 +979,7 @@ struct PlaceImportReportScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
-    @State private var saveRoute: ImportReportSaveRoute?
+    @State private var expandedDetailEntryIDs: Set<String> = []
     @State private var copiedLink = false
 
     var body: some View {
@@ -935,31 +1017,11 @@ struct PlaceImportReportScreen: View {
         }
         .navigationTitle("Import report")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $saveRoute, onDismiss: {
-            store.saveFlowDidDismiss(.saveSheet)
-        }) { route in
-            MapPlaceSaveFlowSheet(context: route.context) { submission in
-                let result = await persistAddPlaceSaveSubmission(
-                    submission,
-                    store: store,
-                    backend: nil
-                )
-                beginBackgroundSyncIfPossible()
-                return result
-            } onRemove: { context in
-                let removed = await removeHistoricalSave(context)
-                if removed { beginBackgroundSyncIfPossible() }
-                return removed
-            }
-            .environmentObject(store)
-        }
     }
 
     private func sourceLinkCard(batch: PlaceImportBatch) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: batch.source.canonicalSystemImage)
-                .font(.system(size: 16, weight: .black))
-                .foregroundStyle(batch.source.canonicalAccent)
+            CanonicalImportSourceMark(source: batch.source, color: .black, size: 18)
                 .frame(width: 40, height: 40)
                 .background(batch.source.canonicalTint, in: Circle())
 
@@ -996,15 +1058,7 @@ struct PlaceImportReportScreen: View {
         let visible = visiblePlace(for: entry)
         return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .fill(batch?.source.canonicalTint ?? WanderTheme.surfaceSand.color)
-                    WanderCategoryEmoji(
-                        emoji: visible?.categoryEmoji ?? "📍",
-                        size: 25
-                    )
-                }
-                .frame(width: 54, height: 54)
+                reportThumbnail(entry)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(visible?.place.canonicalName ?? entry.displayName)
@@ -1037,14 +1091,29 @@ struct PlaceImportReportScreen: View {
                     }
                     Spacer(minLength: 0)
                     Button {
-                        beginDetails(visible)
+                        withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
+                            if expandedDetailEntryIDs.contains(entry.id) {
+                                expandedDetailEntryIDs.remove(entry.id)
+                            } else {
+                                expandedDetailEntryIDs.insert(entry.id)
+                            }
+                        }
                     } label: {
-                        Label("Add details", systemImage: "slider.horizontal.3")
-                            .font(WanderTypography.label)
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .frame(minHeight: WanderTheme.tapMinimum)
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Text("Add details")
+                            Image(systemName: "chevron.down")
+                                .rotationEffect(.degrees(expandedDetailEntryIDs.contains(entry.id) ? 180 : 0))
+                        }
+                        .font(WanderTypography.label)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
+                }
+
+                if expandedDetailEntryIDs.contains(entry.id) {
+                    inlineHistoricalDetails(entry: entry, visible: visible)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
@@ -1055,6 +1124,33 @@ struct PlaceImportReportScreen: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         }
+    }
+
+    @ViewBuilder
+    private func reportThumbnail(_ entry: PlaceImportReceiptEntry) -> some View {
+        if let item = items.first(where: { $0.id == entry.itemID }) {
+            PlaceImportPhotoThumb(item: photoItem(item, for: entry), loadsRemotePhoto: true, size: 54)
+        } else {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .fill(batch?.source.canonicalTint ?? WanderTheme.surfaceSand.color)
+                .overlay {
+                    Image(systemName: "photo.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color.opacity(0.55))
+                }
+                .frame(width: 54, height: 54)
+        }
+    }
+
+    private func photoItem(_ item: PlaceImportItem, for entry: PlaceImportReceiptEntry) -> PlaceImportItem {
+        guard let candidate = item.candidates.first(where: {
+            store.existingImportSave(matching: $0)?.userPlaceID == entry.userPlaceID
+        }) else { return item }
+        var result = item
+        result.candidates = [candidate]
+        result.selectedCandidateID = candidate.id
+        result.selectedCandidateIDsRaw = [candidate.id]
+        return result
     }
 
     private func reportStatusButton(_ status: PlaceStatus, visible: VisiblePlace) -> some View {
@@ -1074,26 +1170,62 @@ struct PlaceImportReportScreen: View {
                 .foregroundStyle(selected ? Color.white : reportStatusColor(status))
                 .background(selected ? reportStatusColor(status) : Color.clear)
                 .clipShape(Circle())
-                .wanderGlassCapsule(tone: selected ? .selected : .neutral)
+                .wanderGlassCapsule(
+                    tone: status == .been ? .neutral : (selected ? .selected : .neutral)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func beginDetails(_ visible: VisiblePlace) {
-        let context: MapPlaceSaveContext
+    private func detailContext(for visible: VisiblePlace) -> MapPlaceSaveContext {
         if visible.userPlace.status == .been,
            let visit = store.visits(for: visible.userPlace.id).first {
-            context = .editVisit(visit, visiblePlace: visible)
+            return .editVisit(visit, visiblePlace: visible)
         } else {
-            context = .editWant(
+            return .editWant(
                 visible,
                 attributes: store.attributes(for: visible.userPlace.id)
             )
         }
-        store.saveFlowDidPresent(.saveSheet)
-        saveRoute = ImportReportSaveRoute(context: context)
+    }
+
+    private func inlineHistoricalDetails(
+        entry: PlaceImportReceiptEntry,
+        visible: VisiblePlace
+    ) -> some View {
+        let context = detailContext(for: visible)
+        return MapPlaceSaveEditor(
+            context: context,
+            onSave: { submission in
+                let result = await persistAddPlaceSaveSubmission(
+                    submission,
+                    store: store,
+                    backend: nil
+                )
+                if result != nil {
+                    beginBackgroundSyncIfPossible()
+                }
+                return result
+            },
+            onRemove: { context in
+                let removed = await removeHistoricalSave(context)
+                if removed { beginBackgroundSyncIfPossible() }
+                return removed
+            },
+            onClose: {
+                _ = expandedDetailEntryIDs.remove(entry.id)
+            },
+            onSaveCompleted: { _ in
+                withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
+                    _ = expandedDetailEntryIDs.remove(entry.id)
+                }
+            },
+            presentation: .inlineSaving
+        )
+        .id("history-details:\(entry.id):\(visible.userPlace.status.rawValue)")
+        .padding(.top, WanderTheme.spacing1)
     }
 
     @MainActor
@@ -1149,6 +1281,7 @@ private extension PlaceImportSource {
         case .googleMaps: "Google Maps"
         case .instagram: "Instagram"
         case .tiktok: "TikTok"
+        case .snapchat: "Snapchat"
         case .textNotes: "Notes"
         }
     }
@@ -1158,6 +1291,7 @@ private extension PlaceImportSource {
         case .googleMaps: "map.fill"
         case .instagram: "camera.fill"
         case .tiktok: "music.note"
+        case .snapchat: "camera.viewfinder"
         case .textNotes: "note.text"
         }
     }
@@ -1167,6 +1301,7 @@ private extension PlaceImportSource {
         case .googleMaps: WanderTheme.stateInfo.color
         case .instagram: WanderTheme.terracotta.color
         case .tiktok: WanderTheme.textInk.color
+        case .snapchat: WanderTheme.textInk.color
         case .textNotes: WanderTheme.categoryMoss.color
         }
     }

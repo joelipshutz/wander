@@ -25,6 +25,12 @@ final class SharedPlaceImportSourceDetectorTests: XCTestCase {
         )
         XCTAssertEqual(
             SharedPlaceImportSourceDetector.source(
+                for: "https://www.snapchat.com/p/example"
+            ),
+            .snapchat
+        )
+        XCTAssertEqual(
+            SharedPlaceImportSourceDetector.source(
                 for: "https://maps.apple/p/example"
             ),
             .textNotes
@@ -462,10 +468,15 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
-        XCTAssertTrue(shareController.contains("Save this place"))
-        XCTAssertTrue(shareController.contains("[\"Wanna\", \"Check In\"]"))
-        XCTAssertTrue(shareController.contains("try inbox.capture(inputs, saveIntent: intent)"))
-        XCTAssertTrue(shareController.contains("extensionContext?.completeRequest"))
+        XCTAssertTrue(shareController.contains("Import places"))
+        XCTAssertTrue(shareController.contains("Start import"))
+        XCTAssertTrue(shareController.contains("linkField.text = sharedLinkString"))
+        XCTAssertTrue(shareController.contains("try inbox.capture(captureInputs)"))
+        XCTAssertFalse(shareController.contains(".open(appURL"))
+        XCTAssertTrue(shareController.contains("completeRequest(returningItems: nil)"))
+        XCTAssertFalse(shareController.contains("countdownDuration"))
+        XCTAssertFalse(shareController.contains("[\"Wanna\", \"Check In\"]"))
+        XCTAssertFalse(shareController.contains("saveIntent:"))
         XCTAssertFalse(shareController.contains("share-extension-captured"))
     }
 

@@ -75,21 +75,26 @@ struct AddImportEntrySection: View {
     }
 }
 
+private struct PlaceImportHubContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct PlaceImportHubScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let completionAction: ([String]) -> Void
     let inboxAction: () -> Void
     var cancelAction: (() -> Void)?
+    var onContentHeightChange: (CGFloat) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var isStarting = false
     @FocusState private var isInputFocused: Bool
-
-    private var summary: PlaceImportSummary {
-        importStore.summary
-    }
 
     var body: some View {
         ScrollView {
@@ -184,21 +189,21 @@ struct PlaceImportHubScreen: View {
                 }
                 .buttonStyle(.plain)
 
-                if summary.hasPendingImports {
-                    Button(action: inboxAction) {
-                        Label(actionTitle, systemImage: "tray.full.fill")
-                            .font(WanderTypography.label)
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .center)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: PlaceImportHubContentHeightKey.self,
+                        value: proxy.size.height
+                    )
+                }
+            }
         }
+        .onPreferenceChange(PlaceImportHubContentHeightKey.self, perform: onContentHeightChange)
         .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
         .navigationTitle("")
@@ -238,22 +243,6 @@ struct PlaceImportHubScreen: View {
                 .accessibilityHint("Shows where to find links in each supported app")
             }
         }
-    }
-
-    private var actionTitle: String {
-        if summary.remainingCount > 0 {
-            return "Previous imports · \(summary.remainingCount) waiting"
-        }
-        if summary.processingCount > 0 {
-            return "Previous imports · matching \(summary.processedCount) of \(summary.totalCount)"
-        }
-        if summary.sourceRetryProcessingCount > 0 {
-            return "Previous import · rescanning source"
-        }
-        if summary.sourceRetryCount > 0 {
-            return "Previous import · scan incomplete"
-        }
-        return "Previous imports"
     }
 
     private var canStart: Bool {
@@ -1420,6 +1409,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             case .googleMaps: "From Google Maps"
             case .instagram: "From Instagram"
             case .tiktok: "From TikTok"
+            case .snapchat: "From Snapchat"
             case .textNotes: "From your notes"
             }
         }
@@ -1949,6 +1939,8 @@ private struct PlaceImportSourceIcon: View {
             )
         case .tiktok:
             Circle().fill(Color.black)
+        case .snapchat:
+            Circle().fill(Color.white)
         case .textNotes:
             Circle().fill(WanderTheme.surfaceSand.color)
         }
@@ -2963,10 +2955,11 @@ private extension PlaceImportReceiptEntry {
     }
 }
 
-private struct PlaceImportPhotoThumb: View {
+struct PlaceImportPhotoThumb: View {
     let item: PlaceImportItem
     let loadsRemotePhoto: Bool
     var size: CGFloat = 52
+    var cornerRadius: CGFloat = WanderTheme.radiusSmall
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
     @State private var presentedMapLocation: PlaceImportMapLocation?
@@ -2997,13 +2990,12 @@ private struct PlaceImportPhotoThumb: View {
 
     private var thumbnail: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+            RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(item.source.tint)
 
-            WanderCategoryEmoji(
-                emoji: item.selectedCandidate?.categoryEmoji ?? "📍",
-                size: max(18, size * 0.42)
-            )
+            Image(systemName: "photo.fill")
+                .font(.system(size: max(18, size * 0.34), weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color.opacity(0.55))
 
             if let photo {
                 PlaceProfilePhotoImage(
@@ -3021,7 +3013,7 @@ private struct PlaceImportPhotoThumb: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
 
     private var photoTaskID: String {
@@ -3033,6 +3025,7 @@ private struct PlaceImportPhotoThumb: View {
             photo = nil
             return
         }
+        photo = nil
         do {
             let resolvedPhoto = try await backend.placePhoto(
                 for: request.rendering(.listThumbnail)
@@ -4792,6 +4785,7 @@ extension PlaceImportSource {
         case .googleMaps: "Google Maps"
         case .instagram: "Instagram Reels"
         case .tiktok: "TikToks"
+        case .snapchat: "Snapchat"
         case .textNotes: "Texts & Notes"
         }
     }
@@ -4803,6 +4797,7 @@ extension PlaceImportSource {
         case .googleMaps: "MAPS"
         case .instagram: "REEL"
         case .tiktok: "TIKTOK"
+        case .snapchat: "SNAP"
         case .textNotes: "TEXT"
         }
     }
@@ -4812,6 +4807,7 @@ extension PlaceImportSource {
         case .googleMaps: "map.fill"
         case .instagram: "play.rectangle.fill"
         case .tiktok: "music.note"
+        case .snapchat: "camera.viewfinder"
         case .textNotes: "note.text"
         }
     }
@@ -4821,6 +4817,7 @@ extension PlaceImportSource {
         case .googleMaps: "BrandGoogleMaps"
         case .instagram: "BrandInstagram"
         case .tiktok: "BrandTikTok"
+        case .snapchat: "BrandSnapchat"
         case .textNotes: nil
         }
     }
@@ -4829,6 +4826,7 @@ extension PlaceImportSource {
         switch self {
         case .googleMaps: Color(red: 0.26, green: 0.52, blue: 0.96)
         case .instagram, .tiktok: Color.white
+        case .snapchat: Color.black
         case .textNotes: WanderTheme.textInk.color
         }
     }
@@ -4838,6 +4836,7 @@ extension PlaceImportSource {
         case .googleMaps: WanderTheme.stateInfo.color
         case .instagram: WanderTheme.terracotta.color
         case .tiktok: WanderTheme.textInk.color
+        case .snapchat: WanderTheme.textInk.color
         case .textNotes: WanderTheme.categoryMoss.color
         }
     }
@@ -4847,13 +4846,14 @@ extension PlaceImportSource {
         case .googleMaps: WanderTheme.skyTint.color
         case .instagram: WanderTheme.terracottaTint.color
         case .tiktok: WanderTheme.surfaceSand.color
+        case .snapchat: Color.white
         case .textNotes: WanderTheme.categorySage.color.opacity(0.24)
         }
     }
 
     var addSourceType: AddSourceType {
         switch self {
-        case .googleMaps, .instagram, .tiktok: .link
+        case .googleMaps, .instagram, .tiktok, .snapchat: .link
         case .textNotes: .manual
         }
     }

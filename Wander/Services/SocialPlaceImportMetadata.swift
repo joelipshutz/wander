@@ -123,7 +123,7 @@ final class PublicSocialImportMetadataProvider: SocialImportMetadataProviding {
             return await tiktokMetadata(for: url)
         case .instagram:
             return await instagramMetadata(for: url)
-        case .googleMaps, .textNotes:
+        case .googleMaps, .snapchat, .textNotes:
             return nil
         }
     }

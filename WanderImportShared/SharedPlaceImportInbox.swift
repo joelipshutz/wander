@@ -5,6 +5,7 @@ enum SharedPlaceImportSource: String, Codable, Equatable, Sendable {
     case googleMaps = "google_maps"
     case instagram
     case tiktok
+    case snapchat
     case textNotes = "text_notes"
 }
 
@@ -168,6 +169,9 @@ enum SharedPlaceImportSourceDetector {
             }
             if host == "tiktok.com" || host.hasSuffix(".tiktok.com") {
                 return .tiktok
+            }
+            if host == "snapchat.com" || host.hasSuffix(".snapchat.com") {
+                return .snapchat
             }
             if isGoogleMapsURL(url, host: host) {
                 return .googleMaps

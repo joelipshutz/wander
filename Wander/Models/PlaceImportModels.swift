@@ -4,6 +4,7 @@ enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Iden
     case googleMaps = "google_maps"
     case instagram
     case tiktok
+    case snapchat
     case textNotes = "text_notes"
 
     var id: String { rawValue }
@@ -15,6 +16,27 @@ enum PlaceImportBatchState: String, Codable, Equatable {
     case ready
     case complete
     case cancelled
+}
+
+enum PlaceImportHistoryPresentation {
+    static func statusLabel(
+        batch: PlaceImportBatch,
+        items: [PlaceImportItem]
+    ) -> String {
+        let placeCount = batch.receipt?.entries.count
+            ?? items.filter { !$0.isSourceRetry }.count
+        if batch.receipt != nil {
+            return "\(placeCount) places"
+        }
+        if batch.state == .cancelled {
+            return "Cancelled"
+        }
+        if [.queued, .processing].contains(batch.state)
+            || items.contains(where: { [.queued, .resolving].contains($0.state) }) {
+            return "Matching…"
+        }
+        return "Ready to review"
+    }
 }
 
 enum PlaceImportItemState: String, Codable, Equatable {
@@ -232,6 +254,7 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
             case .googleMaps: "Google Maps"
             case .instagram: "Instagram"
             case .tiktok: "TikTok"
+            case .snapchat: "Snapchat"
             case .textNotes: "Your notes"
             }
         } else {
@@ -723,6 +746,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         switch source {
         case .instagram: "Instagram post"
         case .tiktok: "TikTok post"
+        case .snapchat: "Snapchat post"
         case .googleMaps, .textNotes: nil
         }
     }

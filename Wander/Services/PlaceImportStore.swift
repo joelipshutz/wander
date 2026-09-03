@@ -163,7 +163,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         case .tiktok, .instagram:
             return try await socialResolution(url: sourceURL, source: source, seed: seed)
-        case .textNotes:
+        case .snapchat, .textNotes:
             do {
                 let candidates = try await placeResolver.resolveLink(
                     LinkPlaceInput(rawValue: sourceURLString)
