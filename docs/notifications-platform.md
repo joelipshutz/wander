@@ -97,11 +97,15 @@ needed to resolve the restaurant.
 The client scans the previous two days through the next 180 days at signed-in
 launch, foreground return, EventKit change, or explicit **sync now**, with a
 15-minute foreground throttle. The server stores at most one derived row per
-account and occurrence, queues `calendar_reservation_live` for one hour after
-the reservation begins, and queues `calendar_reservation_follow_up` for 8 AM
-the following morning. A completed matching check-in suppresses every remaining
-prompt. A notification tap resolves the derived reservation for its owner and
-opens the normal Add editor with Check-in, place, and visit time prefilled.
+account and occurrence. Reminder delivery is grouped by account, provider place,
+and reservation-local calendar date: the group receives at most one
+`calendar_reservation_live` prompt one hour after its earliest reservation and
+one `calendar_reservation_follow_up` prompt at 8 AM the following morning. Once
+a stage has entered the queue, later foreground or calendar-change syncs never
+recreate it after delivery, expiry, failure, cancellation, or completion. A
+completed matching check-in suppresses every remaining prompt. A notification
+tap resolves the active representative reservation for its owner and opens the
+normal Add editor with Check-in, place, and visit time prefilled.
 
 Wanna, save-streak, and import-complete reminders also reconcile into the same
 remote queue. Their authenticated RPC accepts only source-specific data and
