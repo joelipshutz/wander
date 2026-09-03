@@ -32,6 +32,7 @@ struct DiscoverScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var listSelectionPlace: VisiblePlace?
+    @State private var listPickerResult: MapPlaceListPickerResult?
     @State private var listMessage: String?
     @State private var selectedOwnerCandidateID: String?
     @State private var activityLoadState: DiscoverActivityLoadState = .loading
@@ -94,10 +95,6 @@ struct DiscoverScreen: View {
             communityPlaceCandidates,
             excluding: placeResults.places
         )
-    }
-
-    private var addableLists: [LocalPlaceList] {
-        store.visiblePlaceLists.filter { store.canAddPlaces(to: $0) }
     }
 
     private var filteredPlaceResults: [VisiblePlace] {
@@ -387,28 +384,17 @@ struct DiscoverScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
-            .confirmationDialog(
-                "Add to list",
-                isPresented: Binding(
-                    get: { listSelectionPlace != nil },
-                    set: { if !$0 { listSelectionPlace = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                ForEach(addableLists) { list in
-                    Button(list.name) {
-                        addSelectedPlace(to: list)
-                    }
+            .sheet(item: $listSelectionPlace, onDismiss: {
+                listMessage = listPickerResult?.message
+                listPickerResult = nil
+            }) { visiblePlace in
+                MapPlaceListPickerSheet(
+                    target: .visiblePlace(visiblePlace),
+                    analyticsSurface: "discover"
+                ) { result in
+                    listPickerResult = result
                 }
-                Button("Cancel", role: .cancel) {
-                    listSelectionPlace = nil
-                }
-            } message: {
-                if addableLists.isEmpty {
-                    Text("Create a list first, then come back to add this place.")
-                } else {
-                    Text("Choose a list for \(listSelectionPlace?.place.canonicalName ?? "this place").")
-                }
+                .presentationBackground(WanderTheme.canvasWarm.color)
             }
             .alert(
                 "List updated",
@@ -1392,29 +1378,6 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func addSelectedPlace(to list: LocalPlaceList) {
-        guard let visiblePlace = listSelectionPlace else { return }
-        listSelectionPlace = nil
-
-        Task { @MainActor in
-            let result = await store.addVisiblePlace(
-                visiblePlace,
-                to: list,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            switch result.outcome {
-            case .added:
-                listMessage = result.createdWantSave
-                    ? "Added \(visiblePlace.place.canonicalName) to \(list.name) and Wanna."
-                    : "Added \(visiblePlace.place.canonicalName) to \(list.name)."
-            case .alreadyInList:
-                listMessage = "\(visiblePlace.place.canonicalName) is already in \(list.name)."
-            case .permissionDenied:
-                listMessage = "You can’t add places to \(list.name)."
-            }
-        }
-    }
-
     private func beginAddVisitDiscoverPlace(_ visiblePlace: VisiblePlace) {
         guard let currentUserSave = currentUserSave(matching: visiblePlace) else {
             beginSaveDiscoverPlace(visiblePlace)
@@ -2254,6 +2217,7 @@ private struct DiscoverPlaceResultCard: View {
                     systemImage: "text.badge.plus",
                     action: addToList
                 )
+                .accessibilityIdentifier("discover.addToList.\(visiblePlace.place.id)")
 
                 if let shareContent {
                     WanderShareButton(content: shareContent) {
