@@ -40,16 +40,16 @@ struct ImportWorkflowMockupRoot: View {
             case .report:
                 ImportReportMockup()
             case .banner:
-                ImportReadyBannerMockup()
+                ImportMapStateMockup(state: .ready)
             case .complete:
-                ImportCompletionMockup()
+                ImportMapStateMockup(state: .complete)
             case .offline:
-                ImportOfflineMockup()
+                ImportMapStateMockup(state: .offline)
             case .failure:
-                ImportFailureMockup()
+                ImportMapStateMockup(state: .failure)
             }
         }
-        .tint(ImportMockTheme.terracotta)
+        .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
     }
 }
@@ -60,812 +60,1549 @@ private enum ImportReviewMockupMode {
     case details
 }
 
-private enum ImportMockTheme {
-    static let canvas = Color(red: 0.953, green: 0.875, blue: 0.792)
-    static let bone = Color(red: 1, green: 0.969, blue: 0.918)
-    static let raised = Color.white
-    static let sand = Color(red: 0.937, green: 0.890, blue: 0.816)
-    static let ink = Color(red: 0.173, green: 0.129, blue: 0.094)
-    static let muted = Color(red: 0.482, green: 0.396, blue: 0.333)
-    static let faint = Color(red: 0.659, green: 0.584, blue: 0.498)
-    static let border = Color(red: 0.859, green: 0.761, blue: 0.667)
-    static let terracotta = Color(red: 0.831, green: 0.435, blue: 0.302)
-    static let terracottaDark = Color(red: 0.663, green: 0.310, blue: 0.208)
-    static let terracottaTint = Color(red: 0.965, green: 0.878, blue: 0.824)
-    static let success = Color(red: 0.247, green: 0.561, blue: 0.392)
-    static let warning = Color(red: 0.725, green: 0.522, blue: 0.157)
-    static let error = Color(red: 0.722, green: 0.290, blue: 0.227)
-    static let info = Color(red: 0.310, green: 0.557, blue: 0.678)
-    static let skyTint = Color(red: 0.859, green: 0.918, blue: 0.945)
-    static let espresso = Color(red: 0.120, green: 0.094, blue: 0.075)
+private enum ImportMockStatus: String {
+    case none
+    case wanna
+    case checkIn
 }
+
+private enum ImportPostCrop: CaseIterable {
+    case left
+    case right
+    case top
+    case bottom
+    case center
+}
+
+private enum ImportMockProvider {
+    case instagram
+    case googleMaps
+    case tiktok
+    case youtube
+
+    var name: String {
+        switch self {
+        case .instagram: "Instagram"
+        case .googleMaps: "Google Maps"
+        case .tiktok: "TikTok"
+        case .youtube: "YouTube"
+        }
+    }
+}
+
+private struct ImportMockCandidate: Identifiable {
+    let id: String
+    let name: String
+    let detail: String
+    let isBest: Bool
+}
+
+private struct ImportMockPlace: Identifiable {
+    let id: String
+    let name: String
+    let detail: String
+    let crop: ImportPostCrop
+    let candidates: [ImportMockCandidate]
+    let listName: String?
+}
+
+private extension ImportMockPlace {
+    static let all: [Self] = [
+        ImportMockPlace(
+            id: "bar-chelou",
+            name: "Bar Chelou",
+            detail: "Pasadena · French",
+            crop: .right,
+            candidates: [],
+            listName: "Date night"
+        ),
+        ImportMockPlace(
+            id: "gjusta",
+            name: "Gjusta",
+            detail: "Venice · Bakery",
+            crop: .left,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "mcdonalds",
+            name: "McDonald’s",
+            detail: "1320 E Colorado Blvd · 0.7 mi",
+            crop: .bottom,
+            candidates: [
+                ImportMockCandidate(
+                    id: "colorado",
+                    name: "McDonald’s",
+                    detail: "1320 E Colorado Blvd · 0.7 mi",
+                    isBest: true
+                ),
+                ImportMockCandidate(
+                    id: "arroyo",
+                    name: "McDonald’s",
+                    detail: "770 S Arroyo Pkwy · 1.4 mi",
+                    isBest: false
+                ),
+                ImportMockCandidate(
+                    id: "lincoln",
+                    name: "McDonald’s",
+                    detail: "2157 Lincoln Ave · 2.8 mi",
+                    isBest: false
+                ),
+                ImportMockCandidate(
+                    id: "lake",
+                    name: "McDonald’s",
+                    detail: "988 Lake Ave · 3.1 mi",
+                    isBest: false
+                ),
+                ImportMockCandidate(
+                    id: "east-colorado",
+                    name: "McDonald’s",
+                    detail: "1720 Colorado Blvd · 4.0 mi",
+                    isBest: false
+                )
+            ],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "mart-collective",
+            name: "The Mart Collective",
+            detail: "Venice · Vintage",
+            crop: .center,
+            candidates: [],
+            listName: "Weekend"
+        ),
+        ImportMockPlace(
+            id: "bavel",
+            name: "Bavel",
+            detail: "Arts District · Middle Eastern",
+            crop: .top,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "joy",
+            name: "Joy",
+            detail: "Highland Park · Taiwanese",
+            crop: .left,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "botanica",
+            name: "Botanica",
+            detail: "Silver Lake · California",
+            crop: .right,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "holbox",
+            name: "Holbox",
+            detail: "Historic South Central · Seafood",
+            crop: .bottom,
+            candidates: [],
+            listName: "LA essentials"
+        ),
+        ImportMockPlace(
+            id: "found-oyster",
+            name: "Found Oyster",
+            detail: "East Hollywood · Seafood",
+            crop: .top,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "quarter-sheets",
+            name: "Quarter Sheets",
+            detail: "Echo Park · Pizza",
+            crop: .center,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "night-market",
+            name: "Night + Market Song",
+            detail: "Silver Lake · Thai",
+            crop: .left,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "courage",
+            name: "Courage Bagels",
+            detail: "Virgil Village · Bagels",
+            crop: .right,
+            candidates: [],
+            listName: nil
+        ),
+        ImportMockPlace(
+            id: "nobu",
+            name: "Nobu Malibu",
+            detail: "Malibu · Japanese",
+            crop: .top,
+            candidates: [],
+            listName: "Parents in town"
+        )
+    ]
+}
+
+// MARK: - Draggable import entry
 
 private struct ImportEntryMockup: View {
+    @State private var presentsSheet = false
+    @State private var selectedDetent: PresentationDetent = .medium
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            mockMap
-
-            VStack(spacing: 0) {
-                Capsule()
-                    .fill(ImportMockTheme.muted.opacity(0.45))
-                    .frame(width: 36, height: 5)
-                    .padding(.top, 7)
-
-                HStack {
-                    Button("Cancel") {}
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ImportMockTheme.muted)
-                        .frame(minHeight: 44)
-
-                    Spacer()
-
-                    Text("Import places")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-
-                    Spacer()
-
-                    Button("History") {}
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.terracottaDark)
-                        .frame(minHeight: 44)
-                }
-                .padding(.horizontal, 16)
-
-                VStack(spacing: 14) {
-                    VStack(spacing: 4) {
-                        Text("Bring your places with you")
-                            .font(.system(size: 24, weight: .bold, design: .serif))
-                            .foregroundStyle(ImportMockTheme.ink)
-                        Text("Paste a link from Instagram, Google Maps, or TikTok.")
-                            .font(.subheadline)
-                            .foregroundStyle(ImportMockTheme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    HStack(spacing: 10) {
-                        Image(systemName: "link")
-                            .font(.body.weight(.bold))
-                            .foregroundStyle(ImportMockTheme.terracottaDark)
-                        Text("instagram.com/reel/…")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(ImportMockTheme.ink)
-                            .lineLimit(1)
-                        Spacer()
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(ImportMockTheme.faint)
-                            .frame(width: 44, height: 44)
-                    }
-                    .padding(.leading, 14)
-                    .frame(minHeight: 58)
-                    .background(ImportMockTheme.raised)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(ImportMockTheme.border, lineWidth: 1)
-                    )
-
-                    Button(action: {}) {
-                        Label("Start import", systemImage: "arrow.down.doc.fill")
-                            .font(.body.weight(.bold))
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                            .foregroundStyle(ImportMockTheme.bone)
-                            .background(ImportMockTheme.terracotta)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: {}) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text("Your latest import is ready to review")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(ImportMockTheme.success)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 24)
-            }
-            .background(ImportMockTheme.canvas)
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 24,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 24,
-                    style: .continuous
-                )
-            )
-        }
-        .ignoresSafeArea()
-    }
-
-    private var mockMap: some View {
         GeometryReader { proxy in
-            ZStack {
-                ImportMockTheme.skyTint
-                Image("OnboardingMapDiary")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
-                    .opacity(0.78)
-                Color.black.opacity(0.08)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            ImportMockMapBackground(asset: "OnboardingMapDiary")
+                .overlay(alignment: .top) {
+                    ImportMockMapChrome()
+                        .padding(.top, 8)
+                }
+                .task {
+                    selectedDetent = proxy.size.height < 750 ? .large : .medium
+                    presentsSheet = true
+                }
+                .sheet(isPresented: $presentsSheet) {
+                    ImportEntrySheetContent()
+                        .presentationDetents([.medium, .large], selection: $selectedDetent)
+                        .presentationDragIndicator(.visible)
+                        .presentationCornerRadius(WanderTheme.radiusSheet)
+                        .presentationBackground(.ultraThinMaterial)
+                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                        .presentationContentInteraction(.resizes)
+                }
         }
-        .ignoresSafeArea()
     }
 }
+
+private struct ImportEntrySheetContent: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: WanderTheme.spacing2) {
+                ImportMockGlassIconButton(
+                    systemImage: "xmark",
+                    accessibilityLabel: "Close import places"
+                )
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                Text("Import places")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                WanderGlassButtonCluster {
+                    HStack(spacing: WanderTheme.spacing1) {
+                        ImportMockGlassIconButton(
+                            systemImage: "questionmark",
+                            accessibilityLabel: "Import help"
+                        )
+                        ImportMockGlassIconButton(
+                            systemImage: "clock.arrow.circlepath",
+                            accessibilityLabel: "Import history"
+                        )
+                    }
+                }
+            }
+
+            HStack(spacing: WanderTheme.spacing3) {
+                ImportMockSourceIconStack(iconSize: 36)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Bring your places with you")
+                        .font(.system(size: 20, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Instagram, Google Maps, TikTok, and more")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "link")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                Text("instagram.com/reel/…")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .padding(.leading, WanderTheme.spacing3)
+            .padding(.trailing, 2)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .wanderGlassRoundedRectangle(
+                tone: .lightAction,
+                cornerRadius: WanderTheme.radiusLarge,
+                material: .clear
+            )
+
+            ImportMockPrimaryGlassButton(
+                title: "Start import",
+                systemImage: "arrow.down.doc.fill",
+                tone: .accent
+            )
+
+            ImportMockSecondaryGlassButton(
+                title: "Paste from clipboard",
+                systemImage: "doc.on.clipboard"
+            )
+
+            Button(action: {}) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                    Text("13 places ready to review")
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .black))
+                }
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .wanderGlassCapsule(tone: .neutral)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("13 places ready to review")
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing2)
+        .padding(.bottom, WanderTheme.spacing4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(WanderTheme.canvasWarm.color.opacity(0.68))
+    }
+}
+
+// MARK: - Canonical review
 
 private struct ImportReviewMockup: View {
     let mode: ImportReviewMockupMode
 
-    private var showsException: Bool { mode == .ambiguous }
-    private var showsDetails: Bool { mode == .details }
+    @State private var statuses: [String: ImportMockStatus]
+    @State private var expandedMatches: Set<String>
+    @State private var expandedDetails: Set<String>
+    @State private var selectedCandidateID = "colorado"
+
+    init(mode: ImportReviewMockupMode) {
+        self.mode = mode
+        var initialStatuses = Dictionary(
+            uniqueKeysWithValues: ImportMockPlace.all.map { ($0.id, ImportMockStatus.wanna) }
+        )
+        if mode == .details {
+            initialStatuses["bar-chelou"] = .checkIn
+        }
+        _statuses = State(initialValue: initialStatuses)
+        _expandedMatches = State(
+            initialValue: mode == .ambiguous ? ["mcdonalds"] : []
+        )
+        _expandedDetails = State(
+            initialValue: mode == .details ? ["bar-chelou"] : []
+        )
+    }
+
+    private var orderedPlaces: [ImportMockPlace] {
+        switch mode {
+        case .ready:
+            ImportMockPlace.all
+        case .ambiguous:
+            ImportMockPlace.all.sorted { left, _ in left.id == "mcdonalds" }
+        case .details:
+            ImportMockPlace.all
+        }
+    }
+
+    private var selectedCount: Int {
+        statuses.values.filter { $0 != .none }.count
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    reviewHeader
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    Text("13 places matched and ready")
+                        .font(.system(size: 27, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
 
-                    if showsException {
-                        ambiguousMatch
-                        readyReceipt
-                    } else if showsDetails {
-                        selectedPlaces
-                        readyReceipt
-                    } else {
-                        readyReceipt
-                        selectedPlaces
+                    reviewSourceLine
+
+                    ImportReviewSectionHeader(
+                        title: "Ready to add",
+                        count: selectedCount,
+                        wannaSelected: allSelected(.wanna),
+                        checkInSelected: allSelected(.checkIn),
+                        selectAllWanna: { selectAll(.wanna) },
+                        selectAllCheckIn: { selectAll(.checkIn) }
+                    )
+
+                    ForEach(orderedPlaces) { place in
+                        ImportPlaceCard(
+                            place: place,
+                            status: statusBinding(for: place),
+                            showsMatches: matchesBinding(for: place),
+                            showsDetails: detailsBinding(for: place),
+                            selectedCandidateID: $selectedCandidateID,
+                            showsListSummary: false
+                        )
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 110)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
+                .padding(.bottom, 112)
             }
             .scrollIndicators(.hidden)
-            .background(ImportMockTheme.canvas)
+            .background(WanderTheme.canvasWarm.color)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {}) {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.bold))
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Close import review")
+                    ImportMockGlassIconButton(
+                        systemImage: "xmark",
+                        accessibilityLabel: "Close import review"
+                    )
                 }
                 ToolbarItem(placement: .principal) {
                     Text("Instagram import")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 5) {
-                    Button(action: {}) {
-                        Label("Add 13 places", systemImage: "plus")
-                            .font(.body.weight(.bold))
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .foregroundStyle(ImportMockTheme.bone)
-                            .background(ImportMockTheme.espresso)
-                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-                .background(ImportMockTheme.canvas.opacity(0.98))
+                ImportMockPrimaryGlassButton(
+                    title: selectedCount == 0
+                        ? "Keep for later"
+                        : "Add \(selectedCount) place\(selectedCount == 1 ? "" : "s")",
+                    systemImage: selectedCount == 0 ? "clock" : "plus",
+                    tone: .deepBlackAction
+                )
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
+                .padding(.bottom, WanderTheme.spacing2)
+                .background(.ultraThinMaterial)
             }
         }
     }
 
-    private var reviewHeader: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Circle()
-                .fill((showsException ? ImportMockTheme.warning : ImportMockTheme.success).opacity(0.14))
-                .frame(width: 54, height: 54)
-                .overlay(
-                    Image(systemName: showsException ? "sparkles" : "checkmark")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(showsException ? ImportMockTheme.warning : ImportMockTheme.success)
-                )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(showsException ? "12 ready, 1 quick check" : "All 13 places are ready")
-                    .font(.system(size: 24, weight: .bold, design: .serif))
-                    .foregroundStyle(ImportMockTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(showsException ? "We picked the most likely match. Change it only if it looks wrong." : "Everything matched. Add details only where you want them.")
-                    .font(.subheadline)
-                    .foregroundStyle(ImportMockTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private var reviewSourceLine: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            ImportMockSourceIcon(provider: .instagram, size: 26)
+            Text("Instagram")
+                .font(.system(size: 13, weight: .black))
+            Text("·")
+                .foregroundStyle(WanderTheme.textFaint.color)
+            Text("11 new · 2 already saved")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
+        .foregroundStyle(WanderTheme.textInk.color)
         .accessibilityElement(children: .combine)
     }
 
-    private var readyReceipt: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                ImportPostArtwork(crop: .left, cornerRadius: 10)
-                    .frame(width: 54, height: 54)
+    private func allSelected(_ status: ImportMockStatus) -> Bool {
+        !statuses.isEmpty && statuses.values.allSatisfy { $0 == status }
+    }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(showsException ? "Ready now" : "Ready to add")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text(showsException ? "10 new · 2 already saved" : "11 new · 2 already saved")
-                        .font(.subheadline)
-                        .foregroundStyle(ImportMockTheme.muted)
-                }
-                Spacer()
-                Text(showsException ? "12" : "13")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.success)
-                    .monospacedDigit()
-            }
-            .padding(14)
-
-            Divider().overlay(ImportMockTheme.border)
-
-            Button(action: {}) {
-                HStack {
-                    Text("Review ready places")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                }
-                .foregroundStyle(ImportMockTheme.muted)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+    private func selectAll(_ status: ImportMockStatus) {
+        let next: ImportMockStatus = allSelected(status) ? .none : status
+        withAnimation(.easeInOut(duration: 0.2)) {
+            statuses = Dictionary(
+                uniqueKeysWithValues: ImportMockPlace.all.map { ($0.id, next) }
+            )
         }
-        .background(ImportMockTheme.bone)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(ImportMockTheme.border, lineWidth: 1)
+    }
+
+    private func statusBinding(for place: ImportMockPlace) -> Binding<ImportMockStatus> {
+        Binding(
+            get: { statuses[place.id] ?? .none },
+            set: { statuses[place.id] = $0 }
         )
     }
 
-    private var selectedPlaces: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(showsDetails ? "Details for Bar Chelou" : "Selected places")
-                .font(.system(size: 21, weight: .bold, design: .serif))
-                .foregroundStyle(ImportMockTheme.ink)
-
-            ImportSelectedPlaceCard(expanded: showsDetails)
-        }
+    private func matchesBinding(for place: ImportMockPlace) -> Binding<Bool> {
+        Binding(
+            get: { expandedMatches.contains(place.id) },
+            set: { isExpanded in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedMatches.insert(place.id)
+                        expandedDetails.remove(place.id)
+                    } else {
+                        expandedMatches.remove(place.id)
+                    }
+                }
+            }
+        )
     }
 
-    private var ambiguousMatch: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Possible matches")
-                    .font(.system(size: 21, weight: .bold, design: .serif))
-                    .foregroundStyle(ImportMockTheme.ink)
-                Spacer()
-                Text("1 of 1")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(ImportMockTheme.muted)
-            }
-
-            HStack(spacing: 11) {
-                ImportPostArtwork(crop: .bottom, cornerRadius: 11)
-                    .frame(width: 58, height: 58)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("“McDonald’s after the game”")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text("Instagram · Pasadena")
-                        .font(.caption)
-                        .foregroundStyle(ImportMockTheme.muted)
+    private func detailsBinding(for place: ImportMockPlace) -> Binding<Bool> {
+        Binding(
+            get: { expandedDetails.contains(place.id) },
+            set: { isExpanded in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedDetails = [place.id]
+                        expandedMatches.remove(place.id)
+                    } else {
+                        expandedDetails.remove(place.id)
+                    }
                 }
-                Spacer()
             }
-            .padding(12)
-            .background(ImportMockTheme.sand.opacity(0.75))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        )
+    }
+}
 
-            VStack(spacing: 0) {
-                ImportCandidateRow(name: "McDonald’s", detail: "1320 E Colorado Blvd · 0.7 mi", selected: true, best: true)
-                Divider().padding(.leading, 68)
-                ImportCandidateRow(name: "McDonald’s", detail: "770 S Arroyo Pkwy · 1.4 mi", selected: false, best: false)
-                Divider().padding(.leading, 68)
-                ImportCandidateRow(name: "McDonald’s", detail: "2157 Lincoln Ave · 2.8 mi", selected: false, best: false)
-                Divider().padding(.leading, 68)
-                ImportCandidateRow(name: "McDonald’s", detail: "988 Lake Ave · 3.1 mi", selected: false, best: false)
-                Divider().padding(.leading, 68)
-                ImportCandidateRow(name: "McDonald’s", detail: "1720 Colorado Blvd · 4.0 mi", selected: false, best: false)
-            }
-            .background(ImportMockTheme.raised)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(ImportMockTheme.border, lineWidth: 1)
-            )
+private struct ImportReviewSectionHeader: View {
+    let title: String
+    let count: Int
+    let wannaSelected: Bool
+    let checkInSelected: Bool
+    let selectAllWanna: () -> Void
+    let selectAllCheckIn: () -> Void
 
-            Button(action: {}) {
-                Label("Search for a different place", systemImage: "magnifyingglass")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.terracottaDark)
-                    .frame(maxWidth: .infinity, minHeight: 44)
+    var body: some View {
+        HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .accessibilityAddTraits(.isHeader)
+                Text("\(count)")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .monospacedDigit()
             }
-            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("APPLY TO ALL")
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(0.7)
+                    .foregroundStyle(WanderTheme.textFaint.color)
+
+                ImportStatusControls(
+                    status: .constant(wannaSelected ? .wanna : checkInSelected ? .checkIn : .none),
+                    actionOverride: { choice in
+                        switch choice {
+                        case .wanna: selectAllWanna()
+                        case .checkIn: selectAllCheckIn()
+                        case .none: break
+                        }
+                    },
+                    accessibilityPrefix: "Apply to all"
+                )
+            }
         }
     }
 }
 
-private struct ImportSelectedPlaceCard: View {
-    let expanded: Bool
+private struct ImportPlaceCard: View {
+    let place: ImportMockPlace
+    @Binding var status: ImportMockStatus
+    @Binding var showsMatches: Bool
+    @Binding var showsDetails: Bool
+    @Binding var selectedCandidateID: String
+    let showsListSummary: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                ImportPostArtwork(crop: .right, cornerRadius: 10)
-                    .frame(width: 58, height: 58)
+            HStack(spacing: WanderTheme.spacing3) {
+                ImportPostArtwork(crop: place.crop, cornerRadius: WanderTheme.radiusMedium)
+                    .frame(width: 54, height: 54)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Bar Chelou")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text("Pasadena · French")
-                        .font(.caption)
-                        .foregroundStyle(ImportMockTheme.muted)
+                    Text(place.name)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(2)
+                    Text(place.detail)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
+                    if showsListSummary, let listName = place.listName {
+                        Label(listName, systemImage: "square.stack.3d.up.fill")
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .lineLimit(1)
+                    }
                 }
-                Spacer()
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(ImportMockTheme.success)
-            }
-            .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Divider().padding(.leading, 82)
-
-            HStack(spacing: 8) {
-                ImportStatusPill(title: "Wanna", systemImage: "bookmark.fill", selected: !expanded)
-                ImportStatusPill(title: "Check In", systemImage: "checkmark.circle.fill", selected: expanded)
+                ImportStatusControls(
+                    status: $status,
+                    actionOverride: nil,
+                    accessibilityPrefix: place.name
+                )
             }
-            .padding(12)
+            .padding(WanderTheme.spacing3)
+
+            if !place.candidates.isEmpty {
+                Divider()
+                    .overlay(WanderTheme.borderHairline.color)
+                    .padding(.leading, 80)
+
+                Button {
+                    showsMatches.toggle()
+                } label: {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .frame(width: 24)
+                        Text("Possible matches")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Spacer()
+                        Text("\(place.candidates.count)")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .monospacedDigit()
+                        Image(systemName: showsMatches ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(WanderTheme.textFaint.color)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 46)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showsMatches ? "Expanded" : "Collapsed")
+
+                if showsMatches {
+                    Divider()
+                        .overlay(WanderTheme.borderHairline.color)
+                    ImportCandidateList(
+                        candidates: place.candidates,
+                        selectedCandidateID: $selectedCandidateID
+                    )
+                }
+            }
 
             Divider()
+                .overlay(WanderTheme.borderHairline.color)
+                .padding(.leading, 80)
 
-            Button(action: {}) {
-                HStack {
-                    Label(expanded ? "Hide details" : "Add details", systemImage: "slider.horizontal.3")
+            Button {
+                showsDetails.toggle()
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(width: 24)
+                    Text(showsDetails ? "Hide details" : "Add details")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
                     Spacer()
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: showsDetails ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(WanderTheme.textFaint.color)
                 }
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(ImportMockTheme.terracottaDark)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 46)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(showsDetails ? "Expanded" : "Collapsed")
 
-            if expanded {
+            if showsDetails {
                 Divider()
-                ImportDetailsEditorMockup()
+                    .overlay(WanderTheme.borderHairline.color)
+                ImportDetailsEditorMockup(isCheckIn: status == .checkIn)
             }
         }
-        .background(ImportMockTheme.raised)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(ImportMockTheme.border, lineWidth: 1)
-        )
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
     }
 }
 
-private struct ImportStatusPill: View {
-    let title: String
-    let systemImage: String
-    let selected: Bool
+private struct ImportStatusControls: View {
+    @Binding var status: ImportMockStatus
+    let actionOverride: ((ImportMockStatus) -> Void)?
+    let accessibilityPrefix: String
 
     var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.bold))
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background(selected ? ImportMockTheme.terracottaTint : ImportMockTheme.bone)
-            .foregroundStyle(selected ? ImportMockTheme.terracottaDark : ImportMockTheme.muted)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(selected ? ImportMockTheme.terracotta : ImportMockTheme.border, lineWidth: selected ? 2 : 1))
+        WanderGlassButtonCluster(mergeSpacing: 4) {
+            HStack(spacing: 6) {
+                statusButton(
+                    choice: .wanna,
+                    systemImage: "bookmark.fill",
+                    label: "\(accessibilityPrefix), Wanna"
+                )
+                statusButton(
+                    choice: .checkIn,
+                    systemImage: "checkmark.circle.fill",
+                    label: "\(accessibilityPrefix), Check In"
+                )
+            }
+        }
+    }
+
+    private func statusButton(
+        choice: ImportMockStatus,
+        systemImage: String,
+        label: String
+    ) -> some View {
+        Button {
+            if let actionOverride {
+                actionOverride(choice)
+            } else {
+                status = status == choice ? .none : choice
+            }
+        } label: {
+            Image(systemName: resolvedSystemImage(for: choice, selectedImage: systemImage))
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(
+                    status == choice
+                        ? WanderTheme.terracottaDark.color
+                        : WanderTheme.textMuted.color
+                )
+                .frame(width: 42, height: 42)
+                .wanderGlassCapsule(tone: status == choice ? .selected : .neutral)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(status == choice ? .isSelected : [])
+        .accessibilityHint(status == choice ? "Double tap to clear" : "Double tap to select")
+    }
+
+    private func resolvedSystemImage(
+        for choice: ImportMockStatus,
+        selectedImage: String
+    ) -> String {
+        guard status != choice else { return selectedImage }
+        return choice == .wanna ? "bookmark" : "checkmark.circle"
+    }
+}
+
+private struct ImportCandidateList: View {
+    let candidates: [ImportMockCandidate]
+    @Binding var selectedCandidateID: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(candidates) { candidate in
+                Button {
+                    selectedCandidateID = candidate.id
+                } label: {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: selectedCandidateID == candidate.id
+                            ? "circle.inset.filled"
+                            : "circle")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(
+                                selectedCandidateID == candidate.id
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.borderStrong.color
+                            )
+                            .frame(width: 28)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(candidate.name)
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                if candidate.isBest {
+                                    Text("BEST MATCH")
+                                        .font(.system(size: 9, weight: .black))
+                                        .tracking(0.5)
+                                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                                }
+                            }
+                            Text(candidate.detail)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 54)
+                    .background(
+                        selectedCandidateID == candidate.id
+                            ? WanderTheme.terracottaTint.color.opacity(0.5)
+                            : Color.clear
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(
+                    selectedCandidateID == candidate.id ? "Selected" : "Not selected"
+                )
+
+                if candidate.id != candidates.last?.id {
+                    Divider()
+                        .overlay(WanderTheme.borderHairline.color)
+                        .padding(.leading, 52)
+                }
+            }
+        }
+        .background(WanderTheme.surfaceBone.color.opacity(0.7))
     }
 }
 
 private struct ImportDetailsEditorMockup: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            detailRow("Rating", value: "Not rated", image: "star")
-            Divider().padding(.leading, 48)
-            detailRow("Note", value: "Why did you save this?", image: "note.text")
-            Divider().padding(.leading, 48)
-            detailRow("When", value: "Today", image: "calendar")
-            Divider().padding(.leading, 48)
-            detailRow("Category", value: "French", image: "fork.knife")
-            Divider().padding(.leading, 48)
-            detailRow("Friends", value: "Add people", image: "person.2")
-            Divider().padding(.leading, 48)
-            detailRow("Photos", value: "Add photos", image: "photo.on.rectangle")
-            Divider().padding(.leading, 48)
-            detailRow("Lists", value: "Add to a list", image: "square.stack.3d.up")
-            Divider().padding(.leading, 48)
-            detailRow("More options", value: "Visibility, tags, place type", image: "ellipsis.circle")
-        }
-        .background(ImportMockTheme.bone.opacity(0.72))
-    }
+    let isCheckIn: Bool
 
-    private func detailRow(_ title: String, value: String, image: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: image)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ImportMockTheme.terracottaDark)
-                .frame(width: 26)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ImportMockTheme.ink)
-            Spacer()
-            Text(value)
-                .font(.caption)
-                .foregroundStyle(ImportMockTheme.muted)
-                .lineLimit(1)
-            Image(systemName: "chevron.right")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(ImportMockTheme.faint)
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            ImportUnratedPicker()
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text("Note")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("Why did you save this?")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .topLeading)
+                    .padding(WanderTheme.spacing2)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.82))
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    }
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                ImportDetailChip(
+                    title: "When",
+                    value: isCheckIn ? "Today" : "Not set",
+                    systemImage: "calendar"
+                )
+                ImportDetailChip(
+                    title: "Category",
+                    value: "French",
+                    systemImage: "fork.knife"
+                )
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                ImportDetailChip(
+                    title: "Friends",
+                    value: "Add",
+                    systemImage: "person.2"
+                )
+                ImportDetailChip(
+                    title: "Photos",
+                    value: "Add",
+                    systemImage: "photo.on.rectangle"
+                )
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                ImportDetailChip(
+                    title: "Lists",
+                    value: "Date night",
+                    systemImage: "square.stack.3d.up"
+                )
+                ImportDetailChip(
+                    title: "Place type",
+                    value: "Restaurant",
+                    systemImage: "mappin"
+                )
+            }
+
+            Button(action: {}) {
+                HStack {
+                    Label("More options", systemImage: "ellipsis.circle")
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .black))
+                }
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .frame(minHeight: WanderTheme.tapMinimum)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 48)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color.opacity(0.78))
     }
 }
 
-private struct ImportCandidateRow: View {
-    let name: String
-    let detail: String
-    let selected: Bool
-    let best: Bool
-
+private struct ImportUnratedPicker: View {
     var body: some View {
-        HStack(spacing: 11) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(best ? ImportMockTheme.terracottaTint : ImportMockTheme.skyTint)
-                .frame(width: 46, height: 46)
-                .overlay(Image(systemName: "mappin.and.ellipse").foregroundStyle(ImportMockTheme.terracottaDark))
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack {
+                Text("Rating")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Spacer()
+                Text("Not rated")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .frame(minHeight: 28)
+                    .wanderGlassCapsule(tone: .neutral, interactive: false)
+            }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(name)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    if best {
-                        Text("BEST MATCH")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(ImportMockTheme.success)
+            ZStack {
+                Capsule()
+                    .fill(WanderTheme.surfaceSand.color)
+                    .frame(height: 7)
+                HStack {
+                    ForEach(1...5, id: \.self) { value in
+                        VStack(spacing: 5) {
+                            Circle()
+                                .fill(WanderTheme.surfaceRaised.color)
+                                .overlay {
+                                    Circle()
+                                        .stroke(WanderTheme.borderStrong.color, lineWidth: 1.5)
+                                }
+                                .frame(width: 13, height: 13)
+                            Text("\(value)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(WanderTheme.textFaint.color)
+                        }
+                        if value != 5 {
+                            Spacer()
+                        }
                     }
                 }
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(ImportMockTheme.muted)
-                    .lineLimit(1)
             }
-            Spacer()
-            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundStyle(selected ? ImportMockTheme.terracotta : ImportMockTheme.faint)
-                .frame(width: 44, height: 44)
+            .frame(height: 36)
+
+            Text("Tap the scale to rate · 5 is best")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 4)
-        .frame(minHeight: 62)
-        .opacity(selected ? 1 : 0.82)
-        .contentShape(Rectangle())
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color.opacity(0.84))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
         .accessibilityElement(children: .combine)
-        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityLabel("Rating, not rated")
+        .accessibilityHint("Adjustable from one to five after the first touch")
     }
 }
 
+private struct ImportDetailChip: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        Button(action: {}) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text(value)
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .wanderGlassRoundedRectangle(
+                tone: .neutral,
+                cornerRadius: WanderTheme.radiusMedium,
+                material: .clear
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - History and editable report
+
 private struct ImportHistoryMockup: View {
-    private let tiles: [(ImportPostCrop, Bool)] = [
-        (.left, false), (.right, true), (.top, false), (.bottom, false), (.center, false), (.right, false)
+    private let tiles: [(ImportPostCrop, ImportMockProvider, String, Bool)] = [
+        (.left, .instagram, "10 L.A. spots worth the drive", false),
+        (.center, .googleMaps, "Joe’s saved restaurants", true),
+        (.top, .tiktok, "The perfect Sunday in Silver Lake", false),
+        (.bottom, .youtube, "Pasadena places nobody talks about", false),
+        (.right, .googleMaps, "Ryan’s weekend map", false),
+        (.center, .instagram, "Date-night places that actually hit", false)
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                    spacing: 12
+                    columns: [
+                        GridItem(.flexible(), spacing: WanderTheme.spacing3),
+                        GridItem(.flexible(), spacing: WanderTheme.spacing3)
+                    ],
+                    spacing: WanderTheme.spacing3
                 ) {
                     ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
                         Button(action: {}) {
-                            ImportPostArtwork(crop: tile.0, cornerRadius: 15)
-                                .aspectRatio(0.84, contentMode: .fit)
-                                .overlay(alignment: .topLeading) {
-                                    Image(systemName: index % 3 == 0 ? "play.rectangle.fill" : index % 3 == 1 ? "map.fill" : "music.note")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 30, height: 30)
-                                        .background(.black.opacity(0.44))
-                                        .clipShape(Circle())
-                                        .padding(8)
-                                }
-                                .overlay(alignment: .topTrailing) {
-                                    if tile.1 {
-                                        Text("2")
-                                            .font(.caption2.weight(.bold))
-                                            .foregroundStyle(.white)
-                                            .frame(minWidth: 24, minHeight: 24)
-                                            .background(ImportMockTheme.warning)
-                                            .clipShape(Capsule())
-                                            .padding(8)
-                                    }
-                                }
+                            ImportHistoryTile(
+                                crop: tile.0,
+                                provider: tile.1,
+                                postText: tile.2,
+                                attentionCount: tile.3 ? 2 : nil
+                            )
+                            .aspectRatio(0.82, contentMode: .fit)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Import from August \(29 - index), \(index + 3) places")
+                        .accessibilityLabel(
+                            "\(tile.1.name) import from August \(29 - index), \(index + 3) places"
+                        )
                     }
                 }
-                .padding(16)
+                .padding(WanderTheme.spacing4)
             }
-            .background(ImportMockTheme.canvas)
+            .background(WanderTheme.canvasWarm.color)
+            .navigationTitle("Import history")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {}) {
-                        Image(systemName: "chevron.left")
-                            .font(.body.weight(.bold))
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Back to import places")
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("Import history")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
+                    ImportMockGlassIconButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Back to import places"
+                    )
                 }
             }
         }
+    }
+}
+
+private struct ImportHistoryTile: View {
+    let crop: ImportPostCrop
+    let provider: ImportMockProvider
+    let postText: String
+    let attentionCount: Int?
+
+    var body: some View {
+        ZStack {
+            Group {
+                if provider == .googleMaps {
+                    Image("OnboardingMapDiary")
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    ImportPostArtwork(crop: crop, cornerRadius: 0)
+                }
+            }
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.08), .black.opacity(0.76)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading) {
+                HStack {
+                    ImportMockSourceIcon(provider: provider, size: 30)
+                    Spacer()
+                    if let attentionCount {
+                        Text("\(attentionCount)")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 30, minHeight: 30)
+                            .background(WanderTheme.stateWarning.color)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Spacer()
+
+                Text(postText)
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(.white)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+            }
+            .padding(WanderTheme.spacing3)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.7), lineWidth: 1)
+        }
+        .clipped()
     }
 }
 
 private struct ImportReportMockup: View {
+    @State private var statuses: [String: ImportMockStatus] = [
+        "bar-chelou": .checkIn,
+        "gjusta": .wanna,
+        "mart-collective": .wanna
+    ]
+    @State private var expandedDetails: Set<String> = []
+    @State private var selectedCandidateID = "colorado"
+
+    private let reportPlaces = Array(ImportMockPlace.all.prefix(4))
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    ImportPostArtwork(crop: .center, cornerRadius: 18)
-                        .frame(height: 176)
-                        .overlay(alignment: .bottomLeading) {
-                            Label("Instagram · Aug 28", systemImage: "play.rectangle.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 10)
-                                .frame(minHeight: 32)
-                                .background(.black.opacity(0.48))
-                                .clipShape(Capsule())
-                                .padding(12)
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    ImportHistoryTile(
+                        crop: .center,
+                        provider: .instagram,
+                        postText: "10 L.A. spots worth the drive",
+                        attentionCount: nil
+                    )
+                    .frame(height: 190)
+
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: "link")
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                        Text("instagram.com/reel/C9…")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Button(action: {}) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .frame(width: 40, height: 40)
+                                .wanderGlassCapsule(tone: .neutral)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Copy original import link")
+                    }
+                    .padding(.leading, WanderTheme.spacing3)
+                    .padding(.trailing, 4)
+                    .frame(minHeight: 48)
+                    .wanderGlassRoundedRectangle(
+                        tone: .lightAction,
+                        cornerRadius: WanderTheme.radiusLarge,
+                        material: .clear
+                    )
+
+                    Text("13 places imported")
+                        .font(.system(size: 27, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .accessibilityAddTraits(.isHeader)
 
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("13 places imported")
-                                .font(.system(size: 24, weight: .bold, design: .serif))
-                                .foregroundStyle(ImportMockTheme.ink)
-                            Text("Your original choices are preserved below.")
-                                .font(.subheadline)
-                                .foregroundStyle(ImportMockTheme.muted)
-                        }
+                        Text("Imported places")
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .accessibilityAddTraits(.isHeader)
                         Spacer()
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(ImportMockTheme.success)
+                        Text("Edits save instantly")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
 
-                    VStack(spacing: 0) {
-                        reportRow("Bar Chelou", "Check In · 8/10 · Pasadena", "checkmark.circle.fill")
-                        Divider().padding(.leading, 66)
-                        reportRow("Gjusta", "Wanna · Venice", "bookmark.fill")
-                        Divider().padding(.leading, 66)
-                        reportRow("The Mart Collective", "Wanna · Venice", "bookmark.fill")
+                    ForEach(reportPlaces) { place in
+                        ImportPlaceCard(
+                            place: place,
+                            status: reportStatusBinding(for: place),
+                            showsMatches: .constant(false),
+                            showsDetails: reportDetailsBinding(for: place),
+                            selectedCandidateID: $selectedCandidateID,
+                            showsListSummary: true
+                        )
                     }
-                    .background(ImportMockTheme.raised)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(ImportMockTheme.border, lineWidth: 1))
-
-                    Text("10 more places")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.terracottaDark)
-                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
-                .padding(16)
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing6)
             }
-            .background(ImportMockTheme.canvas)
+            .scrollIndicators(.hidden)
+            .background(WanderTheme.canvasWarm.color)
+            .navigationTitle("Import report")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {}) {
-                        Image(systemName: "chevron.left")
-                            .font(.body.weight(.bold))
-                            .frame(width: 44, height: 44)
+                    ImportMockGlassIconButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Back to import history"
+                    )
+                }
+            }
+        }
+    }
+
+    private func reportStatusBinding(for place: ImportMockPlace) -> Binding<ImportMockStatus> {
+        Binding(
+            get: { statuses[place.id] ?? .none },
+            set: { statuses[place.id] = $0 }
+        )
+    }
+
+    private func reportDetailsBinding(for place: ImportMockPlace) -> Binding<Bool> {
+        Binding(
+            get: { expandedDetails.contains(place.id) },
+            set: { isExpanded in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedDetails = [place.id]
+                    } else {
+                        expandedDetails.remove(place.id)
                     }
-                    .accessibilityLabel("Back to import history")
                 }
-                ToolbarItem(placement: .principal) {
-                    Text("Import report")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
+            }
+        )
+    }
+}
+
+// MARK: - Completion and recovery in map context
+
+private enum ImportMapState {
+    case ready
+    case complete
+    case offline
+    case failure
+}
+
+private struct ImportMapStateMockup: View {
+    let state: ImportMapState
+
+    var body: some View {
+        ZStack {
+            ImportMockMapBackground(
+                asset: state == .ready ? "OnboardingMapTrusted" : "OnboardingMapDiary"
+            )
+
+            if state == .complete {
+                VStack(spacing: 4) {
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 19, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                        .background(WanderTheme.terracotta.color)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white, lineWidth: 3))
+                        .shadow(color: .black.opacity(0.2), radius: 7, y: 4)
+                    Text("Bar Chelou")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .frame(minHeight: 26)
+                        .wanderGlassCapsule(tone: .lightAction, interactive: false)
                 }
+                .offset(y: -22)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Bar Chelou added to your map")
+            }
+
+            VStack(spacing: WanderTheme.spacing2) {
+                ImportMockMapChrome()
+
+                switch state {
+                case .ready:
+                    ImportMapBanner(
+                        icon: "checkmark",
+                        color: WanderTheme.stateSuccess.color,
+                        title: "Your import is ready",
+                        detail: "13 places matched",
+                        actionTitle: "Review",
+                        isError: false
+                    )
+                case .complete:
+                    EmptyView()
+                case .offline:
+                    ImportMapBanner(
+                        icon: "wifi.slash",
+                        color: WanderTheme.stateInfo.color,
+                        title: "Saved on this phone",
+                        detail: "13 places will sync when you’re back online",
+                        actionTitle: nil,
+                        isError: false
+                    )
+                case .failure:
+                    ImportMapBanner(
+                        icon: "exclamationmark.triangle.fill",
+                        color: WanderTheme.stateError.color,
+                        title: "3 places still need saving",
+                        detail: "Your link and choices are safe",
+                        actionTitle: "Retry",
+                        isError: true
+                    )
+                }
+
+                Spacer()
+
+                ImportMockBottomBar()
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.top, WanderTheme.spacing2)
+            .padding(.bottom, WanderTheme.spacing2)
+        }
+    }
+}
+
+private struct ImportMockMapChrome: View {
+    var body: some View {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text("Search your map")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Spacer()
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .wanderGlassCapsule(tone: .lightAction)
+
+                ImportMockGlassIconButton(
+                    systemImage: "line.3.horizontal.decrease",
+                    accessibilityLabel: "Map filters"
+                )
+                ImportMockGlassIconButton(
+                    systemImage: "person.crop.circle.fill",
+                    accessibilityLabel: "Profile"
+                )
             }
         }
     }
+}
 
-    private func reportRow(_ name: String, _ detail: String, _ icon: String) -> some View {
-        HStack(spacing: 11) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(ImportMockTheme.terracottaTint)
-                .frame(width: 44, height: 44)
-                .overlay(Image(systemName: icon).foregroundStyle(ImportMockTheme.terracottaDark))
+private struct ImportMapBanner: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let detail: String
+    let actionTitle: String?
+    let isError: Bool
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(color)
+                .frame(width: 38, height: 38)
+                .background(color.opacity(0.14))
+                .clipShape(Circle())
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.ink)
+                Text(title)
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
                 Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(ImportMockTheme.muted)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(ImportMockTheme.faint)
-        }
-        .padding(.horizontal, 11)
-        .frame(minHeight: 62)
-    }
-}
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-private struct ImportReadyBannerMockup: View {
-    var body: some View {
-        ZStack(alignment: .top) {
-            ImportMockMapBackground(asset: "OnboardingMapTrusted")
-
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(ImportMockTheme.success.opacity(0.14))
-                    .frame(width: 42, height: 42)
-                    .overlay(Image(systemName: "checkmark").font(.headline.weight(.bold)).foregroundStyle(ImportMockTheme.success))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Your import is ready")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text("12 ready · 1 quick check")
-                        .font(.caption)
-                        .foregroundStyle(ImportMockTheme.muted)
-                }
-                Spacer()
-                Button("Review") {}
-                    .font(.subheadline.weight(.bold))
+            if let actionTitle {
                 Button(action: {}) {
-                    Image(systemName: "xmark")
-                        .frame(width: 44, height: 44)
+                    Text(actionTitle)
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(isError ? WanderTheme.stateError.color : WanderTheme.textInk.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .frame(minHeight: 40)
+                        .wanderGlassCapsule(tone: .lightAction)
                 }
-                .accessibilityLabel("Dismiss import banner")
+                .buttonStyle(.plain)
             }
-            .padding(.leading, 12)
-            .padding(.trailing, 2)
-            .frame(minHeight: 70)
-            .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(ImportMockTheme.border.opacity(0.8), lineWidth: 1))
-            .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+
+            Button(action: {}) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
         }
+        .padding(.leading, WanderTheme.spacing2)
+        .padding(.trailing, 2)
+        .frame(minHeight: 66)
+        .wanderGlassPanel(
+            cornerRadius: WanderTheme.radiusLarge,
+            tone: isError ? .accent : .lightAction,
+            interactive: true
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct ImportCompletionMockup: View {
+private struct ImportMockBottomBar: View {
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ImportMockMapBackground(asset: "OnboardingMapTrusted")
-
-            VStack(spacing: 5) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundStyle(ImportMockTheme.success)
-                Text("13 places added")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.ink)
-                Text("We’ll finish syncing in the background.")
-                    .font(.caption)
-                    .foregroundStyle(ImportMockTheme.muted)
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing4) {
+                bottomButton("map.fill", selected: true)
+                bottomButton("plus", selected: false)
+                bottomButton("safari", selected: false)
+                bottomButton("person", selected: false)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
-            .padding(.bottom, 90)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .frame(minHeight: 56)
+            .wanderGlassCapsule(tone: .darkOverlay, interactive: false)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func bottomButton(_ image: String, selected: Bool) -> some View {
+        Image(systemName: image)
+            .font(.system(size: 18, weight: .black))
+            .foregroundStyle(selected ? WanderTheme.terracotta.color : .white)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
     }
 }
 
-private struct ImportOfflineMockup: View {
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            ImportMockMapBackground(asset: "OnboardingMapDiary")
+// MARK: - Shared mock presentation
 
-            HStack(spacing: 12) {
-                Image(systemName: "wifi.slash")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.info)
-                    .frame(width: 42, height: 42)
-                    .background(ImportMockTheme.skyTint)
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Saved on this phone")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text("We’ll sync 13 places when you’re back online.")
-                        .font(.caption)
-                        .foregroundStyle(ImportMockTheme.muted)
-                }
-                Spacer()
-            }
-            .padding(12)
-            .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 84)
+private struct ImportMockPrimaryGlassButton: View {
+    let title: String
+    let systemImage: String
+    let tone: WanderGlassTone
+
+    var body: some View {
+        Button(action: {}) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(tone.foregroundStyle)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .wanderGlassRoundedRectangle(
+                    tone: tone,
+                    cornerRadius: WanderTheme.radiusLarge,
+                    interactive: true,
+                    showsBorder: false
+                )
         }
+        .buttonStyle(.plain)
     }
 }
 
-private struct ImportFailureMockup: View {
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            ImportMockMapBackground(asset: "OnboardingMapDiary")
+private struct ImportMockSecondaryGlassButton: View {
+    let title: String
+    let systemImage: String
 
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.error)
-                    .frame(width: 42, height: 42)
-                    .background(ImportMockTheme.error.opacity(0.12))
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("3 places still need saving")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(ImportMockTheme.ink)
-                    Text("Your link and choices are safe.")
-                        .font(.caption)
-                        .foregroundStyle(ImportMockTheme.muted)
-                }
-                Spacer()
-                Button("Retry") {}
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(ImportMockTheme.error)
-                    .frame(minWidth: 54, minHeight: 44)
+    var body: some View {
+        Button(action: {}) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .wanderGlassCapsule(tone: .neutral)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ImportMockGlassIconButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+
+    var body: some View {
+        Button(action: {}) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 42, height: 42)
+                .wanderGlassCapsule(tone: .neutral)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ImportMockSourceIconStack: View {
+    let iconSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: -8) {
+            ImportMockSourceIcon(provider: .googleMaps, size: iconSize)
+            ImportMockSourceIcon(provider: .instagram, size: iconSize)
+            ImportMockSourceIcon(provider: .tiktok, size: iconSize)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Google Maps, Instagram, and TikTok")
+    }
+}
+
+private struct ImportMockSourceIcon: View {
+    let provider: ImportMockProvider
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            background
+
+            switch provider {
+            case .instagram:
+                Image("BrandInstagram")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(.white)
+                    .padding(size * 0.22)
+            case .googleMaps:
+                Image("BrandGoogleMaps")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(Color(red: 0.18, green: 0.48, blue: 0.92))
+                    .padding(size * 0.2)
+            case .tiktok:
+                Image("BrandTikTok")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(.white)
+                    .padding(size * 0.22)
+            case .youtube:
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: size * 0.42, weight: .black))
+                    .foregroundStyle(.white)
             }
-            .padding(12)
-            .background(.ultraThickMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(ImportMockTheme.error.opacity(0.35), lineWidth: 1))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 84)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(.white.opacity(0.86), lineWidth: 2))
+        .shadow(color: .black.opacity(0.14), radius: 3, y: 2)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        switch provider {
+        case .instagram:
+            Circle().fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.51, green: 0.18, blue: 0.78),
+                        Color(red: 0.95, green: 0.19, blue: 0.42),
+                        Color(red: 1, green: 0.72, blue: 0.24)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        case .googleMaps:
+            Circle().fill(.white)
+        case .tiktok:
+            Circle().fill(.black)
+        case .youtube:
+            Circle().fill(Color(red: 0.88, green: 0.1, blue: 0.1))
         }
     }
 }
@@ -885,14 +1622,6 @@ private struct ImportMockMapBackground: View {
     }
 }
 
-private enum ImportPostCrop {
-    case left
-    case right
-    case top
-    case bottom
-    case center
-}
-
 private struct ImportPostArtwork: View {
     let crop: ImportPostCrop
     let cornerRadius: CGFloat
@@ -907,12 +1636,12 @@ private struct ImportPostArtwork: View {
                 .offset(offset(in: proxy.size))
         }
         .clipped()
-        .background(ImportMockTheme.sand)
+        .background(WanderTheme.surfaceSand.color)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay(
+        .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(.white.opacity(0.62), lineWidth: 1)
-        )
+        }
         .accessibilityHidden(true)
     }
 

@@ -1,6 +1,6 @@
 # REC-409 Complete Import Redesign
 
-Status: design-complete, implementation not started  
+Status: revised SwiftUI mockups ready for review, implementation not started
 Linear: REC-409  
 Design branch: `codex/rec-409-complete-import-design`
 
@@ -8,9 +8,9 @@ Design branch: `codex/rec-409-complete-import-design`
 
 Import becomes a fast, resumable place-capture workflow with one principle:
 
-> Ready by default; exceptions by attention.
+> Show every matched place; keep uncertainty inside the place that owns it.
 
-Most people should see that their places are ready, optionally enrich one or two, and add them immediately. Uncertain items remain visible and recoverable without blocking the ready items. Every source link also becomes a durable import report that can be reopened from an image-first history.
+Most people should see one scannable list of matched places, apply Wanna or Check In to all, adjust individual rows, optionally enrich one or two, and add them immediately. A lower-confidence place stays in that same list with its best candidate selected and its alternatives inside a `Possible matches` disclosure. Every source link also becomes a durable import report that reopens the same editable review UI from image-first history.
 
 This branch contains the workflow decision, state contract, and DEBUG-only SwiftUI mockups. It intentionally does not change production import behavior.
 
@@ -18,7 +18,7 @@ This branch contains the workflow decision, state contract, and DEBUG-only Swift
 
 There are two user-facing capabilities and one reliability layer:
 
-1. Core import review: resolve places, focus attention on exceptions, optionally add details, and add the selected places.
+1. Core import review: show every matched place, provide batch and row-level status controls, resolve lower-confidence identity inline, optionally add details, and add the selected places.
 2. Import history: retain a report for every source link and reopen the canonical review experience with the original choices visible.
 3. Optimistic completion: durably queue saves locally, release the UI immediately, and sync or recover in the background.
 
@@ -31,8 +31,8 @@ ADD TAB / SHARE EXTENSION
         |
         v
 +---------------------------+
-| Import places             |
-| source link + History     |
+| Import places system sheet|
+| source link + icon actions|
 +---------------------------+
         |
         | Start import
@@ -53,11 +53,12 @@ GLOBAL COMPLETION ROUTING                   RETRY SOURCE / KEEP REPORT
         v
 +---------------------------------------------------+
 | Canonical review                                  |
-|  1. outcome headline                              |
-|  2. exceptions needing attention                  |
-|  3. collapsed ready receipt                       |
-|  4. optional per-place details                    |
-|  5. persistent Add N places action                |
+|  1. N places matched and ready                    |
+|  2. Ready to add + master status controls         |
+|  3. every matched place row                       |
+|  4. inline Possible matches when applicable       |
+|  5. inline optional details                       |
+|  6. persistent Add N places action                |
 +---------------------------------------------------+
         |
         | Add N places
@@ -69,7 +70,7 @@ GLOBAL COMPLETION ROUTING                   RETRY SOURCE / KEEP REPORT
         +---- local write failed --> stay in review; no success claim
         |
         v
-IMMEDIATE CONFIRMATION + RETURN TO MAP
+IMMEDIATE RETURN TO THE EXISTING MAP SAVE EXPERIENCE
         |
         +---- online --> background sync --> complete
         |
@@ -91,7 +92,8 @@ IMMEDIATE CONFIRMATION + RETURN TO MAP
 ```text
 Add tab
   -> Import places sheet
-       -> History (visible trailing toolbar action)
+       -> History (Liquid Glass clock icon in the top action cluster)
+       -> Help (Liquid Glass question-mark icon)
        -> Latest import ready (when present)
 
 Share extension
@@ -114,11 +116,11 @@ Do not add another control to the already crowded Profile header. The frequent h
 
 If only three things fit above the fold, they are:
 
-1. What happened: ready, partially ready, or needs help.
-2. The first item that needs attention, when one exists.
+1. What happened: `N places matched and ready`.
+2. `Ready to add` with master Wanna and Check In controls aligned to the row controls.
 3. The exact primary outcome: `Add N places`.
 
-Ready results collapse into a receipt when exceptions exist. On the all-ready screen, the receipt leads because it is the outcome. On an exception screen, the exception leads and the receipt follows.
+Every matched place remains visible in one scrollable list. Lower confidence does not create another page or a separate exception section: that place row gains a `Possible matches` disclosure above `Add details`. This keeps the user oriented and prevents the importer state model from taking over the page hierarchy.
 
 ## State contract
 
@@ -143,7 +145,7 @@ Batch, source, place resolution, and save outcome are separate axes. Do not over
 | Source processing | Provider, artwork/fallback, progress copy, and permission to leave. | None required. |
 | Scan incomplete | Places already found remain; source-level warning explains that more may exist. | `Retry scan`. |
 | Unsupported source | Honest provider-specific explanation; original link remains copyable/retryable. | `Try another link`. |
-| No places found | Warm empty result with source context. | `Search manually` or `Try another link`. |
+| No places found | Warm empty result with source context. | `Try another link`. |
 | Source failed | Inline error, not a blank report. | `Retry`. |
 
 ### Place resolution outcomes
@@ -151,18 +153,18 @@ Batch, source, place resolution, and save outcome are separate axes. Do not over
 | Resolution state | Default presentation | Available action |
 |---|---|---|
 | Resolving | Skeleton row that retains the extracted clue; never a generic spinner-only screen. | Wait or leave. |
-| Resolved, high confidence | Selected by default and included in `Add N places`. | Change status, add details, or remove. |
-| Ambiguous, 2–5 candidates | `Possible matches`; best candidate selected by default; at most five total candidates. | Keep the recommendation, choose one alternative, clear it, or search. |
-| Needs a match, zero candidates | Extracted clue plus inline search field and recent/map-proximate suggestions. | Choose one place or leave for later. |
-| Already saved | Passive duplicate receipt showing existing status; import never overwrites existing rating, note, or status implicitly. | Open the existing place or exclude it from this report. |
-| Retryable place failure | Extracted clue plus concise failure reason. | Retry this item or leave for later. |
-| Excluded / skipped | Muted receipt retained in the report. | Restore to review. |
+| Resolved, high confidence | Visible row, selected by the current master default, and included in `Add N places`. | Switch Wanna/Check In, clear both, or add details. |
+| Ambiguous, 2–5 candidates | Same visible row with the best candidate selected and a collapsed `Possible matches` disclosure. | Keep the recommendation or choose one of at most four alternatives. |
+| Needs a match, zero candidates | No interactive row in the launch review. The source report retains an aggregate resolver outcome for diagnostics/reprocessing, but the user is not sent into a guessing flow. | None in launch scope. |
+| Already saved | Visible row using the existing personal status and details; no implicit overwrite. | Leave as-is or make an explicit status/detail change. |
+| Retryable place failure | Source-level retry remains available when the whole source failed; a single zero-result place is omitted from launch review. | Retry the source when applicable. |
+| Excluded | Row remains visible with both status icons off during the active review. | Re-select Wanna or Check In. |
 
 ### Save outcomes
 
 | Outcome | User-visible treatment |
 |---|---|
-| Queued locally | Immediate `N places added` confirmation after the durable local write. |
+| Queued locally | Immediate return to the existing map save experience after the durable local write. |
 | Pending offline | Neutral `Saved on this phone` notice; no red error semantics. |
 | Synced | No interruption; history report quietly becomes complete. |
 | Retryable sync failure | Warning remains on the report; automatic retry continues. |
@@ -185,23 +187,25 @@ resolved | duplicate
 
 ## Matching interaction
 
-- Show candidates in one `Possible matches` subsection for each extracted place.
+- Keep `Possible matches` inside the relevant place card, directly above `Add details`; never create a separate exception page or top-level section.
 - Show no more than five candidates: one best candidate plus four alternatives.
 - The best candidate is selected by default.
 - Selection is zero-or-one, never multi-select. Selecting an alternative moves the checkmark to it.
 - Nonselected candidates are visually muted but remain fully tappable and VoiceOver-enabled; they must not look disabled.
-- A selected recommendation counts in `Add N places`. If the user clears it, the CTA count decreases and a caption states, for example, `1 place stays here for later`.
-- `Search for a different place` follows the candidates and opens inline search without discarding the extracted clue.
+- A selected recommendation counts in `Add N places`. Clearing both status icons on its parent place row removes it from the add count without removing the row.
 - Candidate confidence is expressed as `Best match`, not a numeric score.
 - If there is only one high-confidence match, treat it as resolved rather than manufacturing an ambiguity screen.
+- The current resolver ranking remains authoritative for launch. Name match is expected to carry strong weight, but ranking-algorithm work is not part of this UI branch.
 
 ## Review and optional details
 
-Each selected place has two primary status choices: `Wanna` and `Check In`. Neither status silently generates a rating.
+Each place row has two icon-only status choices aligned on its right edge: bookmark for `Wanna` and checked circle for `Check In`. Only one may be active, and tapping the active icon again clears both. There is no third green selection checkmark.
+
+The `Ready to add` header repeats those two icons as master column controls. Tapping master Wanna applies Wanna to every row; tapping master Check In applies Check In to every row. The user may then override or clear any row. The master state reflects all, mixed, or neither without blocking row-level edits.
 
 `Add details` expands the selected place inline. Only one place disclosure stays open at a time so the list remains navigable. The expanded order is:
 
-1. Rating — always `Not rated` until the user chooses one.
+1. Rating — always `Not rated` with no thumb or fabricated value until the first touch. After the first choice it reuses the existing liquid rating reaction and motion.
 2. Note — prompt: `Why did you save this?`
 3. When — `Today` may be explicit for a new Check In; Wanna has no visit date default.
 4. Place type.
@@ -214,7 +218,9 @@ Each selected place has two primary status choices: `Wanna` and `Check In`. Neit
 
 Lists are deliberately not a third batch-level action. A list assignment belongs to the place disclosure because different imported places may belong to different lists.
 
-The persistent CTA always names the exact operation. Never display `Add 0 places`. If nothing is selected, the primary action becomes `Keep for later`; the nearest resolvable item retains the visual emphasis.
+List membership is independent from Wanna/Check In, so valid combinations include Wanna only, Check In only, Wanna + list, and Check In + list.
+
+The persistent CTA always names the exact operation. Never display `Add 0 places`. If nothing is selected, the primary action becomes `Keep for later`.
 
 ## Import history and report
 
@@ -223,7 +229,7 @@ The persistent CTA always names the exact operation. Never display `Add 0 places
 - Every source link produces one report.
 - Starting another import replaces the `current import` pointer used by the main import flow; it never deletes older reports.
 - Reports remain until the user deletes them or deletes the account.
-- The history grid is two-column and image-only. There are no generated or authored titles.
+- The history grid is two-column and image-only. There are no titles outside the image. Any words visible in a tile are part of the source post thumbnail itself.
 - A small provider glyph identifies Instagram, Google Maps, TikTok, or another supported source.
 - A small attention-count badge appears only when unresolved or failed items remain.
 - Missing artwork uses a warm provider fallback rather than an empty gray rectangle.
@@ -233,11 +239,11 @@ The persistent CTA always names the exact operation. Never display `Add 0 places
 
 Tapping a thumbnail opens the same canonical review component in report mode:
 
-- Original selections, statuses, optional details, and skipped items are shown as they were at import time.
-- Completed membership is a historical snapshot, not a second editor that can silently rewrite the import.
-- Tapping a completed place opens its current place detail/edit flow.
-- Any unresolved or failed item remains actionable in place.
-- The report header shows source artwork, provider, date, imported count, and current attention status.
+- The original source thumbnail leads the page and the original link is visible with a copy-to-clipboard control.
+- Original selections, statuses, optional details, and list memberships initialize the rows.
+- The rows are live editors. Switching Wanna to Check In, Check In to Wanna, or clearing both updates that specific current place save.
+- List membership remains independent and editable through the same per-place details disclosure.
+- Completed, unresolved, and failed rows use the same card anatomy as the active review so the two surfaces cannot drift.
 
 This reuse is a design constraint: there should not be a separate bespoke history-detail UI that drifts from review.
 
@@ -252,7 +258,7 @@ This reuse is a design constraint: there should not be a separate bespoke histor
 
 There are three completion routes into the same report:
 
-1. While in the app: a top overlay banner appears above the current screen with `Review` and an explicit 44pt close button. It persists until dismissed or opened.
+1. While in the app: a top overlay banner appears immediately below any existing header, search, or filter controls with `Review` and an explicit 44pt close button. When no chrome exists, it sits as high as the safe area allows. It persists until dismissed or opened.
 2. While away: an OS notification says the import is ready and deep-links to the report.
 3. If never opened: send one reminder 24 hours after completion, shifted to the next reasonable local-time slot when it would land during quiet hours.
 
@@ -272,27 +278,27 @@ The UI may leave review only after the app has durably written the complete save
 User taps Add N places
   -> atomically persist source, selected candidates, statuses, details, and save intents
      -> failure: remain in review; explain local save failure
-     -> success: short confirmation/confetti; return to map immediately
+     -> success: return immediately to the existing map save experience
         -> background sync
            -> success: silent completion
            -> offline: neutral saved-on-phone notice
            -> repeated/terminal failure: durable warning + Retry
 ```
 
-This applies to all multi-place saves, not only imported packages. Automatic retry should normally occur within seconds, but the durable queue must survive force quit, app restart, and no-network conditions. Retrying must be idempotent.
+This applies to all multi-place saves, not only imported packages. Optimistic completion adds no new dedicated success card or screen; the user sees the same successful place-save feel already used by rec.me, only without server latency. Automatic retry should normally occur within seconds, but the durable queue must survive force quit, app restart, and no-network conditions. Retrying must be idempotent.
 
 ## Interaction state coverage
 
 | Surface | Loading | Empty | Error | Success | Partial |
 |---|---|---|---|---|---|
 | Import entry | Clipboard/source validation appears inline without blocking History. | Blank source field with provider examples. | Invalid link stays editable with a provider-specific reason. | Start import becomes available. | Latest report remains reachable while a new link is entered. |
-| Source processing | Artwork/fallback, provider, and progress; user may leave. | `No places found` plus manual search. | Preserved link with Retry. | Completion route announces ready count. | Found places remain visible beside scan warning. |
-| Canonical review | Per-place clue skeletons, not a page spinner. | `Nothing selected yet`; nearest exception stays active. | Item-level Retry; ready places remain addable. | Outcome headline, selected count, exact CTA. | Exceptions lead; ready receipt collapses below. |
-| Candidate matching | Stable clue card and candidate skeleton rows. | Inline search when no candidates exist. | Retry candidate lookup without losing clue. | One checked candidate, alternatives muted. | Up to five candidates; other import items remain ready. |
+| Source processing | Artwork/fallback, provider, and progress; user may leave. | `No places found` plus `Try another link`. | Preserved link with Retry. | Completion route announces ready count. | Found places remain visible beside scan warning. |
+| Canonical review | Per-place clue skeletons, not a page spinner. | `Nothing selected yet`; all rows remain available. | Source-level Retry when the source failed; matched rows remain addable. | Outcome headline, selected count, exact CTA. | Every matched row stays visible; lower confidence expands in its owning card. |
+| Candidate matching | Stable parent place card and candidate skeleton rows. | Zero-result places are omitted from launch review rather than forcing a guessing flow. | Retry only when the source-level extraction/resolution job failed. | Best candidate selected; alternatives muted but active. | Up to five candidates inside one place card. |
 | Optional details | Row-local progress for photos/friends/lists. | Explicit values such as `Not rated`, `No note`, `No list`. | Failed subaction stays inside the expanded place. | Saved value appears in the row summary. | One detail can fail without blocking the place selection. |
 | Import history | Two-column image skeletons. | Warm `No imports yet` with Import action. | Provider fallback or retry banner; report metadata survives. | Image-only report grid. | Loaded tiles remain usable while artwork resolves. |
-| Import report | Header and row skeletons preserve layout. | Honest `No places found` report rather than disappearing. | Unresolved/failed row remains actionable. | Original choices visible; completed place opens current detail. | Completed and unresolved rows coexist. |
-| Local save / sync | Only the durable local write briefly locks the CTA. | No `Add 0`; use `Keep for later`. | Local failure stays in review; terminal remote failure offers Retry for 10s+. | Immediate confirmation then map. | Offline pending is neutral; successful local items remain available. |
+| Import report | Source thumbnail, copy-link control, and row skeletons preserve layout. | Honest `No places found` report rather than disappearing. | Failed source or save remains retryable. | Original choices initialize live editable rows. | Status and list changes affect only the specific place. |
+| Local save / sync | Only the durable local write briefly locks the CTA. | No `Add 0`; use `Keep for later`. | Local failure stays in review; terminal remote failure offers Retry for 10s+. | Immediate return to the existing map save experience. | Offline pending is neutral; successful local items remain available. |
 
 ## User journey and emotional arc
 
@@ -300,29 +306,31 @@ This applies to all multi-place saves, not only imported packages. Automatic ret
 |---|---|---|---|
 | 1 | Pastes or shares a link. | Certain that rec.me has it. | Durable receipt, clear provider context, visible History. |
 | 2 | Leaves while processing. | Unburdened. | Background work and global completion routing. |
-| 3 | Opens review. | Relieved, not assigned homework. | Outcome-first headline and ready-by-default selection. |
-| 4 | Encounters an ambiguity. | Guided, not stuck. | Best match selected, four alternatives maximum, clue retained. |
+| 3 | Opens review. | In control without hunting through importer states. | Every match is visible in one list with master and row-level status controls. |
+| 4 | Encounters lower confidence. | Guided, not diverted. | Best match selected and alternatives disclosed inside that place card. |
 | 5 | Adds one note or list. | In control. | Inline disclosure with no context switch or random values. |
-| 6 | Adds the places. | Instant gratification. | Durable local queue, immediate confirmation, return to map. |
+| 6 | Adds the places. | Instant gratification. | Durable local queue and immediate return to the familiar map save state. |
 | 7 | Goes offline or sync fails. | Trusting that work is safe. | Neutral offline state; explicit long-lived retry on real failure. |
-| 8 | Returns weeks later. | Able to remember why these places mattered. | Image-first history and preserved report snapshot. |
+| 8 | Returns weeks later. | Able to remember why these places mattered. | Image-first history, original source link, and live editable place rows. |
 
 Time horizons:
 
 - Five seconds: `It worked; most places are already handled.`
-- Five minutes: `I can fix one match and enrich the places I care about without reviewing everything.`
+- Five minutes: `I can scan every result, fix one match, and enrich the places I care about without leaving the list.`
 - Five years: `rec.me still remembers where this group of places came from and what I chose.`
 
 ## Visual and component decisions
 
 Classifier: native app UI.
 
-- Reuse the warm canvas, bone surfaces, ink text, terracotta action color, success green, editorial serif titles, 8pt spacing rhythm, and 44pt controls defined by `DESIGN.md`.
-- Use one calm canvas and minimal chrome. Cards exist only where the card is the interaction: a place, candidate group, source receipt, or report tile.
-- Source imagery is the primary visual anchor in history; do not generate titles to compensate for weak thumbnails.
+- Reuse the warm canvas, bone surfaces, ink text, terracotta action color, success green, 8pt spacing rhythm, and 44pt controls defined by `DESIGN.md`.
+- Present import entry as a real draggable iOS system sheet with `.medium` and `.large` detents, a visible drag indicator, and the same warm map context as Add.
+- Use true iOS 26 Liquid Glass for the close/help/history cluster, text field, Start import, clipboard, latest-report row, status controls, copy-link control, banners, and sticky CTA. Keep content cards opaque enough for text and imagery.
+- Use one calm canvas and minimal chrome. A card represents one matched place; candidate rows and details expand inside it rather than adding nested cards or separate pages.
+- Source imagery is the primary visual anchor in history; do not generate titles outside the image to compensate for weak thumbnails.
 - Avoid dashboard mosaics, decorative gradients, ornamental icon circles, thick borders, and stacked explanatory cards.
-- Status always combines color with icon and copy.
-- Candidate and place rows use thin separators inside one semantic group instead of a card per row.
+- Status controls use outline icons when inactive and filled icons plus terracotta tint/border when active, so selection is not communicated by color alone.
+- The master controls and every row use the same two fixed-width icon columns on the right edge.
 - Primary actions use the existing dark espresso treatment; terracotta remains the selection/action accent.
 
 AI-slop check:
@@ -331,7 +339,7 @@ AI-slop check:
 |---|---|
 | Product unmistakable on first screen | Yes — source artwork, provider, place counts, and rec.me vocabulary. |
 | One strong visual anchor | Yes — source artwork or resolution outcome. |
-| Understandable by headings alone | Yes — outcome, exceptions, ready receipt, details. |
+| Understandable by headings alone | Yes — matched count, Ready to add, Possible matches, Add details. |
 | One job per section | Yes. |
 | Cards necessary | Yes, only for interactive place/source objects. |
 | Motion improves hierarchy | Yes, limited to resolution collapse and completion. |
@@ -341,41 +349,41 @@ AI-slop check:
 
 ### Viewports
 
-- Small iPhone: one-column review; source clue wraps; candidate address truncates after the meaningful street segment; persistent CTA respects the home indicator. History remains two-column because tiles contain no visible text.
+- Small iPhone: one-column review; entry headline and provider list wrap inside the system sheet; candidate address wraps after the meaningful street segment; persistent CTA respects the home indicator. History remains two-column because tile text comes from the visual source thumbnail.
 - Current iPhone: review uses 16pt side insets and the content order shown in the approved renders.
 - Wider iPhone / iPad compatibility: center review at a 620pt maximum content width and history at a 760pt maximum width. Do not stretch the phone composition into a dashboard or invent a side panel in this scope.
 - Keyboard: focused fields remain visible above the keyboard; the persistent CTA moves with the keyboard only when its action remains valid.
 
 ### Accessibility
 
-- Minimum tap target is 44×44pt, including checkmarks, disclosure rows, close buttons, and history tiles.
+- Minimum tap target is 44×44pt, including status icons, disclosure rows, close buttons, and history tiles.
 - Dynamic Type must be verified at default, Extra Extra Large, and an accessibility size. Editorial headings wrap; no essential row has a fixed text height.
 - VoiceOver groups each place/candidate row and announces place name, supporting location, `Best match` when applicable, and selected state.
 - History tiles announce provider, date, number of places, and unresolved count.
 - Do not communicate disabled, warning, selected, or failed state with opacity/color alone.
 - Source thumbnails are decorative when equivalent metadata is announced; meaningful user photos receive their existing place-photo descriptions.
-- Full Keyboard Access follows visual order: close/back, headline context, exceptions, ready receipt, place details, primary CTA.
+- Full Keyboard Access follows visual order: close/back, headline, master controls, each place's Wanna/Check In controls, Possible matches, details, and primary CTA.
 
 ### Motion
 
-- A resolved exception collapses into the ready receipt in one approximately 220ms movement.
-- No more than two imported rows animate simultaneously; larger batches settle without cascading spectacle.
-- Immediate add confirmation is short and does not block interaction.
-- Reduce Motion replaces movement/confetti with an instant state change and the same confirmation copy.
+- Possible matches and Add details expand in one approximately 200ms movement; opening details closes any other details disclosure.
+- Master status changes update visible rows together without a staggered cascade.
+- Successful optimistic completion uses the existing place-save feedback and does not add a second animation layer.
+- Reduce Motion replaces disclosure movement with an instant state change; optimistic completion adds no new motion.
 
 ## Copy contract
 
 | Situation | Headline / action | Supporting copy |
 |---|---|---|
-| All ready | `All 13 places are ready` | `Everything matched. Add details only where you want them.` |
-| One ambiguity | `12 ready, 1 quick check` | `We picked the most likely match. Change it only if it looks wrong.` |
-| Needs match | `11 ready, 2 need a match` | `Tell us which places these are, or keep them for later.` |
+| Review | `13 places matched and ready` | `Instagram · 11 new · 2 already saved` |
+| Matched section | `Ready to add` | Selected count plus icon-only `Apply to all` controls. |
+| Lower confidence | `Possible matches` | Candidate count; `Best match` appears only on the first recommendation. |
 | All selected | `Add 13 places` | No caption. |
-| One cleared | `Add 12 places` | `1 place stays here for later.` |
+| One cleared | `Add 12 places` | No extra warning; the cleared row remains visibly unselected. |
 | Nothing selected | `Keep for later` | No fake add count. |
-| In-app ready | `Your import is ready` / `Review` | `12 ready · 1 quick check` |
-| Immediate completion | `13 places added` | `We’ll finish syncing in the background.` |
-| Offline | `Saved on this phone` | `We’ll sync 13 places when you’re back online.` |
+| In-app ready | `Your import is ready` / `Review` | `13 places matched` |
+| Immediate completion | No new dedicated copy | Return to the existing map save experience. |
+| Offline | `Saved on this phone` | `13 places will sync when you’re back online.` |
 | Terminal failure | `3 places still need saving` / `Retry` | `Your link and choices are safe.` |
 | History empty | `No imports yet` / `Import places` | `Posts and shared lists you import will stay here.` |
 
@@ -387,7 +395,7 @@ Required measurements:
 
 - import captured, processing completed, and review opened;
 - resolution-state counts using aggregate counts only;
-- suggested candidate kept, alternative selected, cleared, and manual search used;
+- suggested candidate kept or alternative selected; master and row status changes;
 - optional details expanded and detail type used;
 - local save queued, offline pending, sync completed, and retry tapped;
 - history opened, report opened, and completion/reminder route used.
@@ -396,21 +404,24 @@ Allowed properties are provider enum, aggregate counts, resolution enum, route e
 
 ## Design decisions
 
-1. Use `ready by default; exceptions by attention` as the governing review model.
+1. Use `show every matched place; keep uncertainty inside the place that owns it` as the governing review model.
 2. Separate batch, source, place-resolution, and save-outcome states.
-3. Lead with exceptions when any exist; otherwise lead with the ready receipt.
-4. Cap ambiguous candidates at five and preselect the best candidate.
-5. Allow zero or one candidate selection; a default selection counts in the CTA until cleared.
-6. Never overwrite an existing place's status, rating, or note because it reappears in an import.
-7. Expand optional details inline, one place at a time, and never invent a rating.
-8. Put list membership inside per-place details; no batch-wide list control in launch scope.
-9. Make the CTA state the exact count and replace `Add 0` with `Keep for later`.
-10. Retain one historical report per source link until deletion; a new import changes only the current pointer.
-11. Make history a two-column, image-only grid with provider and attention badges but no titles.
-12. Reuse the canonical review component for report mode and keep completed membership as a snapshot.
-13. Route in-app banners, OS notifications, and one 24-hour reminder to the same report.
-14. Declare local durable persistence—not server completion—the gate for optimistic UI success.
-15. Treat offline as neutral pending work and terminal failure as an explicit 10-second-plus retry surface.
+3. Present import entry in a draggable `.medium`/`.large` system sheet and restore icon-based help/history actions.
+4. Show every matched place in one `Ready to add` list; remove the collapsed ready receipt and separate exception section.
+5. Give the section and every row the same Wanna/Check In icon columns; allow exactly one or neither per row.
+6. Make the master controls apply a status to all while preserving later row overrides and clear states.
+7. Keep `Possible matches` inside the owning place card, cap candidates at five, and preselect the best candidate.
+8. Omit zero-result places from the launch review instead of forcing manual search; preserve aggregate resolver diagnostics privately.
+9. Never overwrite an existing place's status, rating, or note because it reappears in an import without an explicit user edit.
+10. Expand optional details inline, one place at a time, and keep Rating visibly `Not rated` until the first touch.
+11. Put list membership inside per-place details and keep it independent from Wanna/Check In.
+12. Make the CTA state the exact count and replace `Add 0` with `Keep for later`.
+13. Retain one historical report per source link until deletion; a new import changes only the current pointer.
+14. Make history a two-column source-thumbnail grid with accurate provider and attention badges but no labels outside the image.
+15. Reuse the canonical place cards for report mode, expose a copy-link control, and make status/list edits update only that current place save.
+16. Route in-app banners, OS notifications, and one 24-hour reminder to the same report; place banners below existing chrome.
+17. Declare local durable persistence, not server completion, as the gate for optimistic UI success, with no new success surface.
+18. Treat offline as neutral pending work and terminal failure as an explicit 10-second-plus retry surface.
 
 ## What already exists
 
@@ -436,7 +447,7 @@ Allowed properties are provider enum, aggregate counts, resolution enum, route e
 
 ### Branch 1 — core resolution and review (REC-409)
 
-Land the separated state model, canonical review composition, exception-first ordering, candidate selection rules, duplicate treatment, exact CTA behavior, inline details, and deep-linkable report route contract. Keep the report persistence interface forward-compatible with history.
+Land the separated state model, one-list review composition, master and row status controls, inline candidate disclosure, duplicate treatment, exact CTA behavior, inline details, and deep-linkable report route contract. Keep the report persistence interface forward-compatible with history.
 
 ### Branch 2 — optimistic save reliability (coordinate with REC-341)
 
@@ -444,7 +455,7 @@ Land the durable local save-intent queue, idempotent background sync, app-restar
 
 ### Branch 3 — history and completion routing (new incremental issue)
 
-Land report snapshots, source artwork lifecycle, current-report pointer, Import sheet and Settings entry points, image grid, canonical report mode, in-app completion banner, OS deep link, and single reminder. Stack this after the canonical review contract is stable.
+Land persisted report state, source artwork lifecycle, current-report pointer, Import sheet and Settings entry points, image grid, canonical live-edit report mode, in-app completion banner, OS deep link, and single reminder. Stack this after the canonical review contract is stable.
 
 ## Implementation Tasks
 
@@ -454,18 +465,18 @@ Synthesized from this review's findings. Each task derives from a specific findi
   - Surfaced by: Interaction State Coverage — the current status surface conflates resolution and persistence outcomes.
   - Files: `Wander/Models/PlaceImportModels.swift`, `Wander/Services/PlaceImportStore.swift`, `WanderTests/PlaceImportTests.swift`
   - Verify: focused import model/store tests plus state-transition contract tests.
-- [ ] **T2 (P1, human: ~2d / Codex: ~4h)** — Canonical review — Build outcome-first, exception-led review composition
-  - Surfaced by: Information Architecture — exception work must precede the collapsed ready receipt when attention is needed.
+- [ ] **T2 (P1, human: ~2d / Codex: ~4h)** — Canonical review — Build the one-list review with master and row status columns
+  - Surfaced by: Information Architecture — every match must remain scannable without exposing a separate importer-state dashboard.
   - Files: `Wander/Features/Profile/ProfileImportViews.swift`, import view-model/store files, UI tests
-  - Verify: all-ready, mixed, all-exception, duplicate, and zero-selection screenshots on current and small iPhones.
-- [ ] **T3 (P1, human: ~1d / Codex: ~3h)** — Place matching — Implement zero-or-one candidate selection with five-result cap
-  - Surfaced by: Interaction State Coverage — ambiguous and zero-candidate outcomes need distinct, recoverable controls.
+  - Verify: all-matched, mixed-confidence, duplicate, row override, and zero-selection screenshots on current and small iPhones.
+- [ ] **T3 (P1, human: ~1d / Codex: ~3h)** — Place matching — Put zero-or-one candidate selection inside the parent place card
+  - Surfaced by: Interaction State Coverage — lower confidence must not send the user to a separate review page.
   - Files: import review views, resolver adapter/view model, `WanderTests/PlaceImportTests.swift`
-  - Verify: best preselection, alternative selection, clear, manual search, and accessibility-state tests.
+  - Verify: best preselection, alternative selection, five-result cap, zero-result omission, and accessibility-state tests.
 - [ ] **T4 (P2, human: ~1.5d / Codex: ~4h)** — Inline enrichment — Compose optional place details into one disclosure
   - Surfaced by: User Journey — people need to add a note, list, rating, or visit context without leaving the batch.
   - Files: import review views and existing save-editor/list/friend/photo components
-  - Verify: no random rating, correct Check In date default, one disclosure open, draft retention after scroll/relaunch.
+  - Verify: no rating thumb/value before first touch, existing liquid reaction after selection, correct Check In date default, one disclosure open, and draft retention after scroll/relaunch.
 - [ ] **T5 (P1, human: ~3d / Codex: ~1d)** — Save reliability — Add durable optimistic queue and idempotent recovery
   - Surfaced by: User Journey and Interaction States — remote latency must not block UI, but success cannot precede a durable local write.
   - Files: place save repository/store, local persistence models, sync coordinator, focused save/sync tests
@@ -477,38 +488,40 @@ Synthesized from this review's findings. Each task derives from a specific findi
 - [ ] **T7 (P2, human: ~2d / Codex: ~5h)** — Import history — Persist and render image-first reports
   - Surfaced by: Unresolved Design Decisions — a new import changes the current pointer but must not erase prior work.
   - Files: import store/repository, Import sheet, Settings, canonical review/report, persistence tests
-  - Verify: two entry points, empty/loading/image-failure/partial states, report snapshot, unresolved recovery, deletion, and multiple imports.
+  - Verify: two entry points, empty/loading/image-failure/partial states, source-link copy, live row edits, deletion, and multiple imports.
 - [ ] **T8 (P2, human: ~1d / Codex: ~3h)** — Accessibility and analytics — Complete the nonvisual contract
   - Surfaced by: Responsive & Accessibility and Design System Alignment — state must remain usable without color, standard text size, or private analytics payloads.
   - Files: import accessibility identifiers/labels, analytics contracts, `docs/analytics.md`, managed dashboard script
   - Verify: VoiceOver, Full Keyboard Access, Reduce Motion, accessibility Dynamic Type, `npm --prefix scripts run analytics:check`, and privacy tests.
 
-## Approved Mockups
+## Review Mockups
 
 | Screen / state | Mockup path | Direction | Constraint |
 |---|---|---|---|
-| Import entry | `docs/reviews/rec-409-complete-import-design/entry-large.png` | Bottom sheet over map with visible History and latest-report entry. | Source must be durable before processing. |
-| All ready | `docs/reviews/rec-409-complete-import-design/ready-large.png` | Outcome-led receipt with optional place review. | Do not force item-by-item review. |
-| Possible matches | `docs/reviews/rec-409-complete-import-design/ambiguous-large.png` | Exception leads; five candidates maximum; best selected. | Alternatives remain tappable, not disabled. |
-| Inline details | `docs/reviews/rec-409-complete-import-design/details-large.png` | Selected place expands into the save-detail rows. | No random rating; one disclosure at a time. |
-| History | `docs/reviews/rec-409-complete-import-design/history-large.png` | Two-column source-artwork grid. | No visual titles; provider and attention badges only. |
-| Historical report | `docs/reviews/rec-409-complete-import-design/report-large.png` | Canonical report with preserved choices. | Completed membership is snapshot; place opens current detail. |
-| In-app ready banner | `docs/reviews/rec-409-complete-import-design/banner-large.png` | Persistent top overlay with Review and explicit close. | Dismissal does not mark report reviewed. |
-| Optimistic completion | `docs/reviews/rec-409-complete-import-design/complete-large.png` | Immediate compact success over the map. | Show only after durable local write. |
+| Import entry | `docs/reviews/rec-409-complete-import-design/entry-large.png` | Real draggable iOS system sheet over the map, with Liquid Glass close/help/history, paste, start, and ready-report actions. | `.medium` and `.large` detents; source must be durable before processing. |
+| All matched | `docs/reviews/rec-409-complete-import-design/ready-large.png` | One visible `Ready to add` list with aligned master and row-level status icons. | One or neither status per row; no extra green selection check. |
+| Possible matches | `docs/reviews/rec-409-complete-import-design/ambiguous-large.png` | Five candidates expanded inside the McDonald's card, best selected. | No separate exception page or section. |
+| Inline details | `docs/reviews/rec-409-complete-import-design/details-large.png` | Place card expands into unrated rating, note, When, category, friends, photos, lists, type, and more. | Rating has no fabricated default; one disclosure at a time. |
+| History | `docs/reviews/rec-409-complete-import-design/history-large.png` | Two-column source-thumbnail grid using post/map cover imagery. | Provider and attention badges only outside source artwork. |
+| Historical report | `docs/reviews/rec-409-complete-import-design/report-large.png` | Source thumbnail, copy-link control, and the same editable place cards as review. | A status/list change updates only that place save. |
+| In-app ready banner | `docs/reviews/rec-409-complete-import-design/banner-large.png` | Liquid Glass overlay below existing map filters with Review and explicit close. | Dismissal does not mark report reviewed. |
+| Optimistic completion | `docs/reviews/rec-409-complete-import-design/complete-large.png` | Immediate return to the existing map save experience with the saved place visible. | No new success card or blocking animation. |
 | Offline pending | `docs/reviews/rec-409-complete-import-design/offline-large.png` | Neutral saved-on-phone notice. | Offline is not an error. |
 | Terminal save failure | `docs/reviews/rec-409-complete-import-design/failure-large.png` | Long-lived error with Retry. | Preserve link, choices, and local drafts. |
-| Small-phone all ready | `docs/reviews/rec-409-complete-import-design/ready-small.png` | Compact-width validation. | CTA clears home indicator; headings wrap. |
-| Small-phone matches | `docs/reviews/rec-409-complete-import-design/ambiguous-small.png` | Exception stays primary on a short viewport. | Candidate group scrolls behind fixed CTA. |
+| Small-phone import entry | `docs/reviews/rec-409-complete-import-design/entry-small.png` | System-sheet compact-height validation. | Starts at the large detent below 750pt height; remains draggable and keeps all four actions available. |
+| Small-phone all matched | `docs/reviews/rec-409-complete-import-design/ready-small.png` | Compact-width one-list validation. | CTA clears home indicator; headings wrap. |
+| Small-phone matches | `docs/reviews/rec-409-complete-import-design/ambiguous-small.png` | Candidate disclosure stays inside its parent row on a short viewport. | Candidate group scrolls behind fixed CTA. |
 | Small-phone details | `docs/reviews/rec-409-complete-import-design/details-small.png` | Inline editor at compact width. | Values remain legible and reachable by scroll. |
 | Small-phone history | `docs/reviews/rec-409-complete-import-design/history-small.png` | Image grid retains two columns. | Accessible metadata supplies the omitted visual text. |
+| Small-phone report | `docs/reviews/rec-409-complete-import-design/report-small.png` | Source link and live place editors fit the compact width. | Place status icons and list summary remain legible. |
 
 DEBUG launch arguments are defined in `Wander/Features/Profile/ImportWorkflowDesignMockups.swift` as `-WanderImportWorkflowMockup<Page>`.
 
 ## Validation record
 
 - `xcodegen generate` completed and registered only the DEBUG mockup source in the app target; unrelated generated project entries were removed from the diff.
-- The generic iOS Simulator build completed successfully with only pre-existing warnings.
-- All 14 mockups were launched and captured. Review, matching, details, and history were checked on both the current iPhone simulator and the smaller 375×667pt simulator.
+- The generic iOS Simulator build completed on Xcode 26.6, and native captures ran on iOS 26.5, with only pre-existing warnings.
+- All 16 mockups were launched and captured. Entry, review, matching, details, history, and report were checked on both the iPhone 17 simulator running iOS 26.5 and the smaller 375×667pt simulator.
 - The full test suite compiled, then the UI-test runner stalled while launching the app with repeated `no debugger version` infrastructure errors and was interrupted.
 - The unit target ran and reported pre-existing contract failures in importer, map, navigation, remote-repository, metadata, and widget tests. A focused navigation failure was traced to `WanderRootView.swift` expecting a feature-flag call absent from `origin/main`; this branch does not modify that file or production import logic.
 
@@ -523,22 +536,22 @@ DEBUG launch arguments are defined in `Wander/Features/Profile/ImportWorkflowDes
 | Pass 1  (Info Arch)  | 5/10 -> 10/10 after workflow + hierarchy    |
 | Pass 2  (States)     | 4/10 -> 10/10 after four-axis state model   |
 | Pass 3  (Journey)    | 6/10 -> 10/10 after storyboard + horizons   |
-| Pass 4  (AI Slop)    | 6/10 -> 9/10 after exception-first cleanup  |
+| Pass 4  (AI Slop)    | 6/10 -> 9/10 after native one-list cleanup  |
 | Pass 5  (Design Sys) | 7/10 -> 10/10 after token/component mapping |
 | Pass 6  (Responsive) | 5/10 -> 9/10 after small-phone + a11y specs |
-| Pass 7  (Decisions)  | 15 resolved, 0 deferred                     |
+| Pass 7  (Decisions)  | 18 resolved, 0 deferred                     |
 +--------------------------------------------------------------------+
 | NOT in scope         | written (7 items)                           |
 | What already exists  | written                                    |
 | TODOS.md updates     | 0 items proposed                            |
-| Approved Mockups     | 14 generated, 14 approved by direction     |
-| Decisions made       | 15 added to plan                            |
+| Review Mockups       | 16 generated and ready for review           |
+| Decisions made       | 18 added to plan                            |
 | Decisions deferred   | 0                                          |
 | Overall design score | 6/10 -> 9/10                               |
 +====================================================================+
 ```
 
-Plan is design-complete. Run the iOS design review again after production implementation for live-device visual QA.
+Plan is review-ready. Production implementation remains blocked until the revised direction is approved; run the iOS design review again after implementation for live-device visual QA.
 
 ## GSTACK REVIEW REPORT
 
@@ -547,8 +560,8 @@ Plan is design-complete. Run the iOS design review again after production implem
 | Scope and system audit | CLEAR | Existing design system and importer boundaries identified; transcript scope selected. |
 | Seven design passes | CLEAR | Hierarchy, states, journey, specificity, system alignment, accessibility, and decisions are specified. |
 | SwiftUI render validation | CLEAR | DEBUG mockups built and rendered on current and small iPhone simulators. |
-| Current-state iOS audit evidence | CLEAR | Same-day physical-device audit findings were incorporated into exception-first direction. |
+| Current-state iOS audit evidence | CLEAR | Same-day physical-device findings informed the baseline; the user's one-list direction supersedes the earlier exception-first recommendation. |
 
-VERDICT: DESIGN-COMPLETE — production implementation may begin in the sequenced branches after review approval.
+VERDICT: DESIGN-REVIEW-READY — production implementation has not started.
 
 NO UNRESOLVED DECISIONS
