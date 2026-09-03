@@ -1,9 +1,11 @@
 begin;
 
--- Reservation prompts are intentionally grouped by resolved provider place and
--- reservation-local calendar date. The hash keeps queue identifiers bounded
--- without exposing the provider place identifier in operational metadata.
+-- Reservation prompts are intentionally grouped by account, resolved provider
+-- place, and reservation-local calendar date. The hash keeps queue identifiers
+-- bounded without exposing either identifier in operational metadata and keeps
+-- the queue's globally unique dedupe key isolated between accounts.
 create or replace function app.calendar_reservation_group_key(
+  input_recipient_user_id text,
   input_source_provider text,
   input_source_provider_place_id text,
   input_start_at timestamptz,
@@ -17,7 +19,9 @@ set search_path = pg_catalog, extensions
 as $$
   select encode(
     extensions.digest(
-      lower(trim(coalesce(input_source_provider, '')))
+      trim(coalesce(input_recipient_user_id, ''))
+        || chr(31)
+        || lower(trim(coalesce(input_source_provider, '')))
         || chr(31)
         || trim(coalesce(input_source_provider_place_id, ''))
         || chr(31)
@@ -28,10 +32,10 @@ as $$
   )
 $$;
 
-comment on function app.calendar_reservation_group_key(text, text, timestamptz, text) is
-  'Returns an opaque grouping key for one account-independent provider place and reservation-local calendar date.';
+comment on function app.calendar_reservation_group_key(text, text, text, timestamptz, text) is
+  'Returns an opaque grouping key for one account, provider place, and reservation-local calendar date.';
 
-revoke all on function app.calendar_reservation_group_key(text, text, timestamptz, text)
+revoke all on function app.calendar_reservation_group_key(text, text, text, timestamptz, text)
   from public, anon, authenticated;
 
 -- Fold any still-deliverable legacy duplicates before switching the producer to
@@ -46,6 +50,7 @@ with reservation_events as (
     event.not_before,
     event.created_at,
     app.calendar_reservation_group_key(
+      event.recipient_user_id,
       reservation.source_provider,
       reservation.source_provider_place_id,
       reservation.start_at,
@@ -100,6 +105,7 @@ with open_events as (
     event.recipient_user_id,
     event.notification_type,
     app.calendar_reservation_group_key(
+      event.recipient_user_id,
       reservation.source_provider,
       reservation.source_provider_place_id,
       reservation.start_at,
@@ -130,6 +136,7 @@ with open_events as (
       and reservation.completed_at is null
       and reservation.cancelled_at is null
       and app.calendar_reservation_group_key(
+        open_event.recipient_user_id,
         reservation.source_provider,
         reservation.source_provider_place_id,
         reservation.start_at,
@@ -275,6 +282,7 @@ begin
 
   for reminder_group in
     select distinct app.calendar_reservation_group_key(
+      viewer_id,
       reservation.source_provider,
       reservation.source_provider_place_id,
       reservation.start_at,
@@ -297,6 +305,7 @@ begin
       and reservation.completed_at is null
       and reservation.cancelled_at is null
       and app.calendar_reservation_group_key(
+        viewer_id,
         reservation.source_provider,
         reservation.source_provider_place_id,
         reservation.start_at,
@@ -342,6 +351,7 @@ begin
           from public.calendar_reservations member
           where member.user_id = viewer_id
             and app.calendar_reservation_group_key(
+              viewer_id,
               member.source_provider,
               member.source_provider_place_id,
               member.start_at,
@@ -365,6 +375,7 @@ begin
               from public.calendar_reservations member
               where member.user_id = viewer_id
                 and app.calendar_reservation_group_key(
+                  viewer_id,
                   member.source_provider,
                   member.source_provider_place_id,
                   member.start_at,
@@ -416,6 +427,7 @@ begin
           from public.calendar_reservations member
           where member.user_id = viewer_id
             and app.calendar_reservation_group_key(
+              viewer_id,
               member.source_provider,
               member.source_provider_place_id,
               member.start_at,
@@ -439,6 +451,7 @@ begin
               from public.calendar_reservations member
               where member.user_id = viewer_id
                 and app.calendar_reservation_group_key(
+                  viewer_id,
                   member.source_provider,
                   member.source_provider_place_id,
                   member.start_at,

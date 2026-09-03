@@ -190,7 +190,7 @@ async function runCalendarReservationNotificationSmokeChecks(
         and prompt.oid = 'public.get_calendar_reservation(uuid)'::regprocedure
         and complete.oid = 'public.complete_calendar_reservation(uuid)'::regprocedure
         and reconcile.oid = 'public.reconcile_client_notification_intents(text,jsonb)'::regprocedure
-        and group_key.oid = 'app.calendar_reservation_group_key(text,text,timestamp with time zone,text)'::regprocedure
+        and group_key.oid = 'app.calendar_reservation_group_key(text,text,text,timestamp with time zone,text)'::regprocedure
     `,
     [],
     (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
