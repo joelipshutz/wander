@@ -216,7 +216,7 @@ xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/
 Test:
 
 ```bash
-xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO
+scripts/run-ios-tests.sh
 ```
 
 If Xcode plugin/CoreSimulator access fails under a sandbox, rerun from a normal terminal or with approved elevated access.
@@ -434,13 +434,13 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 - Run the full `xcodebuild test` command above before committing implementation changes.
 - In Codex, sandboxed `xcodebuild test` commonly fails before exercising app code because
   CoreSimulator services, `~/Library/Logs/CoreSimulator`, or SwiftPM dependency fetching are
-  blocked. When that happens, rerun the same `xcodebuild test` command with escalated
+  blocked. When that happens, rerun the same `scripts/run-ios-tests.sh` command with escalated
   permissions rather than changing the destination or interpreting the sandbox failure as a
-  test failure. Use `prefix_rule: ["xcodebuild", "test"]` for the approval request.
+  test failure. Scope the approval to `scripts/run-ios-tests.sh`.
 - For focused regression checks, use the same simulator destination and add
-  `-only-testing:<TestTarget>/<TestCase>/<testName>`, for example:
+  `--only-testing <TestTarget>/<TestCase>/<testName>`, for example:
   ```bash
-  xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts
+  scripts/run-ios-tests.sh --only-testing WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts
   ```
 - Current important test coverage:
   - design tokens
@@ -453,10 +453,12 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 
 ## Local Build And Disk Hygiene
 
-Normal builds and tests must reuse the current worktree's ignored `DerivedData`
-directory. Do not create a new `DerivedData-*` path for focused tests, retries,
-device builds, or routine validation; changing the path forces Xcode and SwiftPM
-to duplicate caches. If concurrent builds genuinely require isolation, use one
+Normal test runs must use `scripts/run-ios-tests.sh`. The wrapper reuses the
+current worktree's ignored `DerivedData` directory, caps `xcodebuild` at one job
+by default, uses quiet output, and refuses to run when disk headroom is unsafe.
+Do not create a new `DerivedData-*` path for focused tests, retries, device
+builds, or routine validation; changing the path forces Xcode and SwiftPM to
+duplicate caches. If concurrent builds genuinely require isolation, use one
 issue-scoped derived-data path, record it in Linear, and remove only that owned
 path after the build process ends and before retiring the worktree.
 
@@ -464,8 +466,7 @@ Before a full test run, archive, simulator-runtime install, or other disk-heavy
 operation, check free space:
 
 ```bash
-df -h /System/Volumes/Data
-find . -maxdepth 1 -type d -name 'DerivedData*' -exec du -sh {} +
+scripts/run-ios-tests.sh --preflight
 ```
 
 If the Data volume has less than 20 GiB free or is above 90% usage, do not start
