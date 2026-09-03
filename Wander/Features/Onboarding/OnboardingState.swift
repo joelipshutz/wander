@@ -299,6 +299,7 @@ final class AppEntryCoordinator: ObservableObject {
     private let completionStore: OnboardingCompletionStore
     private let analytics: AnalyticsClient
     private let usesLocalSimulatorTestSession: Bool
+    private let forcedLocalSimulatorOnboardingStep: OnboardingStep?
     private var resolutionTask: Task<Void, Never>?
     private var resolvedUserID: String?
 
@@ -307,13 +308,15 @@ final class AppEntryCoordinator: ObservableObject {
         backend: WanderBackend,
         completionStore: OnboardingCompletionStore = OnboardingCompletionStore(),
         analytics: AnalyticsClient = NoopAnalyticsClient(),
-        usesLocalSimulatorTestSession: Bool = false
+        usesLocalSimulatorTestSession: Bool = false,
+        forcedLocalSimulatorOnboardingStep: OnboardingStep? = nil
     ) {
         self.auth = auth
         self.backend = backend
         self.completionStore = completionStore
         self.analytics = analytics
         self.usesLocalSimulatorTestSession = usesLocalSimulatorTestSession
+        self.forcedLocalSimulatorOnboardingStep = forcedLocalSimulatorOnboardingStep
     }
 
     func start(preservingReadyState: Bool = false) async {
@@ -432,7 +435,14 @@ final class AppEntryCoordinator: ObservableObject {
             if usesLocalSimulatorTestSession {
                 resolvedUserID = session.userID
                 analytics.identify(userID: session.userID)
-                state = .ready(session: session, firstVisitWalkthroughEligible: false)
+                if let forcedLocalSimulatorOnboardingStep {
+                    state = .onboarding(
+                        session: session,
+                        step: forcedLocalSimulatorOnboardingStep
+                    )
+                } else {
+                    state = .ready(session: session, firstVisitWalkthroughEligible: false)
+                }
                 return
             }
             let local = completionStore.state(for: session.userID)

@@ -55,6 +55,54 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testSimulatorOnboardingStepRoutesThroughTheActualAppEntryFlow() async {
+        XCTAssertEqual(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: [
+                    "Wander",
+                    "-WanderAuthenticatedUITest",
+                    "-WanderOnboardingUITestStep",
+                    "contacts"
+                ],
+                isSimulator: true
+            ),
+            .contacts
+        )
+        XCTAssertNil(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: ["Wander", "-WanderOnboardingUITestStep", "contacts"],
+                isSimulator: true
+            ),
+            "The production onboarding route requires the explicit authenticated UI-test session."
+        )
+        XCTAssertNil(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: [
+                    "Wander",
+                    "-WanderAuthenticatedUITest",
+                    "-WanderOnboardingUITestStep",
+                    "contacts"
+                ],
+                isSimulator: false
+            ),
+            "Physical and App Store builds must never accept the simulator route."
+        )
+
+        let session = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: PreviewAuthSessionProvider(state: .signedIn(session))
+            ),
+            backend: WanderBackend(),
+            usesLocalSimulatorTestSession: true,
+            forcedLocalSimulatorOnboardingStep: .location
+        )
+
+        await coordinator.start()
+
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .location))
+    }
+
     func testLocalSimulatorSessionEntersAppWithoutHostedProfileResolution() async {
         let session = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
         let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedIn(session)))
@@ -742,6 +790,10 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(
             OnboardingLocationPermissionPolicy.action(for: .notDetermined),
             .request
+        )
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.primaryTitle(for: .notDetermined),
+            "Continue"
         )
         XCTAssertEqual(
             OnboardingLocationPermissionPolicy.action(for: .denied),

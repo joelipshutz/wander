@@ -2224,6 +2224,9 @@ struct MapScreen: View {
         }
         .fullScreenCover(isPresented: $isLocationEducationPresented) {
             MapLocationEducationPrompt(
+                permissionAction: OnboardingLocationPermissionPolicy.action(
+                    for: locationPermission.authorizationStatus
+                ),
                 isRequesting: isRequestingLocationPermission,
                 onAllow: allowLocationFromEducation,
                 onCancel: cancelLocationEducation
@@ -5834,8 +5837,8 @@ struct MapScreen: View {
                 let granted = await locationPermission.requestAccess()
                 isRequestingLocationPermission = false
                 trackMapLocationPermissionResult(granted ? "true" : "false")
+                isLocationEducationPresented = false
                 if granted {
-                    isLocationEducationPresented = false
                     performCurrentLocationRecenter()
                 }
             }
@@ -5890,8 +5893,8 @@ struct MapScreen: View {
     }
 
     /// Merely rendering `UserAnnotation` triggers the system location prompt.
-    /// Keep permission requests behind the onboarding upsell or the explicit
-    /// recenter action so "Not now" remains a real choice.
+    /// Keep permission requests behind the onboarding primer or the explicit
+    /// recenter action so the system alert always has clear user context.
     private static var canShowUserLocation: Bool {
         let status = CLLocationManager().authorizationStatus
         return status == .authorizedWhenInUse || status == .authorizedAlways
@@ -9160,6 +9163,7 @@ private struct RecenterButton: View {
 }
 
 private struct MapLocationEducationPrompt: View {
+    let permissionAction: OnboardingLocationPermissionAction
     let isRequesting: Bool
     let onAllow: () -> Void
     let onCancel: () -> Void
@@ -9207,7 +9211,7 @@ private struct MapLocationEducationPrompt: View {
                             ProgressView()
                                 .tint(WanderTheme.textOnAction.color)
                         }
-                        Text(isRequesting ? "Requesting location…" : "Allow Location")
+                        Text(isRequesting ? "Requesting location…" : primaryTitle)
                     }
                     .font(.system(size: 17, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
@@ -9218,12 +9222,14 @@ private struct MapLocationEducationPrompt: View {
                 .disabled(isRequesting)
                 .accessibilityIdentifier("map.locationEducation.allow")
 
-                Button("Cancel", action: onCancel)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .disabled(isRequesting)
-                    .accessibilityIdentifier("map.locationEducation.cancel")
+                if permissionAction != .request {
+                    Button("Cancel", action: onCancel)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .disabled(isRequesting)
+                        .accessibilityIdentifier("map.locationEducation.cancel")
+                }
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing6)
@@ -9245,6 +9251,15 @@ private struct MapLocationEducationPrompt: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+    }
+
+    private var primaryTitle: String {
+        switch permissionAction {
+        case .openSettings:
+            "Open Settings"
+        case .skip, .request, .continueWithoutAccess:
+            "Continue"
+        }
     }
 }
 
