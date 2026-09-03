@@ -1360,7 +1360,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(previewCard.contains("providerName: displayedPhoto?.provider"))
         XCTAssertTrue(previewCard.contains("PlaceCardHoursBadge("))
         XCTAssertTrue(previewCard.contains("private var cardPressGesture: some Gesture"))
-        XCTAssertTrue(previewCard.contains("pressDuration < 0.45"))
+        XCTAssertTrue(previewCard.contains("PlaceProfilePreviewCardPressPolicy.shouldOpen("))
         XCTAssertTrue(previewCard.contains(".padding(.trailing, 74)"))
         XCTAssertFalse(previewCard.contains("PlaceCardPhotoAttribution"))
         XCTAssertFalse(previewCard.contains("map.selectedPlaceAttribution"))
@@ -1398,7 +1398,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("let keepsPresentedCardMounted = previous != nil"))
         XCTAssertFalse(mapScreen.contains("replacementFadeOutDuration"))
         XCTAssertTrue(mapScreen.contains("private func replayActivePinBounce()"))
-        XCTAssertTrue(mapScreen.contains("MapPinReselectionBounceModifier("))
+        XCTAssertTrue(mapScreen.contains("if descriptor.bounceRevision != bounceRevision"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressSession"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressPolicy.shouldOpen("))
+        XCTAssertFalse(placeProfile.contains("cardPressStartedAt"))
         XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
@@ -1476,6 +1479,8 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
+        XCTAssertTrue(mapScreen.contains("\\.placeProfileFloatingActionVariant"))
+        XCTAssertTrue(mapScreen.contains(".id(compactSelectionIdentity)"))
         let mapHeader = try XCTUnwrap(
             placeProfile.components(separatedBy: "private struct PlaceProfileMapHeader: View").last
         )
@@ -3776,30 +3781,131 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
-        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented && hasSelectedProfile"))
+        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains("if isPlaceProfileMounted && hasSelectedProfile {"))
+        XCTAssertTrue(mapScreen.contains("hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)"))
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
+        XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
-        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .bottom))"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.presentationAnimation"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.dismissalAnimation"))
+        XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
+        XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
+        XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
+        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
+        XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
         XCTAssertTrue(mapScreen.contains("usesInteractiveHorizontalDismissal: true"))
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable"))
+        XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
+        XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
+        XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: !reduceMotion)"))
+        XCTAssertTrue(placeProfile.contains("controller.updateRootView(content)"))
+        XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
+        XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.transform = targetTransform(isPresented: isPresented)"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.layer.shouldRasterize = isEnabled"))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.removeFromSuperview()"))
+        XCTAssertTrue(placeProfile.contains("view.accessibilityElementsHidden = !isPresented"))
         XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
         XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
         XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
+    }
+
+    @MainActor
+    func testPlacePreviewCardPressSessionAcceptsTheInitialQuickTap() {
+        let session = PlaceProfilePreviewCardPressSession()
+
+        XCTAssertEqual(session.finish(at: 10), 0)
+        XCTAssertTrue(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: 0,
+                translation: 0
+            )
+        )
+
+        session.beginIfNeeded(at: 10)
+        XCTAssertEqual(session.finish(at: 10.8), 0.8, accuracy: 0.001)
+        XCTAssertFalse(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: 0.8,
+                translation: 0
+            )
+        )
+
+        session.beginIfNeeded(at: 12)
+        session.beginIfNeeded(at: 13)
+        session.cancel()
+        XCTAssertEqual(session.finish(at: 20), 0)
+
+        XCTAssertFalse(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: true,
+                duration: 0,
+                translation: 0
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: PlaceProfilePreviewCardPressPolicy.maximumDuration,
+                translation: 0
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfilePreviewCardPressPolicy.shouldOpen(
+                actionInProgress: false,
+                duration: 0,
+                translation: PlaceProfilePreviewCardPressPolicy.maximumTranslation
+            )
+        )
+    }
+
+    @MainActor
+    func testPlaceProfileSlidingHostingControllerAttachesAndDetachesWithoutAnimation() {
+        var completedStates: [Bool] = []
+        let controller = PlaceProfileSlidingHostingController(
+            rootView: Text("Profile"),
+            isPresented: false,
+            onTransitionCompleted: { completedStates.append($0) }
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        controller.view.layoutIfNeeded()
+        guard let hostedView = controller.view.subviews.first else {
+            XCTFail("Expected the hosted profile view to be attached")
+            return
+        }
+
+        XCTAssertTrue(controller.view.accessibilityElementsHidden)
+        XCTAssertNotEqual(hostedView.transform, CGAffineTransform.identity)
+
+        controller.setPresented(true, animated: false)
+
+        XCTAssertTrue(controller.isPresented)
+        XCTAssertEqual(hostedView.transform, CGAffineTransform.identity)
+        XCTAssertFalse(controller.view.accessibilityElementsHidden)
+        XCTAssertEqual(completedStates, [true])
+
+        controller.setPresented(false, animated: false)
+
+        XCTAssertFalse(controller.isPresented)
+        XCTAssertTrue(controller.view.accessibilityElementsHidden)
+        XCTAssertNil(hostedView.superview)
+        XCTAssertEqual(completedStates, [true, false])
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
@@ -3864,7 +3970,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discoverScreen.contains("guard currentUserSave(matching: visiblePlace) == nil"))
         XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlace("))
         XCTAssertTrue(discoverScreen.contains("status: .wannaGo"))
-        XCTAssertTrue(discoverScreen.contains("store.addVisiblePlace("))
+        XCTAssertTrue(discoverScreen.contains(".sheet(item: $listSelectionPlace"))
+        XCTAssertTrue(discoverScreen.contains("MapPlaceListPickerSheet("))
     }
 
     func testDiscoverUnboundedRowsAreLazyAndPlaceSearchIsSubmitDriven() throws {

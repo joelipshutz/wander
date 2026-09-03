@@ -60,11 +60,10 @@ final class MapPlaceListPickerTests: XCTestCase {
         analytics.events.removeAll()
         let candidate = candidate(id: "unsaved", name: "New Corner Cafe")
 
-        let result = await store.addCandidate(
-            candidate,
+        let result = await MapPlaceListTarget.candidate(candidate).add(
             to: list,
-            backend: nil,
-            analyticsSurface: "map"
+            store: store,
+            backend: nil
         )
 
         XCTAssertEqual(result.outcome, .added)
@@ -122,6 +121,54 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.outcome, .added)
         XCTAssertEqual(result.companionSave, .none)
         XCTAssertEqual(store.currentUserVisiblePlaces.map(\.userPlace.id), [existing.userPlaceID])
+    }
+
+    func testDiscoverPickerAddsVisiblePlaceToMultipleListsWithDiscoverAttribution() async throws {
+        let analytics = MapListRecordingAnalyticsClient()
+        let store = makeStore(analytics: analytics)
+        let candidate = candidate(id: "discover-result", name: "Discover Cafe")
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "Private note",
+            sourceType: .manual
+        )
+        let visiblePlace = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let target = MapPlaceListTarget.visiblePlace(visiblePlace)
+        let lists = try ["Weekend", "Coffee"].map { name in
+            try XCTUnwrap(store.createPlaceList(name: name, description: "", visibility: .followers))
+        }
+        analytics.events.removeAll()
+
+        for list in lists {
+            let result = await target.add(
+                to: list,
+                store: store,
+                backend: nil,
+                analyticsSurface: "discover"
+            )
+            XCTAssertEqual(result.outcome, .added)
+            XCTAssertEqual(result.companionSave, .none)
+            XCTAssertTrue(target.isAlreadyInList(list, store: store))
+        }
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+
+        let rawEvents = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListItemAdded }
+        XCTAssertEqual(rawEvents.count, 2)
+        for event in rawEvents {
+            XCTAssertEqual(event.properties, [
+                "surface": "discover",
+                "list_role": "owner",
+                "companion_save": "none",
+            ])
+        }
+        let engagementEvents = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed
+                && $0.properties["action"] == AnalyticsEngagementAction.listPlaceAdded.rawValue
+        }
+        XCTAssertEqual(engagementEvents.count, 2)
+        XCTAssertTrue(engagementEvents.allSatisfy { $0.properties["surface"] == "discover" })
     }
 
     func testExistingMapListMembershipIsIdempotent() async throws {
