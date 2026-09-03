@@ -6,7 +6,11 @@ import XCTest
 @MainActor
 final class MapSnapshotListTests: XCTestCase {
     func testSelectionIncludesBothStatusesBeyondEightyPinsAndDeduplicates() {
-        let places = (0..<201).map { pin(id: String($0), longitude: Double($0 % 180), status: $0 % 2 == 0 ? .been : .wanna) }
+        var places: [YourMapPrototypePlace] = []
+        for index in 0..<201 {
+            let status: YourMapPrototypeStatus = index % 2 == 0 ? .been : .wanna
+            places.append(pin(id: String(index), longitude: Double(index % 180), status: status))
+        }
         let selected = MapSnapshotSelection.placeIDs(places: places + [places[0]]) { _ in true }
         XCTAssertEqual(selected.count, 201)
         XCTAssertEqual(selected, places.map(\.id))
