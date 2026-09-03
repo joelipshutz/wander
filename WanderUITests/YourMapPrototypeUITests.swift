@@ -76,9 +76,16 @@ final class YourMapPrototypeUITests: XCTestCase {
         snapshot.tap()
         let toast = app.buttons["yourMap.viewSnapshotList"]
         XCTAssertTrue(toast.waitForExistence(timeout: 10))
+        XCTAssertEqual(toast.label, "Edit")
+        XCTAssertTrue(app.staticTexts["View snapshot list"].exists)
         capture("REC-413 Snapshot saved toast")
         toast.tap()
         XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        let title = app.textFields.firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        let existing = title.value as? String ?? ""
+        title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count) + "Snapshot test\n")
         let cover = app.images["Saved map snapshot"]
         for _ in 0..<6 {
             if cover.exists && cover.frame.minY > 100 && cover.frame.maxY < app.frame.maxY - 180 { break }
@@ -89,17 +96,13 @@ final class YourMapPrototypeUITests: XCTestCase {
         }
         XCTAssertTrue(cover.isHittable)
         capture("REC-413 Static snapshot cover")
-        app.swipeDown()
-        app.swipeDown()
-        XCTAssertTrue(app.textFields.firstMatch.value as? String != nil)
-        let title = app.textFields.firstMatch
-        title.tap()
-        let existing = title.value as? String ?? ""
-        title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count) + "Snapshot test\n")
-        app.swipeUp()
-        XCTAssertTrue(app.buttons["listEditor.addPlaces"].waitForExistence(timeout: 5))
+        let addPlaces = app.buttons["listEditor.addPlaces"]
+        for _ in 0..<3 where !addPlaces.isHittable || addPlaces.frame.maxY > app.frame.maxY - 140 {
+            app.swipeUp()
+        }
+        XCTAssertTrue(addPlaces.isHittable)
         capture("REC-413 Snapshot list editor")
-        app.buttons["listEditor.addPlaces"].tap()
+        addPlaces.tap()
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     }
 

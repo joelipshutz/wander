@@ -1324,7 +1324,9 @@ private struct ListDetailScreen: View {
     private var suggestionsSection: some View {
         if canAddPlaces {
             ListSuggestionsSection(
-                suggestions: suggestionBatch.suggestions,
+                suggestions: sourceList.map {
+                    store.availableListSuggestions(suggestionBatch.suggestions, for: $0)
+                } ?? [],
                 isLoading: isLoadingSuggestions,
                 outlineCatalog: savedPlaceOutlineCatalog,
                 currentUserID: store.currentUser.id,
@@ -1724,6 +1726,7 @@ private struct ListAddPlacesScreen: View {
     @ViewBuilder
     private var suggestionsContent: some View {
         let outlineCatalog = savedPlaceOutlineCatalog
+        let suggestions = store.availableListSuggestions(suggestionBatch.suggestions, for: list)
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
@@ -1731,7 +1734,7 @@ private struct ListAddPlacesScreen: View {
 
             if isLoadingSuggestions {
                 ListLoadingRow(title: "Finding places that fit")
-            } else if suggestionBatch.suggestions.isEmpty {
+            } else if suggestions.isEmpty {
                 Text("Start with search, then suggestions will get sharper as the list fills in.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -1741,7 +1744,7 @@ private struct ListAddPlacesScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
                 LazyVStack(spacing: WanderTheme.spacing2) {
-                    ForEach(suggestionBatch.suggestions) { suggestion in
+                    ForEach(suggestions) { suggestion in
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,

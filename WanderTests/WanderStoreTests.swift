@@ -9373,6 +9373,70 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(fallback.lowercased().contains("place"))
     }
 
+    func testListSuggestionFallbackRechecksMembershipAfterRemoteRequest() async throws {
+        for (returnsAddedPlace, fails) in [(false, false), (true, false), (false, true)] {
+            let store = makeStore()
+            let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
+            let candidate = try XCTUnwrap(store.listSuggestions(for: list, limit: 1).first)
+            let response = ListSuggestionFunctionResponse(suggestions: returnsAddedPlace ? [
+                ListSuggestionFunctionItem(visiblePlaceID: candidate.id, reason: "Fits", score: 1)
+            ] : [])
+            let repository = FakeListSuggestionRepository(response: response)
+            repository.shouldFail = fails
+            repository.beforeResponse = {
+                let result = await store.addVisiblePlace(candidate.visiblePlace, to: list, backend: nil)
+                XCTAssertEqual(result.outcome, .added)
+            }
+
+            let suggestions = await store.listSuggestions(
+                for: list, limit: 5, backend: WanderBackend(listSuggestionRepository: repository)
+            )
+
+            XCTAssertTrue(store.hasPlace(candidate.visiblePlace, in: list))
+            XCTAssertFalse(suggestions.contains { VisiblePlaceGrouping.matches($0.visiblePlace, candidate.visiblePlace) })
+            XCTAssertFalse(suggestions.contains { store.hasPlace($0.visiblePlace, in: list) })
+        }
+    }
+
+    func testDisplayedSuggestionsExcludePlacesAddedThroughAnotherFlow() async throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
+        let batch = store.listSuggestions(for: list, limit: 5)
+        XCTAssertGreaterThan(batch.count, 1)
+        let added = try XCTUnwrap(batch.first)
+        let result = await store.addVisiblePlace(added.visiblePlace, to: list, backend: nil)
+        XCTAssertEqual(result.outcome, .added)
+
+        let displayed = store.availableListSuggestions(batch, for: list)
+
+        XCTAssertEqual(displayed.map(\.id), batch.dropFirst().map(\.id))
+        XCTAssertFalse(displayed.contains { store.hasPlace($0.visiblePlace, in: list) })
+    }
+
+    func testListSuggestionsExcludeSyncedSnapshotMembersUsingPreSyncList() async throws {
+        let store = makeStore()
+        let ownPlaces = store.currentUserVisiblePlaces
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+            .image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(
+            placeIDs: ownPlaces.map { $0.place.id }, coverData: data
+        ))
+        let batch = store.listSuggestions(for: list, limit: 20)
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: FakePlaceListRepository()))
+        let synced = try XCTUnwrap(store.placeLists.first { $0.localID == list.localID })
+        XCTAssertNotEqual(list.id, synced.id)
+        XCTAssertTrue(store.placeListItems.contains { $0.listID == synced.id })
+
+        XCTAssertTrue(ownPlaces.allSatisfy { store.hasPlace($0, in: list) })
+        XCTAssertEqual(store.visiblePlaces(in: list).count, store.visiblePlaces(in: synced).count)
+        for suggestions in [
+            store.listSuggestions(for: list, limit: 20),
+            store.availableListSuggestions(batch, for: list)
+        ] {
+            XCTAssertFalse(suggestions.contains { store.hasPlace($0.visiblePlace, in: synced) })
+        }
+    }
+
     func testRemoteListSuggestionReasonsUseReadableMetadata() async throws {
         let store = makeStore()
         let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
@@ -11854,6 +11918,8 @@ private final class FakeExtractionRepository: ExtractionRepository {
 private final class FakeListSuggestionRepository: ListSuggestionRepository {
     private let response: ListSuggestionFunctionResponse
     private(set) var payloads: [ListSuggestionPayload] = []
+    var beforeResponse: (() async -> Void)?
+    var shouldFail = false
 
     init(response: ListSuggestionFunctionResponse) {
         self.response = response
@@ -11861,6 +11927,8 @@ private final class FakeListSuggestionRepository: ListSuggestionRepository {
 
     func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {
         payloads.append(payload)
+        await beforeResponse?()
+        if shouldFail { throw TestError.expected }
         return response
     }
 }

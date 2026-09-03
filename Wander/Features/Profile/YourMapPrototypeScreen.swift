@@ -303,24 +303,34 @@ struct YourMapPrototypeScreen: View {
     }
 
     private func snapshotToast(listID: String) -> some View {
-        HStack(spacing: WanderTheme.spacing2) {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .accessibilityHidden(true)
+
+            Text("View snapshot list")
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 editingSnapshotListID = listID
                 snapshotListID = nil
             } label: {
-                Label("View snapshot list", systemImage: "checkmark.circle.fill")
+                Text("Edit")
                     .font(.system(.subheadline, weight: .bold))
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
             }
             .accessibilityIdentifier("yourMap.viewSnapshotList")
-            Button { snapshotListID = nil } label: {
-                Image(systemName: "xmark")
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            }
-            .accessibilityLabel("Dismiss snapshot confirmation")
+            .accessibilityHint("Edit the snapshot list's name, details, and places")
         }
         .buttonStyle(.plain)
         .padding(.leading, WanderTheme.spacing4)
+        .padding(.trailing, WanderTheme.spacing1)
+        .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
         .padding(.horizontal, WanderTheme.spacing4)

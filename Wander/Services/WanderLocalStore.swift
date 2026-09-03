@@ -2504,8 +2504,9 @@ final class WanderStore: ObservableObject {
     }
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5, backend: WanderBackend?) async -> [ListPlaceSuggestion] {
-        let fallback = listSuggestions(for: list, limit: limit)
-        guard let backend, backend.listSuggestionRepository != nil else { return fallback }
+        guard let backend, backend.listSuggestionRepository != nil else {
+            return listSuggestions(for: list, limit: limit)
+        }
 
         do {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
@@ -2538,12 +2539,23 @@ final class WanderStore: ObservableObject {
             }
             let canonicalSuggestions = canonicalListSuggestions(remoteSuggestions, limit: limit)
             return canonicalSuggestions.isEmpty
-                ? fallback
+                ? listSuggestions(for: list, limit: limit)
                 : disambiguatingSameNameLocations(in: canonicalSuggestions)
         } catch {
             lastRemoteError = remoteErrorMessage(error)
-            return fallback
+            return listSuggestions(for: list, limit: limit)
         }
+    }
+
+    /// Reconcile a displayed batch after edits or sync without reshuffling its
+    /// remaining suggestions. Membership and visibility always use current data.
+    func availableListSuggestions(
+        _ suggestions: [ListPlaceSuggestion],
+        for list: LocalPlaceList
+    ) -> [ListPlaceSuggestion] {
+        guard !suggestions.isEmpty else { return [] }
+        let candidateIDs = Set(listSuggestionCandidates(for: list).map(\.id))
+        return suggestions.filter { candidateIDs.contains($0.id) }
     }
 
     @discardableResult
@@ -3569,7 +3581,13 @@ final class WanderStore: ObservableObject {
     }
 
     private func listReferenceIDs(for list: LocalPlaceList) -> Set<String> {
-        Set([list.id, list.localID, list.serverID].compactMap { $0 })
+        var referenceIDs = Set([list.id, list.localID, list.serverID].compactMap { $0 })
+        // An open editor or in-flight request can still hold the pre-sync value
+        // after list items have been remapped to the server ID.
+        if let current = placeLists.first(where: { $0.localID == list.localID }) {
+            referenceIDs.formUnion([current.id, current.localID, current.serverID].compactMap { $0 })
+        }
+        return referenceIDs
     }
 
     /// Repair only known pre-sync references in restored snapshots. Keeping the
