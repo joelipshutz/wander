@@ -4768,7 +4768,9 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 
     static func == (lhs: PlaceListMock, rhs: PlaceListMock) -> Bool {
-        lhs.id == rhs.id
+        // SwiftUI also compares these snapshots when updating the grid. A
+        // membership change must invalidate the card even when its ID is stable.
+        lhs.id == rhs.id && lhs.itemCount == rhs.itemCount
     }
 
     func hash(into hasher: inout Hasher) {
