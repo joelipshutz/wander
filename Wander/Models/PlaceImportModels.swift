@@ -19,6 +19,13 @@ enum PlaceImportBatchState: String, Codable, Equatable {
 }
 
 enum PlaceImportHistoryPresentation {
+    static func needsReview(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
+        batch.reviewOpenedAt == nil && batch.receipt == nil
+            && ![.queued, .processing, .cancelled].contains(batch.state)
+            && !items.contains { [.queued, .resolving].contains($0.state) }
+            && items.contains { !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state) }
+    }
+
     static func statusLabel(
         batch: PlaceImportBatch,
         items: [PlaceImportItem]
@@ -531,6 +538,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var automaticSaveCompletedAt: Date?
     var requestedStatusRaw: String?
     var requestedRatingScore: Double?
+    /// Opening History alone is not a review. Optional for older snapshots.
+    var reviewOpenedAt: Date?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -547,7 +556,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         automaticSaveRequested: Bool? = nil,
         automaticSaveCompletedAt: Date? = nil,
         requestedStatus: PlaceStatus? = nil,
-        requestedRatingScore: Double? = nil
+        requestedRatingScore: Double? = nil,
+        reviewOpenedAt: Date? = nil
     ) {
         self.id = id
         self.source = source
@@ -564,6 +574,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.automaticSaveCompletedAt = automaticSaveCompletedAt
         requestedStatusRaw = requestedStatus?.rawValue
         self.requestedRatingScore = requestedStatus == .been ? requestedRatingScore : nil
+        self.reviewOpenedAt = reviewOpenedAt
     }
 
     var requestedStatus: PlaceStatus {
@@ -826,6 +837,57 @@ struct PlaceImportSummary: Equatable {
 
     var hasPendingImports: Bool {
         processingCount > 0 || remainingCount > 0 || sourceRetryCount > 0
+    }
+}
+
+/// Transient resolver telemetry, never a guessed percentage or a persisted job.
+struct PlaceImportMatchingProgress: Equatable, Sendable {
+    let totalCount: Int
+    let completedCount: Int
+    let resolvedCount: Int
+    var isDiscovering: Bool = false
+
+    var fraction: Double {
+        guard totalCount > 0 else { return 0 }
+        return min(1, max(0, Double(completedCount) / Double(totalCount)))
+    }
+
+    var label: String {
+        isDiscovering
+            ? "Resolved \(resolvedCount) places · finding the total…"
+            : "Resolved \(resolvedCount) out of \(totalCount) places"
+    }
+
+    static func summarize(
+        items: [PlaceImportItem],
+        inFlight: [String: PlaceImportMatchingProgress] = [:]
+    ) -> Self {
+        var total = 0
+        var completed = 0
+        var resolved = 0
+        var discovering = false
+        for item in items {
+            let pending = [.queued, .resolving].contains(item.state)
+            if pending, let progress = inFlight[item.id] {
+                total += progress.totalCount
+                completed += progress.completedCount
+                resolved += progress.resolvedCount
+                discovering = discovering || progress.isDiscovering
+            } else if pending && (item.isSourceRetry || item.seed.nameHint == nil) {
+                // An unexpanded social/list URL is a source, not one place.
+                discovering = true
+            } else if !item.isSourceRetry {
+                total += 1
+                if !pending {
+                    completed += 1
+                    if !item.candidates.isEmpty { resolved += 1 }
+                }
+            }
+        }
+        return Self(
+            totalCount: total, completedCount: completed,
+            resolvedCount: resolved, isDiscovering: discovering
+        )
     }
 }
 

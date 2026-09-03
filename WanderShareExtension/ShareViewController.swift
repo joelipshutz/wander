@@ -24,6 +24,22 @@ final class ShareViewController: UIViewController {
     private var inputs: [SharedPlaceImportCaptureInput] = []
     private var isSubmitting = false
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard contentStack.superview != nil, contentStack.bounds.width > 0 else { return }
+        let contentHeight = contentStack.systemLayoutSizeFitting(
+            CGSize(width: contentStack.bounds.width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height + 26
+        // Ask the share host for only the space the form needs. Scroll rather
+        // than growing beyond a half sheet at large accessibility text sizes.
+        let height = min(contentHeight, (view.window?.screen.bounds.height ?? 852) * 0.55)
+        if abs(preferredContentSize.height - height) > 1 {
+            preferredContentSize = CGSize(width: view.bounds.width, height: height)
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         preferredContentSize = CGSize(width: 0, height: 440)
@@ -56,6 +72,26 @@ final class ShareViewController: UIViewController {
 
     private func configureImportSheetIfNeeded() {
         guard contentStack.superview == nil else { return }
+
+        let appName = UILabel()
+        appName.text = "rec.me"
+        appName.font = scaledFont(size: 17, weight: .bold, textStyle: .headline)
+        appName.textColor = Palette.ink
+        appName.adjustsFontForContentSizeCategory = true
+        appName.accessibilityTraits = .header
+
+        let closeButton = UIButton(type: .system)
+        closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
+        closeButton.tintColor = Palette.muted
+        closeButton.accessibilityLabel = "Cancel import"
+        closeButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
+        NSLayoutConstraint.activate([
+            closeButton.widthAnchor.constraint(equalToConstant: 44),
+            closeButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
+        let header = UIStackView(arrangedSubviews: [appName, closeButton])
+        header.axis = .horizontal
+        header.alignment = .center
 
         let title = UILabel()
         title.text = "Import places"
@@ -152,13 +188,6 @@ final class ShareViewController: UIViewController {
         startButton.addTarget(self, action: #selector(startImport), for: .touchUpInside)
         startButton.accessibilityIdentifier = "share-extension-start-import"
 
-        let cancelButton = UIButton(type: .system)
-        cancelButton.setTitle("Cancel", for: .normal)
-        cancelButton.titleLabel?.font = scaledFont(size: 15, weight: .semibold, textStyle: .body)
-        cancelButton.tintColor = Palette.muted
-        cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        cancelButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
-
         errorLabel.font = .preferredFont(forTextStyle: .footnote)
         errorLabel.textColor = Palette.error
         errorLabel.numberOfLines = 0
@@ -173,6 +202,7 @@ final class ShareViewController: UIViewController {
         retryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         retryButton.isHidden = true
 
+        contentStack.addArrangedSubview(header)
         contentStack.addArrangedSubview(title)
         contentStack.addArrangedSubview(iconContainer)
         contentStack.addArrangedSubview(headline)
@@ -181,7 +211,6 @@ final class ShareViewController: UIViewController {
         contentStack.addArrangedSubview(startButton)
         contentStack.addArrangedSubview(errorLabel)
         contentStack.addArrangedSubview(retryButton)
-        contentStack.addArrangedSubview(cancelButton)
         contentStack.setCustomSpacing(12, after: title)
         contentStack.setCustomSpacing(12, after: iconContainer)
         contentStack.setCustomSpacing(4, after: headline)

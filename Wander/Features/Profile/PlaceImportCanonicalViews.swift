@@ -13,6 +13,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expandedMatchItemIDs: Set<String> = []
     @State private var expandedDetailItemIDs: Set<String> = []
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
@@ -70,6 +71,9 @@ struct PlaceImportCanonicalReviewScreen: View {
             Text("A place’s details could not be saved. Review its details and try again. Any places already saved are safe.")
         }
         .task(id: selectionPreparationSignature) {
+            if processingCount == 0 {
+                importStore.markReviewOpened(batchIDs: batchIDs)
+            }
             importStore.prepareCandidateSelections(batchIDs: batchIDs)
             importStore.reconcileDuplicates(with: existingPlaces)
             expandedMatchItemIDs.formUnion(possibleMatchItems.map(\.id))
@@ -90,17 +94,25 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private var processingContent: some View {
         VStack(spacing: WanderTheme.spacing4) {
-            ProgressView()
-                .controlSize(.large)
-                .tint(WanderTheme.terracotta.color)
             Text("Matching your places")
                 .font(WanderTypography.editorialMajorSectionTitle)
-            Text("\(processingCount) still processing")
+            ImportMatchingProgressBar(progress: matchingProgress, reduceMotion: reduceMotion)
+                .frame(height: 6)
+                .accessibilityHidden(true)
+            Text(matchingProgress.label)
                 .font(WanderTypography.body)
                 .foregroundStyle(WanderTheme.textMuted.color)
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("import.matching-progress")
+    }
+
+    private var matchingProgress: PlaceImportMatchingProgress {
+        importStore.matchingProgress(batchIDs: batchIDs)
     }
 
     private var applyToAllControls: some View {
@@ -400,11 +412,17 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private var floatingCommitButton: some View {
         WanderPrimaryButton(
-            title: isCommitting ? "Adding…" : commitButtonTitle,
+            title: processingCount > 0 ? "Done" : (isCommitting ? "Adding…" : commitButtonTitle),
             systemImage: isCommitting ? nil : (selectedCandidateCount == 0 ? "xmark" : "arrow.down.circle.fill"),
             isDisabled: isCommitting,
             tone: .espressoConfirmation,
-            action: commit
+            action: {
+                if processingCount > 0 {
+                    onDone()
+                } else {
+                    commit()
+                }
+            }
         )
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
@@ -702,6 +720,36 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private func statusColor(_ status: PlaceStatus) -> Color {
         status == .been ? WanderTheme.stateSuccess.color : WanderTheme.terracotta.color
+    }
+}
+
+private struct ImportMatchingProgressBar: View {
+    let progress: PlaceImportMatchingProgress
+    let reduceMotion: Bool
+    @State private var animates = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(WanderTheme.borderHairline.color)
+                if progress.isDiscovering {
+                    Capsule()
+                        .fill(WanderTheme.terracotta.color)
+                        .frame(width: proxy.size.width * 0.3)
+                        .offset(x: animates && !reduceMotion ? proxy.size.width * 0.7 : 0)
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                            value: animates
+                        )
+                        .onAppear { animates = true }
+                } else {
+                    Capsule()
+                        .fill(WanderTheme.terracotta.color)
+                        .frame(width: proxy.size.width * progress.fraction)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress.fraction)
+                }
+            }
+        }
     }
 }
 

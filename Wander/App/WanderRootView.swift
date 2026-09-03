@@ -297,6 +297,8 @@ struct WanderRootView: View {
     @State private var isPresentingAdd = false
     @State private var isPresentingImportHub: Bool
     @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
+    @State private var importHubDetent: PresentationDetent = .height(AddSheetLayout.importEntryHeight)
+    @State private var importHubPresentationID = UUID()
     @State private var addSheetDetent: PresentationDetent
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
@@ -600,7 +602,7 @@ struct WanderRootView: View {
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.top, proxy.safeAreaInsets.top + 64)
+                .padding(.top, proxy.safeAreaInsets.top + (selectedTab == .map ? 56 : 64))
                 .zIndex(10)
             }
         }
@@ -668,11 +670,20 @@ struct WanderRootView: View {
                     onContentHeightChange: { contentHeight in
                         // Include the native toolbar and drag handle above the
                         // measured content; keep .large available for dragging.
-                        importHubRestingHeight = ceil(contentHeight) + 64
+                        guard contentHeight > 0 else { return }
+                        let wasCompact = importHubDetent == .height(importHubRestingHeight)
+                        importHubRestingHeight = ceil(contentHeight) + 44
+                        if wasCompact {
+                            importHubDetent = .height(importHubRestingHeight)
+                        }
                     }
                 )
             }
-            .presentationDetents([.height(importHubRestingHeight), .large])
+            .id(importHubPresentationID)
+            .presentationDetents(
+                [.height(importHubRestingHeight), .large],
+                selection: $importHubDetent
+            )
             .presentationDragIndicator(.visible)
             .presentationBackground(WanderTheme.canvasWarm.color)
         }
@@ -2069,6 +2080,11 @@ struct WanderRootView: View {
     private func presentImportHub() {
         selectedTab = .map
         isPresentingAdd = false
+        // UIKit can retain the dragged/keyboard-expanded detent between sheets.
+        // A new presentation identity plus an explicit selection always starts
+        // at the measured content height, without preventing manual expansion.
+        importHubPresentationID = UUID()
+        importHubDetent = .height(importHubRestingHeight)
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.24)) {
             isPresentingImportHub = true
         }

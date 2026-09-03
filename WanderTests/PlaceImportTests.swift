@@ -94,6 +94,130 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
     }
 }
 
+@MainActor
+final class PlaceImportUnreadReviewTests: XCTestCase {
+    func testOnlyOpeningTheSpecificFinishedImportClearsItsBadgeAndPersists() throws {
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot())
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(store.unreviewedImportCount, 2)
+        _ = store.batches // Visiting the history grid is read-only.
+        XCTAssertEqual(store.unreviewedImportCount, 2)
+        store.markReviewOpened(batchIDs: ["first"])
+        XCTAssertEqual(store.unreviewedImportCount, 1)
+        let firstDate = store.batches.first { $0.id == "first" }?.reviewOpenedAt
+        XCTAssertNotNil(firstDate)
+        store.markReviewOpened(batchIDs: ["first"])
+        XCTAssertEqual(store.batches.first { $0.id == "first" }?.reviewOpenedAt, firstDate)
+        let restored = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(restored.unreviewedImportCount, 1)
+        restored.markReviewOpened(batchIDs: ["second"])
+        XCTAssertEqual(restored.unreviewedImportCount, 0)
+    }
+
+    func testOpeningDuringMatchingDoesNotAcknowledgeTheFutureReview() async throws {
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot(state: .queued))
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(store.unreviewedImportCount, 0)
+        store.markReviewOpened(batchIDs: ["first"])
+        XCTAssertNil(store.batches.first { $0.id == "first" }?.reviewOpenedAt)
+        await store.waitForProcessing(batchID: "first")
+        XCTAssertEqual(store.unreviewedImportCount, 1)
+        store.markReviewOpened(batchIDs: ["first"])
+        XCTAssertEqual(store.unreviewedImportCount, 0)
+    }
+
+    func testOldSnapshotWithoutReviewMarkerDecodesAndAccountSwitchClearsBadge() throws {
+        let data = try JSONEncoder().encode(snapshot())
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var batches = try XCTUnwrap(json["batches"] as? [[String: Any]])
+        for index in batches.indices { batches[index].removeValue(forKey: "reviewOpenedAt") }
+        json["batches"] = batches
+        let decoded = try JSONDecoder().decode(
+            PlaceImportSnapshot.self, from: JSONSerialization.data(withJSONObject: json)
+        )
+        XCTAssertTrue(decoded.batches.allSatisfy { $0.reviewOpenedAt == nil })
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: decoded))
+        XCTAssertEqual(store.unreviewedImportCount, 2)
+        store.bind(to: "another-account")
+        XCTAssertEqual(store.unreviewedImportCount, 0)
+    }
+
+    func testCancelledAndSourceRetryOnlyImportsDoNotGetReadyBadges() {
+        var snapshot = snapshot()
+        snapshot.batches[0].state = .cancelled
+        snapshot.items[1].kind = .sourceRetry
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: snapshot))
+        XCTAssertEqual(store.unreviewedImportCount, 0)
+    }
+
+    private func snapshot(state: PlaceImportItemState = .ready) -> PlaceImportSnapshot {
+        let batches = ["first", "second"].map {
+            PlaceImportBatch(id: $0, source: .textNotes, sourceName: nil, state: .ready, totalCount: 1)
+        }
+        let items = batches.map {
+            PlaceImportItem(
+                batchID: $0.id, source: .textNotes,
+                seed: PlaceImportSeed(rawText: "Coffee", nameHint: "Coffee", areaHint: nil, sourceURLString: nil, sourceLine: 1),
+                state: state, candidates: state == .ready ? [placeImportCandidate(name: "Coffee")] : []
+            )
+        }
+        return PlaceImportSnapshot(ownerUserID: "test-account", batches: batches, items: items)
+    }
+}
+
+final class PlaceImportMatchingProgressTests: XCTestCase {
+    func testSourceURLIsNotMisrepresentedAsOnePlace() {
+        let progress = PlaceImportMatchingProgress.summarize(items: [item(name: nil, state: .resolving)])
+        XCTAssertTrue(progress.isDiscovering)
+        XCTAssertEqual(progress.totalCount, 0)
+        XCTAssertEqual(progress.resolvedCount, 0)
+        XCTAssertEqual(progress.label, "Resolved 0 places · finding the total…")
+    }
+
+    func testRealResolverProgressReplacesTheSourcePlaceholderCount() {
+        let source = item(name: nil, state: .resolving)
+        let progress = PlaceImportMatchingProgress.summarize(
+            items: [source],
+            inFlight: [source.id: .init(totalCount: 12, completedCount: 5, resolvedCount: 4)]
+        )
+        XCTAssertFalse(progress.isDiscovering)
+        XCTAssertEqual(progress.label, "Resolved 4 out of 12 places")
+        XCTAssertEqual(progress.fraction, 5.0 / 12.0, accuracy: 0.001)
+    }
+
+    func testExpandedRowsAdvanceWithoutCountingFailuresAsResolved() {
+        let ready = item(name: "Coffee", state: .ready)
+        let failed = item(name: "Unavailable", state: .failed)
+        let pending = item(name: "Park", state: .resolving)
+        let progress = PlaceImportMatchingProgress.summarize(items: [ready, failed, pending])
+        XCTAssertEqual(progress.totalCount, 3)
+        XCTAssertEqual(progress.completedCount, 2)
+        XCTAssertEqual(progress.resolvedCount, 1)
+        XCTAssertEqual(progress.label, "Resolved 1 out of 3 places")
+    }
+
+    func testSourceRetryAndStaleTelemetryDoNotInflateKnownPlaces() {
+        var retry = item(name: nil, state: .needsHelp)
+        retry.kind = .sourceRetry
+        let ready = item(name: "Coffee", state: .ready)
+        let progress = PlaceImportMatchingProgress.summarize(
+            items: [retry, ready],
+            inFlight: [ready.id: .init(totalCount: 10, completedCount: 5, resolvedCount: 5)]
+        )
+        XCTAssertEqual(progress.totalCount, 1)
+        XCTAssertEqual(progress.resolvedCount, 1)
+        XCTAssertEqual(progress.fraction, 1)
+    }
+
+    private func item(name: String?, state: PlaceImportItemState) -> PlaceImportItem {
+        PlaceImportItem(
+            batchID: "progress", source: .textNotes,
+            seed: PlaceImportSeed(rawText: name ?? "link", nameHint: name, areaHint: nil, sourceURLString: nil, sourceLine: 1),
+            state: state, candidates: state == .ready ? [placeImportCandidate(name: name ?? "Coffee")] : []
+        )
+    }
+}
+
 final class PlaceImportReceiptMigrationTests: XCTestCase {
     func testGenericSocialNamedNeedsReviewPlacesSurviveReceiptDecode() throws {
         let instagramPlace = PlaceImportReceiptEntry(
@@ -1716,6 +1840,22 @@ final class PlaceImportReviewPlanTests: XCTestCase {
 
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
+    func testResolverProgressIsPublishedWhileSourceIsStillResolvingThenCleared() async throws {
+        let resolver = ProgressReportingPlaceImportResolver()
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(), resolver: resolver)
+        var observedLiveProgress = false
+        resolver.didReport = {
+            observedLiveProgress = true
+            let progress = store.matchingProgress(batchIDs: store.batches.map(\.id))
+            XCTAssertEqual(progress.label, "Resolved 2 out of 5 places")
+            XCTAssertEqual(store.items.first?.state, .resolving)
+        }
+        let batchID = try store.enqueue(source: .instagram, text: "https://www.instagram.com/p/progress-test/")
+        await store.waitForProcessing(batchID: batchID)
+        XCTAssertTrue(observedLiveProgress)
+        XCTAssertTrue(store.matchingProgressByItemID.isEmpty)
+    }
+
     func testExplicitSocialRetryRotatesRemoteAttemptID() async throws {
         let resolver = RecordingPlaceImportResolver(
             resolution: .needsHelp("Try the remote import again.")
@@ -4807,8 +4947,14 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             sourceLine: 1
         )
 
-        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        var progressUpdates: [PlaceImportMatchingProgress] = []
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram) {
+            progressUpdates.append($0)
+        }
 
+        XCTAssertEqual(progressUpdates.map(\.completedCount), Array(0...8))
+        XCTAssertEqual(progressUpdates.map(\.resolvedCount), Array(0...8))
+        XCTAssertTrue(progressUpdates.allSatisfy { $0.totalCount == 8 && !$0.isDiscovering })
         guard case .expandedResolved(let entries, _) = resolution else {
             return XCTFail("Expected eight resolved rows, got \(resolution)")
         }
@@ -8216,6 +8362,24 @@ private final class FakePlaceImportHTTPClient: PlaceImportHTTPFetching {
         requests.append(request)
         guard !responses.isEmpty else { throw URLError(.badServerResponse) }
         return responses.removeFirst()
+    }
+}
+
+@MainActor
+private final class ProgressReportingPlaceImportResolver: PlaceImportResolving {
+    var didReport: (() -> Void)?
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        .needsHelp("No match")
+    }
+
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution {
+        onProgress(.init(totalCount: 5, completedCount: 3, resolvedCount: 2))
+        didReport?()
+        return .needsHelp("No match")
     }
 }
 

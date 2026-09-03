@@ -78,10 +78,21 @@ enum PlaceImportCandidateSearchOutcome: Equatable {
 @MainActor
 protocol PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution
     func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
 }
 
 extension PlaceImportResolving {
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source)
+    }
+
     func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         try await resolve(seed: seed, source: source)
     }
@@ -125,6 +136,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     }
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source, onProgress: { _ in })
+    }
+
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution {
         if let name = normalized(seed.nameHint) {
             if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
                 return await googleSeedResolution(seed, name: name)
@@ -162,7 +180,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .needsHelp(message)
             }
         case .tiktok, .instagram:
-            return try await socialResolution(url: sourceURL, source: source, seed: seed)
+            return try await socialResolution(
+                url: sourceURL, source: source, seed: seed, onProgress: onProgress
+            )
         case .snapchat, .textNotes:
             do {
                 let candidates = try await placeResolver.resolveLink(
@@ -196,7 +216,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     private func socialResolution(
         url: URL,
         source: PlaceImportSource,
-        seed: PlaceImportSeed
+        seed: PlaceImportSeed,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
     ) async throws -> PlaceImportResolution {
         var sourceSeed = seed
         var recognition = SocialMediaRecognition(
@@ -328,7 +349,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         discoveredMediaCount: discoveredMediaCount,
                         understandingPath: understandingPath,
                         understandingWasPartial: understandingWasPartial,
-                        remoteHintsWereAccepted: remoteHintsWereAccepted
+                        remoteHintsWereAccepted: remoteHintsWereAccepted,
+                        onProgress: onProgress
                     )
                 }
                 if understandingWasPartial {
@@ -368,7 +390,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             discoveredMediaCount: discoveredMediaCount,
             understandingPath: understandingPath,
             understandingWasPartial: understandingWasPartial,
-            remoteHintsWereAccepted: remoteHintsWereAccepted
+            remoteHintsWereAccepted: remoteHintsWereAccepted,
+            onProgress: onProgress
         )
     }
 
@@ -380,7 +403,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         discoveredMediaCount: Int,
         understandingPath: String,
         understandingWasPartial: Bool,
-        remoteHintsWereAccepted: Bool
+        remoteHintsWereAccepted: Bool,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
     ) async throws -> PlaceImportResolution {
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
@@ -419,8 +443,17 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var rejectedHintCount = 0
         var lookupFailureCount = 0
         var recoveryHints: [SocialRecoveryHint] = []
+        var completedHintCount = 0
+        onProgress(.init(totalCount: hints.count, completedCount: 0, resolvedCount: 0))
         for hint in hints {
             try Task.checkCancellation()
+            defer {
+                completedHintCount += 1
+                onProgress(.init(
+                    totalCount: hints.count, completedCount: completedHintCount,
+                    resolvedCount: entries.filter { !$0.candidates.isEmpty }.count
+                ))
+            }
             var fetchedCandidates: [PlaceCandidate]
             var usedOCRRecoveryLookup = false
             if hint.isServerGrounded, !hint.resolvedCandidates.isEmpty {
@@ -1101,6 +1134,7 @@ final class PlaceImportStore: ObservableObject {
     @Published private(set) var batches: [PlaceImportBatch]
     @Published private(set) var items: [PlaceImportItem]
     @Published private(set) var persistenceError: String?
+    @Published private(set) var matchingProgressByItemID: [String: PlaceImportMatchingProgress] = [:]
 
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
@@ -1241,6 +1275,34 @@ final class PlaceImportStore: ObservableObject {
     var primaryBatch: PlaceImportBatch? {
         let sorted = batches.sorted { $0.createdAt > $1.createdAt }
         return sorted.first(where: { ![.complete, .cancelled].contains($0.state) }) ?? sorted.first
+    }
+
+    var unreviewedImportCount: Int {
+        let itemsByBatch = Dictionary(grouping: items, by: \.batchID)
+        return batches.filter { batch in
+            PlaceImportHistoryPresentation.needsReview(batch: batch, items: itemsByBatch[batch.id] ?? [])
+        }.count
+    }
+
+    func markReviewOpened(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        var changed = false
+        for index in batches.indices where ids.contains(batches[index].id) {
+            guard PlaceImportHistoryPresentation.needsReview(
+                batch: batches[index], items: items(for: batches[index].id)
+            ) else { continue }
+            batches[index].reviewOpenedAt = .now
+            changed = true
+        }
+        if changed { persist() }
+    }
+
+    func matchingProgress(batchIDs: [String]) -> PlaceImportMatchingProgress {
+        let ids = Set(batchIDs)
+        return .summarize(
+            items: items.filter { ids.contains($0.batchID) },
+            inFlight: matchingProgressByItemID
+        )
     }
 
     var summary: PlaceImportSummary {
@@ -1443,6 +1505,7 @@ final class PlaceImportStore: ObservableObject {
         var didChange = false
         for index in items.indices
         where ids.contains(items[index].batchID) && items[index].state == .resolving {
+            matchingProgressByItemID[items[index].id] = nil
             items[index].state = .queued
             items[index].updatedAt = .now
             didChange = true
@@ -1583,6 +1646,7 @@ final class PlaceImportStore: ObservableObject {
         items = []
         replacedSocialItemsByPlaceholderID = [:]
         ownerUserID = userID
+        matchingProgressByItemID = [:]
         persist()
     }
 
@@ -1934,6 +1998,9 @@ final class PlaceImportStore: ObservableObject {
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
             $0.value.first?.batchID != batchID
         }
+        for item in items where item.batchID == batchID {
+            matchingProgressByItemID[item.id] = nil
+        }
         items.removeAll(where: { $0.batchID == batchID })
         batches.removeAll(where: { $0.id == batchID })
         persist()
@@ -1945,6 +2012,7 @@ final class PlaceImportStore: ObservableObject {
         }
         processingTasks.removeAll()
         replacedSocialItemsByPlaceholderID.removeAll()
+        matchingProgressByItemID.removeAll()
         items.removeAll()
         batches.removeAll()
         persist()
@@ -2027,12 +2095,30 @@ final class PlaceImportStore: ObservableObject {
             guard !claims.isEmpty else { break }
 
             let tasks = claims.map { claim in
-                Task { @MainActor [resolver] in
+                Task { @MainActor [weak self, resolver] in
                     do {
                         let resolution = if claim.isManualSearch {
                             try await resolver.resolveManualSearch(seed: claim.seed, source: claim.source)
                         } else {
-                            try await resolver.resolve(seed: claim.seed, source: claim.source)
+                            try await resolver.resolve(seed: claim.seed, source: claim.source) { [weak self] progress in
+                                guard !Task.isCancelled,
+                                      let item = self?.item(id: claim.itemID),
+                                      item.state == .resolving, item.seed == claim.seed else { return }
+                                self?.matchingProgressByItemID[claim.itemID] = progress
+                            }
+                        }
+                        if claim.seed.nameHint != nil, !Task.isCancelled,
+                           let item = self?.item(id: claim.itemID),
+                           item.state == .resolving, item.seed == claim.seed {
+                            let matched: Bool
+                            if case .candidates(let candidates, _) = resolution {
+                                matched = !candidates.isEmpty
+                            } else {
+                                matched = false
+                            }
+                            self?.matchingProgressByItemID[claim.itemID] = .init(
+                                totalCount: 1, completedCount: 1, resolvedCount: matched ? 1 : 0
+                            )
                         }
                         return ProcessingAttempt.resolved(resolution)
                     } catch is CancellationError {
@@ -2095,6 +2181,7 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private func apply(_ attempt: ProcessingAttempt, to claim: ProcessingClaim) {
+        defer { matchingProgressByItemID[claim.itemID] = nil }
         guard let index = items.firstIndex(where: { $0.id == claim.itemID }),
               items[index].state == .resolving,
               items[index].seed == claim.seed

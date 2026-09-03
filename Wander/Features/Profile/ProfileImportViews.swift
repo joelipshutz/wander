@@ -125,12 +125,16 @@ struct PlaceImportHubScreen: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(WanderTheme.terracottaDark.color)
 
-                    TextField("Paste a link…", text: $input, axis: .vertical)
+                    TextField("Paste a link…", text: $input)
                         .focused($isInputFocused)
                         .accessibilityLabel("Import link")
                         .accessibilityIdentifier("import.input")
                         .font(WanderTypography.body.weight(.semibold))
-                        .lineLimit(1...3)
+                        .lineLimit(1)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .frame(maxWidth: .infinity, minHeight: 64)
 
                     if !input.isEmpty {
                         Button {
@@ -148,6 +152,13 @@ struct PlaceImportHubScreen: View {
                 .padding(.trailing, input.isEmpty ? WanderTheme.spacing3 : 0)
                 .frame(maxWidth: .infinity, minHeight: 64)
                 .background(WanderTheme.surfaceRaised.color)
+                .contentShape(Rectangle())
+                .onTapGesture { isInputFocused = true }
+                .contextMenu {
+                    Button("Paste", systemImage: "doc.on.clipboard") {
+                        pasteFromClipboard()
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -194,6 +205,7 @@ struct PlaceImportHubScreen: View {
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .center)
+            .fixedSize(horizontal: false, vertical: true)
             .background {
                 GeometryReader { proxy in
                     Color.clear.preference(
@@ -230,9 +242,11 @@ struct PlaceImportHubScreen: View {
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: inboxAction) {
-                    Image(systemName: "clock.arrow.circlepath")
+                    historyIcon
                 }
                 .accessibilityLabel("Import history")
+                .accessibilityValue("\(importStore.unreviewedImportCount) imports awaiting review")
+                .accessibilityIdentifier("import.history")
 
                 Button {
                     openURL(ImportHelpDestination.url)
@@ -247,6 +261,23 @@ struct PlaceImportHubScreen: View {
 
     private var canStart: Bool {
         !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var historyIcon: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .overlay(alignment: .topTrailing) {
+                if importStore.unreviewedImportCount > 0 {
+                    Text(importStore.unreviewedImportCount.formatted())
+                        .font(.system(size: 10, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 17, minHeight: 17)
+                        .background(WanderTheme.terracottaDark.color, in: Capsule())
+                        .offset(x: 10, y: -8)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 
     private var errorBinding: Binding<Bool> {

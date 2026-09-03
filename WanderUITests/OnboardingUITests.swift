@@ -1,6 +1,60 @@
 import XCTest
 
 @MainActor
+final class ImportFormRefinementUITests: XCTestCase {
+    func testImportFormReturnsToCompactHeightAfterKeyboardAndDragging() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderMapCapture",
+            "-WanderOpenImportHub", "-WanderDisableWalkthroughs"
+        ]
+        app.launch()
+        let input = app.textFields["import.input"]
+        let clipboard = app.buttons["Paste from clipboard"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        XCTAssertTrue(clipboard.isHittable)
+        let firstTop = app.buttons["Close import"].frame.minY
+        XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 100)
+        keepScreenshot("Import entry — first open")
+
+        let inputHeight = input.frame.height
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        input.typeText("https://www.instagram.com/p/very-long-single-line-import-link-that-must-never-wrap/")
+        XCTAssertEqual(input.frame.height, inputHeight, accuracy: 1)
+        app.buttons["Close import"].tap()
+
+        for opening in 2...3 {
+            XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
+            app.buttons["map.headerAdd"].tap()
+            let shortcut = app.buttons["Import your places and lists from Google Maps, Instagram, TikTok, and more here"]
+            XCTAssertTrue(shortcut.waitForExistence(timeout: 5))
+            shortcut.tap()
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let settlesAtCompactHeight = NSPredicate { _, _ in
+                abs(app.buttons["Close import"].frame.minY - firstTop) <= 2
+            }
+            expectation(for: settlesAtCompactHeight, evaluatedWith: app)
+            waitForExpectations(timeout: 5)
+            XCTAssertTrue(clipboard.isHittable)
+            XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 100)
+            keepScreenshot("Import entry — open \(opening)")
+            let handle = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: app.frame.midX, dy: firstTop - 10))
+            handle.press(forDuration: 0.1, thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -220)))
+            app.buttons["Close import"].tap()
+        }
+    }
+
+    private func keepScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+@MainActor
 final class OnboardingUITests: XCTestCase {
     func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
         let app = XCUIApplication()
@@ -124,7 +178,7 @@ final class OnboardingUITests: XCTestCase {
 
         openImport.tap()
 
-        XCTAssertTrue(app.textViews["import.input"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 second-launch Import From destination"
@@ -157,7 +211,7 @@ final class OnboardingUITests: XCTestCase {
         add(promptScreenshot)
 
         openImport.tap()
-        XCTAssertTrue(app.textViews["import.input"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
     }
 
     func testCoachMarkIsUnskippableAndOnlyTheHighlightedAddActionAdvances() {

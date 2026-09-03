@@ -1,5 +1,41 @@
 # REC-409 iOS Design Review
 
+## Compact-sheet and progress refinement
+
+The latest refinement resets the selected content-fit detent for every new
+presentation, uses a single-line link field with a full-height hit target and
+Paste context action, and moves Map notices 8pt closer to the filters. The
+History counter is per completed, unopened import; opening the grid does not
+clear it. Review timestamps live in the existing account-scoped snapshot.
+The Share composer requests a content-fit half-height presentation and places
+`rec.me` in its upper-left header.
+
+Matching uses real in-memory resolver progress. Source discovery has an
+animated indeterminate bar until its total is known; named rows and returned
+hints advance the completed bar and resolved-place count. Failed lookups do
+not count as resolved. Dismissing the waiting screen cannot commit an
+unreviewed partial set of places.
+
+Current validation: the modified app, Share extension, and unit/UI-test bundles
+compiled for arm64 iOS Simulator. Swift parsing, project generation, and diff
+whitespace checks pass. Native test startup and simulator installation have not
+completed on this host; no new test pass or fresh visual verification is claimed.
+The earlier captures and test counts below belong to commit `4e7964a` and are
+not proof of this refinement.
+New tests cover old-snapshot decoding, account isolation, per-import badge
+acknowledgment, opening during matching, real hint callbacks, progress
+aggregation, and repeated presentation after keyboard use/manual dragging.
+
+Import failure investigation: the server accepted five tester imports around
+19:13–19:19 UTC on September 3, with admitted work finishing in roughly
+15–22 seconds. The tester flag was enabled and the admission count was below
+quota. Neither an HTTP 200 nor a finished admission proves successful place
+extraction. Separately, code inspection confirms that the canonical review
+currently hides source-retry and candidate-less rows, replacing an all-failed
+result with “No places matched” and no retry control. The exact upstream cause
+still needs a failed source/build or provider-outcome logs. No hosted change
+was made during this investigation.
+
 Date: 2026-09-03  
 Runtime: iPhone 17 and 375×667 compact simulator, iOS 26.5  
 Scope: production-view follow-up plus the earlier DEBUG SwiftUI state gallery
