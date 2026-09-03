@@ -179,6 +179,29 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
+    func testColocatedMarkersCyclePastTheCurrentSelection() {
+        XCTAssertEqual(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-b",
+                candidateIDs: ["place-c", "place-a", "place-b"]
+            ),
+            "place-c"
+        )
+        XCTAssertEqual(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-c",
+                candidateIDs: ["place-c", "place-a", "place-b"]
+            ),
+            "place-a"
+        )
+        XCTAssertNil(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-a",
+                candidateIDs: ["place-a"]
+            )
+        )
+    }
+
     func testSearchRankingUsesMapCenterWhileDistanceUsesCachedViewerLocation() {
         let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
@@ -1895,6 +1918,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("animateEntrance("))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
+        XCTAssertTrue(map.contains("paragraphStyle.lineBreakMode = .byTruncatingTail"))
         XCTAssertTrue(map.contains("UIView.animate("))
         XCTAssertTrue(map.contains("self.transform = .identity"))
     }
@@ -2067,7 +2091,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("MapSelectionLifetimePolicy.shouldDismiss"))
         XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
-        XCTAssertTrue(map.contains("view.convert(view.bounds, to: mapView)"))
+        XCTAssertTrue(map.contains("mapView.convert(annotation.coordinate, toPointTo: mapView)"))
+        XCTAssertTrue(map.contains("MapHitTesting.nextColocatedMarkerID"))
         XCTAssertTrue(map.contains("annotation.descriptor.isSelected"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))

@@ -1191,6 +1191,7 @@ struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
+    @Environment(\.placeProfileFloatingActionVariant) private var placeProfileFloatingActionVariant
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -3679,7 +3680,17 @@ struct MapScreen: View {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(walkthroughs)
+                .environmentObject(placeSaveDraftStore)
+                .environment(
+                    \.placeProfileFloatingActionVariant,
+                    placeProfileFloatingActionVariant
+                )
                 .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
+                .id(compactSelectionIdentity)
             }
             .ignoresSafeArea()
             .allowsHitTesting(isPlaceProfilePresented)
@@ -6358,10 +6369,8 @@ private struct NativeMapView: UIViewRepresentable {
             #endif
             for view in views {
                 guard let pinView = view as? NativeMapPinAnnotationView else { continue }
-                // MapKit can deliver a member view and its replacement cluster
-                // in separate delegate calls. Keep it out of the accessibility
-                // tree until the coalesced visible-set refresh resolves the
-                // final cluster membership for this layout pass.
+                // Keep newly added views out of the accessibility tree until
+                // the coalesced refresh confirms they remain in the visible set.
                 pinView.isAccessibilityElement = false
             }
             scheduleVisibleAnnotationAccessibilityRefresh(in: mapView)
@@ -6371,6 +6380,9 @@ private struct NativeMapView: UIViewRepresentable {
             if let feature = annotation as? MKMapFeatureAnnotation {
                 parent.onNativeFeatureSelection(feature)
                 return
+            }
+            if annotation is NativeMapAnnotation {
+                mapView.deselectAnnotation(annotation, animated: false)
             }
         }
 
@@ -6586,24 +6598,33 @@ private struct NativeMapView: UIViewRepresentable {
             at point: CGPoint,
             in mapView: MKMapView
         ) -> NativeMapAnnotation? {
-            visibleAnnotations(in: mapView)
-                .compactMap { annotation -> (NativeMapAnnotation, Bool, CGFloat)? in
-                    guard let annotation = annotation as? NativeMapAnnotation,
-                          let view = mapView.view(for: annotation)
-                    else { return nil }
-                    let hitFrame = view.convert(view.bounds, to: mapView)
-                        .insetBy(dx: -8, dy: -8)
-                    guard hitFrame.contains(point) else { return nil }
-                    let center = CGPoint(x: hitFrame.midX, y: hitFrame.midY)
-                    return (
-                        annotation,
-                        annotation.descriptor.isSelected,
-                        hypot(point.x - center.x, point.y - center.y)
-                    )
+            let candidates = visibleAnnotations(in: mapView)
+                .compactMap { annotation -> (NativeMapAnnotation, CGPoint, CGFloat)? in
+                    guard let annotation = annotation as? NativeMapAnnotation else { return nil }
+                    let center = mapView.convert(annotation.coordinate, toPointTo: mapView)
+                    let distance = hypot(point.x - center.x, point.y - center.y)
+                    guard distance <= MapHitTesting.markerTapRadius else { return nil }
+                    return (annotation, center, distance)
                 }
+
+            if let selected = candidates.first(where: { $0.0.descriptor.isSelected }) {
+                let colocated = candidates.filter {
+                    hypot($0.1.x - selected.1.x, $0.1.y - selected.1.y)
+                        <= MapHitTesting.colocatedMarkerTolerance
+                }
+                if let nextID = MapHitTesting.nextColocatedMarkerID(
+                    selectedID: selected.0.stableID,
+                    candidateIDs: colocated.map { $0.0.stableID }
+                ), let next = colocated.first(where: { $0.0.stableID == nextID }) {
+                    return next.0
+                }
+            }
+
+            return candidates
                 .min { lhs, rhs in
-                    if lhs.1 != rhs.1 {
-                        return lhs.1 && !rhs.1
+                    if abs(lhs.2 - rhs.2) <= MapHitTesting.equalDistanceTolerance,
+                       lhs.0.descriptor.isSelected != rhs.0.descriptor.isSelected {
+                        return lhs.0.descriptor.isSelected && !rhs.0.descriptor.isSelected
                     }
                     return lhs.2 < rhs.2
                 }?
@@ -6670,6 +6691,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        layer.removeAllAnimations()
         image = nil
         renderSignature = ""
         bounceRevision = 0
@@ -6693,10 +6715,18 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         isDark: Bool,
         reduceMotion: Bool
     ) {
-        let shouldAnimateEntrance = presentedAnnotationID != descriptor.id
+        let isNewAnnotation = presentedAnnotationID != descriptor.id
+        let shouldAnimateEntrance = isNewAnnotation
             && descriptor.animatesEntrance
-        presentedAnnotationID = descriptor.id
         let nextSignature = "\(descriptor.renderSignature)|\(isDark ? "dark" : "light")"
+        let supersedesRunningAnimation = isNewAnnotation
+            || renderSignature != nextSignature
+            || abs(alpha - descriptor.opacity) > 0.001
+            || descriptor.bounceRevision != bounceRevision
+        if supersedesRunningAnimation {
+            layer.removeAllAnimations()
+        }
+        presentedAnnotationID = descriptor.id
         if renderSignature != nextSignature {
             image = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
             renderSignature = nextSignature
@@ -6709,7 +6739,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         clusteringIdentifier = nil
         displayPriority = descriptor.isSelected ? .required : .defaultHigh
         zPriority = descriptor.isSelected ? .max : .defaultUnselected
-        selectedZPriority = .max
+        selectedZPriority = descriptor.isSelected ? .max : .defaultSelected
 
         if shouldAnimateEntrance {
             bounceRevision = descriptor.bounceRevision
@@ -6777,7 +6807,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         clusteringIdentifier = nil
         isAccessibilityElement = false
         accessibilityTraits = .button
-        selectedZPriority = .max
+        selectedZPriority = .defaultSelected
         displayPriority = .defaultHigh
         zPriority = .defaultUnselected
     }
@@ -6829,9 +6859,8 @@ private enum NativeMapPinImageRenderer {
                 drawTitle(
                     descriptor.title,
                     isDark: isDark,
-                    centerX: metrics.size.width / 2,
-                    top: metrics.titleTop,
-                    context: context.cgContext
+                    canvasWidth: metrics.size.width,
+                    top: metrics.titleTop
                 )
             }
         }
@@ -7029,9 +7058,8 @@ private enum NativeMapPinImageRenderer {
     private static func drawTitle(
         _ title: String,
         isDark: Bool,
-        centerX: CGFloat,
-        top: CGFloat,
-        context: CGContext
+        canvasWidth: CGFloat,
+        top: CGFloat
     ) {
         let font = UIFont.systemFont(
             ofSize: MapPinVisualMetrics.activeTitleFontSize,
@@ -7045,16 +7073,26 @@ private enum NativeMapPinImageRenderer {
             ? UIColor.black.withAlphaComponent(0.96)
             : UIColor.white.withAlphaComponent(0.96)
         shadow.shadowBlurRadius = 2
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: foreground,
-            .shadow: shadow
+            .shadow: shadow,
+            .paragraphStyle: paragraphStyle
         ]
         let string = title as NSString
-        let size = string.size(withAttributes: attributes)
         string.draw(
-            at: CGPoint(x: centerX - size.width / 2, y: top),
-            withAttributes: attributes
+            with: CGRect(
+                x: 0,
+                y: top,
+                width: canvasWidth,
+                height: MapPinVisualMetrics.activeTitleLineHeight + 2
+            ),
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+            attributes: attributes,
+            context: nil
         )
     }
 }
@@ -7717,11 +7755,24 @@ private enum MapPerformanceProbe {
 enum MapHitTesting {
     static let markerTapRadius: CGFloat = 34
     static let passiveTapAllowableMovement: CGFloat = 10
+    static let colocatedMarkerTolerance: CGFloat = 1
+    static let equalDistanceTolerance: CGFloat = 0.5
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
             hypot(markerPoint.x - point.x, markerPoint.y - point.y) <= radius
         }
+    }
+
+    static func nextColocatedMarkerID(
+        selectedID: String,
+        candidateIDs: [String]
+    ) -> String? {
+        let orderedIDs = Array(Set(candidateIDs)).sorted()
+        guard orderedIDs.count > 1,
+              let selectedIndex = orderedIDs.firstIndex(of: selectedID)
+        else { return nil }
+        return orderedIDs[(selectedIndex + 1) % orderedIDs.count]
     }
 }
 

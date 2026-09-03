@@ -274,6 +274,7 @@ struct PlaceProfileFullScreen: View {
 }
 
 struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPresented: Bool
     let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
@@ -303,8 +304,12 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
         controller.onTransitionCompleted = onTransitionCompleted
         if controller.isPresented == isPresented {
             controller.updateRootView(content)
+        } else if isPresented {
+            controller.updateRootView(content)
+            controller.setPresented(isPresented, animated: !reduceMotion)
         } else {
-            controller.setPresented(isPresented, animated: true)
+            controller.setPresented(isPresented, animated: !reduceMotion)
+            controller.updateRootView(content)
         }
     }
 }
@@ -396,12 +401,12 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
         let timing = isPresented
             ? UICubicTimingParameters(
-                controlPoint1: CGPoint(x: 0.22, y: 1),
-                controlPoint2: CGPoint(x: 0.36, y: 1)
+                controlPoint1: PlaceProfileVerticalMotionStyle.presentationControlPoint1,
+                controlPoint2: PlaceProfileVerticalMotionStyle.presentationControlPoint2
             )
             : UICubicTimingParameters(
-                controlPoint1: CGPoint(x: 0.4, y: 0),
-                controlPoint2: CGPoint(x: 0.6, y: 1)
+                controlPoint1: PlaceProfileVerticalMotionStyle.dismissalControlPoint1,
+                controlPoint2: PlaceProfileVerticalMotionStyle.dismissalControlPoint2
             )
         let animator = UIViewPropertyAnimator(
             duration: PlaceProfileVerticalMotionStyle.duration,
