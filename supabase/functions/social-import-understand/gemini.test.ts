@@ -85,6 +85,13 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
         },
         [],
         [mediaAssessment("media:0")],
+        {
+          promptTokenCount: 100,
+          cachedContentTokenCount: 10,
+          candidatesTokenCount: 20,
+          thoughtsTokenCount: 5,
+          totalTokenCount: 125,
+        },
       );
     }
     if (url === fileURI && method === "DELETE") {
@@ -118,6 +125,13 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
       globalAreaEvidenceIds: [],
     },
     attemptCount: 2,
+    tokenUsage: {
+      promptTokens: 200,
+      cachedPromptTokens: 20,
+      responseTokens: 40,
+      thinkingTokens: 10,
+      totalTokens: 250,
+    },
   });
   assertEquals(maximumGeminiSemanticPasses, 2);
   assertEquals(calls, [
@@ -134,6 +148,12 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
   const generationConfig = asRecord(generateBody?.generationConfig);
   assertEquals(generationConfig?.maxOutputTokens, 16_384);
   assertEquals(generationConfig?.thinkingConfig, { thinkingLevel: "LOW" });
+  const reconciliationConfig = asRecord(
+    generatedBodies[1]?.generationConfig,
+  );
+  assertEquals(reconciliationConfig?.thinkingConfig, {
+    thinkingLevel: "MEDIUM",
+  });
   assertEquals(generationConfig?.mediaResolution, "MEDIA_RESOLUTION_HIGH");
   const parts = requestParts(generateBody);
   assertEquals(parts[1], {
@@ -1661,6 +1681,7 @@ function geminiUnderstandingResponse(
   postContext: Record<string, unknown>,
   candidates: unknown[],
   mediaAssessments: unknown[] = [],
+  usageMetadata?: Record<string, unknown>,
 ): Response {
   return Response.json({
     candidates: [{
@@ -1674,6 +1695,7 @@ function geminiUnderstandingResponse(
         }],
       },
     }],
+    ...(usageMetadata ? { usageMetadata } : {}),
   });
 }
 

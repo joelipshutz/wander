@@ -41,6 +41,21 @@ npm run test:social-import-eval
 npm run eval:social-import -- --providers current,current-improved --resolve none
 ```
 
+Compare current published token prices against usage from a completed run:
+
+```bash
+npm run eval:social-import:cost -- \
+  --input-tokens 44348 \
+  --output-tokens 22548 \
+  --imports 8
+```
+
+The calculator reads `model-pricing.json`, whose prices and official source
+links are dated. Its result is deliberately a same-token comparison, not a
+prediction that every provider will use the same number of tokens. Native video
+support, frame extraction, transcription, retries, caching, acquisition, and
+POI resolution must be measured separately in live runs.
+
 After a scoring-only change, regenerate an existing run's `results.json` and
 summaries without reacquiring social media or rerunning understanding. Every
 invocation appends a `score-contract-v4` transform and chained input/output
@@ -136,8 +151,18 @@ deno run \
   scripts/social-import-eval/production-parity.ts \
   --corpus /private/tmp/rec120-launch-gate.json \
   --out /private/tmp/rec120-production-parity \
-  --fixture-dir /private/tmp/rec120-launch-gate.vUN2Dx
+  --fixture-dir /private/tmp/rec120-launch-gate.vUN2Dx \
+  --model gemini-3.8-flash \
+  --thinking medium \
+  --reconciliation-thinking high
 ```
+
+The model and thinking flags are optional. Omitting them preserves the
+production baseline of `gemini-3.5-flash`, `LOW` initial thinking, and `MEDIUM`
+reconciliation thinking. The manifest records the selected configuration, and
+each successful case records bounded prompt, cached-prompt, response, thinking,
+and total token counts. This makes model quality, latency, and actual cost
+comparable without changing the app or the deployed Edge Function.
 
 `--fixture-dir` accepts either an evaluator run directory or its `raw/`
 subdirectory. It reuses each case's validated `apify.json` acquisition envelope

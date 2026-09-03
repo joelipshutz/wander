@@ -25,6 +25,9 @@ test("production-parity arguments require explicit corpus and output paths", () 
       corpusPath: "/private/corpus.json",
       outputDirectory: "/private/run",
       fixtureDirectory: null,
+      geminiModel: null,
+      initialThinkingLevel: "LOW",
+      reconciliationThinkingLevel: "MEDIUM",
       help: false,
     },
   );
@@ -46,6 +49,41 @@ test("production-parity arguments require explicit corpus and output paths", () 
       "/private/acquisition",
     ]).fixtureDirectory,
     "/private/acquisition",
+  );
+  assert.deepEqual(
+    parseDiagnosticArguments([
+      "--corpus",
+      "/private/corpus.json",
+      "--out",
+      "/private/run",
+      "--model",
+      "gemini-3.8-flash",
+      "--thinking",
+      "medium",
+      "--reconciliation-thinking",
+      "high",
+    ]),
+    {
+      corpusPath: "/private/corpus.json",
+      outputDirectory: "/private/run",
+      fixtureDirectory: null,
+      geminiModel: "gemini-3.8-flash",
+      initialThinkingLevel: "MEDIUM",
+      reconciliationThinkingLevel: "HIGH",
+      help: false,
+    },
+  );
+  assert.throws(
+    () =>
+      parseDiagnosticArguments([
+        "--corpus",
+        "/private/corpus.json",
+        "--out",
+        "/private/run",
+        "--thinking",
+        "maximum",
+      ]),
+    /invalid_thinking_level/,
   );
 });
 
@@ -466,7 +504,9 @@ for (const failureStage of ["media", "understanding"] as const) {
         profileUsernames: [],
       }),
       acquireInstagramProfileAliases: async () => {
-        throw new Error("profile acquisition should be skipped without handles");
+        throw new Error(
+          "profile acquisition should be skipped without handles",
+        );
       },
       ingestAcquiredMedia: async () => {
         if (failureStage === "media") {

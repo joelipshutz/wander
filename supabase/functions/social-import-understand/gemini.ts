@@ -20,6 +20,26 @@ export const maximumConcurrentGeminiImageUploads = 4;
 export const maximumGeminiVideoInputs = 10;
 export const maximumGeminiFileUploadTimeoutMilliseconds = 60_000;
 
+export type GeminiThinkingLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export type GeminiThinkingProfile = {
+  initial: GeminiThinkingLevel;
+  reconciliation: GeminiThinkingLevel;
+};
+
+export type GeminiTokenUsage = {
+  promptTokens: number;
+  cachedPromptTokens: number;
+  responseTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+};
+
+export const defaultGeminiThinkingProfile: GeminiThinkingProfile = {
+  initial: "LOW",
+  reconciliation: "MEDIUM",
+};
+
 const geminiAPIOrigin = "https://generativelanguage.googleapis.com";
 const maximumGeminiFileResponseBytes = 1_000_000;
 const maximumGeminiFilePollAttempts = 20;
@@ -38,6 +58,7 @@ export type GeminiUnderstanding = {
   mediaAssessments: ModelMediaAssessment[];
   postContext?: ModelPostContext;
   attemptCount: number;
+  tokenUsage?: GeminiTokenUsage;
   coverageIncomplete?: true;
   mediaCoverageIncomplete?: true;
   captionCoverageIncomplete?: true;
@@ -54,6 +75,7 @@ export async function understandWithGemini(
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
   profileAliases: InstagramProfileAlias[] = [],
+  thinkingProfile: GeminiThinkingProfile = defaultGeminiThinkingProfile,
 ): Promise<GeminiUnderstanding> {
   const model = validModel(modelValue) ?? "gemini-3.5-flash";
   const uploadedFiles: UploadedGeminiFile[] = [];
@@ -118,6 +140,7 @@ export async function understandWithGemini(
       deadline,
       dependencies,
       requestSignal,
+      thinkingProfile.initial,
     );
     const reconciliation = reconciliationDirective(
       first,
@@ -168,10 +191,14 @@ export async function understandWithGemini(
         deadline,
         dependencies,
         requestSignal,
-        "MEDIUM",
+        thinkingProfile.reconciliation,
       );
       const merged = {
         ...reconciled,
+        tokenUsage: combineGeminiTokenUsage(
+          first.tokenUsage,
+          reconciled.tokenUsage,
+        ),
         candidates: mergeReconciledCandidates(
           first.candidates,
           reconciled.candidates,
@@ -410,6 +437,7 @@ type ParsedGeminiUnderstanding = {
   postContext: ModelPostContext;
   isLegacyResponse: boolean;
   attemptCount: number;
+  tokenUsage?: GeminiTokenUsage;
 };
 
 async function generateUnderstanding(
@@ -419,7 +447,7 @@ async function generateUnderstanding(
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
-  thinkingLevel: "LOW" | "MEDIUM" = "LOW",
+  thinkingLevel: GeminiThinkingLevel = "LOW",
 ): Promise<ParsedGeminiUnderstanding> {
   const body = JSON.stringify({
     systemInstruction: {
@@ -542,6 +570,7 @@ function publicUnderstanding(
     mediaAssessments: parsed.mediaAssessments,
     ...(parsed.isLegacyResponse ? {} : { postContext: parsed.postContext }),
     attemptCount,
+    ...(parsed.tokenUsage ? { tokenUsage: parsed.tokenUsage } : {}),
     ...(coverageIncomplete ? { coverageIncomplete: true as const } : {}),
     ...(coverage.mediaIncomplete
       ? { mediaCoverageIncomplete: true as const }
@@ -1325,6 +1354,7 @@ function parseGeminiPayload(
   mediaAssessments: ModelMediaAssessment[];
   postContext: ModelPostContext;
   isLegacyResponse: boolean;
+  tokenUsage?: GeminiTokenUsage;
 } {
   const root = asRecord(raw);
   const candidates = Array.isArray(root?.candidates) ? root?.candidates : [];
@@ -1375,6 +1405,54 @@ function parseGeminiPayload(
       : validatePostContext(response.postContext),
     mediaAssessments: mediaAssessments.map(validateMediaAssessment),
     isLegacyResponse,
+    ...geminiTokenUsage(root?.usageMetadata),
+  };
+}
+
+function geminiTokenUsage(
+  value: unknown,
+): { tokenUsage: GeminiTokenUsage } | Record<string, never> {
+  const usage = asRecord(value);
+  if (!usage) return {};
+  const promptTokens = tokenCount(usage.promptTokenCount);
+  const cachedPromptTokens = tokenCount(usage.cachedContentTokenCount);
+  const responseTokens = tokenCount(usage.candidatesTokenCount);
+  const thinkingTokens = tokenCount(usage.thoughtsTokenCount);
+  const totalTokens = tokenCount(usage.totalTokenCount);
+  if (
+    promptTokens === null && cachedPromptTokens === null &&
+    responseTokens === null && thinkingTokens === null && totalTokens === null
+  ) return {};
+  return {
+    tokenUsage: {
+      promptTokens: promptTokens ?? 0,
+      cachedPromptTokens: cachedPromptTokens ?? 0,
+      responseTokens: responseTokens ?? 0,
+      thinkingTokens: thinkingTokens ?? 0,
+      totalTokens: totalTokens ?? 0,
+    },
+  };
+}
+
+function tokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 &&
+      value <= 1_000_000_000
+    ? value
+    : null;
+}
+
+function combineGeminiTokenUsage(
+  first?: GeminiTokenUsage,
+  second?: GeminiTokenUsage,
+): GeminiTokenUsage | undefined {
+  if (!first) return second;
+  if (!second) return first;
+  return {
+    promptTokens: first.promptTokens + second.promptTokens,
+    cachedPromptTokens: first.cachedPromptTokens + second.cachedPromptTokens,
+    responseTokens: first.responseTokens + second.responseTokens,
+    thinkingTokens: first.thinkingTokens + second.thinkingTokens,
+    totalTokens: first.totalTokens + second.totalTokens,
   };
 }
 

@@ -13,7 +13,11 @@ import {
   profileAliasCandidates,
   recommendedCaptionHandles,
 } from "../../supabase/functions/social-import-understand/evidence.ts";
-import { understandWithGemini } from "../../supabase/functions/social-import-understand/gemini.ts";
+import {
+  defaultGeminiThinkingProfile,
+  type GeminiThinkingLevel,
+  understandWithGemini,
+} from "../../supabase/functions/social-import-understand/gemini.ts";
 import { ingestAcquiredMedia } from "../../supabase/functions/social-import-understand/media.ts";
 import { parseSocialSource } from "../../supabase/functions/social-import-understand/source.ts";
 import type {
@@ -42,6 +46,9 @@ type DiagnosticArguments = {
   corpusPath: string;
   outputDirectory: string;
   fixtureDirectory: string | null;
+  geminiModel: string | null;
+  initialThinkingLevel: GeminiThinkingLevel;
+  reconciliationThinkingLevel: GeminiThinkingLevel;
   help: boolean;
 };
 
@@ -88,6 +95,8 @@ type DiagnosticRunOptions = {
   apifyToken: string;
   geminiAPIKey: string;
   geminiModel?: string;
+  initialThinkingLevel?: GeminiThinkingLevel;
+  reconciliationThinkingLevel?: GeminiThinkingLevel;
   fixtureDirectory?: string;
 };
 
@@ -124,6 +133,14 @@ type DiagnosticCaseResult = {
   mediaIngestion: ReturnType<typeof ingestionSummary>[];
   understanding: {
     attemptCount: number;
+    tokenUsage: {
+      promptTokens: number;
+      cachedPromptTokens: number;
+      responseTokens: number;
+      thinkingTokens: number;
+      billedOutputTokens: number;
+      totalTokens: number;
+    } | null;
     postContext: ReturnType<typeof postContextSummary>;
     candidates: ReturnType<typeof candidateSummary>[];
   } | null;
@@ -171,6 +188,9 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
     corpusPath: "",
     outputDirectory: "",
     fixtureDirectory: null,
+    geminiModel: null,
+    initialThinkingLevel: defaultGeminiThinkingProfile.initial,
+    reconciliationThinkingLevel: defaultGeminiThinkingProfile.reconciliation,
     help: false,
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -179,7 +199,16 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
       values.help = true;
       continue;
     }
-    if (!["--corpus", "--out", "--fixture-dir"].includes(argument)) {
+    if (
+      ![
+        "--corpus",
+        "--out",
+        "--fixture-dir",
+        "--model",
+        "--thinking",
+        "--reconciliation-thinking",
+      ].includes(argument)
+    ) {
       throw new DiagnosticError("unknown_argument");
     }
     const next = args[index + 1];
@@ -188,7 +217,13 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
     }
     if (argument === "--corpus") values.corpusPath = next;
     else if (argument === "--out") values.outputDirectory = next;
-    else values.fixtureDirectory = next;
+    else if (argument === "--fixture-dir") values.fixtureDirectory = next;
+    else if (argument === "--model") values.geminiModel = validModel(next);
+    else if (argument === "--thinking") {
+      values.initialThinkingLevel = validThinkingLevel(next);
+    } else {
+      values.reconciliationThinkingLevel = validThinkingLevel(next);
+    }
     index += 1;
   }
   if (!values.help && (!values.corpusPath || !values.outputDirectory)) {
@@ -224,6 +259,14 @@ export async function runProductionParityDiagnostic(
     acquisitionMode: options.fixtureDirectory
       ? "saved_apify_fixture"
       : "live_apify",
+    understandingConfiguration: {
+      provider: "gemini",
+      model: options.geminiModel ?? "gemini-3.5-flash",
+      initialThinkingLevel: options.initialThinkingLevel ??
+        defaultGeminiThinkingProfile.initial,
+      reconciliationThinkingLevel: options.reconciliationThinkingLevel ??
+        defaultGeminiThinkingProfile.reconciliation,
+    },
   };
   await dependencies.fileSystem.writeJSON(
     options.outputDirectory,
@@ -341,6 +384,12 @@ async function runCase(
       dependencies.runtime,
       abortController.signal,
       aliases,
+      {
+        initial: options.initialThinkingLevel ??
+          defaultGeminiThinkingProfile.initial,
+        reconciliation: options.reconciliationThinkingLevel ??
+          defaultGeminiThinkingProfile.reconciliation,
+      },
     );
     const aliasCandidates = dependencies.operations.profileAliasCandidates(
       aliases,
@@ -376,6 +425,13 @@ async function runCase(
       mediaIngestion: ingestions.map(ingestionSummary),
       understanding: {
         attemptCount: boundedInteger(understanding.attemptCount, 0, 6),
+        tokenUsage: understanding.tokenUsage
+          ? {
+            ...understanding.tokenUsage,
+            billedOutputTokens: understanding.tokenUsage.responseTokens +
+              understanding.tokenUsage.thinkingTokens,
+          }
+          : null,
         postContext: postContextSummary(understanding.postContext),
         candidates: understanding.candidates
           .slice(0, maximumPersistedModelCandidates)
@@ -827,6 +883,22 @@ function validSecret(value: string | undefined): string | null {
     : null;
 }
 
+function validModel(value: string): string {
+  const model = value.trim();
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(model)) {
+    throw new DiagnosticError("invalid_model");
+  }
+  return model;
+}
+
+function validThinkingLevel(value: string): GeminiThinkingLevel {
+  const level = value.trim().toUpperCase();
+  if (level !== "LOW" && level !== "MEDIUM" && level !== "HIGH") {
+    throw new DiagnosticError("invalid_thinking_level");
+  }
+  return level;
+}
+
 function usage(): string {
   return `Production-parity social import diagnostic
 
@@ -834,7 +906,9 @@ Usage:
   deno run --allow-env=APIFY_TOKEN,GEMINI_API_KEY,GEMINI_MODEL \\
     --allow-read --allow-write --allow-net \\
     scripts/social-import-eval/production-parity.ts \\
-    --corpus <path> --out <private-directory> [--fixture-dir <run-or-raw-directory>]
+    --corpus <path> --out <private-directory> [--fixture-dir <run-or-raw-directory>] \
+    [--model <gemini-model>] [--thinking <low|medium|high>] \
+    [--reconciliation-thinking <low|medium|high>]
 `;
 }
 
@@ -867,7 +941,10 @@ async function main(): Promise<void> {
         outputDirectory: args.outputDirectory,
         apifyToken,
         geminiAPIKey,
-        geminiModel: validSecret(Deno.env.get("GEMINI_MODEL")) ?? undefined,
+        geminiModel: args.geminiModel ??
+          validSecret(Deno.env.get("GEMINI_MODEL")) ?? undefined,
+        initialThinkingLevel: args.initialThinkingLevel,
+        reconciliationThinkingLevel: args.reconciliationThinkingLevel,
         fixtureDirectory: args.fixtureDirectory ?? undefined,
       },
       {

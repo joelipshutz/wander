@@ -16,7 +16,8 @@
     "test:testflight-manifest": "node --test reconcile-testflight-manifest.test.mjs testflight-manifest.test.mjs testflight-release-gate.test.mjs",
     "eval:social-import": "node social-import-eval/run.mjs",
     "eval:social-import:rescore": "node social-import-eval/rescore.mjs",
-    "test:social-import-eval": "node --test social-import-eval.test.mjs"
+    "eval:social-import:cost": "node social-import-eval/model-cost-comparison.mjs",
+    "test:social-import-eval": "node --test social-import-eval.test.mjs social-import-eval/model-cost-comparison.test.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"
