@@ -154,6 +154,12 @@ overwriting another active checkout.
 
 Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and record outcome, tests, known issues, and next steps in the PR and Linear. Prefer squash merging PRs into `main`, then delete the branch.
 
+After a PR merges or an issue is abandoned, retire the agent-owned worktree
+unless an explicit handoff still needs it. First verify its status and preserve
+any user or other-agent changes; then remove only ignored build artifacts the
+agent created and remove the clean worktree through Git. Worktrees are active
+checkouts, not long-term archives.
+
 ## Shared Agent Skills
 
 Repo-owned agent workflows live in `agent-skills/`. These files are the shared
@@ -434,7 +440,7 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 - For focused regression checks, use the same simulator destination and add
   `-only-testing:<TestTarget>/<TestCase>/<testName>`, for example:
   ```bash
-  xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts
+  xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts
   ```
 - Current important test coverage:
   - design tokens
@@ -444,6 +450,40 @@ printing it. An analytics build with a blank resolved token must not be uploaded
   - deterministic Discover parser
   - local store follow/block/search/save/draft behavior
 - For visual work, also capture simulator screenshots across at least the current iPhone target and one smaller phone target before calling the UI ready.
+
+## Local Build And Disk Hygiene
+
+Normal builds and tests must reuse the current worktree's ignored `DerivedData`
+directory. Do not create a new `DerivedData-*` path for focused tests, retries,
+device builds, or routine validation; changing the path forces Xcode and SwiftPM
+to duplicate caches. If concurrent builds genuinely require isolation, use one
+issue-scoped derived-data path, record it in Linear, and remove only that owned
+path after the build process ends and before retiring the worktree.
+
+Before a full test run, archive, simulator-runtime install, or other disk-heavy
+operation, check free space:
+
+```bash
+df -h /System/Volumes/Data
+find . -maxdepth 1 -type d -name 'DerivedData*' -exec du -sh {} +
+```
+
+If the Data volume has less than 20 GiB free or is above 90% usage, do not start
+another disk-heavy operation. Report the measured usage and safe cleanup
+candidates first. Reuse an installed simulator runtime and existing device when
+they satisfy the required destination; do not install another runtime or create
+throwaway simulator devices for routine tests.
+
+Agents may remove ignored build artifacts they created in their own active
+worktree only after verifying the exact path with `git check-ignore` and that no
+build is using it. Never delete another worktree, simulator devices or runtimes,
+Xcode global DerivedData, Archives, iOS DeviceSupport, Codex/Claude task history,
+or broad cache directories without Joe's explicit approval. A nearly full disk
+is a cleanup problem, not a reason to reset or reformat the Mac.
+
+Keep build logs bounded: run the narrowest useful test first, avoid repeating an
+identical failed command without a changed condition, and do not emit or retain
+full verbose logs when the failure summary and result bundle are sufficient.
 
 ## App Store Build Numbers
 
