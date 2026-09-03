@@ -560,6 +560,7 @@ final class WanderStore: ObservableObject {
         self.persistence = persistence
 
         var shouldPersistAfterRestore = false
+        var didRestoreSnapshot = false
         if let restored = persistence?.load()?.restoredState(contactProvider: fixtures.contactProvider) {
             self.currentUser = restored.currentUser
             self.profiles = restored.profiles
@@ -591,6 +592,7 @@ final class WanderStore: ObservableObject {
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
+            didRestoreSnapshot = true
         } else {
             self.currentUser = fixtures.currentUser
             self.profiles = fixtures.profiles
@@ -636,6 +638,9 @@ final class WanderStore: ObservableObject {
         )
         currentUserCalendarLocalFingerprint = makeCurrentUserCalendarLocalFingerprint()
 
+        if didRestoreSnapshot, repairLegacyListReferences() {
+            shouldPersistAfterRestore = true
+        }
         if shouldPersistAfterRestore {
             persist()
         }
@@ -2330,7 +2335,8 @@ final class WanderStore: ObservableObject {
         var friends: [LocalPlaceList] = []
         var collabs: [LocalPlaceList] = []
         for list in visiblePlaceLists {
-            let isCurrentUserMember = !listReferenceIDs(for: list)
+            let listIDs = listReferenceIDs(for: list)
+            let isCurrentUserMember = !listIDs
                 .isDisjoint(with: currentUserMemberListIDs)
             let isMine = list.ownerUserID == currentUser.id || isCurrentUserMember
             if isMine {
@@ -2338,7 +2344,7 @@ final class WanderStore: ObservableObject {
             } else {
                 friends.append(list)
             }
-            if collaborativeListIDs.contains(list.id), isMine {
+            if !listIDs.isDisjoint(with: collaborativeListIDs), isMine {
                 collabs.append(list)
             }
         }
@@ -2380,12 +2386,24 @@ final class WanderStore: ObservableObject {
         for profile in profiles where profileByID[profile.id] == nil {
             profileByID[profile.id] = profile
         }
+        // Restored memberships may still reference the ID used before a list synced.
+        // Resolve those aliases just as membership permissions and list items do.
+        var canonicalListIDByReferenceID: [String: String] = [:]
+        canonicalListIDByReferenceID.reserveCapacity(placeLists.count * 3)
+        for list in placeLists {
+            for referenceID in listReferenceIDs(for: list) {
+                canonicalListIDByReferenceID[referenceID] = list.id
+            }
+        }
         var profilesByListID: [String: [LocalProfile]] = [:]
+        var seenUserIDsByListID: [String: Set<String>] = [:]
         for member in placeListMembers where member.deletedAt == nil {
-            guard let profile = profileByID[member.userID],
-                  !isBlockedBetweenCurrentUser(and: profile.id)
+            guard let listID = canonicalListIDByReferenceID[member.listID],
+                  let profile = profileByID[member.userID],
+                  !isBlockedBetweenCurrentUser(and: profile.id),
+                  seenUserIDsByListID[listID, default: []].insert(profile.id).inserted
             else { continue }
-            profilesByListID[member.listID, default: []].append(profile)
+            profilesByListID[listID, default: []].append(profile)
         }
         for listID in profilesByListID.keys {
             profilesByListID[listID]?.sort { $0.handle < $1.handle }
@@ -3552,6 +3570,30 @@ final class WanderStore: ObservableObject {
 
     private func listReferenceIDs(for list: LocalPlaceList) -> Set<String> {
         Set([list.id, list.localID, list.serverID].compactMap { $0 })
+    }
+
+    /// Repair only known pre-sync references in restored snapshots. Keeping the
+    /// stored links canonical also protects sync and deletion paths, without
+    /// changing membership status, ownership, timestamps, or pending operations.
+    private func repairLegacyListReferences() -> Bool {
+        var canonicalIDByLocalID: [String: String] = [:]
+        for list in placeLists where list.localID != list.id {
+            canonicalIDByLocalID[list.localID] = list.id
+        }
+        guard !canonicalIDByLocalID.isEmpty else { return false }
+
+        var changed = false
+        for index in placeListMembers.indices {
+            guard let canonicalID = canonicalIDByLocalID[placeListMembers[index].listID] else { continue }
+            placeListMembers[index].listID = canonicalID
+            changed = true
+        }
+        for index in placeListItems.indices {
+            guard let canonicalID = canonicalIDByLocalID[placeListItems[index].listID] else { continue }
+            placeListItems[index].listID = canonicalID
+            changed = true
+        }
+        return changed
     }
 
     private func visibleListItemsByListID(in lists: [LocalPlaceList]) -> [String: [LocalPlaceListItem]] {
