@@ -141,7 +141,8 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderUsePerformanceFixtures",
             "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
-            "-WanderMapCaptureMode", "friends"
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceInteractionControls"
         ]
         app.launch()
 
@@ -149,22 +150,14 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 12))
         XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 12))
 
-        let pin = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", ", social ")
-        ).firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 12))
-        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
-        XCTAssertTrue(map.frame.contains(pinCenter))
-        let normalizedPinCenter = CGVector(
-            dx: (pinCenter.x - map.frame.minX) / map.frame.width,
-            dy: (pinCenter.y - map.frame.minY) / map.frame.height
-        )
-
         let card = app.buttons["map.selectedPlaceCard"]
         let activePin = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "map.pin.active.saved.")
         ).firstMatch
+        let selectFirstPin = app.buttons["map.performanceSelectFirstPin"]
         let nearby = app.buttons["map.nearby"]
+        XCTAssertTrue(selectFirstPin.waitForExistence(timeout: 3))
+        XCTAssertTrue(selectFirstPin.isHittable)
         XCTAssertTrue(nearby.waitForExistence(timeout: 3))
 
         var didMeasureInteraction = false
@@ -182,7 +175,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 defer { stopMeasuring() }
                 guard invocationCount > 1 else { return }
 
-                map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+                selectFirstPin.tap()
                 XCTAssertTrue(card.waitForExistence(timeout: 3))
                 XCTAssertTrue(activePin.waitForExistence(timeout: 2))
 
@@ -217,7 +210,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 didMeasureInteraction = true
             }
         } else {
-            map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+            selectFirstPin.tap()
             XCTAssertTrue(card.waitForExistence(timeout: 3))
             map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
             XCTAssertTrue(card.waitForNonExistence(timeout: 3))
@@ -227,6 +220,148 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(didMeasureInteraction)
         XCTAssertFalse(card.exists)
         XCTAssertTrue(nearby.isHittable)
+    }
+
+    func testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceProbe",
+            "-WanderMapPerformanceSelectedPin"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 3))
+
+        let dragStart = map.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.72, dy: 0.42)
+        )
+        let dragEnd = map.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.28, dy: 0.56)
+        )
+        let probe = app.descendants(matching: .any)["map.performanceProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 3))
+        let populatedProbe = NSPredicate(format: "value CONTAINS %@", "camera=")
+        var didMeasurePan = false
+        var invocationCount = 0
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        options.invocationOptions = [.manuallyStart, .manuallyStop]
+        measure(
+            metrics: [XCTClockMetric(), XCTCPUMetric(application: app)],
+            options: options
+        ) {
+            invocationCount += 1
+            startMeasuring()
+            defer { stopMeasuring() }
+            guard invocationCount > 1 else { return }
+
+            dragStart.press(
+                forDuration: 0.08,
+                thenDragTo: dragEnd,
+                withVelocity: .fast,
+                thenHoldForDuration: 0.08
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(
+                    for: [
+                        XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)
+                    ],
+                    timeout: 3
+                ),
+                .completed
+            )
+            didMeasurePan = true
+        }
+        XCTAssertTrue(didMeasurePan)
+
+        let snapshot = String(describing: probe.value)
+        print("REC404_MAP_PERFORMANCE_PROBE \(snapshot)")
+        add(XCTAttachment(string: snapshot))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-404 dense map after selected-pin pan"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testPerformanceFixtureTracesDenseMapPanZoomAndClusterChurn() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends",
+            "-WanderMapPerformanceProbe",
+            "-WanderMapPerformanceCameraControls",
+            "-WanderMapPerformanceSelectedPin"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 3))
+
+        let probe = app.descendants(matching: .any)["map.performanceProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 3))
+
+        func metric(_ name: String, in snapshot: String) -> Int? {
+            snapshot
+                .split(separator: ";")
+                .first { $0.hasPrefix("\(name)=") }
+                .flatMap { Int($0.dropFirst(name.count + 1)) }
+        }
+
+        func perform(_ label: String, button: XCUIElement) {
+            let previousValue = probe.value as? String ?? ""
+            XCTAssertTrue(button.isHittable)
+            button.tap()
+            let populatedProbe = NSPredicate(
+                format: "value != %@ AND value CONTAINS %@",
+                previousValue,
+                "camera="
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(
+                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)],
+                    timeout: 3
+                ),
+                .completed
+            )
+            let snapshot = probe.value as? String ?? ""
+            print("REC404_MAP_CLUSTER_TRACE \(label) \(snapshot)")
+            XCTAssertLessThanOrEqual(
+                metric("nativeA11yVisits", in: snapshot) ?? .max,
+                200,
+                "Accessibility maintenance must stay bounded to the viewport-buffered set"
+            )
+            XCTAssertLessThanOrEqual(
+                metric("nativeSyncVisits", in: snapshot) ?? .max,
+                200,
+                "The 780-place fixture must stay viewport-buffered inside MapKit"
+            )
+            XCTAssertLessThan(
+                metric("maxFrameGapMs", in: snapshot) ?? .max,
+                100,
+                "Dense-map camera animation must not freeze for a visible fraction of a second"
+            )
+        }
+
+        let zoomOut = app.buttons["map.performanceZoomOut"]
+        let zoomIn = app.buttons["map.performanceZoomIn"]
+        XCTAssertTrue(zoomOut.waitForExistence(timeout: 3))
+        XCTAssertTrue(zoomIn.waitForExistence(timeout: 3))
+
+        perform("zoom-out-1", button: zoomOut)
+        perform("zoom-out-2", button: zoomOut)
+        perform("zoom-in", button: zoomIn)
     }
 
     func testSingleScreenTapOnMapPinSelectsThatPlace() {
@@ -290,8 +425,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 5))
 
-        let pin = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "Bar Nido"))
+        let pin = app.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Bar Nido,"))
             .firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
 
@@ -384,7 +519,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 5))
-        map.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.45))
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
             .press(forDuration: 0.7)
 
         let card = app.buttons["map.selectedPlaceCard"]
