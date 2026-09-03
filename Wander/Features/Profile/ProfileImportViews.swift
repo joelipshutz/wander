@@ -153,13 +153,15 @@ struct PlaceImportHubScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 64)
                 .background(WanderTheme.surfaceRaised.color)
                 .contentShape(Rectangle())
-                .onTapGesture { isInputFocused = true }
+                .simultaneousGesture(TapGesture().onEnded { isInputFocused = true })
                 .contextMenu {
                     Button("Paste", systemImage: "doc.on.clipboard") {
                         pasteFromClipboard()
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("import.input-container")
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .stroke(

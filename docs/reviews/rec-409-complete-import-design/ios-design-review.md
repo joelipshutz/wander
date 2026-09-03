@@ -18,10 +18,22 @@ unreviewed partial set of places.
 
 Current validation: the modified app, Share extension, and unit/UI-test bundles
 compiled for arm64 iOS Simulator. Swift parsing, project generation, and diff
-whitespace checks pass. Native test startup and simulator installation have not
-completed on this host; no new test pass or fresh visual verification is claimed.
-The earlier captures and test counts below belong to commit `4e7964a` and are
-not proof of this refinement.
+whitespace checks pass. The first refinement run passed 13 of 15 tests; it found
+a stale navigation assertion and a link-field focus failure in the reopen UI
+test. Both have follow-up corrections; full unit and focused UI revalidation
+are running. First-open screenshots verify the reduced bottom space on both
+phone sizes; repeated opens, keyboard behavior, and Share-host sizing are not
+yet signed off. The earlier test counts farther below belong to commit
+`4e7964a`, not this refinement.
+
+| Refinement evidence | iPhone 17 | Compact 375×667 |
+|---|---|---|
+| Real entry sheet, first open only | [Capture](refinement-Entry-large.png) | [Capture](refinement-Entry-small.png) |
+
+The compact [matching-screen capture](refinement-Processing-small.png) renders
+the production bar and resolved-count label with two queued fixture places.
+Count changes are covered by the passing resolver/store progress tests; this
+still image is layout evidence, not proof of animation or a live import.
 New tests cover old-snapshot decoding, account isolation, per-import badge
 acknowledgment, opening during matching, real hint callbacks, progress
 aggregation, and repeated presentation after keyboard use/manual dragging.

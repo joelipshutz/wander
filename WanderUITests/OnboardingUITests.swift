@@ -18,8 +18,14 @@ final class ImportFormRefinementUITests: XCTestCase {
         keepScreenshot("Import entry — first open")
 
         let inputHeight = input.frame.height
-        input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let inputContainer = app.otherElements["import.input-container"]
+        XCTAssertTrue(inputContainer.exists)
+        inputContainer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 10) else {
+            keepScreenshot("Import entry — field did not focus")
+            XCTFail("Tapping the full-height input container should open the keyboard")
+            return
+        }
         input.typeText("https://www.instagram.com/p/very-long-single-line-import-link-that-must-never-wrap/")
         XCTAssertEqual(input.frame.height, inputHeight, accuracy: 1)
         app.buttons["Close import"].tap()

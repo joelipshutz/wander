@@ -2072,7 +2072,8 @@ final class NavigationContractTests: XCTestCase {
                 ".accessibilityLabel(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
-        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input, axis: .vertical)"))
+        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
+        XCTAssertFalse(importViews.contains("TextField(\"Paste a link…\", text: $input, axis: .vertical)"))
         XCTAssertTrue(
             importViews.contains(
                 "Text(\"Paste a link from Instagram, Google Maps, or TikTok\")"
