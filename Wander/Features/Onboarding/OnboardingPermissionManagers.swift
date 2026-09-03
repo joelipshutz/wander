@@ -28,7 +28,7 @@ enum OnboardingLocationPermissionPolicy {
     static func primaryTitle(for status: CLAuthorizationStatus) -> String {
         switch action(for: status) {
         case .skip, .request:
-            "Use my location"
+            "Continue"
         case .openSettings:
             "Open Settings"
         case .continueWithoutAccess:
