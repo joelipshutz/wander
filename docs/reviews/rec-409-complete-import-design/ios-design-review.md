@@ -20,15 +20,25 @@ Current validation: the modified app, Share extension, and unit/UI-test bundles
 compiled for arm64 iOS Simulator. Swift parsing, project generation, and diff
 whitespace checks pass. The first refinement run passed 13 of 15 tests; it found
 a stale navigation assertion and a link-field focus failure in the reopen UI
-test. Both have follow-up corrections; full unit and focused UI revalidation
-are running. First-open screenshots verify the reduced bottom space on both
-phone sizes; repeated opens, keyboard behavior, and Share-host sizing are not
-yet signed off. The earlier test counts farther below belong to commit
-`4e7964a`, not this refinement.
+test. After the gesture correction, the iPhone 17 UI test passed: the top of
+the full-height field opens the keyboard, a long URL stays on one line, and the
+second/third presentations return within 2pt of the first after keyboard use
+and manual dragging. The full run passed 1,712 of 1,725 tests. Its 13 failures
+include one assertion still expecting the previous gesture spelling (corrected
+for the final focused run), the 11 previously reported failure cases, and a
+search performance check measuring 72ms against a 50ms threshold. This is not a
+passing full suite or proof of clean-baseline equivalence. The final focused
+compact-phone run passed all 15 tests, including the corrected navigation
+assertion, unread/progress contracts, and the same keyboard/drag/reopen UI test.
+Both phone sizes pass the repeated-presentation check; Share-host sizing still
+needs device verification. Twelve other full-suite failures remain unresolved;
+the full suite was not rerun after the assertion-only correction.
+The earlier test counts farther below belong to commit `4e7964a`.
 
 | Refinement evidence | iPhone 17 | Compact 375×667 |
 |---|---|---|
 | Real entry sheet, first open only | [Capture](refinement-Entry-large.png) | [Capture](refinement-Entry-small.png) |
+| Third presentation after keyboard and dragging | [Capture](refinement-Reopened-large.png) | [Capture](refinement-Reopened-small.png) |
 
 The compact [matching-screen capture](refinement-Processing-small.png) renders
 the production bar and resolved-count label with two queued fixture places.

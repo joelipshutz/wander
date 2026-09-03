@@ -2104,7 +2104,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("importHubRestingHeight = ceil(contentHeight) + 44"))
         XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
         XCTAssertFalse(importViews.contains("text: $input, axis: .vertical"))
-        XCTAssertTrue(importViews.contains(".onTapGesture { isInputFocused = true }"))
+        XCTAssertTrue(importViews.contains(".simultaneousGesture(TapGesture().onEnded { isInputFocused = true })"))
         XCTAssertTrue(importViews.contains("importStore.unreviewedImportCount"))
         XCTAssertFalse(importViews.contains("Label(\"Previous imports\""))
         XCTAssertTrue(importViews.contains("struct PlaceImportHubOverlay: View"))
