@@ -62,6 +62,11 @@ final class YourMapPrototypeUITests: XCTestCase {
         app.launch()
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        // The combined preview can exist below the tab bar. Bring its actual
+        // tap target into view before opening Explore on every phone size.
+        for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
+            app.swipeUp()
+        }
         preview.tap()
         let snapshot = app.buttons["yourMap.snapshot"]
         XCTAssertTrue(snapshot.waitForExistence(timeout: 10))
@@ -74,6 +79,18 @@ final class YourMapPrototypeUITests: XCTestCase {
         capture("REC-413 Snapshot saved toast")
         toast.tap()
         XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        let cover = app.images["Saved map snapshot"]
+        for _ in 0..<6 {
+            if cover.exists && cover.frame.minY > 100 && cover.frame.maxY < app.frame.maxY - 180 { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).press(
+                forDuration: 0.1,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            )
+        }
+        XCTAssertTrue(cover.isHittable)
+        capture("REC-413 Static snapshot cover")
+        app.swipeDown()
+        app.swipeDown()
         XCTAssertTrue(app.textFields.firstMatch.value as? String != nil)
         let title = app.textFields.firstMatch
         title.tap()
