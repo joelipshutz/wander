@@ -5180,7 +5180,16 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft] = [],
         visibility: PlaceVisibility? = nil
     ) -> LocalPlaceVisit? {
-        guard let userPlace = currentUserPlace(matching: userPlaceID) else { return nil }
+        let userPlace: LocalUserPlace
+        if let localUserPlace = currentUserPlace(matching: userPlaceID) {
+            userPlace = localUserPlace
+        } else if let remoteVisiblePlace = remoteCurrentUserVisiblePlace(
+            matching: userPlaceID
+        ) {
+            userPlace = materializeRemoteCurrentUserPlace(remoteVisiblePlace)
+        } else {
+            return nil
+        }
 
         let now = Date.now
         let isRepeatCheckIn = !visits(for: userPlace.id).isEmpty
