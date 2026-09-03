@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { deterministicFallbackHints } from "../../supabase/functions/social-import-understand/evidence.ts";
+import {
+  deterministicFallbackHints,
+  groundedHints,
+} from "../../supabase/functions/social-import-understand/evidence.ts";
+import type { ModelCandidate } from "../../supabase/functions/social-import-understand/types.ts";
 import {
   type RuntimeDependencies,
   SocialImportError,
@@ -12,6 +16,70 @@ import {
   parseDiagnosticArguments,
   runProductionParityDiagnostic,
 } from "./production-parity.ts";
+
+test("production grounding combines caption and slide names with expanded city labels without conflating venues", () => {
+  const candidate = (
+    name: string,
+    area: string,
+    itemIndex: number,
+    mediaID: string,
+  ): ModelCandidate => ({
+    name,
+    area,
+    itemIndex,
+    sourceMention: name,
+    entityType: "poi",
+    classification: "destination",
+    modality: "image_text",
+    evidenceIds: [mediaID],
+    confidence: .99,
+    startMs: -1,
+    endMs: -1,
+  });
+  const candidates = [
+    candidate("Annabelle's", "Vancouver", 0, "media:0"),
+    candidate("Annabelle’s", "Vancouver, British Columbia", 0, "media:1"),
+    candidate("Rory's Place", "Ojai", 1, "media:2"),
+    candidate("Rory's Other Place", "Ojai", 1, "media:3"),
+    candidate("Sample Cafe", "Springfield, Illinois", 2, "media:4"),
+    candidate("Sample Cafe", "Springfield, Massachusetts", 2, "media:5"),
+  ];
+  const media = candidates.map((_, index) => ({
+    id: `media:${index}`,
+    index,
+    kind: "image" as const,
+    url: "https://example.com/image.jpg",
+    thumbnailURL: null,
+    altText: null,
+  }));
+  const ingestions = media.map((item) => ({
+    mediaID: item.id,
+    kind: item.kind,
+    status: "ok" as const,
+    byteCount: 1,
+    mimeType: "image/jpeg",
+    errorCode: null,
+  }));
+  const result = groundedHints(
+    candidates,
+    { texts: [], media },
+    ingestions,
+    150,
+  );
+  assert.equal(result.hints.length, 5);
+  assert.equal(
+    result.hints.filter((hint) => hint.name.startsWith("Annabelle")).length,
+    1,
+  );
+  assert.equal(
+    result.hints.filter((hint) => hint.name.startsWith("Rory")).length,
+    2,
+  );
+  assert.equal(
+    result.hints.filter((hint) => hint.name === "Sample Cafe").length,
+    2,
+  );
+});
 
 test("production-parity arguments require explicit corpus and output paths", () => {
   assert.deepEqual(
@@ -28,6 +96,8 @@ test("production-parity arguments require explicit corpus and output paths", () 
       geminiModel: null,
       initialThinkingLevel: "LOW",
       reconciliationThinkingLevel: "MEDIUM",
+      maxOutputTokens: 16_384,
+      profileAliasesPath: null,
       help: false,
     },
   );
@@ -70,6 +140,8 @@ test("production-parity arguments require explicit corpus and output paths", () 
       geminiModel: "gemini-3.8-flash",
       initialThinkingLevel: "MEDIUM",
       reconciliationThinkingLevel: "HIGH",
+      maxOutputTokens: 16_384,
+      profileAliasesPath: null,
       help: false,
     },
   );
@@ -204,6 +276,10 @@ test("production-parity output is bounded and omits tokens, captions, bytes, and
       calls.push("profile_candidates");
       return [];
     },
+    taggedProfileCandidates: () => {
+      calls.push("tagged_candidates");
+      return [];
+    },
     groundedHints: () => {
       calls.push("grounding");
       return {
@@ -249,6 +325,7 @@ test("production-parity output is bounded and omits tokens, captions, bytes, and
     "media",
     "gemini",
     "profile_candidates",
+    "tagged_candidates",
     "grounding",
   ]);
   assert.equal(run.results[0].status, "completed");
@@ -294,8 +371,15 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
     status: "ok",
     raw: { items: [{ fixtureRecord: true }] },
   });
+  const frozenAliases = [{
+    username: "fixture_cafe",
+    fullName: "Fixture Cafe",
+  }];
   const fileSystem: DiagnosticFileSystem = {
-    readTextFile: async () => corpus,
+    readTextFile: async (path) =>
+      path === "/private/aliases.json"
+        ? JSON.stringify({ "fixture-case": frozenAliases })
+        : corpus,
     readOptionalTextFile: async (path) => {
       fixturePaths.push(path);
       return path.endsWith("/raw/fixture-case/apify.json") ? fixture : null;
@@ -351,10 +435,10 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
       mentions: [],
       handleMentions: [],
       listItems: [],
-      profileUsernames: [],
+      profileUsernames: ["fixture_cafe"],
     }),
     acquireInstagramProfileAliases: async () => {
-      throw new Error("profile acquisition should be skipped without handles");
+      throw new Error("profile acquisition must not run with frozen aliases");
     },
     ingestAcquiredMedia: async (
       media: Array<{ url: string }>,
@@ -373,23 +457,31 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
         errorCode: null,
       }];
     },
-    understandWithGemini: async () => ({
-      candidates: [{
-        name: "Fixture Cafe",
-        sourceMention: "Fixture Cafe",
-        area: "",
-        entityType: "poi",
-        itemIndex: 0,
-        classification: "destination",
-        modality: "caption",
-        evidenceIds: ["caption:0"],
-        confidence: 0.9,
-        startMs: -1,
-        endMs: -1,
-      }],
-      attemptCount: 1,
-    }),
+    understandWithGemini: async (...args: unknown[]) => {
+      assert.deepEqual(args[8], frozenAliases);
+      assert.equal(
+        (args[10] as { maxOutputTokens: number }).maxOutputTokens,
+        32_768,
+      );
+      return {
+        candidates: [{
+          name: "Fixture Cafe",
+          sourceMention: "Fixture Cafe",
+          area: "",
+          entityType: "poi",
+          itemIndex: 0,
+          classification: "destination",
+          modality: "caption",
+          evidenceIds: ["caption:0"],
+          confidence: 0.9,
+          startMs: -1,
+          endMs: -1,
+        }],
+        attemptCount: 1,
+      };
+    },
     profileAliasCandidates: () => [],
+    taggedProfileCandidates: () => [],
     groundedHints: () => ({
       hints: [{
         name: "Fixture Cafe",
@@ -419,6 +511,8 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
       corpusPath: "/private/corpus.json",
       outputDirectory: "/private/output",
       fixtureDirectory: "/private/saved-run",
+      profileAliasesPath: "/private/aliases.json",
+      maxOutputTokens: 32_768,
       apifyToken,
       geminiAPIKey,
     },
@@ -431,6 +525,7 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
     "/private/saved-run/raw/fixture-case/apify.json",
   ]);
   assert.equal(run.manifest.acquisitionMode, "saved_apify_fixture");
+  assert.equal(typeof run.manifest.aliasFixtureSHA256, "string");
   assert.equal(run.results[0].acquisition?.mode, "saved_apify_fixture");
   assert.equal(run.results[0].grounding?.hints[0].name, "Fixture Cafe");
   const persisted = [...writes.values()].join("\n");

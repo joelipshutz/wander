@@ -12,9 +12,11 @@ import {
   groundedHints,
   profileAliasCandidates,
   recommendedCaptionHandles,
+  taggedProfileCandidates,
 } from "../../supabase/functions/social-import-understand/evidence.ts";
 import {
   defaultGeminiThinkingProfile,
+  type GeminiResponseDiagnostic,
   type GeminiThinkingLevel,
   understandWithGemini,
 } from "../../supabase/functions/social-import-understand/gemini.ts";
@@ -49,6 +51,8 @@ type DiagnosticArguments = {
   geminiModel: string | null;
   initialThinkingLevel: GeminiThinkingLevel;
   reconciliationThinkingLevel: GeminiThinkingLevel;
+  maxOutputTokens: number;
+  profileAliasesPath: string | null;
   help: boolean;
 };
 
@@ -74,6 +78,7 @@ export type DiagnosticOperations = {
   ingestAcquiredMedia: typeof ingestAcquiredMedia;
   understandWithGemini: typeof understandWithGemini;
   profileAliasCandidates: typeof profileAliasCandidates;
+  taggedProfileCandidates: typeof taggedProfileCandidates;
   groundedHints: typeof groundedHints;
 };
 
@@ -98,6 +103,9 @@ type DiagnosticRunOptions = {
   initialThinkingLevel?: GeminiThinkingLevel;
   reconciliationThinkingLevel?: GeminiThinkingLevel;
   fixtureDirectory?: string;
+  maxOutputTokens?: number;
+  profileAliasesPath?: string;
+  profileAliasesByCase?: Record<string, InstagramProfileAlias[]>;
 };
 
 type DiagnosticRunDependencies = {
@@ -124,6 +132,7 @@ type DiagnosticCaseResult = {
   status: "completed" | "failed";
   failedStage: StageName | null;
   errorCode: string | null;
+  modelResponses: GeminiResponseDiagnostic[];
   acquisition: ReturnType<typeof acquisitionSummary> | null;
   profileEnrichment: {
     status: "ok" | "failed" | "skipped";
@@ -180,6 +189,7 @@ const productionOperations: DiagnosticOperations = {
   ingestAcquiredMedia,
   understandWithGemini,
   profileAliasCandidates,
+  taggedProfileCandidates,
   groundedHints,
 };
 
@@ -191,6 +201,8 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
     geminiModel: null,
     initialThinkingLevel: defaultGeminiThinkingProfile.initial,
     reconciliationThinkingLevel: defaultGeminiThinkingProfile.reconciliation,
+    maxOutputTokens: 16_384,
+    profileAliasesPath: null,
     help: false,
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -207,6 +219,8 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
         "--model",
         "--thinking",
         "--reconciliation-thinking",
+        "--max-output-tokens",
+        "--profile-aliases",
       ].includes(argument)
     ) {
       throw new DiagnosticError("unknown_argument");
@@ -219,7 +233,14 @@ export function parseDiagnosticArguments(args: string[]): DiagnosticArguments {
     else if (argument === "--out") values.outputDirectory = next;
     else if (argument === "--fixture-dir") values.fixtureDirectory = next;
     else if (argument === "--model") values.geminiModel = validModel(next);
-    else if (argument === "--thinking") {
+    else if (argument === "--profile-aliases") values.profileAliasesPath = next;
+    else if (argument === "--max-output-tokens") {
+      const budget = Number(next);
+      if (!Number.isInteger(budget) || budget < 1_024 || budget > 65_536) {
+        throw new DiagnosticError("invalid_output_budget");
+      }
+      values.maxOutputTokens = budget;
+    } else if (argument === "--thinking") {
       values.initialThinkingLevel = validThinkingLevel(next);
     } else {
       values.reconciliationThinkingLevel = validThinkingLevel(next);
@@ -242,6 +263,44 @@ export async function runProductionParityDiagnostic(
     options.corpusPath,
   );
   const corpus = parseCorpus(corpusText, dependencies.operations);
+  let aliasFixtureSHA256: string | null = null;
+  if (options.profileAliasesPath) {
+    const aliasText = await dependencies.fileSystem.readTextFile(
+      options.profileAliasesPath,
+    );
+    const aliasFixture = asRecord(JSON.parse(aliasText));
+    if (!aliasFixture) throw new DiagnosticError("invalid_alias_fixture");
+    const byCase: Record<string, InstagramProfileAlias[]> = {};
+    for (const item of corpus) {
+      const rows = aliasFixture[item.id];
+      if (!Array.isArray(rows) || rows.length > 150) {
+        throw new DiagnosticError("invalid_alias_fixture");
+      }
+      byCase[item.id] = rows.map((row) => {
+        const alias = asRecord(row);
+        if (
+          !alias || typeof alias.username !== "string" ||
+          !/^[A-Za-z0-9._]{1,30}$/.test(alias.username) ||
+          typeof alias.fullName !== "string" || alias.fullName.length > 160 ||
+          !alias.fullName.trim()
+        ) {
+          throw new DiagnosticError("invalid_alias_fixture");
+        }
+        return {
+          username: alias.username,
+          fullName: alias.fullName,
+          ...(typeof alias.businessCategoryName === "string"
+            ? { businessCategoryName: alias.businessCategoryName.slice(0, 160) }
+            : {}),
+          ...(typeof alias.isBusinessAccount === "boolean"
+            ? { isBusinessAccount: alias.isBusinessAccount }
+            : {}),
+        };
+      });
+    }
+    options = { ...options, profileAliasesByCase: byCase };
+    aliasFixtureSHA256 = await sha256(aliasText);
+  }
   await dependencies.fileSystem.prepareOutputDirectory(options.outputDirectory);
 
   const secrets = [options.apifyToken, options.geminiAPIKey];
@@ -259,6 +318,7 @@ export async function runProductionParityDiagnostic(
     acquisitionMode: options.fixtureDirectory
       ? "saved_apify_fixture"
       : "live_apify",
+    aliasFixtureSHA256,
     understandingConfiguration: {
       provider: "gemini",
       model: options.geminiModel ?? "gemini-3.5-flash",
@@ -266,6 +326,7 @@ export async function runProductionParityDiagnostic(
         defaultGeminiThinkingProfile.initial,
       reconciliationThinkingLevel: options.reconciliationThinkingLevel ??
         defaultGeminiThinkingProfile.reconciliation,
+      maxOutputTokens: options.maxOutputTokens ?? 16_384,
     },
   };
   await dependencies.fileSystem.writeJSON(
@@ -319,6 +380,7 @@ async function runCase(
   let ingestions: MediaIngestion[] = [];
   let requestedHandleCount = 0;
   let profileStatus: "ok" | "failed" | "skipped" = "skipped";
+  const modelResponses: GeminiResponseDiagnostic[] = [];
 
   try {
     evidence = options.fixtureDirectory
@@ -345,7 +407,10 @@ async function runCase(
       )
       : [];
     requestedHandleCount = handles.length;
-    const aliasesPromise = handles.length > 0
+    const frozenAliases = options.profileAliasesByCase?.[testCase.id];
+    const aliasesPromise = frozenAliases !== undefined
+      ? Promise.resolve(frozenAliases)
+      : handles.length > 0
       ? dependencies.operations.acquireInstagramProfileAliases(
         handles,
         options.apifyToken,
@@ -390,15 +455,27 @@ async function runCase(
         reconciliation: options.reconciliationThinkingLevel ??
           defaultGeminiThinkingProfile.reconciliation,
       },
+      {
+        maxOutputTokens: options.maxOutputTokens,
+        onResponse: (diagnostic) => modelResponses.push(diagnostic),
+      },
     );
     const aliasCandidates = dependencies.operations.profileAliasCandidates(
       aliases,
       catalog,
     );
+    const taggedCandidates = dependencies.operations.taggedProfileCandidates(
+      aliases,
+      catalog,
+      ingestions,
+      understanding.postContext,
+      understanding.candidates,
+      understanding.mediaAssessments,
+    );
 
     stage = "grounding";
     const grounded = dependencies.operations.groundedHints(
-      [...understanding.candidates, ...aliasCandidates],
+      [...taggedCandidates, ...understanding.candidates, ...aliasCandidates],
       catalog,
       ingestions,
       maximumPersistedHints,
@@ -412,6 +489,7 @@ async function runCase(
       status: "completed",
       failedStage: null,
       errorCode: null,
+      modelResponses,
       acquisition: acquisitionSummary(
         evidence,
         catalog,
@@ -468,6 +546,7 @@ async function runCase(
       status: "failed",
       failedStage: stage,
       errorCode,
+      modelResponses,
       acquisition: evidence && catalog
         ? acquisitionSummary(
           evidence,
@@ -908,7 +987,8 @@ Usage:
     scripts/social-import-eval/production-parity.ts \\
     --corpus <path> --out <private-directory> [--fixture-dir <run-or-raw-directory>] \
     [--model <gemini-model>] [--thinking <low|medium|high>] \
-    [--reconciliation-thinking <low|medium|high>]
+    [--reconciliation-thinking <low|medium|high>] [--max-output-tokens <1024..65536>] \\
+    [--profile-aliases <private-per-case-alias-json>]
 `;
 }
 
@@ -946,6 +1026,8 @@ async function main(): Promise<void> {
         initialThinkingLevel: args.initialThinkingLevel,
         reconciliationThinkingLevel: args.reconciliationThinkingLevel,
         fixtureDirectory: args.fixtureDirectory ?? undefined,
+        maxOutputTokens: args.maxOutputTokens,
+        profileAliasesPath: args.profileAliasesPath ?? undefined,
       },
       {
         operations: productionOperations,

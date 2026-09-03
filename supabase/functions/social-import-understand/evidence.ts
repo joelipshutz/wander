@@ -356,7 +356,22 @@ export function groundedHints(
       end_ms: finiteTimestamp(candidate.endMs),
     };
     const identity = normalizedIdentity(groundedName, hint.area);
-    const existingIndex = preparedIndexes.get(identity);
+    // The model can cite one venue from both caption and media with a short
+    // and expanded locality. Exact key equality alone leaves duplicate rows;
+    // require the same logical item and full name before merging expansions.
+    const exactExistingIndex = preparedIndexes.get(identity);
+    const localityVariantIndex =
+      exactExistingIndex === undefined && candidate.itemIndex >= 0
+        ? prepared.findIndex((existing) =>
+          existing.itemIndex === candidate.itemIndex &&
+          normalizedValue(existing.hint.name) ===
+            normalizedValue(groundedName) &&
+          existing.hint.area !== null && hint.area !== null &&
+          sourceAreasReferToSamePlace(existing.hint.area, hint.area)
+        )
+        : -1;
+    const existingIndex = exactExistingIndex ??
+      (localityVariantIndex >= 0 ? localityVariantIndex : undefined);
     const textualSourceMention = textualModality(candidate.modality) &&
         sourceMention
       ? sourceMention
@@ -2072,9 +2087,16 @@ function sourceAreasReferToSamePlace(
 ): boolean {
   if (!left || !right) return true;
   if (normalizedValue(left) === normalizedValue(right)) return true;
-  const leftPrimary = normalizedValue(left.split(",", 1)[0] ?? "");
-  const rightPrimary = normalizedValue(right.split(",", 1)[0] ?? "");
-  return leftPrimary.length > 0 && leftPrimary === rightPrimary;
+  const leftParts = left.split(",").map(normalizedValue).filter(Boolean);
+  const rightParts = right.split(",").map(normalizedValue).filter(Boolean);
+  // An omitted region can be enriched; contradictory regions cannot. Do not
+  // collapse Springfield, Illinois with Springfield, Massachusetts.
+  const shorter = leftParts.length <= rightParts.length
+    ? leftParts
+    : rightParts;
+  const longer = leftParts.length <= rightParts.length ? rightParts : leftParts;
+  return shorter.length > 0 &&
+    shorter.every((part, index) => part === longer[index]);
 }
 
 function sharesDirectEvidence(
