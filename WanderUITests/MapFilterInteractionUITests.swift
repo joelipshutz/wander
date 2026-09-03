@@ -291,7 +291,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testPerformanceFixtureTracesDenseMapPanZoomAndClusterChurn() {
+    func testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -336,7 +336,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 .completed
             )
             let snapshot = probe.value as? String ?? ""
-            print("REC404_MAP_CLUSTER_TRACE \(label) \(snapshot)")
+            print("REC404_MAP_INDIVIDUAL_PIN_TRACE \(label) \(snapshot)")
             XCTAssertLessThanOrEqual(
                 metric("nativeA11yVisits", in: snapshot) ?? .max,
                 200,
@@ -441,6 +441,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 3))
         XCTAssertTrue(card.label.contains("Bar Nido"))
+
+        card.tap()
+        XCTAssertTrue(
+            app.staticTexts["Ratings"].waitForExistence(timeout: 3),
+            "The first collapsed-card tap should open the place profile."
+        )
     }
 
     func testSourceFiltersFitWithoutOverlapOnSmallPhones() {
