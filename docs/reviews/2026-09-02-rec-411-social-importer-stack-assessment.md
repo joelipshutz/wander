@@ -2,8 +2,9 @@
 
 Date: 2026-09-02
 
-Status: Benchmark design and cost instrumentation complete; new live provider
-runs await credentials
+Status: First live 24-post acquisition benchmark and 23-post frozen-input model
+comparison complete; repeated reliability and canonical POI resolution remain
+open
 
 Scope: Instagram/TikTok acquisition, multimodal understanding, and POI
 resolution
@@ -33,11 +34,132 @@ as its most intelligent Flash model. Gemini 3.7 Flash remains in the matrix as a
 same-price stability control so a launch decision does not rest on release-day
 claims alone.
 
+The first live comparison now supports advancing Gemini 3.8 Flash at
+`MEDIUM/HIGH` to the repeatability and resolver gates. It exceeded Gemini 3.5
+Flash at `HIGH/HIGH` on operational completion, source-adjudicated extraction,
+elapsed run time, and measured model cost. This is not yet authorization to
+remove the runtime model switch or declare the composed importer launch-ready:
+the result is one pass, only eight cases currently have adjudicated labels, and
+the final POI identity stage was deliberately excluded.
+
 Fable is useful as a ceiling test on the hard failures, not as the first
 production candidate. Claude and OpenAI models accept images but not native
 video, so a fair test must give them normalized keyframes plus a transcript.
 That adds a preprocessing system and makes their token, latency, and accuracy
 figures non-comparable with a direct-video Gemini run unless both are reported.
+
+## 2026-09-04 live benchmark
+
+### Corpus and controls
+
+The acquisition corpus contains 24 public Instagram URLs selected for difficult
+caption handles, single-image text, long carousels, native reel text, speech,
+city-versus-venue context, natural features, and long declared lists. Eight are
+known acceptance cases and 16 were independently sourced before provider calls.
+The candidate corpus and raw provider payloads remain private evaluation
+artifacts. They are not production data or committed fixtures.
+
+Both model configurations received the same 23 Apify-usable acquisition
+envelopes, profile aliases, and byte-identical frozen media inputs. The frozen
+set contained approximately 241 MiB of images and video. Input hashes matched
+before and after every replay. The initial 8,192-token diagnostic ceiling caused
+artificial truncation, so only failed cases were retried with the production
+16,384-token ceiling. Transport-only failures received one bounded clean retry.
+Final metrics below merge a successful retry only into the case that originally
+failed; they do not rerun or cherry-pick already successful cases.
+
+### Acquisition: Bright Data versus Apify
+
+| Metric | Bright Data | Apify |
+|---|---:|---:|
+| Usable records | 24/24 | 23/24 |
+| Shared captions matching after whitespace normalization | 23/23 | 23/23 |
+| Shared ordered media counts matching | 23/23 | 23/23 |
+| Shared reel bytes matching by length and prefix digest | 11/11 | 11/11 |
+| Shared image cases with the higher first-image resolution | 0/12 | 12/12 |
+| Measured acquisition charge | Dashboard reported $0 consumed | $0.0621 for the 24-URL batch |
+
+Apify's only acquisition miss was a restricted reel that Bright Data returned
+with usable video. Bright Data returned more tagged-user metadata in three
+carousels. Apify returned a platform location on five shared reels where Bright
+Data did not. Bright Data's inspected carousel images were capped at a 640-pixel
+side while Apify returned 1,080-4,096-pixel originals; the actual reel media was
+the same from both providers.
+
+This does not support replacing Apify outright. Keep Apify as the primary source
+for image posts and carousels, where original resolution is valuable, and use
+Bright Data as a restricted/no-result fallback plus optional tagged-user
+enrichment. For reels, the bytes were identical, so use the same primary/fallback
+order to avoid an unnecessary production rewrite while gaining Bright Data's
+one observed reliability recovery.
+
+### Reasoning: Gemini 3.5 versus 3.8
+
+| Metric after bounded failed-case retries | Gemini 3.5 Flash HIGH/HIGH | Gemini 3.8 Flash MEDIUM/HIGH |
+|---|---:|---:|
+| Operationally completed | 19/23 (82.6%) | 22/23 (95.7%) |
+| Cases returning at least one grounded place | 20/23 (87.0%) | 20/23 (87.0%) |
+| Grounded place hints | 159 | 226 |
+| Measured Gemini spend | $4.093 | $1.979 |
+| Measured Gemini spend per input post | $0.178 | $0.086 |
+
+The 3.5 run retained three deadline failures and one invalid-schema failure.
+The 3.8 run retained one deadline failure. An operational completion is not an
+accuracy claim: two completed 3.8 cases produced no final grounded place and
+remain outside the scored subset. One caption explicitly recommends 7even Seas
+Coffee Co., so that zero-place result is already a likely extraction miss rather
+than a valid no-result.
+
+The strict source-reviewed subset currently committed in this branch contains
+three cases and 80 required mentions. On those cases, 3.8 returned 80/80 required
+mentions and three exact sets; 3.5 returned 17/80 and two exact sets because the
+63-place stress case timed out. An extended eight-case acceptance subset,
+combining those source reviews with prior user-adjudicated failures and explicit
+caption expectations, contains 114 required mentions. It produced:
+
+| Extraction metric | Gemini 3.5 Flash HIGH/HIGH | Gemini 3.8 Flash MEDIUM/HIGH |
+|---|---:|---:|
+| Required mention recall | 38/114 (33.3%) | 113/114 (99.1%) |
+| Place-name precision | 100% | 100% |
+| Posts with at least one correct place | 6/8 (75.0%) | 7/8 (87.5%) |
+| Exact place sets | 5/8 (62.5%) | 7/8 (87.5%) |
+
+The eight-case score is encouraging but provisional: it is a known hard-case
+slice, not the independently labeled 50-100-post launch gate, and the 63-place
+post dominates mention-weighted recall. Gemini 3.8's one miss was the explicitly
+captioned 7even Seas Coffee Co. Exact-set and post-success rates therefore remain
+the primary comparison.
+
+### Controlled Bright Data to Gemini 3.8 replay
+
+The same seven acceptance cases were replayed through the production normalizer
+and Gemini 3.8 using Bright Data media. All seven model calls completed. The
+final grounding returned 112/113 required mentions, 100% place-name precision,
+seven posts with a useful result, and six exact sets. The single miss was Miya
+Miya on the Community Goods popup post. Gemini had recognized Miya Miya as a
+destination candidate from the identical caption, but the final deterministic
+grounding pass retained only Community Goods. That is evidence of a grounding
+decision difference, not missing scraper text, and it does not establish that
+Bright Data's lower image resolution caused the miss.
+
+The Bright replay cost $0.633 in Gemini usage. Across all runs in this benchmark,
+measured Gemini spend was $6.705. Apify's rounded account usage increased by
+approximately $0.36, including the batch acquisition and profile-alias
+enrichment; Bright Data still displayed $0 consumed. Total observed provider
+spend was therefore approximately $7.06, below the approved $10 cap.
+
+### Provisional gate decision
+
+1. Advance Gemini 3.8 Flash `MEDIUM/HIGH`; it has reached and exceeded 3.5 on
+   the available extraction evidence while costing about 52% less per corpus
+   post after retries.
+2. Keep Apify primary and add Bright Data fallback. Acquisition differences are
+   real, but they do not explain the large 3.5-versus-3.8 gap on shared inputs.
+3. Independently label the remaining 16 candidate posts before treating the
+   23-post completion rate as place accuracy.
+4. Repeat the finalists three times, then run the same frozen hints through the
+   locality-aware top-three Google Places resolver. No model choice can repair a
+   correct LA hint that the resolver maps to Texas.
 
 ## What the prior run already establishes
 
@@ -235,17 +357,18 @@ will become extraction training data.
 
 ## Immediate execution order
 
-1. Run the six static Gemini configurations against the saved eight-case
-   acquisition fixtures, recording quality, latency, attempts, and token usage.
-   Run 3.8 agentic processing on the video subset as a separate API-path test.
-2. Adjudicate the known Ojai/LA failures and add branch/locality truth.
-3. Expand the corpus to 50-100 posts before provider selection.
-4. Run the hard slice through Terra, Sol, Opus, and Fable using one frozen
-   keyframe/transcript package.
-5. Benchmark Apify versus Bright Data acquisition separately.
-6. Benchmark Google Places, locality-aware top-three behavior, MapKit, and the
-   experimental Resolution API separately.
-7. Compose only the winning layers and repeat each finalist three times.
+1. Independently adjudicate the remaining 16 candidate posts, including branch,
+   locality, entity type, and explicit no-result expectations where appropriate.
+2. Repeat Gemini 3.8 `MEDIUM/HIGH` three times on both frozen Apify and Bright
+   evidence. Keep 3.5 `HIGH/HIGH` as the control; do not expand weaker model
+   variants unless 3.8 regresses.
+3. Benchmark Google Places, locality-aware top-three behavior, MapKit, and the
+   experimental Resolution API on the same frozen 3.8 hints.
+4. Add Bright Data as a bounded fallback in the production acquisition layer,
+   then compose and repeat the two winning end-to-end stacks.
+5. Expand to the independently labeled 50-100-post launch gate. Run Terra, Sol,
+   Opus, or Fable only if Gemini 3.8 or the resolver misses the gate in a way a
+   challenger can plausibly fix.
 
 The live runs require provider credentials in the local process environment.
 The evaluator never writes those credentials into manifests or result files.
