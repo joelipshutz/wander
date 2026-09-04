@@ -1470,6 +1470,59 @@ final class PlaceImportMultiMatchSelectionTests: XCTestCase {
         XCTAssertEqual(review.committableCount, 2)
         XCTAssertEqual(review.primaryActionTitle, "Add 2 places")
     }
+
+    func testDuplicateReconciliationKeepsMixedMultiMatchRowsSelectable() throws {
+        let first = placeImportCandidate(name: "Jade Rabbit Downtown")
+        let second = placeImportCandidate(name: "Jade Rabbit Eastside")
+        let batch = PlaceImportBatch(
+            id: "mixed-duplicate-batch",
+            source: .instagram,
+            sourceName: "Instagram",
+            state: .ready,
+            totalCount: 1,
+            processedCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "jade-rabbit-source",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Jade Rabbit",
+                nameHint: "Jade Rabbit",
+                areaHint: "Portland",
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [first, second],
+            selectedCandidateID: first.id,
+            selectedCandidateIDs: [first.id, second.id]
+        )
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+            ),
+            resolver: FakePlaceImportResolver()
+        )
+
+        store.reconcileDuplicates(with: [
+            PlaceImportExistingPlace(
+                userPlaceID: "existing-first",
+                name: first.name,
+                latitude: first.latitude,
+                longitude: first.longitude,
+                sourceProvider: first.sourceProvider,
+                sourceProviderPlaceID: first.sourceProviderPlaceID
+            )
+        ])
+
+        XCTAssertEqual(store.item(id: item.id)?.state, .ready)
+        XCTAssertNil(store.item(id: item.id)?.duplicateUserPlaceID)
+        XCTAssertEqual(store.item(id: item.id)?.selectedCandidateIDs, [first.id, second.id])
+
+        store.toggleCandidateSelection(itemID: item.id, candidateID: first.id)
+        XCTAssertEqual(store.item(id: item.id)?.selectedCandidateIDs, [second.id])
+    }
 }
 
 final class PlaceImportSaveSyncNoticeTests: XCTestCase {
@@ -1575,6 +1628,102 @@ final class PlaceImportSaveSyncNoticeTests: XCTestCase {
             PlaceImportSaveSyncNotice.resolved(
                 batches: [batch],
                 syncStatesByUserPlaceID: ["save-one": .synced]
+            )
+        )
+    }
+
+    func testOlderFailureOutranksNewerPendingNotice() {
+        let older = syncNoticeBatch(
+            id: "older",
+            receiptID: "older-receipt",
+            userPlaceID: "failed-save",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+        let newer = syncNoticeBatch(
+            id: "newer",
+            receiptID: "newer-receipt",
+            userPlaceID: "pending-save",
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+
+        let notice = PlaceImportSaveSyncNotice.resolved(
+            batches: [newer, older],
+            syncStatesByUserPlaceID: [
+                "failed-save": .failed,
+                "pending-save": .pendingCreate
+            ]
+        )
+
+        XCTAssertEqual(notice?.receiptID, "older-receipt")
+        XCTAssertEqual(notice?.kind, .failed)
+    }
+
+    func testDismissedNoticeFallsThroughToAnotherReceipt() throws {
+        let newer = syncNoticeBatch(
+            id: "newer",
+            receiptID: "newer-receipt",
+            userPlaceID: "newer-save",
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+        let older = syncNoticeBatch(
+            id: "older",
+            receiptID: "older-receipt",
+            userPlaceID: "older-save",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+        let newestNotice = try XCTUnwrap(
+            PlaceImportSaveSyncNotice.resolved(
+                batches: [newer, older],
+                syncStatesByUserPlaceID: [
+                    "newer-save": .pendingCreate,
+                    "older-save": .pendingCreate
+                ]
+            )
+        )
+
+        let next = PlaceImportSaveSyncNotice.resolved(
+            batches: [newer, older],
+            syncStatesByUserPlaceID: [
+                "newer-save": .pendingCreate,
+                "older-save": .pendingCreate
+            ],
+            excludingNoticeIDs: [newestNotice.id]
+        )
+
+        XCTAssertEqual(next?.receiptID, "older-receipt")
+    }
+
+    private func syncNoticeBatch(
+        id: String,
+        receiptID: String,
+        userPlaceID: String,
+        createdAt: Date
+    ) -> PlaceImportBatch {
+        PlaceImportBatch(
+            id: id,
+            source: .instagram,
+            sourceName: nil,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+            state: .complete,
+            totalCount: 1,
+            processedCount: 1,
+            receipt: PlaceImportReceipt(
+                id: receiptID,
+                batchID: id,
+                sourceName: nil,
+                createdAt: createdAt,
+                entries: [
+                    PlaceImportReceiptEntry(
+                        itemID: "\(id)-item",
+                        displayName: id,
+                        displayArea: nil,
+                        status: .wannaGo,
+                        outcome: .added,
+                        userPlaceID: userPlaceID
+                    )
+                ],
+                destinationListID: nil
             )
         )
     }

@@ -648,8 +648,9 @@ struct WanderRootView: View {
         }
         guard let notice = PlaceImportSaveSyncNotice.resolved(
             batches: importStore.batches,
-            syncStatesByUserPlaceID: syncStates
-        ), !dismissedImportSaveSyncNoticeIDs.contains(notice.id)
+            syncStatesByUserPlaceID: syncStates,
+            excludingNoticeIDs: dismissedImportSaveSyncNoticeIDs
+        )
         else { return nil }
         return notice
     }
@@ -1429,6 +1430,7 @@ struct WanderRootView: View {
         let resumableIDs = importStore.batches.compactMap { batch -> String? in
             guard batch.automaticSaveRequested != true,
                   batch.receipt == nil,
+                  batch.reviewOpenedAt == nil,
                   !alreadyTracked.contains(batch.id)
             else { return nil }
             let activeItems = importStore.items(for: batch.id).filter {

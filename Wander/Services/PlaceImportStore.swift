@@ -2034,6 +2034,18 @@ final class PlaceImportStore: ObservableObject {
     func reconcileDuplicates(with existingPlaces: [PlaceImportExistingPlace]) {
         var changedBatchIDs = Set<String>()
         for index in items.indices where [.ready, .ambiguous, .duplicate].contains(items[index].state) {
+            // A multi-match row is independently selectable. One existing
+            // candidate must not collapse or disable its unsaved siblings;
+            // commit resolves duplicate status for each concrete candidate.
+            if items[index].candidates.count > 1 {
+                if items[index].state == .duplicate || items[index].duplicateUserPlaceID != nil {
+                    items[index].duplicateUserPlaceID = nil
+                    items[index].state = items[index].selectedCandidates.isEmpty ? .ambiguous : .ready
+                    items[index].updatedAt = .now
+                    changedBatchIDs.insert(items[index].batchID)
+                }
+                continue
+            }
             let match = items[index].candidates.lazy.compactMap { candidate in
                 existingPlaces.first(where: { self.existingPlaceMatches($0, candidate: candidate) })
                     .map { (candidate, $0) }

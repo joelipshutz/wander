@@ -1,7 +1,7 @@
 # REC-409 Complete Import Redesign
 
 Status: production SwiftUI implementation complete, validation in progress
-Linear: REC-409  
+Linear: REC-409
 Design branch: `codex/rec-409-complete-import-design`
 
 ## Outcome

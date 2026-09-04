@@ -2165,9 +2165,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
         XCTAssertTrue(banner.contains(".frame(width: 44, height: 44)"))
         XCTAssertTrue(banner.contains(".background(WanderTheme.surfaceRaised.color, in: Circle())"))
-        XCTAssertTrue(banner.contains(".alignmentGuide(.trailing) { $0.width / 2 }"))
-        XCTAssertTrue(banner.contains(".alignmentGuide(.top) { $0.height / 2 }"))
-        XCTAssertTrue(banner.contains(".contentShape(Circle())"))
+        XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(banner.contains(".offset(x: 11, y: -11)"))
+        XCTAssertFalse(banner.contains(".alignmentGuide(.trailing)"))
         XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
         XCTAssertTrue(banner.contains("Button(action: onOpen)"))
         let completionNotice = try XCTUnwrap(
@@ -2178,6 +2178,37 @@ final class NavigationContractTests: XCTestCase {
             completionNotice.contains(".padding(.horizontal, WanderTheme.spacing2)"),
             "Only the import-ready toast should receive the additional horizontal inset"
         )
+    }
+
+    func testCanonicalImportCommitPreservesUnselectedRowsAndAccountBoundary() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let review = try XCTUnwrap(
+            views.components(separatedBy: "struct PlaceImportCanonicalReviewScreen: View {").last?
+                .components(separatedBy: "struct PlaceImportHistoryScreen: View {").first
+        )
+
+        XCTAssertTrue(review.contains("@State private var commitTask: Task<Void, Never>?"))
+        XCTAssertTrue(review.contains(".interactiveDismissDisabled(isCommitting)"))
+        XCTAssertTrue(review.contains("PlaceImportCommitAuthorization.isValid("))
+        XCTAssertTrue(review.contains("guard canContinueCommit(expectedUserID: expectedUserID)"))
+        XCTAssertFalse(review.contains("dismissUnselectedRows()"))
+        XCTAssertFalse(review.contains("importStore.dismiss(itemID: item.id)"))
+    }
+
+    func testReceiptBackedHistoryKeepsActionableRowsInReview() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let destination = try XCTUnwrap(
+            views.components(separatedBy: "struct PlaceImportHistoryDestination: View {").last?
+                .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
+        )
+
+        XCTAssertTrue(destination.contains("PlaceImportReceiptPresentationPolicy.canUseStoredReceipt("))
+        XCTAssertTrue(destination.contains("activeItemCount: activeItemCount"))
+        XCTAssertTrue(destination.contains("![.saved, .dismissed].contains($0.state)"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {

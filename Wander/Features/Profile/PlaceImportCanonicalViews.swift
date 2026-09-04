@@ -19,6 +19,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
     @State private var stagedDetailSubmissions: [String: MapPlaceSaveSubmission] = [:]
     @State private var isCommitting = false
+    @State private var commitTask: Task<Void, Never>?
     @State private var showsCommitError = false
     @State private var didExpandInitialDetails = false
     @State private var rescueItem: PlaceImportItem?
@@ -95,6 +96,8 @@ struct PlaceImportCanonicalReviewScreen: View {
         .wanderScreen()
         .navigationTitle("Review places")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isCommitting)
+        .interactiveDismissDisabled(isCommitting)
         .sheet(item: $rescueItem) { item in
             PlaceImportRescueScreen(
                 item: item,
@@ -120,6 +123,9 @@ struct PlaceImportCanonicalReviewScreen: View {
         .task(id: selectionPreparationSignature) {
             if processingCount == 0 {
                 importStore.markReviewOpened(batchIDs: batchIDs)
+                for receipt in scopedBatches.compactMap(\.receipt) where receipt.presentedAt == nil {
+                    importStore.markReceiptPresented(receiptID: receipt.id)
+                }
             }
             importStore.prepareCandidateSelections(batchIDs: batchIDs)
             importStore.reconcileDuplicates(with: existingPlaces)
@@ -129,6 +135,11 @@ struct PlaceImportCanonicalReviewScreen: View {
                 didExpandInitialDetails = true
                 toggleDetails(item, candidate: item.selectedCandidate)
             }
+        }
+        .onDisappear {
+            commitTask?.cancel()
+            commitTask = nil
+            isCommitting = false
         }
     }
 
@@ -573,7 +584,6 @@ struct PlaceImportCanonicalReviewScreen: View {
     private func commit() {
         guard !isCommitting else { return }
         guard selectedCandidateCount > 0 else {
-            dismissUnselectedRows()
             onDone()
             return
         }
@@ -585,98 +595,116 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
 
         isCommitting = true
-        Task { @MainActor in
-            var receipts: [PlaceImportReceiptEntry] = []
-            for batch in scopedBatches {
-                let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
-                let destination = destinationList(for: batch, itemCount: batchItems.count)
-                var entries: [PlaceImportReceiptEntry] = []
-
-                for item in batchItems {
-                    let selected = item.isSelectedForImport ? item.selectedCandidates : []
-                    guard !selected.isEmpty else {
-                        if ![.saved, .dismissed].contains(item.state) {
-                            importStore.dismiss(itemID: item.id)
-                        }
-                        continue
-                    }
-
-                    var lastUserPlaceID: String?
-                    for candidate in selected {
-                        let existing = store.existingImportSave(matching: candidate)
-                        let status = item.stagedStatus
-                        let result: SaveResult
-                        if let stagedSubmission = stagedDetailSubmissions[item.id] {
-                            guard let stagedResult = await persistImportedPlaceSaveSubmission(
-                               stagedSubmission.replacingImportCandidate(
-                                   candidate,
-                                   sourceType: item.source.canonicalAddSourceType,
-                                   status: status
-                               ),
-                               sourceType: item.source.canonicalAddSourceType,
-                               store: store,
-                               backend: nil
-                            ) else {
-                                isCommitting = false
-                                showsCommitError = true
-                                return
-                            }
-                            result = stagedResult
-                        } else {
-                            result = store.saveImportedCandidate(
-                                candidate,
-                                status: status,
-                                visibility: .selfOnly,
-                                note: item.stagedNote,
-                                sourceType: item.source.canonicalAddSourceType,
-                                ratingScore: status == .been ? item.stagedRatingScore : nil,
-                                visitedAt: item.stagedVisitedAt ?? .now
-                            )
-                        }
-                        if let destination {
-                            _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
-                        }
-                        lastUserPlaceID = result.userPlaceID
-                        entries.append(
-                            PlaceImportReceiptEntry(
-                                itemID: item.id,
-                                displayName: candidate.name,
-                                displayArea: candidateArea(candidate),
-                                status: status,
-                                outcome: existing == nil ? .added : .existing,
-                                userPlaceID: result.userPlaceID
-                            )
-                        )
-                    }
-                    if let lastUserPlaceID {
-                        importStore.markSaved(itemID: item.id, userPlaceID: lastUserPlaceID)
-                    }
-                }
-
-                importStore.recordReceipt(
-                    batchID: batch.id,
-                    entries: entries,
-                    destinationListID: destination?.id
-                )
-                receipts.append(contentsOf: entries)
-            }
-            store.flushPersistence()
+        commitTask = Task { @MainActor in
+            await commitScopedImports(expectedUserID: expectedUserID)
             isCommitting = false
-            onDone()
-
-            guard auth.isSignedIn, !receipts.isEmpty else { return }
-            Task { @MainActor in
-                _ = await store.syncUnsyncedOwnPlaces(backend: backend)
-                _ = await store.syncPendingPlaceLists(backend: backend)
-                _ = await store.retryPendingSharedVisitInvites(backend: backend)
-            }
+            commitTask = nil
         }
     }
 
-    private func dismissUnselectedRows() {
-        for item in scopedItems where ![.saved, .dismissed].contains(item.state) {
-            importStore.dismiss(itemID: item.id)
+    @MainActor
+    private func commitScopedImports(expectedUserID: String) async {
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        var receipts: [PlaceImportReceiptEntry] = []
+        for batch in scopedBatches {
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
+            let destination = destinationList(for: batch, itemCount: batchItems.count)
+            var entries = batch.receipt?.entries ?? []
+
+            for item in batchItems {
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                let selected = item.isSelectedForImport ? item.selectedCandidates : []
+                guard !selected.isEmpty else {
+                    continue
+                }
+
+                entries.removeAll { $0.itemID == item.id && $0.outcome == .needsReview }
+
+                var lastUserPlaceID: String?
+                for candidate in selected {
+                    guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                    let existing = store.existingImportSave(matching: candidate)
+                    let status = item.stagedStatus
+                    let result: SaveResult
+                    if let stagedSubmission = stagedDetailSubmissions[item.id] {
+                        guard let stagedResult = await persistImportedPlaceSaveSubmission(
+                            stagedSubmission.replacingImportCandidate(
+                                candidate,
+                                sourceType: item.source.canonicalAddSourceType,
+                                status: status
+                            ),
+                            sourceType: item.source.canonicalAddSourceType,
+                            store: store,
+                            backend: nil
+                        ) else {
+                            showsCommitError = true
+                            return
+                        }
+                        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                        result = stagedResult
+                    } else {
+                        result = store.saveImportedCandidate(
+                            candidate,
+                            status: status,
+                            visibility: .selfOnly,
+                            note: item.stagedNote,
+                            sourceType: item.source.canonicalAddSourceType,
+                            ratingScore: status == .been ? item.stagedRatingScore : nil,
+                            visitedAt: item.stagedVisitedAt ?? .now
+                        )
+                    }
+                    if let destination {
+                        _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
+                    }
+                    lastUserPlaceID = result.userPlaceID
+                    entries.append(
+                        PlaceImportReceiptEntry(
+                            itemID: item.id,
+                            displayName: candidate.name,
+                            displayArea: candidateArea(candidate),
+                            status: status,
+                            outcome: existing == nil ? .added : .existing,
+                            userPlaceID: result.userPlaceID
+                        )
+                    )
+                }
+                if let lastUserPlaceID {
+                    importStore.markSaved(itemID: item.id, userPlaceID: lastUserPlaceID)
+                }
+            }
+
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            importStore.recordReceipt(
+                batchID: batch.id,
+                entries: entries,
+                destinationListID: destination?.id
+            )
+            receipts.append(contentsOf: entries)
         }
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        store.flushPersistence()
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        onDone()
+
+        guard case .signedIn = auth.state, !receipts.isEmpty else { return }
+        Task { @MainActor in
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            _ = await store.syncUnsyncedOwnPlaces(backend: backend)
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            _ = await store.syncPendingPlaceLists(backend: backend)
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            _ = await store.retryPendingSharedVisitInvites(backend: backend)
+        }
+    }
+
+    private func canContinueCommit(expectedUserID: String) -> Bool {
+        PlaceImportCommitAuthorization.isValid(
+            expectedUserID: expectedUserID,
+            authUserID: auth.state.session?.userID,
+            currentUserID: store.currentUser.id,
+            isCancelled: Task.isCancelled
+        )
     }
 
     private func destinationList(for batch: PlaceImportBatch, itemCount: Int) -> LocalPlaceList? {
@@ -888,13 +916,16 @@ struct PlaceImportHistoryScreen: View {
     }
 }
 
-private struct PlaceImportHistoryDestination: View {
+struct PlaceImportHistoryDestination: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchID: String
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        if importStore.batches.first(where: { $0.id == batchID })?.receipt != nil {
+        if importStore.batches.first(where: { $0.id == batchID })?.receipt != nil,
+           PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(
+               activeItemCount: activeItemCount
+           ) {
             PlaceImportReportScreen(importStore: importStore, batchID: batchID)
         } else {
             PlaceImportCanonicalReviewScreen(
@@ -903,6 +934,12 @@ private struct PlaceImportHistoryDestination: View {
                 onDone: { dismiss() }
             )
         }
+    }
+
+    private var activeItemCount: Int {
+        importStore.items(for: batchID).filter {
+            ![.saved, .dismissed].contains($0.state)
+        }.count
     }
 }
 
@@ -1121,6 +1158,9 @@ struct PlaceImportReportScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: batchID) {
             importStore.markReviewOpened(batchIDs: [batchID])
+            if let receipt = batch?.receipt, receipt.presentedAt == nil {
+                importStore.markReceiptPresented(receiptID: receipt.id)
+            }
         }
     }
 
@@ -1452,7 +1492,7 @@ struct PlaceImportSaveSyncBanner: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(width: 32, height: WanderTheme.tapMinimum)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")

@@ -139,8 +139,8 @@ result with “No places matched” and no retry control. The exact upstream cau
 still needs a failed source/build or provider-outcome logs. No hosted change
 was made during this investigation.
 
-Date: 2026-09-03  
-Runtime: iPhone 17 and 375×667 compact simulator, iOS 26.5  
+Date: 2026-09-03
+Runtime: iPhone 17 and 375×667 compact simulator, iOS 26.5
 Scope: production-view follow-up plus the earlier DEBUG SwiftUI state gallery
 
 ## Implementation follow-up — September 3

@@ -437,11 +437,7 @@ struct AddScreen: View {
                 }
             }
             .navigationDestination(isPresented: $showsImportReview) {
-                PlaceImportCanonicalReviewScreen(
-                    importStore: importStore,
-                    batchIDs: importReviewBatchIDs,
-                    onDone: onClose
-                )
+                importCompletionDestination
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
@@ -452,6 +448,27 @@ struct AddScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var importCompletionDestination: some View {
+        if importReviewBatchIDs.count == 1, let batchID = importReviewBatchIDs.first {
+            PlaceImportHistoryDestination(importStore: importStore, batchID: batchID)
+        } else if importReviewBatchIDs.allSatisfy({ batchID in
+            let activeCount = importStore.items(for: batchID).filter {
+                ![.saved, .dismissed].contains($0.state)
+            }.count
+            return importStore.batches.first(where: { $0.id == batchID })?.receipt != nil
+                && PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(activeItemCount: activeCount)
+        }) {
+            PlaceImportHistoryScreen(importStore: importStore)
+        } else {
+            PlaceImportCanonicalReviewScreen(
+                importStore: importStore,
+                batchIDs: importReviewBatchIDs,
+                onDone: onClose
+            )
         }
     }
 

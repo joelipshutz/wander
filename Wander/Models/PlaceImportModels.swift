@@ -304,13 +304,15 @@ struct PlaceImportSaveSyncNotice: Equatable, Identifiable {
     static func resolved(
         batches: [PlaceImportBatch],
         syncStatesByUserPlaceID: [String: SyncState],
-        excludingReceiptIDs: Set<String> = []
+        excludingNoticeIDs: Set<String> = []
     ) -> PlaceImportSaveSyncNotice? {
         let receipts = batches
             .compactMap(\.receipt)
-            .filter { !excludingReceiptIDs.contains($0.id) }
             .sorted { $0.createdAt > $1.createdAt }
 
+        // Failures always outrank pending work, even when the failure belongs
+        // to an older receipt. A dismissed pending notice may still surface if
+        // it later transitions to a failure because its notice identity changes.
         for receipt in receipts {
             let ids = Array(Set(receipt.entries.compactMap(\.userPlaceID))).sorted()
             let failed = ids.filter {
@@ -318,13 +320,17 @@ struct PlaceImportSaveSyncNotice: Equatable, Identifiable {
                 return state == .failed || state == .serverDenied
             }
             if !failed.isEmpty {
-                return PlaceImportSaveSyncNotice(
+                let notice = PlaceImportSaveSyncNotice(
                     receiptID: receipt.id,
                     userPlaceIDs: failed,
                     kind: .failed
                 )
+                if !excludingNoticeIDs.contains(notice.id) { return notice }
             }
+        }
 
+        for receipt in receipts {
+            let ids = Array(Set(receipt.entries.compactMap(\.userPlaceID))).sorted()
             let pending = ids.filter {
                 guard let state = syncStatesByUserPlaceID[$0] else { return false }
                 return state == .localOnly
@@ -333,11 +339,12 @@ struct PlaceImportSaveSyncNotice: Equatable, Identifiable {
                     || state == .pendingDelete
             }
             if !pending.isEmpty {
-                return PlaceImportSaveSyncNotice(
+                let notice = PlaceImportSaveSyncNotice(
                     receiptID: receipt.id,
                     userPlaceIDs: pending,
                     kind: .pending
                 )
+                if !excludingNoticeIDs.contains(notice.id) { return notice }
             }
         }
         return nil

@@ -94,11 +94,15 @@ struct PlaceImportHubScreen: View {
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var isStarting = false
+    @State private var isClosing = false
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: WanderTheme.spacing3) {
+        VStack(spacing: 0) {
+            importHeader
+
+            ScrollView {
+                VStack(spacing: WanderTheme.spacing3) {
                 Text("Import places")
                     .font(.system(size: 28, weight: .black, design: .rounded))
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -202,27 +206,28 @@ struct PlaceImportHubScreen: View {
                 }
                 .buttonStyle(.plain)
 
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing2)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .fixedSize(horizontal: false, vertical: true)
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: PlaceImportHubContentHeightKey.self,
-                        value: proxy.size.height
-                    )
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing2)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .fixedSize(horizontal: false, vertical: true)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: PlaceImportHubContentHeightKey.self,
+                            value: proxy.size.height
+                        )
+                    }
                 }
             }
+            .onPreferenceChange(PlaceImportHubContentHeightKey.self) { height in
+                // Include the header's badge clearance; the presenter adds the
+                // same 44pt control row it reserved for the previous toolbar.
+                onContentHeightChange(height + 12)
+            }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .onPreferenceChange(PlaceImportHubContentHeightKey.self) { height in
-            // Include the header's badge clearance; the presenter adds the
-            // same 44pt control row it reserved for the previous toolbar.
-            onContentHeightChange(height + 12)
-        }
-        .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -233,28 +238,22 @@ struct PlaceImportHubScreen: View {
             Text(errorMessage ?? "Try again.")
         }
         .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            importHeader
-        }
     }
 
     // A native toolbar clips badges to its content bounds. Keep the same
     // 44pt glass controls in the sheet so badges can straddle their borders.
     private var importHeader: some View {
         HStack {
-            Button {
-                isInputFocused = false
-                if let cancelAction {
-                    cancelAction()
-                } else {
-                    dismiss()
-                }
-            } label: {
+            Button(action: closeImport) {
                 Image(systemName: "xmark")
                     .font(.system(size: 20, weight: .medium))
                     .frame(width: 44, height: 44)
                     .wanderGlassCapsule(tone: .neutral)
             }
+            // The interactive keyboard-dismiss gesture attached to the form's
+            // scroll view can consume the first touch. A simultaneous tap keeps
+            // this fixed header's close action single-tap and idempotent.
+            .simultaneousGesture(TapGesture().onEnded(closeImport))
             .foregroundStyle(WanderTheme.textMuted.color)
             .accessibilityLabel("Close import")
             Spacer()
@@ -296,6 +295,16 @@ struct PlaceImportHubScreen: View {
 
     private var canStart: Bool {
         !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func closeImport() {
+        guard !isClosing else { return }
+        isClosing = true
+        if let cancelAction {
+            cancelAction()
+        } else {
+            dismiss()
+        }
     }
 
     @ViewBuilder
@@ -442,7 +451,15 @@ struct PlaceImportCompletionBanner: View {
         }
         .shadow(color: WanderTheme.textInk.color.opacity(0.15), radius: 10, y: 5)
         .overlay(alignment: .topTrailing) {
-            Button(action: onDismiss) {
+            ZStack(alignment: .topTrailing) {
+                Button(action: onDismiss) {
+                    Color.clear
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Dismiss import notification")
+                .accessibilityIdentifier("import.notice.dismiss")
+
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -450,13 +467,11 @@ struct PlaceImportCompletionBanner: View {
                     .background(WanderTheme.surfaceRaised.color, in: Circle())
                     .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
                     .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 3, y: 1)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
+                    .offset(x: 11, y: -11)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .accessibilityLabel("Dismiss import notification")
-            .accessibilityIdentifier("import.notice.dismiss")
-            .alignmentGuide(.trailing) { $0.width / 2 }
-            .alignmentGuide(.top) { $0.height / 2 }
+            .frame(width: 44, height: 44, alignment: .topTrailing)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .contain)

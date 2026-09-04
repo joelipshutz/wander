@@ -38,13 +38,15 @@ final class ImportFormRefinementUITests: XCTestCase {
         // Liquid Glass accessibility bounds differ from SwiftUI's layout
         // anchor by a few points; the rendered gap should remain about 10pt.
         // The primary button's accessibility frame excludes its 12pt vertical
-        // content padding; the floating X is centered on the actual card edge.
+        // content padding. The X glyph is centered on the actual card edge,
+        // while its full 44pt hit target remains inside the card and window.
         let cardTop = review.frame.minY - 12
         XCTAssertEqual(cardTop - filterRow.frame.maxY, 10, accuracy: 3)
-        XCTAssertEqual(dismiss.frame.midY, cardTop, accuracy: 1)
-        XCTAssertEqual(dismiss.frame.midX, review.frame.maxX + 44, accuracy: 1)
+        XCTAssertEqual(dismiss.frame.minY, cardTop, accuracy: 1)
+        XCTAssertEqual(dismiss.frame.maxX, review.frame.maxX + 44, accuracy: 1)
         XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
         XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+        XCTAssertLessThanOrEqual(dismiss.frame.maxX, app.frame.maxX)
         keepScreenshot("Import notice — anchored below filters")
         dismiss.tap()
         XCTAssertTrue(dismiss.waitForNonExistence(timeout: 5))
