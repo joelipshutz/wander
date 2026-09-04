@@ -67,7 +67,7 @@ Screen hierarchy rule:
 Map:
 
 1. Search: place, vibe, area, contact, or username.
-2. Map viewport with filtered pins and clusters.
+2. Map viewport with filtered individual pins.
 3. Filter chips: you, social/following, friends, been, wanna go.
 4. Selected place sheet.
 5. Bottom nav.
@@ -300,8 +300,8 @@ Pin states:
 
 Rules:
 
-- Clusters preserve owner/status breakdown.
-- Mixed clusters open a grouped sheet.
+- Keep places as individual pins; do not condense them into numbered clusters.
+- Keep the active pin and its title above neighboring pins.
 - Recency may later use opacity/tone, not a new primary color.
 - VoiceOver labels include owner, status, category, and place name.
 

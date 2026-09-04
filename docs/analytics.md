@@ -89,6 +89,11 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
 
+The shared add-to-lists picker attributes successful additions to its entry
+surface: `map` for Map and place-profile actions, `discover` for Discover search
+results. Both existing-list selection and new-list creation emit
+`place_list_item_added` and the matching `list_place_added` engagement action.
+
 The push worker also emits three server-side operational events. They use
 `platform=server`, `source=push_notification_worker`, and a constant
 `distinct_id=notification_operations`; the server analytics path never exports
