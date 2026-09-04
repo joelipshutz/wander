@@ -1553,6 +1553,40 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(glassSurface.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(glassSurface.contains(".glassEffect("))
         XCTAssertTrue(glassSurface.contains(".background(.ultraThinMaterial, in: shape)"))
+        XCTAssertTrue(glassSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
+        XCTAssertTrue(glassSurface.contains("if reduceTransparency"))
+        XCTAssertTrue(glassSurface.contains("selected ? brandMode.accent : brandMode.raisedBackground"))
+        XCTAssertTrue(glassSurface.contains("@Environment(\\.colorSchemeContrast)"))
+        XCTAssertTrue(glassSurface.contains("colorSchemeContrast == .increased"))
+    }
+
+    func testSharedGlassAndMapSearchProvideOpaqueReduceTransparencyFallbacks() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertEqual(
+            theme.components(separatedBy: "@Environment(\\.accessibilityReduceTransparency)").count - 1,
+            3
+        )
+        XCTAssertTrue(theme.contains("var opaqueFallbackBase: Color"))
+        XCTAssertEqual(
+            theme.components(separatedBy: ".background(tone.opaqueFallbackBase").count - 1,
+            3
+        )
+
+        let mapSearchSurface = try sourceSection(
+            map,
+            after: "private struct MapSearchCapsuleSurfaceModifier: ViewModifier",
+            before: "private extension View"
+        )
+        XCTAssertTrue(mapSearchSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
+        XCTAssertTrue(mapSearchSurface.contains("if reduceTransparency"))
+        XCTAssertTrue(mapSearchSurface.contains(".background(astirBrandMode.raisedBackground, in: shape)"))
+        XCTAssertTrue(mapSearchSurface.contains("@Environment(\\.colorSchemeContrast)"))
     }
 
     func testPlaceProfileHeaderOnlyShowsRecMeUserAttribution() throws {
