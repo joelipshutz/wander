@@ -2056,10 +2056,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("importStore: importStore"))
         XCTAssertTrue(addScreen.contains("AddImportEntrySection("))
         XCTAssertTrue(importViews.contains("PlaceImportHubScreen("))
-        XCTAssertTrue(addScreen.contains("PlaceImportAdaptiveReviewScreen("))
+        XCTAssertTrue(addScreen.contains("PlaceImportCanonicalReviewScreen("))
         XCTAssertTrue(addScreen.contains("case .importReview(let batchIDs):"))
         XCTAssertFalse(addScreen.contains("PlaceImportSourceScreen("))
-        XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
+        XCTAssertTrue(addScreen.contains("PlaceImportHistoryScreen(importStore: importStore)"))
         XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 520"))
         XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 570"))
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
@@ -2077,7 +2077,8 @@ final class NavigationContractTests: XCTestCase {
                 ".accessibilityLabel(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
-        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input, axis: .vertical)"))
+        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
+        XCTAssertFalse(importViews.contains("TextField(\"Paste a link…\", text: $input, axis: .vertical)"))
         XCTAssertTrue(
             importViews.contains(
                 "Text(\"Paste a link from Instagram, Google Maps, or TikTok\")"
@@ -2092,22 +2093,122 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains(".importReview(batchIDs: batchIDs)"))
         XCTAssertTrue(root.contains("completionAction: beginInteractivePlaceImport"))
         XCTAssertTrue(root.contains("selectedTab = .map"))
-        XCTAssertTrue(root.contains("PlaceImportCompletionBanner(notice: notice)"))
+        XCTAssertTrue(root.contains("PlaceImportCompletionBanner(notice: notice, onDismiss: dismissImportCompletionBanner)"))
+        XCTAssertTrue(root.contains("overlayPreferenceValue(MapFilterBoundsKey.self)"))
+        XCTAssertTrue(root.contains("proxy[$0].maxY + 10"))
         XCTAssertTrue(root.contains("notifyImportMatchingFinished("))
         XCTAssertTrue(root.contains("addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)"))
         XCTAssertTrue(importViews.contains("private let sources: [PlaceImportSource] = [.googleMaps, .instagram, .tiktok]"))
         XCTAssertFalse(importViews.contains("ForEach(PlaceImportSource.allCases)"))
         XCTAssertTrue(importViews.contains("WanderCategoryEmoji("))
-        XCTAssertTrue(addScreen.contains("importEntryHeight: CGFloat = 410"))
+        XCTAssertTrue(addScreen.contains("importEntryHeight: CGFloat = 440"))
+        XCTAssertTrue(root.contains("ImportContentFittingSheet(height: importHubRestingHeight)"))
+        XCTAssertTrue(importViews.contains(".custom(identifier: compactID)"))
+        XCTAssertTrue(importViews.contains("sheet.invalidateDetents()"))
+        XCTAssertTrue(root.contains(".id(importHubPresentationID)"))
+        XCTAssertTrue(root.contains("importHubPresentationID = UUID()"))
+        XCTAssertTrue(root.contains("importHubRestingHeight = AddSheetLayout.importEntryHeight"))
+        XCTAssertTrue(importViews.contains("key: PlaceImportHubContentHeightKey.self"))
+        XCTAssertTrue(root.contains("importHubRestingHeight = ceil(contentHeight) + 44"))
+        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
+        XCTAssertFalse(importViews.contains("text: $input, axis: .vertical"))
+        XCTAssertTrue(importViews.contains(".simultaneousGesture(TapGesture().onEnded { isInputFocused = true })"))
+        XCTAssertTrue(importViews.contains("importStore.recentImportBadgeCount"))
+        XCTAssertFalse(importViews.contains("Label(\"Previous imports\""))
         XCTAssertTrue(importViews.contains("struct PlaceImportHubOverlay: View"))
         XCTAssertTrue(importViews.contains("bottomLeadingRadius: 0"))
         XCTAssertTrue(importViews.contains(".ignoresSafeArea(.container, edges: [.horizontal, .bottom])"))
         XCTAssertTrue(root.contains("onOpenImportHub: presentImportHub"))
         XCTAssertTrue(addScreen.contains("importCompletionHeight: CGFloat = 710"))
-        XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark.circle\")"))
+        XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark\")"))
         XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))
+    }
+
+    func testBothImportReviewDestinationsAcknowledgeOpeningButHistoryGridDoesNot() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let review = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportCanonicalReviewScreen: View {")
+            .last?.components(separatedBy: "private var reviewHeader").first)
+        XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
+        let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
+            .last?.components(separatedBy: "private func sourceLinkCard").first)
+        XCTAssertTrue(report.contains(".task(id: batchID)"))
+        XCTAssertTrue(report.contains("importStore.markReviewOpened(batchIDs: [batchID])"))
+        let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
+            .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
+        XCTAssertFalse(history.contains("markReviewOpened"))
+    }
+
+    func testImportHistoryBadgeAndNoticeDismissAnchorToTopRight() throws {
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let header = try XCTUnwrap(importViews.components(separatedBy: "private var importHeader: some View {").last?
+            .components(separatedBy: "private var errorBinding").first)
+        XCTAssertTrue(importViews.contains(".toolbar(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(header.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(header.contains(".wanderGlassCapsule(tone: .neutral)"))
+        XCTAssertTrue(header.contains(".alignmentGuide(.leading) { $0.width / 2 - 44 }"))
+        XCTAssertTrue(header.contains(".alignmentGuide(.top) { $0.height / 2 }"))
+        XCTAssertTrue(header.contains("importStore.recentImportBadgeCount"))
+        XCTAssertFalse(header.contains(".clipShape("), "The badge must not be clipped with the glass capsule")
+        XCTAssertTrue(importViews.contains("imports matching or awaiting review"))
+
+        let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
+            .components(separatedBy: "struct ImportContentFittingSheet").first)
+        XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
+        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(banner.contains(".background(WanderTheme.surfaceRaised.color, in: Circle())"))
+        XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(banner.contains(".offset(x: 11, y: -11)"))
+        XCTAssertFalse(banner.contains(".alignmentGuide(.trailing)"))
+        XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
+        XCTAssertTrue(banner.contains("Button(action: onOpen)"))
+        let completionNotice = try XCTUnwrap(
+            root.components(separatedBy: "if let notice = activeImportCompletionNotice {").last?
+                .components(separatedBy: "if let notice = activeImportSaveSyncNotice {").first
+        )
+        XCTAssertTrue(
+            completionNotice.contains(".padding(.horizontal, WanderTheme.spacing2)"),
+            "Only the import-ready toast should receive the additional horizontal inset"
+        )
+    }
+
+    func testCanonicalImportCommitPreservesUnselectedRowsAndAccountBoundary() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let review = try XCTUnwrap(
+            views.components(separatedBy: "struct PlaceImportCanonicalReviewScreen: View {").last?
+                .components(separatedBy: "struct PlaceImportHistoryScreen: View {").first
+        )
+
+        XCTAssertTrue(review.contains("@State private var commitTask: Task<Void, Never>?"))
+        XCTAssertTrue(review.contains(".interactiveDismissDisabled(isCommitting)"))
+        XCTAssertTrue(review.contains("PlaceImportCommitAuthorization.isValid("))
+        XCTAssertTrue(review.contains("guard canContinueCommit(expectedUserID: expectedUserID)"))
+        XCTAssertFalse(review.contains("dismissUnselectedRows()"))
+        XCTAssertFalse(review.contains("importStore.dismiss(itemID: item.id)"))
+    }
+
+    func testReceiptBackedHistoryKeepsActionableRowsInReview() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let destination = try XCTUnwrap(
+            views.components(separatedBy: "struct PlaceImportHistoryDestination: View {").last?
+                .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
+        )
+
+        XCTAssertTrue(destination.contains("PlaceImportReceiptPresentationPolicy.canUseStoredReceipt("))
+        XCTAssertTrue(destination.contains("activeItemCount: activeItemCount"))
+        XCTAssertTrue(destination.contains("![.saved, .dismissed].contains($0.state)"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {
@@ -2267,8 +2368,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains(".frame(width: 32, height: 32)"))
         XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = true"))
         XCTAssertFalse(mapScreen.contains("didSelectStatus"))
-        XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"))
-        XCTAssertTrue(mapScreen.contains("return status == .wannaGo ? \"Wanna go\" : \"Check in\""))
+        XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"), "The shared editor retains its top spacing.")
+        XCTAssertTrue(mapScreen.contains("return \"Add to Wanna\""), "New Wanna saves use the shared Add to Wanna action.")
+        XCTAssertTrue(mapScreen.contains("return \"Update Wanna\""), "Existing Wanna saves use the shared Update Wanna action.")
+        XCTAssertTrue(mapScreen.contains("return context.saveTitle"), "Check-in actions use their contextual save title.")
         XCTAssertTrue(mapScreen.contains(".overlay(alignment: .bottom)"))
         XCTAssertTrue(mapScreen.contains("WanderTheme.spacing16 + WanderTheme.spacing12"))
         XCTAssertTrue(mapScreen.contains(".shadow(color: Color.black.opacity(0.2), radius: 16, y: 8)"))
@@ -2338,7 +2441,7 @@ final class NavigationContractTests: XCTestCase {
         )
         let removalConfirmation = try sourceSection(
             mapScreen,
-            after: ".alert(context.removeConfirmationTitle",
+            after: ".alert(removeConfirmationTitle",
             before: "} message:"
         )
 
@@ -2367,8 +2470,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(destructiveButton.contains(".background(WanderTheme.stateError.color)"))
         XCTAssertFalse(destructiveButton.contains(".clipShape(Capsule())"))
 
-        XCTAssertTrue(removalConfirmation.contains("Button(context.removeTitle, role: .destructive)"))
-        XCTAssertTrue(removalConfirmation.contains("removeSave()"))
+        XCTAssertTrue(removalConfirmation.contains("Button(removeTitle, role: .destructive, action: onRemoveConfirmed)"))
+        XCTAssertTrue(mapScreen.contains("onRemoveConfirmed: removeSave"))
         XCTAssertTrue(mapScreen.contains("Text(context.removeConfirmationMessage)"))
     }
 
@@ -4433,7 +4536,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(authGate.contains(".espressoConfirmation"))
     }
 
-    func testEverySaveEntryPointUsesOneSharedBottomSheet() throws {
+    func testEverySaveEntryPointUsesSharedEditorWithInlineImportDetails() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -4498,7 +4601,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
         XCTAssertTrue(placeProfile.contains("MapPlaceSaveFlowSheet("))
         XCTAssertFalse(placeProfile.contains("MapPlaceSaveEditor("))
-        XCTAssertFalse(mapScreen.contains("MapPlaceSaveEditorPresentation"))
+        XCTAssertTrue(mapScreen.contains("MapPlaceSaveEditorPresentation"))
         XCTAssertFalse(placeProfile.contains("presentation: .attached"))
         XCTAssertTrue(placeProfile.contains(".sheet(item: attachedSaveSheetContext)"))
         XCTAssertTrue(placeProfile.contains("draft: resolvedAttachedSaveDraft(for: context)"))
@@ -4533,8 +4636,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("placeTypeSection"))
         XCTAssertTrue(sharedEditor.contains("visitParticipationSections"))
         XCTAssertFalse(sharedEditor.contains("presentation == .attached"))
-        XCTAssertFalse(sharedEditor.contains("presentation == .sheet"))
+        XCTAssertTrue(sharedEditor.contains("case .inlineStaging, .inlineSaving:"))
         XCTAssertTrue(sharedEditor.contains("onContentExpansionRequested"))
+
+        let canonicalImport = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        XCTAssertTrue(canonicalImport.contains("presentation: .inlineStaging"))
+        XCTAssertTrue(canonicalImport.contains("presentation: .inlineSaving"))
+        XCTAssertFalse(canonicalImport.contains(".sheet(item: $saveRoute"))
+        XCTAssertTrue(canonicalImport.contains("stagedDetailSubmissions[item.id] = submission"))
+        XCTAssertTrue(sharedEditor.contains("onSubmissionChange?(currentSubmission)"))
+        let inlineEditor = try sourceSection(
+            sharedEditor,
+            after: "private var inlineEditor: some View",
+            before: "private func prepareEditor"
+        )
+        XCTAssertTrue(inlineEditor.contains("singleScreenContent"))
+        XCTAssertFalse(inlineEditor.contains("NavigationStack"))
+        XCTAssertFalse(inlineEditor.contains("ScrollView"))
 
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))

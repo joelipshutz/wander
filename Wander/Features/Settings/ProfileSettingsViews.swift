@@ -25,6 +25,7 @@ struct ProfileSettingsHome: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var importStore: PlaceImportStore
 
     @State private var showsAccountManagement = false
     @State private var showsNotifications = false
@@ -122,6 +123,7 @@ struct ProfileSettingsHome: View {
             mapSection
             notificationsSection
             privacySection
+            importsSection
             if isDebugSettingsEntitled {
                 featureFlagsSection
             }
@@ -266,6 +268,17 @@ struct ProfileSettingsHome: View {
                 }
             }
             .foregroundStyle(WanderTheme.textInk.color)
+        }
+    }
+
+    private var importsSection: some View {
+        Section("Imports") {
+            NavigationLink {
+                PlaceImportHistoryScreen(importStore: importStore)
+            } label: {
+                Label("Import history", systemImage: "clock.arrow.circlepath")
+            }
+            .accessibilityIdentifier("settings.importHistory")
         }
     }
 

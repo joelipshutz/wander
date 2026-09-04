@@ -6238,7 +6238,9 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
-        visitedAt: Date = .now
+        visitedAt: Date = .now,
+        plannedDate: Date? = nil,
+        attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         if let existingPlace = place(matching: candidate),
            let existingUserPlace = currentUserPlace(for: existingPlace) {
@@ -6257,6 +6259,8 @@ final class WanderStore: ObservableObject {
                 sourceType: sourceType,
                 ratingScore: ratingScore,
                 visitedAt: visitedAt,
+                plannedDate: plannedDate,
+                attributes: attributes,
                 requestsProductUpsell: false
             )
         }
@@ -6269,6 +6273,8 @@ final class WanderStore: ObservableObject {
             sourceType: sourceType,
             ratingScore: ratingScore,
             visitedAt: visitedAt,
+            plannedDate: plannedDate,
+            attributes: attributes,
             requestsProductUpsell: false
         )
     }

@@ -297,6 +297,8 @@ struct WanderRootView: View {
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
     @State private var isPresentingImportHub: Bool
+    @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
+    @State private var importHubPresentationID = UUID()
     @State private var addSheetDetent: PresentationDetent
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
@@ -333,6 +335,7 @@ struct WanderRootView: View {
     @State private var surfacedImportCompletionBatchIDs: Set<String> = []
     @State private var activeImportCompletionNotice: PlaceImportCompletionNotice?
     @State private var importCompletionBannerTask: Task<Void, Never>?
+    @State private var dismissedImportSaveSyncNoticeIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
@@ -397,6 +400,14 @@ struct WanderRootView: View {
             initialValue: opensImportHub ? false : Self.resolvedInitialAddPresentation()
         )
         _isPresentingImportHub = State(initialValue: opensImportHub)
+        #if DEBUG
+        if launchArguments.contains("-WanderImportNoticeUITest") {
+            _activeImportCompletionNotice = State(initialValue: PlaceImportCompletionNotice(
+                batchIDs: ["notice-fixture"], foundCount: 13, matchedCount: 13,
+                needsReviewCount: 0, sourceRetryCount: 0, sourceName: "Instagram"
+            ))
+        }
+        #endif
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
         _placeProfileFloatingActionVariant = State(
@@ -521,6 +532,7 @@ struct WanderRootView: View {
             }
         }
         .environmentObject(store)
+        .environmentObject(importStore)
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
@@ -559,13 +571,30 @@ struct WanderRootView: View {
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub
         )
-        .overlay {
+        .overlayPreferenceValue(MapFilterBoundsKey.self) { filterBounds in
             GeometryReader { proxy in
                 VStack(spacing: WanderTheme.spacing2) {
                     if let notice = activeImportCompletionNotice {
-                        PlaceImportCompletionBanner(notice: notice) {
+                        PlaceImportCompletionBanner(notice: notice, onDismiss: dismissImportCompletionBanner) {
                             openImportCompletionNotice(notice)
                         }
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .transition(
+                            accessibilityReduceMotion
+                                ? .opacity
+                                : .move(edge: .top).combined(with: .opacity)
+                        )
+                    }
+
+                    if let notice = activeImportSaveSyncNotice {
+                        PlaceImportSaveSyncBanner(
+                            notice: notice,
+                            isOffline: isImportSyncOffline,
+                            retryAction: retryImportedPlaceSaves,
+                            dismissAction: {
+                                dismissedImportSaveSyncNoticeIDs.insert(notice.id)
+                            }
+                        )
                         .transition(
                             accessibilityReduceMotion
                                 ? .opacity
@@ -585,7 +614,9 @@ struct WanderRootView: View {
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.top, proxy.safeAreaInsets.top + WanderTheme.spacing2)
+                .padding(.top, selectedTab == .map
+                    ? filterBounds.map { proxy[$0].maxY + 10 } ?? 10
+                    : 64)
                 .zIndex(10)
             }
         }
@@ -611,23 +642,58 @@ struct WanderRootView: View {
         Label(tab.title, systemImage: tab.systemImage)
     }
 
+    private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
+        let syncStates = store.currentUserVisiblePlaces.reduce(into: [String: SyncState]()) { result, visible in
+            result[visible.userPlace.id] = visible.userPlace.syncState
+        }
+        guard let notice = PlaceImportSaveSyncNotice.resolved(
+            batches: importStore.batches,
+            syncStatesByUserPlaceID: syncStates,
+            excludingNoticeIDs: dismissedImportSaveSyncNoticeIDs
+        )
+        else { return nil }
+        return notice
+    }
+
+    private func retryImportedPlaceSaves() {
+        guard auth.isSignedIn else {
+            auth.presentGate(for: .syncPlace)
+            return
+        }
+        Task { @MainActor in
+            _ = await store.retryFailedOwnPlaceSyncs(backend: backend)
+            _ = await store.syncPendingPlaceLists(backend: backend)
+        }
+    }
+
+    private var isImportSyncOffline: Bool {
+        if case .offline = auth.state {
+            return true
+        }
+        return false
+    }
+
     private var presentedRoot: some View {
         tabRoot
-        .overlay {
-            if isPresentingImportHub {
-                PlaceImportHubOverlay(
+        .sheet(isPresented: $isPresentingImportHub) {
+            NavigationStack {
+                PlaceImportHubScreen(
                     importStore: importStore,
                     completionAction: beginInteractivePlaceImport,
                     inboxAction: openImportInboxFromHub,
-                    cancelAction: dismissImportHub
+                    cancelAction: dismissImportHub,
+                    onContentHeightChange: { contentHeight in
+                        // Include the native toolbar and drag handle above the
+                        // measured content; keep .large available for dragging.
+                        guard contentHeight > 0 else { return }
+                        importHubRestingHeight = ceil(contentHeight) + 44
+                    }
                 )
-                .transition(
-                    accessibilityReduceMotion
-                        ? .opacity
-                        : .move(edge: .bottom).combined(with: .opacity)
-                )
-                .zIndex(200)
             }
+            .id(importHubPresentationID)
+            .background(ImportContentFittingSheet(height: importHubRestingHeight))
+            .presentationDragIndicator(.visible)
+            .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .walkthroughPresenterScrim(
             isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
@@ -697,6 +763,7 @@ struct WanderRootView: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                         .environmentObject(pushNotifications)
+                        .environmentObject(importStore)
                 }
             }
         }
@@ -1363,6 +1430,7 @@ struct WanderRootView: View {
         let resumableIDs = importStore.batches.compactMap { batch -> String? in
             guard batch.automaticSaveRequested != true,
                   batch.receipt == nil,
+                  batch.reviewOpenedAt == nil,
                   !alreadyTracked.contains(batch.id)
             else { return nil }
             let activeItems = importStore.items(for: batch.id).filter {
@@ -1586,14 +1654,8 @@ struct WanderRootView: View {
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.22)) {
             activeImportCompletionNotice = notice
         }
-        importCompletionBannerTask?.cancel()
-        importCompletionBannerTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(7))
-            guard !Task.isCancelled,
-                  activeImportCompletionNotice?.id == notice.id
-            else { return }
-            dismissImportCompletionBanner()
-        }
+        // Remains until Review or X. Dismissing the notice does not mark the
+        // report reviewed or cancel the import.
     }
 
     private func openImportCompletionNotice(_ notice: PlaceImportCompletionNotice) {
@@ -2158,6 +2220,11 @@ struct WanderRootView: View {
     private func presentImportHub() {
         selectedTab = .map
         isPresentingAdd = false
+        // UIKit can retain the dragged/keyboard-expanded detent between sheets.
+        // A new presentation identity plus an explicit selection always starts
+        // at the measured content height, without preventing manual expansion.
+        importHubPresentationID = UUID()
+        importHubRestingHeight = AddSheetLayout.importEntryHeight
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.24)) {
             isPresentingImportHub = true
         }

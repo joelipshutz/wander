@@ -3312,6 +3312,85 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
+    func testInlineImportDetailsPersistPlannedDateAndAttributesLocally() async throws {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "inline-import-details", name: "Inline Details Cafe", category: "coffee",
+            latitude: 34.123, longitude: -118.321, confidence: 0.99
+        )
+        let plannedDate = Date.now.addingTimeInterval(86_400)
+        let submission = MapPlaceSaveSubmission(
+            context: .importCandidate(
+                candidate, sourceType: .link, status: .wannaGo,
+                defaultVisibility: .selfOnly
+            ),
+            candidate: candidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            ratingScore: nil,
+            note: "Try the patio",
+            attributes: [PlaceAttributeDraft(
+                questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                valueType: "personal_label", stringValues: ["Weekend"]
+            )],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            plannedDate: plannedDate
+        )
+
+        let persisted = await persistImportedPlaceSaveSubmission(
+            submission, sourceType: .link, store: store, backend: nil
+        )
+        let result = try XCTUnwrap(persisted)
+        let visible = try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            $0.userPlace.id == result.userPlaceID
+        })
+        XCTAssertEqual(visible.userPlace.note, "Try the patio")
+        XCTAssertEqual(visible.userPlace.status, .wannaGo)
+        XCTAssertEqual(
+            visible.userPlace.plannedDate.map { WannaGoDate.storageString(from: $0) },
+            WannaGoDate.storageString(from: plannedDate)
+        )
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).contains {
+            $0.questionKey == PlaceMemoryAttributeKeys.personalLabels
+                && $0.valueJSON.contains("Weekend")
+        })
+    }
+
+    func testImportSubmissionHonorsLatestRowStatusAfterDetailsCollapse() {
+        let candidate = PlaceCandidate(
+            id: "inline-import-mode", name: "Mode Cafe", category: "coffee",
+            latitude: 34.123, longitude: -118.321, confidence: 0.99
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: .importCandidate(
+                candidate, sourceType: .link, status: .been,
+                defaultVisibility: .selfOnly
+            ),
+            candidate: candidate,
+            status: .been,
+            visibility: .selfOnly,
+            ratingScore: 4.5,
+            note: "Keep this note",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: ["user_friend"],
+            reconcilesSharedVisitInvitees: false
+        )
+
+        let wanna = submission.replacingImportCandidate(
+            candidate, sourceType: .link, status: .wannaGo
+        )
+
+        XCTAssertEqual(wanna.status, .wannaGo)
+        XCTAssertEqual(wanna.context.initialStatus, .wannaGo)
+        XCTAssertEqual(wanna.note, "Keep this note")
+        XCTAssertNil(wanna.ratingScore)
+        XCTAssertTrue(wanna.inviteeUserIDs.isEmpty)
+        XCTAssertTrue(wanna.photoAttachments.isEmpty)
+    }
+
     func testAutomaticImportDoesNotCreateASecondCheckInForAnExistingBeenPlace() {
         let store = makeStore()
         let candidate = PlaceCandidate(

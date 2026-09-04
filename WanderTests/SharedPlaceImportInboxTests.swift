@@ -25,6 +25,12 @@ final class SharedPlaceImportSourceDetectorTests: XCTestCase {
         )
         XCTAssertEqual(
             SharedPlaceImportSourceDetector.source(
+                for: "https://www.snapchat.com/p/example"
+            ),
+            .snapchat
+        )
+        XCTAssertEqual(
+            SharedPlaceImportSourceDetector.source(
                 for: "https://maps.apple/p/example"
             ),
             .textNotes
@@ -462,11 +468,52 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
-        XCTAssertTrue(shareController.contains("Save this place"))
-        XCTAssertTrue(shareController.contains("[\"Wanna\", \"Check In\"]"))
-        XCTAssertTrue(shareController.contains("try inbox.capture(inputs, saveIntent: intent)"))
-        XCTAssertTrue(shareController.contains("extensionContext?.completeRequest"))
+        XCTAssertTrue(shareController.contains("Import places"))
+        XCTAssertTrue(shareController.contains("Start import"))
+        XCTAssertTrue(shareController.contains("linkField.text = sharedLinkString"))
+        XCTAssertTrue(shareController.contains("try inbox.capture(captureInputs)"))
+        XCTAssertFalse(shareController.contains(".open(appURL"))
+        XCTAssertTrue(shareController.contains("completeRequest(returningItems: nil)"))
+        XCTAssertTrue(shareController.contains("countdownDuration: TimeInterval = 5"))
+        XCTAssertTrue(shareController.contains("countdownWorkItem?.cancel()"))
+        XCTAssertTrue(shareController.contains("!UIAccessibility.isVoiceOverRunning"))
+        XCTAssertTrue(shareController.contains("!UIAccessibility.isSwitchControlRunning"))
+        XCTAssertTrue(shareController.contains("!isClosing, !isSubmitting, canStartImport"))
+        XCTAssertTrue(shareController.contains("linkField.isUserInteractionEnabled = false"))
+        XCTAssertTrue(shareController.contains("linkField.textColor = Palette.muted"))
+        XCTAssertTrue(shareController.contains("cardHeight?.constant = height"))
+        XCTAssertFalse(shareController.contains("[\"Wanna\", \"Check In\"]"))
+        XCTAssertFalse(shareController.contains("saveIntent:"))
         XCTAssertFalse(shareController.contains("share-extension-captured"))
+    }
+
+    func testShareCountdownFillsLeftToRightWithTranslucentBlackBehindTheButton() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let controller = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderShareExtension/ShareViewController.swift"
+            )
+        )
+
+        XCTAssertTrue(controller.contains("startButton.configuration = .plain()"))
+        XCTAssertFalse(controller.contains("startButton.configuration = .glass()"))
+        XCTAssertTrue(controller.contains("startContainer.backgroundColor = UIColor(white: 0.06, alpha: 1)"))
+        XCTAssertTrue(controller.contains("countdownFill.backgroundColor = UIColor(white: 0.36, alpha: 0.85)"))
+        XCTAssertTrue(controller.contains("countdownFill.leftAnchor.constraint(equalTo: startContainer.leftAnchor)"))
+        XCTAssertTrue(controller.contains("countdownFill.topAnchor.constraint(equalTo: startContainer.topAnchor)"))
+        XCTAssertTrue(controller.contains("countdownFill.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor)"))
+        XCTAssertTrue(controller.contains("startContainer.clipsToBounds = true"))
+        XCTAssertTrue(controller.contains("countdownFill.isUserInteractionEnabled = false"))
+        let fillInsertion = try XCTUnwrap(controller.range(of: "startContainer.addSubview(countdownFill)"))
+        let buttonInsertion = try XCTUnwrap(controller.range(of: "startContainer.addSubview(startButton)"))
+        XCTAssertLessThan(fillInsertion.lowerBound, buttonInsertion.lowerBound)
+        XCTAssertTrue(controller.contains("fillWidth?.constant = 0"))
+        XCTAssertTrue(controller.contains("fillWidth?.constant = startContainer.bounds.width"))
+        XCTAssertTrue(controller.contains("countdownDuration: TimeInterval = 5"))
+        XCTAssertTrue(controller.contains("UIView.animate(withDuration: Self.countdownDuration"))
+        XCTAssertTrue(controller.contains("[.curveLinear, .beginFromCurrentState, .allowUserInteraction]"))
     }
 
     private func propertyList(_ url: URL) throws -> [String: Any] {
