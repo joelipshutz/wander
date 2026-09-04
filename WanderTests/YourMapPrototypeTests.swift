@@ -125,6 +125,49 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertEqual(insights.returnMagnets.map(\.visitCount), insights.returnMagnets.map(\.visitCount).sorted(by: >))
     }
 
+    func testGeographyExcludesUnknownsIndependentlyAndKeepsAllPlacesDenominator() {
+        let values = [
+            (" Los Angeles ", "United States"),
+            ("Los Angeles", "Unknown country"),
+            ("Unknown city", "Canada"),
+            (" \n ", "Canada"),
+            ("uNkNoWn CiTy", " UNKNOWN COUNTRY "),
+            ("Unknown", "Unknown region"),
+            ("Paris", "France"),
+            ("Paris", ""),
+        ]
+        let places = values.enumerated().map { index, value in
+            geographyPlace(id: index, city: value.0, country: value.1)
+        }
+        let insights = YourMapPrototypeInsights(places: places, now: Date())
+
+        XCTAssertEqual(insights.totalCount, 8)
+        XCTAssertEqual(insights.cityBreakdown.map(\.title), ["Los Angeles", "Paris"])
+        XCTAssertEqual(insights.cityBreakdown.map(\.count), [2, 2])
+        XCTAssertEqual(insights.cityBreakdown.map(\.fraction), [0.25, 0.25])
+        XCTAssertEqual(insights.countryBreakdown.map(\.title), ["Canada", "France", "United States"])
+        XCTAssertEqual(insights.countryBreakdown.map(\.count), [2, 1, 1])
+        XCTAssertEqual(insights.countryBreakdown.map(\.fraction), [0.25, 0.125, 0.125])
+    }
+
+    func testGeographyWithOnlyMissingLocationsHasNoRankings() {
+        let places = [geographyPlace(id: 0, city: "Unknown city", country: "Unknown country")]
+        for input in [places, []] {
+            let insights = YourMapPrototypeInsights(places: input, now: Date())
+            XCTAssertTrue(insights.cityBreakdown.isEmpty)
+            XCTAssertTrue(insights.countryBreakdown.isEmpty)
+            XCTAssertEqual(insights.totalCount, input.count)
+        }
+    }
+
+    private func geographyPlace(id: Int, city: String, country: String) -> YourMapPrototypePlace {
+        YourMapPrototypePlace(
+            id: "geography-\(id)", name: "Fixture", latitude: 0, longitude: 0,
+            status: .been, category: "Restaurants", city: city, country: country,
+            tags: [], rating: 4, visitCount: 1, lastVisitedAt: Date(timeIntervalSince1970: 1_787_623_200)
+        )
+    }
+
     func testSavedLensKeepsTheExactFilterRecipeAndExplainsIt() {
         let lens = YourMapPrototypeLens(
             timeRange: .thisYear,
