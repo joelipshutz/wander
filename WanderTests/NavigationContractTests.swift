@@ -2141,6 +2141,9 @@ final class NavigationContractTests: XCTestCase {
         let importViews = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
         )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
         let header = try XCTUnwrap(importViews.components(separatedBy: "private var importHeader: some View {").last?
             .components(separatedBy: "private var errorBinding").first)
         XCTAssertTrue(importViews.contains(".toolbar(.hidden, for: .navigationBar)"))
@@ -2162,6 +2165,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(banner.contains(".contentShape(Circle())"))
         XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
         XCTAssertTrue(banner.contains("Button(action: onOpen)"))
+        let completionNotice = try XCTUnwrap(
+            root.components(separatedBy: "if let notice = activeImportCompletionNotice {").last?
+                .components(separatedBy: "if let notice = activeImportSaveSyncNotice {").first
+        )
+        XCTAssertTrue(
+            completionNotice.contains(".padding(.horizontal, WanderTheme.spacing2)"),
+            "Only the import-ready toast should receive the additional horizontal inset"
+        )
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {

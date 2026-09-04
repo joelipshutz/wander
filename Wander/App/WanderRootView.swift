@@ -574,6 +574,7 @@ struct WanderRootView: View {
                         PlaceImportCompletionBanner(notice: notice, onDismiss: dismissImportCompletionBanner) {
                             openImportCompletionNotice(notice)
                         }
+                        .padding(.horizontal, WanderTheme.spacing2)
                         .transition(
                             accessibilityReduceMotion
                                 ? .opacity
