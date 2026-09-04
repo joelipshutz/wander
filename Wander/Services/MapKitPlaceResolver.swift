@@ -74,6 +74,30 @@ final class CoreFirstVisitParkLocationContextProvider: FirstVisitParkLocationCon
 }
 
 @MainActor
+enum ExternalPlaceSearchEligibilityPolicy {
+    static func allows(
+        pointOfInterestCategory: MKPointOfInterestCategory?,
+        name: String?,
+        requestedCategory: String?
+    ) -> Bool {
+        guard let pointOfInterestCategory else { return false }
+        guard let requestedCategory,
+              !requestedCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return true
+        }
+        guard let providerCategory = WanderPlaceCategory.primary(
+            for: pointOfInterestCategory,
+            name: name
+        ) else {
+            return false
+        }
+        return WanderPlaceCategory.normalizedPrimaryCategory(providerCategory)
+            == WanderPlaceCategory.normalizedPrimaryCategory(requestedCategory)
+    }
+}
+
+@MainActor
 final class MapKitPlaceResolver: PlaceCandidateResolving {
     private let locationProvider: CurrentLocationProviding
 
@@ -117,6 +141,17 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
     }
 
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        try await resolveEntry(input, requiresProviderPlaceEvidence: false)
+    }
+
+    func resolveSearchEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        try await resolveEntry(input, requiresProviderPlaceEvidence: true)
+    }
+
+    private func resolveEntry(
+        _ input: ManualPlaceInput,
+        requiresProviderPlaceEvidence: Bool
+    ) async throws -> [PlaceCandidate] {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return [] }
 
@@ -130,7 +165,11 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         for query in searchPlan.queries {
             let request = MKLocalSearch.Request()
             request.naturalLanguageQuery = query
-            request.resultTypes = [.pointOfInterest, .address]
+            if requiresProviderPlaceEvidence {
+                request.resultTypes = .pointOfInterest
+            } else {
+                request.resultTypes = [.pointOfInterest, .address]
+            }
             if let coordinate = searchPlan.coordinateHint {
                 request.region = MKCoordinateRegion(
                     center: coordinate,
@@ -152,7 +191,10 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
 
             do {
                 let response = try await MKLocalSearch(request: request).start()
-                for candidate in mapItems(response.mapItems, fallbackCategory: category, limit: perQueryLimit)
+                let eligibleItems = requiresProviderPlaceEvidence
+                    ? searchEligibleMapItems(response.mapItems, requestedCategory: category)
+                    : response.mapItems
+                for candidate in mapItems(eligibleItems, fallbackCategory: category, limit: perQueryLimit)
                     where candidateIDs.insert(candidate.id).inserted {
                     candidates.append(candidate)
                 }
@@ -167,6 +209,19 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             throw PlaceResolutionError.noCandidates
         }
         return Array(candidates.prefix(8))
+    }
+
+    private func searchEligibleMapItems(
+        _ items: [MKMapItem],
+        requestedCategory: String?
+    ) -> [MKMapItem] {
+        return items.filter { item in
+            ExternalPlaceSearchEligibilityPolicy.allows(
+                pointOfInterestCategory: item.pointOfInterestCategory,
+                name: item.name,
+                requestedCategory: requestedCategory
+            )
+        }
     }
 
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] {

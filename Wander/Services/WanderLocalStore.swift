@@ -6025,6 +6025,20 @@ final class WanderStore: ObservableObject {
         )
     }
 
+    func externalSearchCandidates(
+        name: String,
+        areaHint: String?,
+        category: String?
+    ) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolveSearchEntry(
+            ManualPlaceInput(
+                name: name,
+                areaHint: areaHint,
+                category: category
+            )
+        )
+    }
+
     func photoTextCandidates(for query: String) async throws -> [PlaceCandidate] {
         try await placeResolver.resolveManualEntry(
             ManualPlaceInput(

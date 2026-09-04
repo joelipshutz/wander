@@ -1,3 +1,4 @@
+import MapKit
 import XCTest
 @testable import Wander
 
@@ -627,6 +628,350 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(request.categories, [WanderPlaceCategory.coffeeTeaSweets])
         XCTAssertTrue(request.favoriteOnly)
         XCTAssertEqual(request.scope, .everyone)
+    }
+
+    func testExternalPlannerUsesCategoryFallbackForConsumedOnlySearch() throws {
+        let filters = DeterministicFilterParser.filters(
+            query: "coffee worth crossing town for",
+            schema: DiscoverFilterSchema()
+        )
+
+        let input = try XCTUnwrap(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: filters.query,
+                filters: filters
+            )
+        )
+
+        XCTAssertEqual(input.name, "coffee")
+        XCTAssertEqual(input.category, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertNil(input.areaHint)
+    }
+
+    func testExternalPlannerPreservesSpecificCategoryTerm() throws {
+        let filters = DeterministicFilterParser.filters(
+            query: "best pastries and bakeries",
+            schema: DiscoverFilterSchema()
+        )
+
+        let input = try XCTUnwrap(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: filters.query,
+                filters: filters
+            )
+        )
+
+        XCTAssertEqual(input.name, "bakery")
+        XCTAssertEqual(input.category, WanderPlaceCategory.coffeeTeaSweets)
+    }
+
+    func testExternalPlannerUsesCategoryTermForSuggestedHikeSearch() throws {
+        let filters = DeterministicFilterParser.filters(
+            query: "easy weekend hikes",
+            schema: DiscoverFilterSchema()
+        )
+
+        let input = try XCTUnwrap(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: filters.query,
+                filters: filters
+            )
+        )
+
+        XCTAssertEqual(input.name, "hike")
+        XCTAssertEqual(input.category, WanderPlaceCategory.outdoorsNature)
+    }
+
+    func testExternalPlannerForwardsOutOfAreaSearch() throws {
+        let filters = DiscoverFilters(
+            query: "coffee in NYC",
+            categories: [WanderPlaceCategory.coffeeTeaSweets],
+            area: "NYC"
+        )
+
+        let input = try XCTUnwrap(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: filters.query,
+                filters: filters
+            )
+        )
+
+        XCTAssertEqual(input.name, "coffee")
+        XCTAssertEqual(input.areaHint, "NYC")
+        XCTAssertEqual(input.category, WanderPlaceCategory.coffeeTeaSweets)
+    }
+
+    func testExternalPlannerPreservesNamedPlaceContainingCategoryWord() throws {
+        let filters = DeterministicFilterParser.filters(
+            query: "Courage Bagels",
+            schema: DiscoverFilterSchema()
+        )
+
+        let input = try XCTUnwrap(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: filters.query,
+                filters: filters
+            )
+        )
+
+        XCTAssertEqual(input.name, "courage bagels")
+        XCTAssertNil(input.category)
+    }
+
+    func testExternalPlannerKeepsSocialOnlyConstraintsInsideRecme() {
+        let ownerFilters = DiscoverFilters(
+            query: "Ryan's coffee",
+            ownerQuery: "ryan"
+        )
+        let statusFilters = DiscoverFilters(
+            query: "coffee I visited",
+            statuses: [.been]
+        )
+        let relationshipFilters = DiscoverFilters(
+            query: "friends coffee",
+            relationship: .mutual
+        )
+
+        XCTAssertNil(DiscoverExternalPlaceSearchPlanner.input(query: ownerFilters.query, filters: ownerFilters))
+        XCTAssertNil(DiscoverExternalPlaceSearchPlanner.input(query: statusFilters.query, filters: statusFilters))
+        XCTAssertNil(
+            DiscoverExternalPlaceSearchPlanner.input(
+                query: relationshipFilters.query,
+                filters: relationshipFilters
+            )
+        )
+    }
+
+    func testExternalEligibilityRequiresProviderPlaceAndCategoryEvidence() {
+        XCTAssertFalse(
+            ExternalPlaceSearchEligibilityPolicy.allows(
+                pointOfInterestCategory: nil,
+                name: "123 Main Street",
+                requestedCategory: WanderPlaceCategory.coffeeTeaSweets
+            )
+        )
+        XCTAssertTrue(
+            ExternalPlaceSearchEligibilityPolicy.allows(
+                pointOfInterestCategory: .cafe,
+                name: "Dayglow",
+                requestedCategory: WanderPlaceCategory.coffeeTeaSweets
+            )
+        )
+        XCTAssertFalse(
+            ExternalPlaceSearchEligibilityPolicy.allows(
+                pointOfInterestCategory: .park,
+                name: "Echo Park Lake",
+                requestedCategory: WanderPlaceCategory.coffeeTeaSweets
+            )
+        )
+        XCTAssertTrue(
+            ExternalPlaceSearchEligibilityPolicy.allows(
+                pointOfInterestCategory: .park,
+                name: "Echo Park Lake",
+                requestedCategory: nil
+            )
+        )
+    }
+
+    func testDiscoverRankingLetsExactExternalPlaceBeatWeakTrustedMatch() throws {
+        let trusted = makeVisiblePlace(
+            id: "trusted-context",
+            name: "Harbor House",
+            note: "Dayglow was mentioned here"
+        )
+        let trustedGroups = VisiblePlaceGrouping.groups(
+            from: [trusted],
+            currentUserID: "viewer"
+        )
+        let exactExternal = makeCandidate("external-dayglow", name: "Dayglow")
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "Dayglow",
+            filters: DiscoverFilters(query: "Dayglow"),
+            trusted: trustedGroups,
+            recme: [],
+            external: [exactExternal]
+        )
+
+        guard case .external(let first) = try XCTUnwrap(ordered.first) else {
+            return XCTFail("The exact outside place should outrank a contextual saved match.")
+        }
+        XCTAssertEqual(first.id, exactExternal.id)
+    }
+
+    func testDiscoverRankingKeepsEquallyRelevantTrustedPlaceFirst() throws {
+        let trusted = makeVisiblePlace(id: "trusted-dayglow", name: "Dayglow")
+        let trustedGroups = VisiblePlaceGrouping.groups(
+            from: [trusted],
+            currentUserID: "viewer"
+        )
+        let exactExternal = makeCandidate("external-dayglow", name: "Dayglow")
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "Dayglow",
+            filters: DiscoverFilters(query: "Dayglow"),
+            trusted: trustedGroups,
+            recme: [],
+            external: [exactExternal]
+        )
+
+        guard case .trusted(let first) = try XCTUnwrap(ordered.first) else {
+            return XCTFail("Trust should break an equal-relevance tie.")
+        }
+        XCTAssertEqual(first.primary.id, trusted.id)
+    }
+
+    func testDiscoverCategoryRankingFillsAfterTrustedAndRecmeResults() {
+        let trusted = makeVisiblePlace(
+            id: "trusted-coffee",
+            name: "Circuit",
+            category: "Coffee shop"
+        )
+        let trustedGroups = VisiblePlaceGrouping.groups(
+            from: [trusted],
+            currentUserID: "viewer"
+        )
+        let recme = makeCandidate("recme-coffee", name: "Maru Coffee")
+        let external = makeCandidate("external-coffee", name: "Dayglow")
+        let filters = DiscoverFilters(
+            query: "coffee",
+            categories: [WanderPlaceCategory.coffeeTeaSweets]
+        )
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: filters.query,
+            filters: filters,
+            trusted: trustedGroups,
+            recme: [recme],
+            external: [external]
+        )
+
+        XCTAssertEqual(
+            ordered.map { candidate in
+                switch candidate {
+                case .trusted: "trusted"
+                case .recme: "recme"
+                case .external: "external"
+                }
+            },
+            ["trusted", "recme", "external"]
+        )
+    }
+
+    func testDiscoverRankingDeduplicatesPhysicalPlaceAcrossAllCorpora() {
+        let trusted = makeVisiblePlace(
+            id: "trusted-dayglow",
+            name: "Dayglow",
+            sourceProviderPlaceID: "shared-dayglow"
+        )
+        let trustedGroups = VisiblePlaceGrouping.groups(
+            from: [trusted],
+            currentUserID: "viewer"
+        )
+        let recme = makeCandidate("recme-dayglow", name: "Dayglow")
+        let external = makeCandidate("external-dayglow", name: "Dayglow")
+        let sharedRecme = PlaceCandidate(
+            id: recme.id,
+            name: recme.name,
+            category: recme.category,
+            latitude: recme.latitude,
+            longitude: recme.longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "shared-dayglow",
+            confidence: recme.confidence
+        )
+        let sharedExternal = PlaceCandidate(
+            id: external.id,
+            name: external.name,
+            category: external.category,
+            latitude: external.latitude,
+            longitude: external.longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "shared-dayglow",
+            confidence: external.confidence
+        )
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "Dayglow",
+            filters: DiscoverFilters(query: "Dayglow"),
+            trusted: trustedGroups,
+            recme: [sharedRecme],
+            external: [sharedExternal]
+        )
+
+        XCTAssertEqual(ordered.count, 1)
+        guard case .trusted = ordered[0] else {
+            return XCTFail("The visible trusted save should own the deduplicated place.")
+        }
+    }
+
+    func testDiscoverRankingDeduplicatesNearbySameNameWithoutSharedProviderID() {
+        let recme = PlaceCandidate(
+            id: "recme-dayglow",
+            name: "Dayglow",
+            category: "Coffee shop",
+            latitude: 34,
+            longitude: -118,
+            sourceProvider: "google_places",
+            sourceProviderPlaceID: "google-dayglow",
+            confidence: 1
+        )
+        let external = PlaceCandidate(
+            id: "external-dayglow",
+            name: "Dayglow",
+            category: "Coffee shop",
+            latitude: 34.0005,
+            longitude: -118.0005,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: nil,
+            confidence: 1
+        )
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "Dayglow",
+            filters: DiscoverFilters(query: "Dayglow"),
+            trusted: [],
+            recme: [recme],
+            external: [external]
+        )
+
+        XCTAssertEqual(ordered.count, 1)
+        guard case .recme = ordered[0] else {
+            return XCTFail("The rec.me row should own a nearby same-name duplicate.")
+        }
+    }
+
+    func testDiscoverRankingKeepsSameNamePlacesOutsideCoordinateTolerance() {
+        let recme = PlaceCandidate(
+            id: "recme-dayglow",
+            name: "Dayglow",
+            category: "Coffee shop",
+            latitude: 34,
+            longitude: -118,
+            sourceProvider: "google_places",
+            sourceProviderPlaceID: "google-dayglow",
+            confidence: 1
+        )
+        let external = PlaceCandidate(
+            id: "external-dayglow",
+            name: "Dayglow",
+            category: "Coffee shop",
+            latitude: 34.002,
+            longitude: -118.002,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: nil,
+            confidence: 1
+        )
+
+        let ordered = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: "Dayglow",
+            filters: DiscoverFilters(query: "Dayglow"),
+            trusted: [],
+            recme: [recme],
+            external: [external]
+        )
+
+        XCTAssertEqual(ordered.count, 2)
     }
 
     func testRecmePlannerTreatsFriendsAsHardMutualScope() {
