@@ -2108,7 +2108,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
         XCTAssertFalse(importViews.contains("text: $input, axis: .vertical"))
         XCTAssertTrue(importViews.contains(".simultaneousGesture(TapGesture().onEnded { isInputFocused = true })"))
-        XCTAssertTrue(importViews.contains("importStore.unreviewedImportCount"))
+        XCTAssertTrue(importViews.contains("importStore.recentImportBadgeCount"))
         XCTAssertFalse(importViews.contains("Label(\"Previous imports\""))
         XCTAssertTrue(importViews.contains("struct PlaceImportHubOverlay: View"))
         XCTAssertTrue(importViews.contains("bottomLeadingRadius: 0"))
@@ -2119,6 +2119,28 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))
+    }
+
+    func testImportHistoryBadgeAndNoticeDismissAnchorToTopRight() throws {
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let historyIcon = try XCTUnwrap(importViews.components(separatedBy: "private var historyIcon: some View {").last?
+            .components(separatedBy: "private var errorBinding").first)
+        XCTAssertTrue(historyIcon.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(historyIcon.contains(".overlay(alignment: .topTrailing)"))
+        XCTAssertTrue(historyIcon.contains("importStore.recentImportBadgeCount"))
+        XCTAssertFalse(historyIcon.contains(".offset("), "The badge should anchor to the button, not an offset icon")
+        XCTAssertTrue(importViews.contains("imports matching or awaiting review"))
+
+        let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
+            .components(separatedBy: "struct ImportContentFittingSheet").first)
+        XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
+        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44, alignment: .topTrailing)"))
+        XCTAssertTrue(banner.contains(".frame(width: 12, height: 12)\n                    .padding(6)"))
+        XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
+        XCTAssertTrue(banner.contains("Button(action: onOpen)"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {

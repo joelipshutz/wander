@@ -247,7 +247,7 @@ struct PlaceImportHubScreen: View {
                     historyIcon
                 }
                 .accessibilityLabel("Import history")
-                .accessibilityValue("\(importStore.unreviewedImportCount) imports awaiting review")
+                .accessibilityValue("\(importStore.recentImportBadgeCount) imports matching or awaiting review")
                 .accessibilityIdentifier("import.history")
 
                 Button {
@@ -267,16 +267,16 @@ struct PlaceImportHubScreen: View {
 
     private var historyIcon: some View {
         Image(systemName: "clock.arrow.circlepath")
+            .frame(width: 44, height: 44)
             .overlay(alignment: .topTrailing) {
-                if importStore.unreviewedImportCount > 0 {
-                    Text(importStore.unreviewedImportCount.formatted())
+                if importStore.recentImportBadgeCount > 0 {
+                    Text(importStore.recentImportBadgeCount.formatted())
                         .font(.system(size: 10, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 17, minHeight: 17)
                         .background(WanderTheme.terracottaDark.color, in: Capsule())
-                        .offset(x: 10, y: -8)
                         .accessibilityHidden(true)
                 }
             }
@@ -393,14 +393,7 @@ struct PlaceImportCompletionBanner: View {
                 .padding(.leading, WanderTheme.spacing3)
             }
             .accessibilityLabel("\(notice.bannerTitle). \(notice.bannerDetail). Review import")
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Dismiss import notification")
-            .accessibilityIdentifier("import.notice.dismiss")
+            .padding(.trailing, 44)
         }
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
@@ -415,6 +408,19 @@ struct PlaceImportCompletionBanner: View {
                 .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
         }
         .shadow(color: WanderTheme.textInk.color.opacity(0.15), radius: 10, y: 5)
+        .overlay(alignment: .topTrailing) {
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(width: 12, height: 12)
+                    .padding(6)
+                    .frame(width: 44, height: 44, alignment: .topTrailing)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Dismiss import notification")
+            .accessibilityIdentifier("import.notice.dismiss")
+        }
         .buttonStyle(.plain)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("import.notice")

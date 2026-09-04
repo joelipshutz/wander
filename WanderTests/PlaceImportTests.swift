@@ -100,30 +100,39 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
         let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot())
         let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
         XCTAssertEqual(store.unreviewedImportCount, 2)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
         _ = store.batches // Visiting the history grid is read-only.
         XCTAssertEqual(store.unreviewedImportCount, 2)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
         store.markReviewOpened(batchIDs: ["first"])
         XCTAssertEqual(store.unreviewedImportCount, 1)
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
         let firstDate = store.batches.first { $0.id == "first" }?.reviewOpenedAt
         XCTAssertNotNil(firstDate)
         store.markReviewOpened(batchIDs: ["first"])
         XCTAssertEqual(store.batches.first { $0.id == "first" }?.reviewOpenedAt, firstDate)
         let restored = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
         XCTAssertEqual(restored.unreviewedImportCount, 1)
+        XCTAssertEqual(restored.recentImportBadgeCount, 1)
         restored.markReviewOpened(batchIDs: ["second"])
         XCTAssertEqual(restored.unreviewedImportCount, 0)
+        XCTAssertEqual(restored.recentImportBadgeCount, 0)
     }
 
     func testOpeningDuringMatchingDoesNotAcknowledgeTheFutureReview() async throws {
         let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot(state: .queued))
         let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
         XCTAssertEqual(store.unreviewedImportCount, 0)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
         store.markReviewOpened(batchIDs: ["first"])
         XCTAssertNil(store.batches.first { $0.id == "first" }?.reviewOpenedAt)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
         await store.waitForProcessing(batchID: "first")
         XCTAssertEqual(store.unreviewedImportCount, 1)
+        XCTAssertEqual(store.recentImportBadgeCount, 2, "Ready and still-matching imports each count once")
         store.markReviewOpened(batchIDs: ["first"])
         XCTAssertEqual(store.unreviewedImportCount, 0)
+        XCTAssertEqual(store.recentImportBadgeCount, 1, "The other import is still matching")
     }
 
     func testOldSnapshotWithoutReviewMarkerDecodesAndAccountSwitchClearsBadge() throws {
@@ -138,8 +147,10 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
         XCTAssertTrue(decoded.batches.allSatisfy { $0.reviewOpenedAt == nil })
         let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: decoded))
         XCTAssertEqual(store.unreviewedImportCount, 2)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
         store.bind(to: "another-account")
         XCTAssertEqual(store.unreviewedImportCount, 0)
+        XCTAssertEqual(store.recentImportBadgeCount, 0)
     }
 
     func testCancelledAndSourceRetryOnlyImportsDoNotGetReadyBadges() {
@@ -148,6 +159,47 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
         snapshot.items[1].kind = .sourceRetry
         let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: snapshot))
         XCTAssertEqual(store.unreviewedImportCount, 0)
+        XCTAssertEqual(store.recentImportBadgeCount, 0)
+    }
+
+    func testRecentsBadgeIncrementsOnEnqueueAndStaysStableThroughMatching() async throws {
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(), resolver: FakePlaceImportResolver()
+        )
+        let first = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        let second = try store.enqueue(source: .textNotes, text: "Bakery, Los Angeles")
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
+        await store.waitForProcessing(batchID: first)
+        await store.waitForProcessing(batchID: second)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
+        store.markReviewOpened(batchIDs: [second])
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+    }
+
+    func testMatchingBadgeSurvivesRestartAndDoesNotAcknowledgeResultsEarly() throws {
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot(state: .queued))
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        store.markReviewOpened(batchIDs: ["first", "second"])
+        let restored = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(restored.recentImportBadgeCount, 2)
+        XCTAssertTrue(restored.batches.allSatisfy { $0.reviewOpenedAt == nil })
+        restored.bind(to: "another-account")
+        XCTAssertEqual(restored.recentImportBadgeCount, 0)
+    }
+
+    func testMatchingBadgeRemainsVisibleForRetryWhileCancelledImportsStayExcluded() {
+        var snapshot = snapshot(state: .queued)
+        snapshot.batches[0].state = .processing
+        snapshot.batches[0].reviewOpenedAt = .now
+        snapshot.batches[1].state = .cancelled
+        // The presentation helper accepts a processing batch before rows arrive.
+        // A restored store independently finalizes empty batches, so retain its
+        // queued source row when testing a live retry through the store.
+        XCTAssertTrue(PlaceImportHistoryPresentation.isMatching(batch: snapshot.batches[0], items: []))
+        XCTAssertFalse(PlaceImportHistoryPresentation.isMatching(batch: snapshot.batches[1], items: snapshot.items))
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: snapshot))
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
     }
 
     private func snapshot(state: PlaceImportItemState = .ready) -> PlaceImportSnapshot {

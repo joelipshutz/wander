@@ -37,6 +37,10 @@ final class ImportFormRefinementUITests: XCTestCase {
         // Liquid Glass accessibility bounds differ from SwiftUI's layout
         // anchor by a few points; the rendered gap should remain about 10pt.
         XCTAssertEqual(banner.frame.minY - filterRow.frame.maxY, 10, accuracy: 3)
+        XCTAssertEqual(dismiss.frame.minY, banner.frame.minY, accuracy: 1)
+        XCTAssertEqual(dismiss.frame.maxX, banner.frame.maxX, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
         keepScreenshot("Import notice — anchored below filters")
         dismiss.tap()
         XCTAssertTrue(dismiss.waitForNonExistence(timeout: 5))

@@ -19,6 +19,12 @@ enum PlaceImportBatchState: String, Codable, Equatable {
 }
 
 enum PlaceImportHistoryPresentation {
+    static func isMatching(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
+        guard batch.receipt == nil, batch.state != .cancelled else { return false }
+        return [.queued, .processing].contains(batch.state)
+            || items.contains { [.queued, .resolving].contains($0.state) }
+    }
+
     static func needsReview(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
         batch.reviewOpenedAt == nil && batch.receipt == nil
             && ![.queued, .processing, .cancelled].contains(batch.state)
@@ -38,8 +44,7 @@ enum PlaceImportHistoryPresentation {
         if batch.state == .cancelled {
             return "Cancelled"
         }
-        if [.queued, .processing].contains(batch.state)
-            || items.contains(where: { [.queued, .resolving].contains($0.state) }) {
+        if isMatching(batch: batch, items: items) {
             return "Matching…"
         }
         return "Ready to review"
