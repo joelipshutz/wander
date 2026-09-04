@@ -55,7 +55,8 @@ enum MapPlaceListTarget: Identifiable {
     func add(
         to list: LocalPlaceList,
         store: WanderStore,
-        backend: WanderBackend
+        backend: WanderBackend?,
+        analyticsSurface: String = "map"
     ) async -> ListPlaceAddResult {
         switch self {
         case .candidate(let candidate):
@@ -63,14 +64,14 @@ enum MapPlaceListTarget: Identifiable {
                 candidate,
                 to: list,
                 backend: backend,
-                analyticsSurface: "map"
+                analyticsSurface: analyticsSurface
             )
         case .visiblePlace(let visiblePlace):
             await store.addVisiblePlace(
                 visiblePlace,
                 to: list,
                 backend: backend,
-                analyticsSurface: "map"
+                analyticsSurface: analyticsSurface
             )
         }
     }
@@ -173,6 +174,7 @@ struct MapPlaceListPickerSheet: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     let target: MapPlaceListTarget
+    var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
     @State private var selection = MapPlaceListPickerSelection(existingListIDs: [])
     @State private var didLoadMembership = false
@@ -542,7 +544,7 @@ struct MapPlaceListPickerSheet: View {
         var results: [ListPlaceAddResult] = []
         for list in lists {
             results.append(
-                await target.add(to: list, store: store, backend: backend)
+                await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface)
             )
         }
         isApplying = false
@@ -573,7 +575,7 @@ struct MapPlaceListPickerSheet: View {
 
         isApplying = true
         Task { @MainActor in
-            let result = await target.add(to: list, store: store, backend: backend)
+            let result = await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface)
             _ = await store.syncPendingPlaceLists(backend: backend)
             isApplying = false
             refreshPresentation()

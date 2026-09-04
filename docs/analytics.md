@@ -79,7 +79,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
 | `place_list_created` | A list is created | `visibility`, `collaborator_count` |
-| `place_list_item_added` | A place is successfully added to a list from an instrumented surface | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
+| `place_list_item_added` | A place is successfully added to a list from an instrumented surface (including `map_snapshot` capture) | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
@@ -88,6 +88,11 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
+
+The shared add-to-lists picker attributes successful additions to its entry
+surface: `map` for Map and place-profile actions, `discover` for Discover search
+results. Both existing-list selection and new-list creation emit
+`place_list_item_added` and the matching `list_place_added` engagement action.
 
 The push worker also emits three server-side operational events. They use
 `platform=server`, `source=push_notification_worker`, and a constant

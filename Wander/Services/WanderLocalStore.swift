@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import UIKit
 
 struct UnresolvedDraft: Identifiable, Equatable {
     let id: String
@@ -559,6 +560,7 @@ final class WanderStore: ObservableObject {
         self.persistence = persistence
 
         var shouldPersistAfterRestore = false
+        var didRestoreSnapshot = false
         if let restored = persistence?.load()?.restoredState(contactProvider: fixtures.contactProvider) {
             self.currentUser = restored.currentUser
             self.profiles = restored.profiles
@@ -590,6 +592,7 @@ final class WanderStore: ObservableObject {
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
+            didRestoreSnapshot = true
         } else {
             self.currentUser = fixtures.currentUser
             self.profiles = fixtures.profiles
@@ -635,6 +638,9 @@ final class WanderStore: ObservableObject {
         )
         currentUserCalendarLocalFingerprint = makeCurrentUserCalendarLocalFingerprint()
 
+        if didRestoreSnapshot, repairLegacyListReferences() {
+            shouldPersistAfterRestore = true
+        }
         if shouldPersistAfterRestore {
             persist()
         }
@@ -2420,7 +2426,8 @@ final class WanderStore: ObservableObject {
         var friends: [LocalPlaceList] = []
         var collabs: [LocalPlaceList] = []
         for list in visiblePlaceLists {
-            let isCurrentUserMember = !listReferenceIDs(for: list)
+            let listIDs = listReferenceIDs(for: list)
+            let isCurrentUserMember = !listIDs
                 .isDisjoint(with: currentUserMemberListIDs)
             let isMine = list.ownerUserID == currentUser.id || isCurrentUserMember
             if isMine {
@@ -2428,7 +2435,7 @@ final class WanderStore: ObservableObject {
             } else {
                 friends.append(list)
             }
-            if collaborativeListIDs.contains(list.id), isMine {
+            if !listIDs.isDisjoint(with: collaborativeListIDs), isMine {
                 collabs.append(list)
             }
         }
@@ -2470,12 +2477,24 @@ final class WanderStore: ObservableObject {
         for profile in profiles where profileByID[profile.id] == nil {
             profileByID[profile.id] = profile
         }
+        // Restored memberships may still reference the ID used before a list synced.
+        // Resolve those aliases just as membership permissions and list items do.
+        var canonicalListIDByReferenceID: [String: String] = [:]
+        canonicalListIDByReferenceID.reserveCapacity(placeLists.count * 3)
+        for list in placeLists {
+            for referenceID in listReferenceIDs(for: list) {
+                canonicalListIDByReferenceID[referenceID] = list.id
+            }
+        }
         var profilesByListID: [String: [LocalProfile]] = [:]
+        var seenUserIDsByListID: [String: Set<String>] = [:]
         for member in placeListMembers where member.deletedAt == nil {
-            guard let profile = profileByID[member.userID],
-                  !isBlockedBetweenCurrentUser(and: profile.id)
+            guard let listID = canonicalListIDByReferenceID[member.listID],
+                  let profile = profileByID[member.userID],
+                  !isBlockedBetweenCurrentUser(and: profile.id),
+                  seenUserIDsByListID[listID, default: []].insert(profile.id).inserted
             else { continue }
-            profilesByListID[member.listID, default: []].append(profile)
+            profilesByListID[listID, default: []].append(profile)
         }
         for listID in profilesByListID.keys {
             profilesByListID[listID]?.sort { $0.handle < $1.handle }
@@ -2576,8 +2595,9 @@ final class WanderStore: ObservableObject {
     }
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5, backend: WanderBackend?) async -> [ListPlaceSuggestion] {
-        let fallback = listSuggestions(for: list, limit: limit)
-        guard let backend, backend.listSuggestionRepository != nil else { return fallback }
+        guard let backend, backend.listSuggestionRepository != nil else {
+            return listSuggestions(for: list, limit: limit)
+        }
 
         do {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
@@ -2610,12 +2630,23 @@ final class WanderStore: ObservableObject {
             }
             let canonicalSuggestions = canonicalListSuggestions(remoteSuggestions, limit: limit)
             return canonicalSuggestions.isEmpty
-                ? fallback
+                ? listSuggestions(for: list, limit: limit)
                 : disambiguatingSameNameLocations(in: canonicalSuggestions)
         } catch {
             lastRemoteError = remoteErrorMessage(error)
-            return fallback
+            return listSuggestions(for: list, limit: limit)
         }
+    }
+
+    /// Reconcile a displayed batch after edits or sync without reshuffling its
+    /// remaining suggestions. Membership and visibility always use current data.
+    func availableListSuggestions(
+        _ suggestions: [ListPlaceSuggestion],
+        for list: LocalPlaceList
+    ) -> [ListPlaceSuggestion] {
+        guard !suggestions.isEmpty else { return [] }
+        let candidateIDs = Set(listSuggestionCandidates(for: list).map(\.id))
+        return suggestions.filter { candidateIDs.contains($0.id) }
     }
 
     @discardableResult
@@ -2899,6 +2930,32 @@ final class WanderStore: ObservableObject {
         }
         persist()
         return true
+    }
+
+    /// The capture fixes membership before saving. This synchronous batch creates
+    /// one list without changing the status, visits, or notes of its source saves.
+    func createMapSnapshotList(placeIDs: [String], coverData: Data, now: Date = .now) -> LocalPlaceList? {
+        guard !coverData.isEmpty, coverData.count <= LocalPlaceList.maximumSnapshotCoverBytes,
+              UIImage(data: coverData) != nil else { return nil }
+        let requested = Set(placeIDs)
+        let owned = currentUserVisiblePlaces.filter { requested.contains($0.place.id) }
+        guard !owned.isEmpty else { return nil }
+        return performBatchedLocalMutations {
+            guard let list = createPlaceList(
+                name: "Map snapshot · \(now.formatted(date: .abbreviated, time: .shortened))",
+                description: "",
+                visibility: .stealth
+            ), let index = placeLists.firstIndex(where: { $0.localID == list.localID }) else { return nil }
+            placeLists[index].snapshotCoverData = coverData
+            for place in owned {
+                let result = addCurrentUserPlace(userPlaceID: place.userPlace.id, to: list)
+                if result.outcome == .added {
+                    trackListPlaceAdded(to: list, companionSave: .none, surface: "map_snapshot")
+                }
+            }
+            persist()
+            return placeLists[index]
+        }
     }
 
     @discardableResult
@@ -3274,6 +3331,13 @@ final class WanderStore: ObservableObject {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
             }
 
+            if let data = list.snapshotCoverData, list.snapshotCoverPath == nil {
+                let path = try await backend.uploadListSnapshotCover(listID: remoteListID, jpegData: data)
+                if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
+                    placeLists[currentIndex].snapshotCoverPath = path
+                }
+            }
+
             if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }),
                placeListMatchesSnapshot(placeLists[currentIndex], snapshot: list, collaboratorUserIDs: collaboratorUserIDs) {
                 placeLists[currentIndex].syncStateRaw = SyncState.synced.rawValue
@@ -3608,7 +3672,37 @@ final class WanderStore: ObservableObject {
     }
 
     private func listReferenceIDs(for list: LocalPlaceList) -> Set<String> {
-        Set([list.id, list.localID, list.serverID].compactMap { $0 })
+        var referenceIDs = Set([list.id, list.localID, list.serverID].compactMap { $0 })
+        // An open editor or in-flight request can still hold the pre-sync value
+        // after list items have been remapped to the server ID.
+        if let current = placeLists.first(where: { $0.localID == list.localID }) {
+            referenceIDs.formUnion([current.id, current.localID, current.serverID].compactMap { $0 })
+        }
+        return referenceIDs
+    }
+
+    /// Repair only known pre-sync references in restored snapshots. Keeping the
+    /// stored links canonical also protects sync and deletion paths, without
+    /// changing membership status, ownership, timestamps, or pending operations.
+    private func repairLegacyListReferences() -> Bool {
+        var canonicalIDByLocalID: [String: String] = [:]
+        for list in placeLists where list.localID != list.id {
+            canonicalIDByLocalID[list.localID] = list.id
+        }
+        guard !canonicalIDByLocalID.isEmpty else { return false }
+
+        var changed = false
+        for index in placeListMembers.indices {
+            guard let canonicalID = canonicalIDByLocalID[placeListMembers[index].listID] else { continue }
+            placeListMembers[index].listID = canonicalID
+            changed = true
+        }
+        for index in placeListItems.indices {
+            guard let canonicalID = canonicalIDByLocalID[placeListItems[index].listID] else { continue }
+            placeListItems[index].listID = canonicalID
+            changed = true
+        }
+        return changed
     }
 
     private func visibleListItemsByListID(in lists: [LocalPlaceList]) -> [String: [LocalPlaceListItem]] {
@@ -9740,7 +9834,14 @@ final class WanderStore: ObservableObject {
             placeLists[index].name = remoteList.name
             placeLists[index].description = remoteList.description
             placeLists[index].visibilityRaw = remoteList.visibilityRaw
-            placeLists[index].syncStateRaw = SyncState.synced.rawValue
+            let pendingCover = placeLists[index].snapshotCoverData != nil
+                && placeLists[index].snapshotCoverPath == nil && remoteList.snapshotCoverPath == nil
+            placeLists[index].syncStateRaw = pendingCover ? SyncState.pendingUpdate.rawValue : SyncState.synced.rawValue
+            // Summary RPCs omit the cover; detail supplies it. Never discard a
+            // locally captured cover while its upload is pending or retrying.
+            if let path = remoteList.snapshotCoverPath {
+                placeLists[index].snapshotCoverPath = path
+            }
             placeLists[index].cachedItemCount = remoteList.cachedItemCount
             placeLists[index].createdAt = remoteList.createdAt
             placeLists[index].updatedAt = remoteList.updatedAt
