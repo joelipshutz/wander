@@ -196,6 +196,35 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["28 places"].exists)
     }
 
+    func testListCardCountUpdatesAfterRepeatedRemovals() {
+        let app = performanceListsApp()
+        app.launch()
+
+        let firstList = app.buttons["Open Realistic list 000, collaborative list"]
+        XCTAssertTrue(firstList.waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["28 places"].exists)
+        firstList.tap()
+        XCTAssertTrue(app.staticTexts["28 places"].waitForExistence(timeout: 8))
+
+        for expectedCount in stride(from: 27, through: 25, by: -1) {
+            let removeButton = app.buttons.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "Remove ")
+            ).firstMatch
+            reveal(removeButton, in: app)
+            XCTAssertTrue(removeButton.isHittable)
+            removeButton.tap()
+            XCTAssertTrue(app.staticTexts["\(expectedCount) places"].waitForExistence(timeout: 8))
+        }
+
+        app.navigationBars.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(firstList.waitForExistence(timeout: 8))
+        capture("REC-416 list card after three removals")
+        XCTAssertTrue(app.staticTexts["25 places"].waitForExistence(timeout: 5))
+
+        firstList.tap()
+        XCTAssertTrue(app.staticTexts["25 places"].waitForExistence(timeout: 8))
+    }
+
     func testPerformanceFixtureColdListDetailIsImmediatelyScrollable() {
         let app = performanceListsApp()
         app.launch()
