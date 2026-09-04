@@ -966,7 +966,9 @@ struct ProfilePrivacyTrustScreen: View {
                               : "calendar.badge.plus")
                         Text(isConnectingCalendar
                              ? "working"
-                             : (calendarReservations.hasFullAccess ? "sync now" : "connect calendar"))
+                             : CalendarPermissionPolicy.primaryTitle(
+                                 for: calendarReservations.authorizationStatus
+                             ))
                     }
                     .font(.system(size: 15, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
@@ -1000,6 +1002,12 @@ struct ProfilePrivacyTrustScreen: View {
 
     @MainActor
     private func connectOrSyncCalendar() async {
+        if CalendarPermissionPolicy.action(for: calendarReservations.authorizationStatus) == .openSettings {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            await UIApplication.shared.open(url)
+            return
+        }
+
         isConnectingCalendar = true
         calendarErrorMessage = nil
         defer { isConnectingCalendar = false }

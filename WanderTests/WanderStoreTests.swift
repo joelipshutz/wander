@@ -6791,6 +6791,57 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(serializedProperties.contains("-118.24"))
     }
 
+    func testNewSaveAndFollowPublishNotificationUpsellTriggersWithoutImportNoise() {
+        let store = WanderStore(fixtures: .empty())
+        let manualCandidate = PlaceCandidate(
+            id: "upsell_manual",
+            name: "Manual Place",
+            category: "coffee",
+            latitude: 34.05,
+            longitude: -118.24,
+            confidence: 1
+        )
+
+        _ = store.saveCandidate(
+            manualCandidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+        let saveRequest = store.productUpsellTriggerRequest
+        XCTAssertEqual(saveRequest?.trigger, .placeSaved)
+
+        _ = store.saveCandidate(
+            manualCandidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+        XCTAssertEqual(store.productUpsellTriggerRequest?.id, saveRequest?.id)
+
+        store.follow(userID: "user_friend", source: .profile)
+        XCTAssertEqual(store.productUpsellTriggerRequest?.trigger, .followCreated)
+
+        let importOnlyStore = WanderStore(fixtures: .empty())
+        _ = importOnlyStore.saveImportedCandidate(
+            PlaceCandidate(
+                id: "upsell_import",
+                name: "Imported Place",
+                category: "restaurant",
+                latitude: 34.06,
+                longitude: -118.25,
+                confidence: 1
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .link
+        )
+        XCTAssertNil(importOnlyStore.productUpsellTriggerRequest)
+    }
+
     func testPlaceShareTracksCompletionAndOnlyCountsSuccessfulRecommendations() {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)

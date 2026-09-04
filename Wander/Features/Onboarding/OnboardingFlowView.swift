@@ -11,6 +11,7 @@ struct OnboardingFlowView: View {
 
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var step: OnboardingStep
     @State private var didTrackStart = false
@@ -70,13 +71,15 @@ struct OnboardingFlowView: View {
                     advance(from: .friends)
                 }
             case .notifications:
-                OnboardingNotificationView(analytics: analytics) {
-                    await finish()
-                }
+                OnboardingNotificationUpsellTrigger(
+                    userID: session.userID,
+                    finish: finish
+                )
             }
         }
         .environmentObject(backend)
         .environmentObject(auth)
+        .environmentObject(productUpsells)
         .environmentObject(pushNotifications)
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.snappy(duration: 0.35), value: step)
@@ -774,67 +777,33 @@ private struct OnboardingEmptySuggestions: View {
     }
 }
 
-private struct OnboardingNotificationView: View {
-    @EnvironmentObject private var backend: WanderBackend
-    @EnvironmentObject private var auth: AuthSessionStore
+private struct OnboardingNotificationUpsellTrigger: View {
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    let analytics: AnalyticsClient
+    let userID: String
     let finish: () async -> Void
-    @State private var isWorking = false
+    @State private var didRequest = false
 
     var body: some View {
-        OnboardingStepScaffold(step: .notifications) {
-            VStack(spacing: WanderTheme.spacing6) {
-                Spacer(minLength: WanderTheme.spacing4)
-                ZStack {
-                    Circle()
-                        .fill(WanderTheme.categorySun.color.opacity(0.18))
-                        .frame(width: 220, height: 220)
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
-                        .font(.system(size: 86, weight: .medium))
-                        .foregroundStyle(WanderTheme.categorySun.color)
-                        .symbolEffect(.bounce, value: isWorking)
-                }
-                OnboardingHeadline(
-                    eyebrow: "STAY IN THE LOOP",
-                    title: "Don’t miss a great find",
-                    message: "Get a heads-up when friends connect with you, share places, or add something worth seeing."
-                )
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-        } footer: {
-            VStack(spacing: WanderTheme.spacing1) {
-                WanderPrimaryButton(
-                    title: isWorking ? "Turning on notifications…" : "Allow notifications",
-                    isDisabled: isWorking
+        Color.clear
+            .task {
+                guard !didRequest else { return }
+                didRequest = true
+                await pushNotifications.refreshAuthorizationStatus()
+                productUpsells.bind(to: userID)
+                productUpsells.request(
+                    trigger: .onboardingNotifications,
+                    userID: userID,
+                    isEligible: !pushNotifications.notificationsAreEnabled,
+                    bypassesFrequencyCap: ProductUpsellDebugPolicy.bypassesFrequencyCap()
                 ) {
-                    Task {
-                        isWorking = true
-                        let enabled = await pushNotifications.enableNotifications(backend: backend, authState: auth.state) != nil
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingPermissionResult,
-                            properties: ["permission": "notifications", "granted": enabled ? "true" : "false"]
-                        ))
-                        await finish()
-                    }
-                }
-                Button("Not now") {
-                    analytics.track(AnalyticsEvent(
-                        name: WanderAnalyticsEvents.onboardingPermissionResult,
-                        properties: ["permission": "notifications", "granted": "skipped"]
-                    ))
                     Task { await finish() }
                 }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
-        }
     }
 }
 
-private struct OnboardingStepScaffold<Content: View, Footer: View>: View {
+struct OnboardingStepScaffold<Content: View, Footer: View>: View {
     let step: OnboardingStep
     @ViewBuilder let content: Content
     @ViewBuilder let footer: Footer
@@ -879,7 +848,7 @@ private struct OnboardingStepScaffold<Content: View, Footer: View>: View {
     }
 }
 
-private struct OnboardingHeadline: View {
+struct OnboardingHeadline: View {
     let eyebrow: String
     let title: String
     let message: String

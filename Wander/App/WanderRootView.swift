@@ -291,6 +291,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
@@ -340,6 +341,7 @@ struct WanderRootView: View {
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
     @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
+    @State private var didRequestForcedProductUpsell = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -887,6 +889,10 @@ struct WanderRootView: View {
         .onChange(of: store.isRefreshingCurrentUserCalendarData) {
             handleCalendarRefreshStateChange($0, $1)
         }
+        .onChange(of: store.productUpsellTriggerRequest) { _, request in
+            guard let request else { return }
+            requestProductUpsell(request.trigger)
+        }
     }
 
     private var stateObservedRoot: some View {
@@ -987,6 +993,16 @@ struct WanderRootView: View {
         .onChange(of: firstVisitWalkthroughEligibilityContext) { _, _ in
             guard isSessionValidated else { return }
             configureWalkthroughsForCurrentUser()
+        }
+        .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
+            guard !isBlocked else { return }
+            presentDeferredProductUpsellIfPossible()
+        }
+        .onChange(of: pushNotifications.hasLoadedNotificationPreferences) { _, _ in
+            presentDeferredProductUpsellIfPossible()
+        }
+        .task {
+            requestForcedProductUpsellIfNeeded()
         }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
             if !isPresented, !walkthroughs.hasActivePrimaryJourney {
@@ -1823,6 +1839,51 @@ struct WanderRootView: View {
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
             presentLaunchLessonIfAppropriate()
         }
+        presentDeferredProductUpsellIfPossible()
+    }
+
+    private var blocksProductUpsellPresentation: Bool {
+        isPresentingAdd
+            || isPresentingImportHub
+            || auth.activeGate != nil
+            || initialPresentation != nil
+            || sharedProfile != nil
+    }
+
+    private func requestProductUpsell(
+        _ trigger: ProductUpsellTrigger,
+        bypassesFrequencyCap: Bool = false
+    ) {
+        guard isSessionValidated else { return }
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        productUpsells.bind(to: userID)
+        let preferencesAreReady = pushNotifications.hasLoadedNotificationPreferences
+            || bypassesFrequencyCap
+        productUpsells.request(
+            trigger: trigger,
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: preferencesAreReady && !blocksProductUpsellPresentation,
+            bypassesFrequencyCap: bypassesFrequencyCap
+        )
+    }
+
+    private func presentDeferredProductUpsellIfPossible() {
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        productUpsells.presentDeferredIfPossible(
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && !blocksProductUpsellPresentation
+        )
+    }
+
+    private func requestForcedProductUpsellIfNeeded() {
+        guard !didRequestForcedProductUpsell,
+              let trigger = ProductUpsellDebugPolicy.forcedTrigger()
+        else { return }
+        didRequestForcedProductUpsell = true
+        requestProductUpsell(trigger, bypassesFrequencyCap: true)
     }
 
     private func configureWalkthroughsForCurrentUser() {

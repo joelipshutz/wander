@@ -809,6 +809,15 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testCalendarPermissionPolicyUsesNeutralRequestAndSettingsRecovery() {
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "continue")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .denied), .openSettings)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "open settings")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .fullAccess), .sync)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "sync now")
+    }
+
     func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {
         let fallback = FirstVisitParkSuggestionPolicy.hotchkissPark
 

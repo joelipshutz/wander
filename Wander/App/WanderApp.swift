@@ -70,6 +70,7 @@ struct WanderApp: App {
     @StateObject private var backend: WanderBackend
     @StateObject private var entryCoordinator: AppEntryCoordinator
     @StateObject private var pushNotifications: PushNotificationManager
+    @StateObject private var productUpsells: ProductUpsellCoordinator
     @StateObject private var calendarReservations: CalendarReservationManager
     #if DEBUG
     @StateObject private var mapCaptureBackend: WanderBackend
@@ -93,6 +94,9 @@ struct WanderApp: App {
         analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
         _pushNotifications = StateObject(
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
+        )
+        _productUpsells = StateObject(
+            wrappedValue: ProductUpsellCoordinator(analytics: contextualAnalytics)
         )
         _calendarReservations = StateObject(
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)
@@ -196,6 +200,7 @@ struct WanderApp: App {
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)
+            .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
     }
@@ -210,6 +215,7 @@ struct WanderApp: App {
             .environmentObject(auth)
             .environmentObject(mapCaptureBackend)
             .environmentObject(pushNotifications)
+            .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
     }

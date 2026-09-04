@@ -309,6 +309,8 @@ final class PushNotificationManager: ObservableObject {
     @Published private(set) var navigationRequest: NotificationNavigationRequest?
     @Published private(set) var wannaGoRemindersEnabled: Bool
     @Published private(set) var saveStreakRemindersEnabled = false
+    @Published private(set) var pushEnabled = false
+    @Published private(set) var hasLoadedNotificationPreferences = false
 
     private let userDefaults: UserDefaults
     private let analytics: AnalyticsClient
@@ -316,7 +318,6 @@ final class PushNotificationManager: ObservableObject {
     private let tokenKey = "wander.apnsDeviceToken"
     private static let wannaGoRemindersKey = "wander.wannaGoRemindersEnabled"
     private static let saveStreakRemindersKeyPrefix = "wander.saveStreakRemindersEnabled."
-    private var pushEnabled = false
     private var saveStreakReminderUserID: String?
     private var handledEventIDs: [String] = []
 
@@ -361,6 +362,10 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
+    var notificationsAreEnabled: Bool {
+        pushEnabled && canRegisterForRemoteNotifications
+    }
+
     static func shouldRefreshRemoteRegistration(
         isSignedIn: Bool,
         backendCanRegister: Bool,
@@ -400,6 +405,12 @@ final class PushNotificationManager: ObservableObject {
     }
 
     func refreshAuthorizationStatus() async {
+        #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderNotificationAuthorizationNotDeterminedFixture") {
+            authorizationStatus = .notDetermined
+            return
+        }
+        #endif
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus
     }
@@ -415,6 +426,7 @@ final class PushNotificationManager: ObservableObject {
         navigationRequest = nil
         handledEventIDs.removeAll()
         applyNotificationPreferences(.allDisabled)
+        hasLoadedNotificationPreferences = false
         saveStreakReminderUserID = nil
         saveStreakRemindersEnabled = false
         WanderAppDelegate.setAuthenticatedSessionSignedOut()
@@ -813,6 +825,7 @@ final class PushNotificationManager: ObservableObject {
 
     func applyNotificationPreferences(_ preferences: NotificationPreferences) {
         pushEnabled = preferences.pushEnabled
+        hasLoadedNotificationPreferences = true
         wannaGoRemindersEnabled = preferences.pushEnabled && preferences.wannaGoRemindersEnabled
         userDefaults.set(wannaGoRemindersEnabled, forKey: Self.wannaGoRemindersKey)
         refreshSaveStreakReminderPreference()
