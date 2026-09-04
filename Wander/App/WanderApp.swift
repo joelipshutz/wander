@@ -8,6 +8,7 @@ import UIKit
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let liveAuthArgument = "-WanderUseLiveAuth"
+    static let onboardingStepArgument = "-WanderOnboardingUITestStep"
 
     private static let persistenceKey = "recme.simulator.authenticatedFixture.v1"
     private static let signedOutArguments: Set<String> = [
@@ -40,6 +41,19 @@ enum SimulatorTestSessionPolicy {
         return defaults.bool(forKey: persistenceKey)
     }
 
+    static func forcedOnboardingStep(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> OnboardingStep? {
+        guard isSimulator,
+              arguments.contains(authenticatedFixtureArgument),
+              let flagIndex = arguments.firstIndex(of: onboardingStepArgument)
+        else { return nil }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        return OnboardingStep(rawValue: arguments[valueIndex])
+    }
+
     private static var isSimulatorBuild: Bool {
         #if targetEnvironment(simulator)
         true
@@ -66,6 +80,7 @@ struct WanderApp: App {
     init() {
         let configuration = WanderBackendConfiguration.current()
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
+        let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
         if let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
@@ -111,7 +126,8 @@ struct WanderApp: App {
                 auth: authStore,
                 backend: backendStore,
                 analytics: contextualAnalytics,
-                usesLocalSimulatorTestSession: usesSimulatorTestSession
+                usesLocalSimulatorTestSession: usesSimulatorTestSession,
+                forcedLocalSimulatorOnboardingStep: forcedOnboardingStep
             )
         )
         #if DEBUG

@@ -2,6 +2,60 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testREC396BeforeMapLocationPrimer() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures"
+        ]
+        app.launch()
+
+        let nearby = app.buttons["map.nearby"]
+        XCTAssertTrue(nearby.waitForExistence(timeout: 8))
+        guard nearby.value as? String == "Location permission needed" else {
+            throw XCTSkip("Simulator already has location permission")
+        }
+        nearby.tap()
+
+        let allow = app.buttons["map.locationEducation.allow"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 5))
+        XCTAssertEqual(allow.label, "Allow Location")
+        XCTAssertTrue(app.buttons["map.locationEducation.cancel"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-396 before Map location permission"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testREC396BeforeFeedContactPrimer() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseEphemeralEmptyFixtures",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderFeedSurface",
+            "people"
+        ]
+        app.launch()
+
+        let inviteEntry = app.buttons["invite people to rec.me"]
+        XCTAssertTrue(inviteEntry.waitForExistence(timeout: 8))
+        inviteEntry.tap()
+
+        let permissionContinue = app.buttons["continue to contacts"]
+        XCTAssertTrue(permissionContinue.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["invite.close"].exists)
+        XCTAssertTrue(app.buttons["not now"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-396 before Feed contact invite permission"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
         let app = XCUIApplication()
         defer {
