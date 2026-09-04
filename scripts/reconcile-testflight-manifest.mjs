@@ -218,7 +218,13 @@ function releaseStatusCopy(status) {
   }
 }
 
-export function buildReleaseArtifacts({ report, buildNumber, marketingVersion, status }) {
+export function buildReleaseArtifacts({
+  report,
+  buildNumber,
+  marketingVersion,
+  status,
+  approvedTesterCopy = null,
+}) {
   if (!report.ok) {
     fail("Cannot generate release artifacts from a failed reconciliation.");
   }
@@ -247,7 +253,7 @@ export function buildReleaseArtifacts({ report, buildNumber, marketingVersion, s
     ? substantiveOperations
     : ["none"];
 
-  const whatToTest = [
+  const generatedWhatToTest = [
     "What changed",
     bulletList(changes, "No tester-facing changes."),
     "",
@@ -257,22 +263,41 @@ export function buildReleaseArtifacts({ report, buildNumber, marketingVersion, s
     "Known limitations",
     bulletList(limitations, "No known limitations beyond existing tracked issues."),
   ].join("\n");
+  const whatToTest = approvedTesterCopy == null
+    ? generatedWhatToTest
+    : String(approvedTesterCopy).trim();
+
+  if (approvedTesterCopy != null) {
+    if (!nonEmptyString(whatToTest)) {
+      fail("Approved TestFlight tester copy cannot be empty.");
+    }
+    for (const heading of ["What changed", "What to test", "Known limitations"]) {
+      if (!whatToTest.includes(heading)) {
+        fail(`Approved TestFlight tester copy must include the ${heading} heading.`);
+      }
+    }
+  }
 
   if (whatToTest.length > 4000) {
     fail(`Generated TestFlight What to Test copy is ${whatToTest.length} characters; limit is 4000.`);
   }
 
+  const slackBody = approvedTesterCopy == null
+    ? [
+      "What changed",
+      bulletList(changes, "No tester-facing changes."),
+      "",
+      "What to test",
+      bulletList(tests, "No additional tester action."),
+      "",
+      "Known limitations",
+      bulletList(limitations, "No known limitations beyond existing tracked issues."),
+    ].join("\n")
+    : whatToTest;
   const slack = [
     `rec.me ${marketingVersion.trim()} (${buildNumber}) ${releaseStatusCopy(status)}.`,
     "",
-    "What changed",
-    bulletList(changes, "No tester-facing changes."),
-    "",
-    "What to test",
-    bulletList(tests, "No additional tester action."),
-    "",
-    "Known limitations",
-    bulletList(limitations, "No known limitations beyond existing tracked issues."),
+    slackBody,
     "",
     `Install or update: ${TESTFLIGHT_URL}`,
     `Please report problems in ${FEEDBACK_CHANNEL} with your device, account/email if relevant, screenshots, and exact repro steps.`,
