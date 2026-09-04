@@ -551,7 +551,7 @@ struct AddScreen: View {
                 Button(action: goBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -597,7 +597,7 @@ struct AddScreen: View {
                 } label: {
                     Label("back to add options", systemImage: "chevron.left")
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back to add options")
@@ -684,7 +684,7 @@ struct AddScreen: View {
                         systemImage: "location.fill"
                     )
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
                 }
                 .buttonStyle(.plain)
@@ -709,7 +709,7 @@ struct AddScreen: View {
             } label: {
                 Label("See more", systemImage: "arrow.up.right")
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
                     .background(brandMode.recessedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -982,7 +982,7 @@ struct AddScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             Image(systemName: "tray.and.arrow.down.fill")
                 .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
 
             Text(draft?.title ?? "Draft saved.")
                 .font(AstirTypography.sheetTitle)
@@ -1840,7 +1840,7 @@ private struct AddSearchField: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .black))
                 }
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
             }
@@ -1955,7 +1955,7 @@ private struct CandidateRow: View {
             }
             Spacer()
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? brandMode.accent : brandMode.border)
+                .foregroundStyle(isSelected ? brandMode.accentText : brandMode.border)
         }
         .padding(WanderTheme.spacing3)
         .background(isSelected ? brandMode.accentWash : brandMode.raisedBackground)
@@ -1983,7 +1983,7 @@ private struct InlineMessage: View {
     var body: some View {
         Text(text)
             .font(AstirTypography.label)
-            .foregroundStyle(brandMode.accent)
+            .foregroundStyle(brandMode.accentText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(WanderTheme.spacing3)
             .background(brandMode.accentWash)
@@ -2195,7 +2195,7 @@ private struct AddCameraRecoveryScreen: View {
 
                 Image(systemName: "camera.fill")
                     .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 88, height: 88)
                     .background(brandMode.accentWash)
                     .clipShape(Circle())

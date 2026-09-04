@@ -61,7 +61,7 @@ enum WanderTheme {
     )
     static let textMuted = WanderColorToken(
         name: "color.text.muted",
-        hex: "#6F6A62",
+        hex: "#655F57",
         darkHex: "#98958D"
     )
     static let textFaint = WanderColorToken(
@@ -71,14 +71,14 @@ enum WanderTheme {
     )
     static let textOnAction = WanderColorToken(
         name: "color.text.onAction",
-        hex: "#F2E9DB",
+        hex: "#141714",
         darkHex: "#141714"
     )
 
     static let borderHairline = WanderColorToken(
         name: "color.border.hairline",
-        hex: "#C9BFB0",
-        darkHex: "#464943"
+        hex: "#8A8176",
+        darkHex: "#74786F"
     )
     static let borderStrong = WanderColorToken(
         name: "color.border.strong",
@@ -205,7 +205,7 @@ struct WanderMapAppearance: Equatable {
     }
 
     var accentText: Color {
-        AstirTheme.signal.color
+        isDark ? AstirTheme.signal.color : AstirTheme.signalOnPaper.color
     }
 
     var neutralGlassTone: WanderGlassTone {
@@ -365,7 +365,7 @@ struct WanderChip: View {
         .font(AstirTypography.label)
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+        .foregroundStyle(isSelected ? brandMode.accentText : brandMode.secondaryText)
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             Rectangle()

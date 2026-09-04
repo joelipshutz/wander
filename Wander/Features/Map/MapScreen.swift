@@ -1434,7 +1434,7 @@ struct MapScreen: View {
                         AstirFloatingHeaderSurface {
                             VStack(spacing: WanderTheme.spacing1) {
                                 HStack {
-                                    AstirMastheadLockup(isCompact: true)
+                                    AstirMastheadLockup(presentation: .localizedBlur)
                                     Spacer()
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
@@ -1450,7 +1450,7 @@ struct MapScreen: View {
                                             )
                                         }
                                         .buttonStyle(.plain)
-                                        .frame(minWidth: 44, minHeight: 48)
+                                        .frame(minWidth: 44, minHeight: 44)
                                         .accessibilityIdentifier("map.filter.\(source.rawValue)")
                                         .walkthroughTarget(source.walkthroughTarget)
                                     }
@@ -1464,13 +1464,13 @@ struct MapScreen: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    .frame(minWidth: 44, minHeight: 48)
+                                    .frame(minWidth: 44, minHeight: 44)
                                     .accessibilityIdentifier("map.filter.more")
                                     .walkthroughTarget(.mapMoreFilters)
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
                             }
-                            .padding(.top, WanderTheme.spacing1)
+                            .padding(.top, 0)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .overlay(alignment: .topTrailing) {
@@ -6830,14 +6830,9 @@ private struct MapSourceFilterChip: View {
         }
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(isSelected ? astirBrandMode.accent : astirBrandMode.primaryText)
-        .contentShape(Rectangle())
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)
-                .frame(height: isSelected ? 2 : 1)
-        }
-        .padding(.vertical, 2)
+        .foregroundStyle(isSelected ? astirBrandMode.accentText : astirBrandMode.primaryText)
+        .contentShape(Capsule())
+        .astirGlassSurface(cornerRadius: 18, selected: isSelected, castsShadow: true)
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -6878,14 +6873,9 @@ private struct MapMoreFilterChip: View {
         }
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(isActive ? astirBrandMode.accent : astirBrandMode.primaryText)
-        .contentShape(Rectangle())
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(isActive ? astirBrandMode.accent : astirBrandMode.border)
-                .frame(height: isActive ? 2 : 1)
-        }
-        .padding(.vertical, 2)
+        .foregroundStyle(isActive ? astirBrandMode.accentText : astirBrandMode.primaryText)
+        .contentShape(Capsule())
+        .astirGlassSurface(cornerRadius: 18, selected: isActive, castsShadow: true)
         .accessibilityLabel("More map filters")
         .accessibilityValue(
             selectedOptionCount == 0
@@ -7101,7 +7091,7 @@ private struct MapMoreOptionChip: View {
                     .minimumScaleFactor(0.84)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? astirBrandMode.accent : astirBrandMode.primaryText)
+            .foregroundStyle(isSelected ? astirBrandMode.accentText : astirBrandMode.primaryText)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -12240,7 +12230,7 @@ private struct RestaurantCuisineCompactChoice: View {
             }
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(minHeight: WanderTheme.tapMinimum)
-            .foregroundStyle(isSelected ? brandMode.accent : brandMode.primaryText)
+            .foregroundStyle(isSelected ? brandMode.accentText : brandMode.primaryText)
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(isSelected ? brandMode.accent : brandMode.border)
@@ -12662,7 +12652,7 @@ struct CategoryPickerModePill: View {
         }
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(isSelected ? brandMode.accent : brandMode.primaryText)
+        .foregroundStyle(isSelected ? brandMode.accentText : brandMode.primaryText)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(isSelected ? brandMode.accent : brandMode.border)
@@ -12720,7 +12710,7 @@ private struct SubcategoryPickerChip: View {
             .minimumScaleFactor(0.74)
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 40)
-            .foregroundStyle(isSelected ? brandMode.accent : brandMode.primaryText)
+            .foregroundStyle(isSelected ? brandMode.accentText : brandMode.primaryText)
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .stroke(
@@ -14353,7 +14343,7 @@ private struct PlaceActivityCard: View {
             if let photoError {
                 Text(photoError)
                     .font(AstirTypography.caption)
-                    .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color)
+                    .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
             }
         }
         .padding(WanderTheme.spacing3)
@@ -14665,7 +14655,7 @@ private struct PlaceActivityFactLine: View {
 
             Image(systemName: systemImage)
                 .font(.system(size: 11, weight: .black))
-                .foregroundStyle(astirBrandMode.accent)
+                .foregroundStyle(astirBrandMode.accentText)
 
             Text(title)
                 .font(AstirTypography.label)
@@ -15316,7 +15306,7 @@ private struct StatusBadge: View {
             Text(status == .been ? CheckInCopy.noun : "wanna")
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
-                .foregroundStyle(astirBrandMode.accent)
+                .foregroundStyle(astirBrandMode.accentText)
         }
         .padding(.horizontal, WanderTheme.spacing1)
         .frame(minHeight: 36)

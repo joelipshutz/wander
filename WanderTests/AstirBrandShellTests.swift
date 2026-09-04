@@ -65,6 +65,10 @@ final class AstirBrandShellTests: XCTestCase {
         XCTAssertEqual(AstirTheme.ink.hex, "#141714")
         XCTAssertEqual(AstirTheme.paper.hex, "#F2E9DB")
         XCTAssertEqual(AstirTheme.signal.hex, "#F05A3C")
+        XCTAssertEqual(AstirTheme.signalOnPaper.hex, "#B23620")
+        XCTAssertEqual(AstirTheme.mutedOnPaper.hex, "#655F57")
+        XCTAssertEqual(AstirTheme.lineOnPaper.hex, "#8A8176")
+        XCTAssertEqual(AstirTheme.lineOnInk.hex, "#74786F")
     }
 
     func testPrototypeKeepsAstirSpellingAndCurrentNavigationContract() throws {

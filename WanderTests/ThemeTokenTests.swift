@@ -9,10 +9,10 @@ final class ThemeTokenTests: XCTestCase {
             "color.surface.raised": "#FFF9F0",
             "color.surface.sand": "#E8DED0",
             "color.text.ink": "#141714",
-            "color.text.muted": "#6F6A62",
+            "color.text.muted": "#655F57",
             "color.text.faint": "#8D877E",
-            "color.text.onAction": "#F2E9DB",
-            "color.border.hairline": "#C9BFB0",
+            "color.text.onAction": "#141714",
+            "color.border.hairline": "#8A8176",
             "color.border.strong": "#A99F91",
             "color.action.terracotta": "#F05A3C",
             "color.action.terracottaDark": "#C9422A",
@@ -45,7 +45,7 @@ final class ThemeTokenTests: XCTestCase {
         XCTAssertEqual(WanderTheme.surfaceSand.darkHex, "#101210")
         XCTAssertEqual(WanderTheme.textInk.darkHex, "#F2E9DB")
         XCTAssertEqual(WanderTheme.textMuted.darkHex, "#98958D")
-        XCTAssertEqual(WanderTheme.borderHairline.darkHex, "#464943")
+        XCTAssertEqual(WanderTheme.borderHairline.darkHex, "#74786F")
         XCTAssertEqual(WanderTheme.terracotta.darkHex, "#F05A3C")
         XCTAssertEqual(WanderTheme.sunTint.darkHex, "#312B1A")
         XCTAssertEqual(WanderTheme.skyTint.darkHex, "#172A32")

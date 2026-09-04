@@ -773,7 +773,7 @@ private struct ActivityShareTicket: View {
                 Text("ASTIR")
                     .font(AstirTypography.metadata)
                     .tracking(2.2)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
 
             Rectangle()
@@ -1147,7 +1147,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     Image(systemName: "photo.stack.fill")
                         .font(.system(size: 30, weight: .bold))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: 58, height: 58)
                         .background(brandMode.accentWash)
                         .clipShape(Circle())

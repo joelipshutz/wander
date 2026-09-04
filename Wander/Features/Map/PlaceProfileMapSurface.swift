@@ -1323,7 +1323,7 @@ private struct PlaceProfileFullView: View {
     private func headerNavigationControls(topInset: CGFloat) -> some View {
         AstirFloatingHeaderSurface {
             ZStack {
-                AstirMastheadLockup(isCompact: true)
+                AstirMastheadLockup(presentation: .localizedBlur)
 
                 HStack(spacing: WanderTheme.spacing2) {
                     if walkthroughs.activeSurface != .placeDetail {
@@ -1887,7 +1887,7 @@ private struct PlaceProfileFullView: View {
             .font(AstirTypography.metadata)
             .textCase(.uppercase)
             .tracking(1.2)
-            .foregroundStyle(astirBrandMode.accent)
+            .foregroundStyle(astirBrandMode.accentText)
     }
 }
 
@@ -1992,7 +1992,7 @@ struct PlaceProfileFloatingActions: View {
     var body: some View {
         actionCluster
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, variant.usesCompactButtons ? WanderTheme.spacing6 : WanderTheme.spacing3)
+        .padding(.horizontal, usesCompactLayout ? WanderTheme.spacing6 : WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .contain)
     }
@@ -2034,7 +2034,7 @@ struct PlaceProfileFloatingActions: View {
             Button {
                 onAction(action)
             } label: {
-                if variant.usesCompactButtons {
+                if usesCompactLayout {
                     actionLabel(for: action)
                         .contentShape(
                             RoundedRectangle(
@@ -2070,7 +2070,7 @@ struct PlaceProfileFloatingActions: View {
 
     @ViewBuilder
     private func actionLabel(for action: PlaceProfileSaveAction) -> some View {
-        if variant.usesCompactButtons {
+        if usesCompactLayout {
             VStack(spacing: 3) {
                 Image(systemName: systemImage(for: action))
                     .accessibilityHidden(true)
@@ -2131,6 +2131,19 @@ struct PlaceProfileFloatingActions: View {
         return dynamicTypeSize.isAccessibilitySize
             ? Self.accessibilityCompactActionFrameWidth
             : Self.compactActionFrameWidth
+    }
+
+    /// A single primary action should read as the clear full-width CTA. Compact
+    /// ticket buttons are reserved for multi-action clusters.
+    private var usesCompactLayout: Bool {
+        Self.shouldUseCompactLayout(variant: variant, actionCount: actions.count)
+    }
+
+    static func shouldUseCompactLayout(
+        variant: PlaceProfileFloatingActionVariant,
+        actionCount: Int
+    ) -> Bool {
+        variant.usesCompactButtons && actionCount > 1
     }
 
     private var usesVerticalLayout: Bool {
@@ -2447,7 +2460,7 @@ private struct PlacePhotoGalleryViewer: View {
                     Text("@\(contributor.handle)")
                         .font(AstirTypography.bodySmall)
                         .underline()
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .allowsTightening(true)
@@ -2494,7 +2507,7 @@ private struct PlacePhotoGalleryViewer: View {
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
         }
-            .foregroundStyle(brandMode.accent)
+            .foregroundStyle(brandMode.accentText)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(minHeight: 38)
             .overlay(alignment: .bottom) {
@@ -3276,7 +3289,7 @@ private struct PlaceProfileStatusPill: View {
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(height: 30)
             .background(visualStyle == .astir ? astirBrandMode.raisedBackground : (status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color))
-            .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : (status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color))
+            .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : (status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color))
             .overlay {
                 if visualStyle == .astir {
                     Rectangle().stroke(astirBrandMode.border, lineWidth: 1)

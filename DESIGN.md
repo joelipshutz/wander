@@ -33,18 +33,22 @@ across production surfaces by this provisional grammar:
 - Dark Mode inverts that relationship and uses ink-black as the canvas; every
   production surface and sheet must adapt with system appearance.
 - Astir signal coral (`#F05A3C`) is the single brand-action and selection accent.
-  Success, warning, info/social, and destructive colors keep their semantic roles.
+  Small text on Light paper uses the contrast-safe companion `#B23620`; success,
+  warning, info/social, and destructive colors keep their semantic roles.
 - Screen, place, list, and major section titles use Dynamic-Type-aware native
   editorial serif. Body, controls, search, identity, and supporting copy use
   Avenir Next; condensed sans is reserved for short metadata.
-- Header elements float independently as Liquid Glass components over a subtle,
-  frameless blur field. Do not place the full header group inside one glass block.
+- Header elements float independently as Liquid Glass components. Blur stays
+  localized to each logo, search field, tab control, or action; never add a
+  shared material field or put the full header group inside one glass block.
 - Search and action fields use soft continuous rectangles, not hard boxes. Tabs
-  use an editorial underline treatment rather than filled chips.
+  use an editorial underline treatment rather than filled chips. Map source
+  filters are the exception: they use compact individual glass chips because
+  they float directly over variable map imagery.
 - The only live Astir modes are the adaptive editorial Dark and Light schemes;
   launch arguments must not select a separate palette.
-- Feed's floating header hides on sustained downward scrolling and returns on
-  upward scrolling; Reduce Motion must remain respected.
+- Feed and Lists floating headers hide on sustained downward scrolling and
+  return on upward scrolling; Reduce Motion must remain respected.
 
 ## Product Context
 
@@ -318,8 +322,8 @@ Rules:
 
 - Up to four pin states can show at once.
 - Selected state must be readable by color, fill, and accessibility label.
-- Filter selection must not shift the layout; use type, signal color, and a fine
-  underline instead of a filled chip.
+- Filter selection must not shift the layout. Map source filters use a stable
+  compact glass-chip frame with signal color plus an accessibility label.
 
 ### Pin System
 

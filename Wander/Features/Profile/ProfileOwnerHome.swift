@@ -317,9 +317,10 @@ struct ProfileOwnerHome: View {
                     allActivityAction: allActivityAction
                 )
                 .id(ProfileHomeScrollAnchor.activity)
-                if mode.isOwner, let yourMapAction {
+                if let yourMapAction {
                     ProfileYourMapPreview(
                         insights: insights,
+                        title: "\(ownerLabel) map",
                         action: yourMapAction
                     )
                     .id(ProfileHomeScrollAnchor.map)
@@ -1123,7 +1124,7 @@ private struct ProfileSaveStreakRow: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 28, height: 28)
 
                 Text(streakTitle)
@@ -1428,7 +1429,7 @@ private struct ProfileCalendarMetric: View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(value)")
                 .font(AstirTypography.sheetTitle)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text(label)
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
@@ -1458,7 +1459,7 @@ private struct ProfileCalendarDayCell: View {
                 if isToday {
                     Text("NOW")
                         .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .padding(.horizontal, 5)
                         .frame(height: 13)
                         .overlay(alignment: .bottom) {
@@ -1538,6 +1539,7 @@ private struct ProfileCalendarLegend: View {
 private struct ProfileYourMapPreview: View {
     @Environment(\.astirBrandMode) private var brandMode
     let insights: ProfileInsights
+    let title: String
     let action: () -> Void
 
     var body: some View {
@@ -1559,7 +1561,7 @@ private struct ProfileYourMapPreview: View {
                         Image(systemName: "chevron.right")
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
 
                 ProfileMapSnapshotView(
@@ -1586,8 +1588,8 @@ private struct ProfileYourMapPreview: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Your Map, \(countSummary)")
-        .accessibilityHint("Opens your full interactive place diary")
+        .accessibilityLabel("\(title), \(countSummary)")
+        .accessibilityHint("Opens this full interactive place diary")
         .accessibilityIdentifier("profile.yourMap.preview")
         .walkthroughTarget(.profileMap)
         .walkthroughEmphasis(.profileMap)
@@ -1966,7 +1968,7 @@ private struct ProfileMapSummaryRow: View {
             Spacer()
             Text("\(item.percentage)%")
                 .font(AstirTypography.control)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .black))
                 .foregroundStyle(brandMode.secondaryText)
@@ -2002,7 +2004,7 @@ private struct ProfileMapSummaryShareButton: View {
                 } else {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
             }
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)

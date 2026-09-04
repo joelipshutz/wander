@@ -458,6 +458,18 @@ final class PlaceProfilePresentationTests: XCTestCase {
             PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth,
             PlaceProfileFloatingActions.compactActionFrameWidth
         )
+        XCTAssertFalse(
+            PlaceProfileFloatingActions.shouldUseCompactLayout(
+                variant: .productionDefault,
+                actionCount: 1
+            )
+        )
+        XCTAssertTrue(
+            PlaceProfileFloatingActions.shouldUseCompactLayout(
+                variant: .productionDefault,
+                actionCount: 2
+            )
+        )
     }
 
     func testFloatingActionIntegerFlagPersistsPerAccount() throws {

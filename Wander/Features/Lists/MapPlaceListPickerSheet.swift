@@ -214,7 +214,7 @@ struct MapPlaceListPickerSheet: View {
                         dismiss()
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .disabled(isApplying)
                     .accessibilityIdentifier("map-list-picker.cancel")
                 }
@@ -296,7 +296,7 @@ struct MapPlaceListPickerSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Image(systemName: WanderTab.lists.systemImage)
                 .font(.system(size: 20, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("No lists yet")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
@@ -318,7 +318,7 @@ struct MapPlaceListPickerSheet: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing2) {
             Image(systemName: "bookmark.fill")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 18, height: 18)
 
             Text("This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go.")

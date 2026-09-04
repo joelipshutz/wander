@@ -417,8 +417,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
         XCTAssertTrue(map.contains("accessibilityIdentifier: \"map.headerAdd\""))
         XCTAssertTrue(map.contains("struct MapSourceFilterChip"))
-        XCTAssertTrue(map.contains(".fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)"))
-        XCTAssertTrue(map.contains(".fill(isActive ? astirBrandMode.accent : astirBrandMode.border)"))
+        XCTAssertTrue(map.contains(".astirGlassSurface(cornerRadius: 18, selected: isSelected, castsShadow: true)"))
+        XCTAssertTrue(map.contains(".astirGlassSurface(cornerRadius: 18, selected: isActive, castsShadow: true)"))
         let mapAddButton = try sourceSection(
             map,
             after: "private struct MapGlassAddButton: View",
@@ -560,16 +560,22 @@ final class NavigationContractTests: XCTestCase {
         let lists = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
         )
-        let header = try XCTUnwrap(
-            lists.components(separatedBy: "private var header: some View").last?
-                .components(separatedBy: "private var scopeSwitch: some View").first
+        let home = try sourceSection(
+            lists,
+            after: "private var homeScreen: some View",
+            before: "private var scopeSwitch: some View"
         )
 
-        XCTAssertTrue(header.contains("Text(\"lists\")"))
-        XCTAssertTrue(header.contains("AstirIconActionButton("))
-        XCTAssertTrue(header.contains("accessibilityIdentifier: \"lists.headerAdd\""))
-        XCTAssertFalse(header.contains("WanderGlassHeader("))
-        XCTAssertFalse(header.contains(".wanderGlassPanel("))
+        XCTAssertFalse(home.contains("AstirMastheadLockup("))
+        XCTAssertFalse(home.contains("Text(\"lists\")"))
+        XCTAssertFalse(home.contains("save places into a plan you can actually use"))
+        XCTAssertTrue(lists.contains("AstirEditorialSegmentedSwitch("))
+        XCTAssertTrue(home.contains("AstirIconActionButton("))
+        XCTAssertTrue(home.contains("accessibilityIdentifier: \"lists.headerAdd\""))
+        XCTAssertTrue(home.contains(".astirScrollTracking("))
+        XCTAssertTrue(home.contains("AstirFloatingHeaderBehavior.animation"))
+        XCTAssertFalse(home.contains("WanderGlassHeader("))
+        XCTAssertFalse(home.contains(".wanderGlassPanel("))
     }
 
     @MainActor

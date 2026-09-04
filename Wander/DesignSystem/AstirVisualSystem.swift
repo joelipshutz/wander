@@ -48,6 +48,15 @@ enum AstirBrandMode: String, CaseIterable, Equatable {
         }
     }
 
+    /// Contrast-safe accent for labels and symbols drawn directly on the
+    /// app surface. Filled controls continue to use `accent`.
+    var accentText: Color {
+        switch self {
+        case .editorial: AstirTheme.signal.color
+        case .editorialLight: AstirTheme.signalOnPaper.color
+        }
+    }
+
     var border: Color {
         switch self {
         case .editorial: AstirTheme.lineOnInk.color
@@ -101,10 +110,11 @@ enum AstirTheme {
     static let inkRaised = WanderColorToken(name: "astir.color.inkRaised", hex: "#1B1F1B")
     static let inkRecessed = WanderColorToken(name: "astir.color.inkRecessed", hex: "#101210")
     static let signal = WanderColorToken(name: "astir.color.signal", hex: "#F05A3C")
+    static let signalOnPaper = WanderColorToken(name: "astir.color.signalOnPaper", hex: "#B23620")
     static let mutedOnInk = WanderColorToken(name: "astir.color.mutedOnInk", hex: "#98958D")
-    static let mutedOnPaper = WanderColorToken(name: "astir.color.mutedOnPaper", hex: "#6F6A62")
-    static let lineOnInk = WanderColorToken(name: "astir.color.lineOnInk", hex: "#464943")
-    static let lineOnPaper = WanderColorToken(name: "astir.color.lineOnPaper", hex: "#C9BFB0")
+    static let mutedOnPaper = WanderColorToken(name: "astir.color.mutedOnPaper", hex: "#655F57")
+    static let lineOnInk = WanderColorToken(name: "astir.color.lineOnInk", hex: "#74786F")
+    static let lineOnPaper = WanderColorToken(name: "astir.color.lineOnPaper", hex: "#8A8176")
 
     static func wordmark(_ size: CGFloat) -> Font {
         .system(size: size, weight: .medium, design: .serif)
@@ -327,9 +337,8 @@ extension View {
     }
 }
 
-/// Positions independently floating controls without placing another glass
-/// slab behind the group. A frameless material field lightly softens moving
-/// content beneath the controls, then fades away without reading as a card.
+/// Positions independently floating controls without adding a shared material
+/// slab. Each child owns the smallest glass or localized blur it needs.
 struct AstirFloatingHeaderSurface<Content: View>: View {
     private let content: Content
 
@@ -340,45 +349,77 @@ struct AstirFloatingHeaderSurface<Content: View>: View {
     var body: some View {
         content
             .padding(.horizontal, WanderTheme.spacing2)
-            .padding(.top, WanderTheme.spacing1)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background {
-                AstirHeaderBlurBackdrop()
-                    .padding(.horizontal, -WanderTheme.spacing2)
-                    .padding(.top, -72)
-                    .ignoresSafeArea(edges: .top)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
     }
 }
 
-private struct AstirHeaderBlurBackdrop: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.astirBrandMode) private var brandMode
+enum AstirFloatingHeaderBehavior {
+    static let topRevealOffset: CGFloat = 8
+    static let minimumHideOffset: CGFloat = 28
+    static let minimumMeaningfulDelta: CGFloat = 0.7
+    static let hideTravelThreshold: CGFloat = 24
+    static let revealTravelThreshold: CGFloat = 9
+
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.30, extraBounce: 0)
+    }
+}
+
+struct AstirScrollOffsetReader: View {
+    let coordinateSpaceName: String
 
     var body: some View {
-        Group {
-            if reduceTransparency {
-                brandMode.background.opacity(0.94)
-            } else {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .opacity(brandMode.prefersDarkInterface ? 0.34 : 0.42)
-                    .overlay(brandMode.background.opacity(brandMode.prefersDarkInterface ? 0.04 : 0.025))
-            }
-        }
-        .mask {
-            LinearGradient(
-                stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black.opacity(0.94), location: 0.76),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: AstirScrollOffsetPreferenceKey.self,
+                value: max(0, -proxy.frame(in: .named(coordinateSpaceName)).minY)
             )
         }
+        .frame(height: 1)
+        .padding(.bottom, -1)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct AstirScrollOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct AstirScrollTrackingModifier: ViewModifier {
+    let coordinateSpaceName: String
+    let onOffsetChange: (CGFloat) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                max(0, geometry.contentOffset.y + geometry.contentInsets.top)
+            } action: { _, offset in
+                onOffsetChange(offset)
+            }
+        } else {
+            content.onPreferenceChange(AstirScrollOffsetPreferenceKey.self) { offset in
+                onOffsetChange(offset)
+            }
+        }
+    }
+}
+
+extension View {
+    func astirScrollTracking(
+        coordinateSpaceName: String,
+        onOffsetChange: @escaping (CGFloat) -> Void
+    ) -> some View {
+        modifier(
+            AstirScrollTrackingModifier(
+                coordinateSpaceName: coordinateSpaceName,
+                onOffsetChange: onOffsetChange
+            )
+        )
     }
 }
 
@@ -426,7 +467,7 @@ struct AstirEditorialSegmentedSwitch: View {
                             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                             .foregroundStyle(
                                 isSelected
-                                    ? brandMode.accent
+                                    ? brandMode.accentText
                                     : brandMode.secondaryText
                             )
 

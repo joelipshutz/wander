@@ -97,7 +97,7 @@ struct ProfileSettingsHome: View {
             Button(action: closeSettings) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                     .background(brandMode.raisedBackground, in: Circle())
             }
@@ -357,7 +357,7 @@ struct ProfileSettingsHome: View {
             if hasPendingFeatureFlagRestart {
                 Label("Restart rec.me to apply these changes", systemImage: "arrow.clockwise")
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .accessibilityIdentifier("settings.flags.restartRequired")
             }
         } header: {
@@ -603,7 +603,7 @@ private struct DefaultMapFilterSettingsScreen: View {
                         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                             Image(systemName: source.systemImage)
                                 .font(.system(.body, design: .default, weight: .bold))
-                                .foregroundStyle(brandMode.accent)
+                                .foregroundStyle(brandMode.accentText)
                                 .frame(width: 24)
 
                             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
@@ -622,7 +622,7 @@ private struct DefaultMapFilterSettingsScreen: View {
                             if store.defaultMapFilter == source {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 15, weight: .black))
-                                    .foregroundStyle(brandMode.accent)
+                                    .foregroundStyle(brandMode.accentText)
                                     .accessibilityHidden(true)
                             }
                         }
@@ -791,7 +791,7 @@ private struct ProfileSettingsAccountActions: View {
             VStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: icon)
                     .font(.system(.title3, design: .default, weight: .semibold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(height: 24)
 
                 Text(title)
@@ -902,7 +902,7 @@ struct ProfilePrivacyTrustScreen: View {
                 ForEach(SettingsTrustSurface.facts) { fact in
                     HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                         Image(systemName: fact.icon)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .frame(width: 28)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(fact.title)
@@ -1041,7 +1041,7 @@ struct BlockedMutedScreen: View {
                             }
                         }
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                     }
                     .padding(.vertical, WanderTheme.spacing1)
                     .listRowBackground(brandMode.raisedBackground)

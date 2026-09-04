@@ -498,7 +498,7 @@ struct ActivityPostcardView: View {
         if let rating = context.rating {
             Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
                 .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.terracottaDark.color)
+                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
                 .padding(.horizontal, 9)
                 .frame(minHeight: 30)
                 .background(visualStyle == .astir ? Color.clear : WanderTheme.terracottaTint.color)
@@ -942,7 +942,7 @@ struct ActivityCommentsScreen: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "bubble.right")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("Start the conversation")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
@@ -984,7 +984,7 @@ struct ActivityCommentsScreen: View {
 
                 Button("Post", action: post)
                     .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(minWidth: 52, minHeight: 44)
                     .disabled(normalizedDraft.isEmpty || isPosting)
             }
@@ -1263,7 +1263,7 @@ struct ActivityCommentsRouteScreen: View {
             } else {
                 Image(systemName: "exclamationmark.bubble")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
 
                 Text("This activity couldn’t load")
                     .font(AstirTypography.sectionTitle)

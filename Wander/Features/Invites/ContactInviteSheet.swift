@@ -60,7 +60,7 @@ struct InviteEntryPointButton: View {
                         .fill(brandMode.accentWash)
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
                 .frame(width: 42, height: 42)
 
@@ -78,7 +78,7 @@ struct InviteEntryPointButton: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.vertical, WanderTheme.spacing2)
@@ -639,7 +639,7 @@ struct ContactInviteSheet: View {
                     if contact.relationship.isOnRecme {
                         Text("on rec.me")
                             .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .scaleEffect(0.82)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
@@ -683,7 +683,7 @@ struct ContactInviteSheet: View {
                     .frame(width: 104, height: 104)
                 Image(systemName: "person.2.crop.square.stack.fill")
                     .font(.system(size: 42, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
 
             VStack(spacing: WanderTheme.spacing2) {
@@ -766,7 +766,7 @@ struct ContactInviteSheet: View {
 
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.system(size: 56, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text("contacts are off")
@@ -859,7 +859,7 @@ struct ContactInviteSheet: View {
             Spacer()
             Image(systemName: "arrow.clockwise.circle.fill")
                 .font(.system(size: 42, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("contacts couldn’t load")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
@@ -892,7 +892,7 @@ struct ContactInviteSheet: View {
                     .frame(width: 108, height: 108)
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 43, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .offset(x: -3, y: 2)
             }
 
@@ -1441,7 +1441,7 @@ private struct AlphabetScrubber: View {
 
                     Text(letters[index])
                         .font(.system(size: 8, weight: .black, design: .rounded))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .scaleEffect(scale)
                         .offset(x: isScrubbing ? horizontalOffset(for: distance) : 0)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
