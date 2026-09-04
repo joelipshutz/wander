@@ -21,6 +21,7 @@ import {
   validatePayloadAgainstChangedFiles,
   verifyManifestSourceCurrent,
 } from "./testflight-manifest.mjs";
+import { sha256 } from "./reconcile-testflight-manifest.mjs";
 
 function markedPayload(payload) {
   return `Summary\n\n<!-- ${PR_PAYLOAD_MARKER}\n${JSON.stringify(payload, null, 2)}\n-->`;
@@ -215,6 +216,41 @@ test("snapshot syncs the same issue and emits a version-2 release gate", async (
       /^rec\.me 1\.0 \(2\) is the locked release candidate\./,
     );
     assert.equal(parseEntryComment(state.comments[0].body).disposition, "ship");
+  } finally {
+    rmSync(repository.cwd, { recursive: true, force: true });
+    rmSync(output, { recursive: true, force: true });
+  }
+});
+
+test("snapshot hashes approved compact tester copy while retaining every manifest entry", async () => {
+  const repository = makeRepository();
+  const output = mkdtempSync(join(tmpdir(), "recme-manifest-approved-copy-"));
+  const { client } = fakeGitHub(repository);
+  const approvedTesterCopy = [
+    "What changed",
+    "- Imports are easier to review.",
+    "",
+    "What to test",
+    "- Import a post and review it.",
+    "",
+    "Known limitations",
+    "- No new known limitations.",
+  ].join("\n");
+  try {
+    const result = await createReleaseSnapshot({
+      client,
+      cwd: repository.cwd,
+      baseRef: "testflight/build-1",
+      headRef: repository.candidateSha,
+      buildNumber: 2,
+      status: "candidate",
+      writeDirectory: output,
+      approvedTesterCopy,
+    });
+    const gate = JSON.parse(readFileSync(result.files.reconciliation, "utf8"));
+    assert.equal(readFileSync(result.files.whatToTest, "utf8").trim(), approvedTesterCopy);
+    assert.equal(gate.entries.length, 1);
+    assert.equal(gate.whatToTestSha256, sha256(approvedTesterCopy));
   } finally {
     rmSync(repository.cwd, { recursive: true, force: true });
     rmSync(output, { recursive: true, force: true });

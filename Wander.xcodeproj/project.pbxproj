@@ -49,6 +49,7 @@
 		1B5F7AE1882A1C2C51D99E92 /* WanderBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = E850341A28B18117631F62F5 /* WanderBackend.swift */; };
 		1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */; };
 		1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */; };
+		1CB895FDF5D496BF5085E7E7 /* rec-404-map-card-first-tap-still-fails-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 76FB4958A3B77C78A341C275 /* rec-404-map-card-first-tap-still-fails-pre.json */; };
 		1CC229F1DBD13EA63FA6EE21 /* rec-270-liquid-glass-pin-transition-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */; };
 		1EE3B1F3E6390358B764C2BE /* ProfileOwnerHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37422B8F2E5F0D4CBE2C20BA /* ProfileOwnerHome.swift */; };
 		1F0CFA9D6277F7F19F5DE064 /* PlaceSaveDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */; };
@@ -254,6 +255,7 @@
 		E004960753EEE03FB0C5133A /* YourMapPrototypeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE361490EBD29A724E1B3F6 /* YourMapPrototypeTests.swift */; };
 		E140EC2813E26B8307B1D1B1 /* rec-270-map-search-shadow-followup-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 5158D1D9D07312701C4E026B /* rec-270-map-search-shadow-followup-pre.json */; };
 		E15BC91E5CA5C62F2E9E710A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */; };
+		E3420CA8E184426B7EEC9FD6 /* rec-404-map-card-first-tap-still-fails-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = 9EB98141169138353D30E900 /* rec-404-map-card-first-tap-still-fails-pre.png */; };
 		E4B474B631166BEA26F3C833 /* SupabaseDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21979B6601194E839F12552D /* SupabaseDTOs.swift */; };
 		E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */; };
 		E675767BE5C249B99B816B74 /* WanderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0078639327C81EA5F98400B4 /* WanderApp.swift */; };
@@ -461,6 +463,7 @@
 		73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaGoReminderTests.swift; sourceTree = "<group>"; };
 		73F1E08A489F203F67F25F17 /* AppBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBrand.swift; sourceTree = "<group>"; };
 		76E267FE49035CB36F175971 /* ProfileImportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileImportViews.swift; sourceTree = "<group>"; };
+		76FB4958A3B77C78A341C275 /* rec-404-map-card-first-tap-still-fails-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-404-map-card-first-tap-still-fails-pre.json"; sourceTree = "<group>"; };
 		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
 		7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureDateSaveMockups.swift; sourceTree = "<group>"; };
 		7A02BE0AE86E482916C8F103 /* Wander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wander.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -499,6 +502,7 @@
 		9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-330-camera-preview-pre.json"; sourceTree = "<group>"; };
 		9E5C022AA603520F5AFAA348 /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
 		9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceExternalLinksTests.swift; sourceTree = "<group>"; };
+		9EB98141169138353D30E900 /* rec-404-map-card-first-tap-still-fails-pre.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-404-map-card-first-tap-still-fails-pre.png"; sourceTree = "<group>"; };
 		9F0B6B10FCA35BC2BBC333BC /* PlaceImportCandidateMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportCandidateMatcher.swift; sourceTree = "<group>"; };
 		9FCB749FFB8699E525A65B0D /* SaveStreakCelebrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreakCelebrationView.swift; sourceTree = "<group>"; };
 		A090198414BF253FB326D960 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
@@ -741,6 +745,8 @@
 				F0FADB002E3D0B48F08EF245 /* rec-380-apple-signin-adoption-race-pre.json */,
 				526A2543FC6ACCCA31926BFB /* rec-381-large-account-map-loading-post.png */,
 				5A263B28EB66953BBA9F4A35 /* rec-381-large-account-map-loading-pre.json */,
+				76FB4958A3B77C78A341C275 /* rec-404-map-card-first-tap-still-fails-pre.json */,
+				9EB98141169138353D30E900 /* rec-404-map-card-first-tap-still-fails-pre.png */,
 				61FB898ADE26A77B273B1639 /* simulator-test-session-relaunch-post.png */,
 				4017467979764DBA4C407626 /* simulator-test-session-relaunch-pre.json */,
 			);
@@ -1441,6 +1447,8 @@
 				54234A3E3176B76CF9CDFC4B /* rec-380-apple-signin-adoption-race-pre.json in Resources */,
 				B80EF30F001BDDB5522662E9 /* rec-381-large-account-map-loading-post.png in Resources */,
 				56F03137107EE30E0A42B4F8 /* rec-381-large-account-map-loading-pre.json in Resources */,
+				1CB895FDF5D496BF5085E7E7 /* rec-404-map-card-first-tap-still-fails-pre.json in Resources */,
+				E3420CA8E184426B7EEC9FD6 /* rec-404-map-card-first-tap-still-fails-pre.png in Resources */,
 				9C82EFA4EF3FC64621785DDB /* simulator-test-session-relaunch-post.png in Resources */,
 				2EAB478075A4392BD131BCAF /* simulator-test-session-relaunch-pre.json in Resources */,
 			);
@@ -1848,7 +1856,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 168;
+				CURRENT_PROJECT_VERSION = 169;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
@@ -1865,7 +1873,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 168;
+				CURRENT_PROJECT_VERSION = 169;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
