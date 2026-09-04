@@ -813,8 +813,9 @@ private struct OnboardingNotificationView: View {
                     ),
                     isDisabled: isWorking
                 ) {
+                    guard !isWorking else { return }
+                    isWorking = true
                     Task {
-                        isWorking = true
                         await pushNotifications.refreshAuthorizationStatus()
                         if OnboardingNotificationPermissionPolicy.action(
                             for: pushNotifications.authorizationStatus
@@ -837,7 +838,8 @@ private struct OnboardingNotificationView: View {
                         await finish()
                     }
                 }
-                if OnboardingNotificationPermissionPolicy.allowsSecondaryAction(
+                if !isWorking,
+                   OnboardingNotificationPermissionPolicy.allowsSecondaryAction(
                     for: pushNotifications.authorizationStatus
                 ) {
                     Button("Not now") {

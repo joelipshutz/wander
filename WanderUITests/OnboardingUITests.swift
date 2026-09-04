@@ -4,6 +4,11 @@ import XCTest
 final class OnboardingUITests: XCTestCase {
     func testActualOnboardingPermissionScreensUseSingleNeutralAction() {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+        }
         app.launchArguments = [
             "-WanderAuthenticatedUITest",
             "-WanderUseDemoFixtures",
@@ -12,6 +17,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
+        XCTAssertTrue(app.staticTexts["Find the good stuff nearby"].waitForExistence(timeout: 8))
         let locationContinue = app.buttons["Continue"].firstMatch
         XCTAssertTrue(locationContinue.waitForExistence(timeout: 8))
         XCTAssertEqual(locationContinue.label, "Continue")
@@ -22,7 +28,12 @@ final class OnboardingUITests: XCTestCase {
         locationScreenshot.lifetime = .keepAlways
         add(locationScreenshot)
 
+        locationContinue.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+
         app.terminate()
+        app.resetAuthorizationStatus(for: .location)
         app.launchArguments = [
             "-WanderAuthenticatedUITest",
             "-WanderUseDemoFixtures",
@@ -40,6 +51,27 @@ final class OnboardingUITests: XCTestCase {
         contactsScreenshot.name = "REC-396 actual onboarding contacts permission"
         contactsScreenshot.lifetime = .keepAlways
         add(contactsScreenshot)
+    }
+
+    func testActualOnboardingNotificationPrimerContinuesToSystemPrompt() {
+        let app = XCUIApplication()
+        addTeardownBlock { app.terminate() }
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "notifications"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Don’t miss a great find"].waitForExistence(timeout: 8))
+        let notificationContinue = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(notificationContinue.isHittable)
+        XCTAssertFalse(app.buttons["Not now"].exists)
+
+        notificationContinue.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
     }
 
     func testActualFeedContactInvitePrimerUsesSingleNeutralAction() {
