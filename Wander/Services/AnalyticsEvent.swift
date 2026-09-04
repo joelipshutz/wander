@@ -231,6 +231,7 @@ enum WanderAnalyticsEvents {
     static let onboardingCarouselAdvanced = "onboarding_carousel_advanced"
     static let onboardingAuthStarted = "onboarding_auth_started"
     static let onboardingAuthCompleted = "onboarding_auth_completed"
+    static let nativeSocialAuthResult = "native_social_auth_result"
     static let onboardingIdentitySubmitted = "onboarding_identity_submitted"
     static let onboardingIdentityFailed = "onboarding_identity_failed"
     static let onboardingPermissionResult = "onboarding_permission_result"

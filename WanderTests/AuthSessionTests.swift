@@ -146,12 +146,14 @@ final class AuthSessionTests: XCTestCase {
 
     func testAppleSignUpCompletesSessionAndClosesNativeAuth() async {
         let session = AuthSession(userID: "user_apple", displayName: "Apple User", handle: nil)
+        let analytics = AuthRecordingAnalyticsClient()
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
-            nativeAuthSession: session
+            nativeAuthSession: session,
+            nativeAuthSessionAdoption: .afterCompletionRetry
         )
-        let store = AuthSessionStore(provider: provider)
+        let store = AuthSessionStore(provider: provider, analytics: analytics)
         store.beginSignIn(mode: .signUp)
 
         let outcome = await store.authenticate(with: .apple)
@@ -166,6 +168,20 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertFalse(store.isPresentingNativeAuth)
         XCTAssertNil(store.activeSocialAuthProvider)
         XCTAssertNil(store.nativeAuthError)
+        XCTAssertEqual(
+            analytics.events,
+            [
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.nativeSocialAuthResult,
+                    properties: [
+                        "provider": "apple",
+                        "mode": "sign_up",
+                        "result": "completed",
+                        "session_adoption": "after_completion_retry"
+                    ]
+                )
+            ]
+        )
     }
 
     func testAppleCancellationKeepsAuthOpenWithoutShowingAnError() async {
@@ -190,12 +206,13 @@ final class AuthSessionTests: XCTestCase {
     }
 
     func testAppleFailureKeepsAuthOpenWithRecoverableCopy() async {
+        let analytics = AuthRecordingAnalyticsClient()
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
             nativeAuthFailure: AuthSessionError.tokenUnavailable
         )
-        let store = AuthSessionStore(provider: provider)
+        let store = AuthSessionStore(provider: provider, analytics: analytics)
         store.beginSignIn()
 
         let outcome = await store.authenticate(with: .apple)
@@ -205,6 +222,25 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(
             store.nativeAuthError,
             "Apple sign-in didn’t finish. Try again or use another method."
+        )
+        XCTAssertEqual(
+            analytics.events,
+            [
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.nativeSocialAuthResult,
+                    properties: [
+                        "provider": "apple",
+                        "mode": "sign_in_or_up",
+                        "result": "failed",
+                        "session_adoption": "none",
+                        "failure_category": "token_unavailable"
+                    ]
+                )
+            ]
+        )
+        XCTAssertEqual(
+            analytics.events.map(WanderAnalyticsSchema.sanitized),
+            analytics.events
         )
     }
 
@@ -452,6 +488,94 @@ final class AuthSessionTests: XCTestCase {
             .unavailable("Could not verify your session. Check your connection and try again.")
         )
     }
+
+    #if canImport(ClerkKit)
+    func testCompletedNativeAuthRetriesUntilAuthoritativeSessionAppears() async throws {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let session = AuthSession(
+            userID: "user_apple",
+            displayName: "Apple User",
+            handle: "apple"
+        )
+        var resolutions: [AuthSession?] = [nil, nil, session]
+        var sleepRequests: [UInt64] = []
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { resolutions.removeFirst() },
+            sessionCache: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [200, 600, 2_000],
+            sessionAdoptionSleeper: { delay in sleepRequests.append(delay) },
+            configureClerk: { $0 }
+        )
+
+        let adoption = try await service.adoptCompletedNativeAuthSession()
+
+        XCTAssertEqual(adoption, .afterCompletionRetry)
+        XCTAssertEqual(sleepRequests, [200, 600])
+        XCTAssertEqual(service.state, .signedIn(session))
+        XCTAssertTrue(resolutions.isEmpty)
+    }
+
+    func testCompletedNativeAuthFailsAfterBoundedSessionAdoptionRetries() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        var resolutionCount = 0
+        var sleepRequests: [UInt64] = []
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolutionCount += 1
+                return nil
+            },
+            sessionCache: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [200, 600],
+            sessionAdoptionSleeper: { delay in sleepRequests.append(delay) },
+            configureClerk: { $0 }
+        )
+
+        do {
+            _ = try await service.adoptCompletedNativeAuthSession()
+            XCTFail("Expected session adoption to fail closed")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .sessionUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(resolutionCount, 3)
+        XCTAssertEqual(sleepRequests, [200, 600])
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testProviderErrorRecoveryAdoptsOnlyAuthoritativeActiveSession() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let session = AuthSession(
+            userID: "user_existing",
+            displayName: "Existing User",
+            handle: "existing"
+        )
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { session },
+            sessionCache: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionSleeper: { _ in
+                XCTFail("Provider-error recovery must not wait or retry")
+            },
+            configureClerk: { $0 }
+        )
+
+        let didRecover = await service.adoptCurrentSessionAfterProviderError()
+
+        XCTAssertTrue(didRecover)
+        XCTAssertEqual(service.state, .signedIn(session))
+    }
+    #endif
 
     func testOfflineIdentityIsSignedInLocallyButCannotIssueRemoteTokens() async {
         let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
@@ -1386,4 +1510,15 @@ private final class TwoStageAccountSwitchAuthProvider: AuthSessionProviding {
         guard case .signedIn = state else { throw AuthSessionError.notSignedIn }
         return "test-token"
     }
+}
+
+private final class AuthRecordingAnalyticsClient: AnalyticsClient {
+    private(set) var events: [AnalyticsEvent] = []
+
+    func track(_ event: AnalyticsEvent) {
+        events.append(event)
+    }
+
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

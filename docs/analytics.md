@@ -68,6 +68,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
+| `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
 | `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
 | `place_import_matching_completed` | Every item in that pasted import finishes local matching | aggregate `batch_count`, `matched_count`, `needs_review_count` |

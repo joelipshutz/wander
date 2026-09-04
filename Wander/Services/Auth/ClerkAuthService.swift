@@ -15,7 +15,10 @@ final class ClerkAuthService: AuthSessionProviding {
 
     #if canImport(ClerkKit)
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
+    typealias SessionAdoptionSleeper = @MainActor (UInt64) async throws -> Void
     private let resolveAuthoritativeSession: SessionResolver
+    private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
+    private let sessionAdoptionSleeper: SessionAdoptionSleeper
     private var refreshGeneration = 0
     private enum PendingEmailVerification {
         case signIn(SignIn)
@@ -27,11 +30,21 @@ final class ClerkAuthService: AuthSessionProviding {
         configuration: WanderBackendConfiguration,
         resolveSession: @escaping SessionResolver = ClerkAuthService.resolveCurrentSession,
         sessionCache: AuthSessionCache = .live,
+        sessionAdoptionRetryDelaysNanoseconds: [UInt64] = [
+            200_000_000,
+            600_000_000,
+            2_000_000_000
+        ],
+        sessionAdoptionSleeper: @escaping SessionAdoptionSleeper = { delay in
+            try await Task<Never, Never>.sleep(nanoseconds: delay)
+        },
         configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
     ) {
         self.configuration = configuration
         self.resolveAuthoritativeSession = resolveSession
         self.sessionCache = sessionCache
+        self.sessionAdoptionRetryDelaysNanoseconds = sessionAdoptionRetryDelaysNanoseconds
+        self.sessionAdoptionSleeper = sessionAdoptionSleeper
 
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
@@ -163,14 +176,15 @@ final class ClerkAuthService: AuthSessionProviding {
     func authenticate(
         with provider: NativeSocialAuthProvider,
         mode: NativeAuthMode
-    ) async throws -> NativeAuthOutcome {
+    ) async throws -> NativeSocialAuthResult {
         #if canImport(ClerkKit) && canImport(AuthenticationServices)
         guard configuration.isClerkConfigured else {
             throw AuthSessionError.notConfigured
         }
 
+        let startedWithSignedInSession = state.isSignedIn
+        let result: TransferFlowResult
         do {
-            let result: TransferFlowResult
             switch (provider, mode) {
             case (.apple, .signIn):
                 result = try await Clerk.shared.auth.signInWithApple(transferable: false)
@@ -189,32 +203,6 @@ final class ClerkAuthService: AuthSessionProviding {
                 result = try await Clerk.shared.auth.signUpWithOAuth(provider: .google)
             }
 
-            let outcome: NativeAuthOutcome
-            switch result {
-            case .signIn(let signIn):
-                if signIn.status == .complete {
-                    outcome = .completed
-                } else if mode == .signIn {
-                    outcome = .requiresExistingAccountVerification
-                } else {
-                    outcome = .requiresAdditionalVerification
-                }
-            case .signUp(let signUp):
-                if signUp.status == .complete {
-                    outcome = .completed
-                } else if mode == .signIn {
-                    outcome = .requiresExistingAccountVerification
-                } else {
-                    outcome = .requiresAdditionalVerification
-                }
-            }
-
-            guard outcome == .completed else { return outcome }
-            await refreshSession()
-            guard case .signedIn = state else {
-                throw AuthSessionError.sessionUnavailable
-            }
-            return .completed
         } catch let error as ASAuthorizationError where error.code == .canceled {
             throw AuthSessionError.cancelled
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
@@ -222,12 +210,85 @@ final class ClerkAuthService: AuthSessionProviding {
         } catch is CancellationError {
             throw AuthSessionError.cancelled
         } catch {
-            throw Self.authError(from: error)
+            let mappedError = Self.authError(from: error)
+            if !startedWithSignedInSession,
+               await adoptCurrentSessionAfterProviderError() {
+                return NativeSocialAuthResult(
+                    outcome: .completed,
+                    sessionAdoption: .afterProviderErrorRefresh
+                )
+            }
+            throw mappedError
         }
+
+        let outcome: NativeAuthOutcome
+        switch result {
+        case .signIn(let signIn):
+            if signIn.status == .complete {
+                outcome = .completed
+            } else if mode == .signIn {
+                outcome = .requiresExistingAccountVerification
+            } else {
+                outcome = .requiresAdditionalVerification
+            }
+        case .signUp(let signUp):
+            if signUp.status == .complete {
+                outcome = .completed
+            } else if mode == .signIn {
+                outcome = .requiresExistingAccountVerification
+            } else {
+                outcome = .requiresAdditionalVerification
+            }
+        }
+
+        guard outcome == .completed else {
+            return NativeSocialAuthResult(outcome: outcome)
+        }
+        let adoption = try await adoptCompletedNativeAuthSession()
+        return NativeSocialAuthResult(
+            outcome: .completed,
+            sessionAdoption: adoption
+        )
         #else
         throw AuthSessionError.notConfigured
         #endif
     }
+
+    #if canImport(ClerkKit)
+    /// A completed Clerk auth response can precede the active client session
+    /// becoming observable. Retry only this post-completion adoption boundary;
+    /// ordinary foreground refreshes remain single-shot.
+    func adoptCompletedNativeAuthSession() async throws -> NativeAuthSessionAdoption {
+        await refreshSession()
+        try Task.checkCancellation()
+        if case .signedIn = state {
+            return .immediate
+        }
+
+        for delay in sessionAdoptionRetryDelaysNanoseconds {
+            try await sessionAdoptionSleeper(delay)
+            try Task.checkCancellation()
+            if case .signedIn = state {
+                return .afterCompletionRetry
+            }
+            await refreshSession()
+            try Task.checkCancellation()
+            if case .signedIn = state {
+                return .afterCompletionRetry
+            }
+        }
+
+        throw AuthSessionError.sessionUnavailable
+    }
+
+    func adoptCurrentSessionAfterProviderError() async -> Bool {
+        await refreshSession()
+        guard !Task.isCancelled, case .signedIn = state else {
+            return false
+        }
+        return true
+    }
+    #endif
 
     func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws {
         #if canImport(ClerkKit)
