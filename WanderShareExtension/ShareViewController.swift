@@ -1,7 +1,7 @@
 import UIKit
 
 /// The share extension mirrors the in-app import sheet: the source app fills
-/// the link, and the person only confirms Start import. Matching, review,
+/// the link, and Start import counts down unless cancelled. Matching, review,
 /// notifications, and final saves remain owned by the containing app.
 final class ShareViewController: UIViewController {
     private enum Palette {
@@ -15,14 +15,22 @@ final class ShareViewController: UIViewController {
     }
 
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
+    private let cardView = UIView()
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let linkField = UITextField()
     private let startButton = UIButton(type: .system)
+    private let startContainer = UIView()
+    private let countdownFill = UIView()
+    private var fillWidth: NSLayoutConstraint?
+    private var cardHeight: NSLayoutConstraint?
+    private var countdownWorkItem: DispatchWorkItem?
+    private static let countdownDuration: TimeInterval = 5
     private let errorLabel = UILabel()
     private let retryButton = UIButton(type: .system)
     private var inputs: [SharedPlaceImportCaptureInput] = []
     private var isSubmitting = false
+    private var isClosing = false
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
@@ -32,9 +40,13 @@ final class ShareViewController: UIViewController {
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         ).height + 26
-        // Ask the share host for only the space the form needs. Scroll rather
-        // than growing beyond a half sheet at large accessibility text sizes.
-        let height = min(contentHeight, (view.window?.screen.bounds.height ?? 852) * 0.55)
+        // Some share hosts ignore preferredContentSize. The visible card is
+        // bottom-aligned and content-sized even when the host supplies a taller
+        // transparent container. Large text scrolls inside the available space.
+        let height = min(contentHeight + view.safeAreaInsets.bottom, view.bounds.height)
+        if abs((cardHeight?.constant ?? 0) - height) > 1 {
+            cardHeight?.constant = height
+        }
         if abs(preferredContentSize.height - height) > 1 {
             preferredContentSize = CGSize(width: view.bounds.width, height: height)
         }
@@ -43,9 +55,37 @@ final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         preferredContentSize = CGSize(width: 0, height: 440)
-        view.backgroundColor = Palette.canvas
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        cardView.translatesAutoresizingMaskIntoConstraints = false
+        cardView.backgroundColor = Palette.canvas
+        cardView.layer.cornerRadius = 32
+        cardView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        cardView.clipsToBounds = true
+        view.addSubview(cardView)
+        cardHeight = cardView.heightAnchor.constraint(equalToConstant: 440)
+        NSLayoutConstraint.activate([
+            cardView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            cardView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            cardView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            cardHeight!
+        ])
+        NotificationCenter.default.addObserver(self, selector: #selector(pauseCountdown),
+            name: .NSExtensionHostWillResignActive, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(startCountdown),
+            name: .NSExtensionHostDidBecomeActive, object: nil)
         configureLoadingView()
         loadSharedItems()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        startCountdown()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        pauseCountdown()
     }
 
     private func scaledFont(
@@ -63,10 +103,10 @@ final class ShareViewController: UIViewController {
         loadingIndicator.color = Palette.terracotta
         loadingIndicator.startAnimating()
         loadingIndicator.accessibilityLabel = "Reading shared link"
-        view.addSubview(loadingIndicator)
+        cardView.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
-            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            loadingIndicator.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
+            loadingIndicator.centerYAnchor.constraint(equalTo: cardView.centerYAnchor)
         ])
     }
 
@@ -143,7 +183,9 @@ final class ShareViewController: UIViewController {
         ])
 
         linkField.font = scaledFont(size: 15, weight: .semibold, textStyle: .body)
-        linkField.textColor = Palette.ink
+        linkField.textColor = Palette.muted
+        linkField.isUserInteractionEnabled = false
+        linkField.accessibilityTraits = .staticText
         linkField.tintColor = Palette.terracotta
         linkField.clearButtonMode = .whileEditing
         linkField.autocapitalizationType = .none
@@ -153,7 +195,6 @@ final class ShareViewController: UIViewController {
         linkField.placeholder = "Shared link"
         linkField.accessibilityLabel = "Import link"
         linkField.accessibilityIdentifier = "share-extension-import-link"
-        linkField.addTarget(self, action: #selector(linkEdited), for: .editingChanged)
 
         let linkContainer = UIStackView(arrangedSubviews: [linkIcon, linkField])
         linkContainer.axis = .horizontal
@@ -173,7 +214,7 @@ final class ShareViewController: UIViewController {
         linkContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
 
         if #available(iOS 26.0, *) {
-            startButton.configuration = .prominentGlass()
+            startButton.configuration = .glass()
         } else {
             startButton.configuration = .filled()
         }
@@ -181,12 +222,34 @@ final class ShareViewController: UIViewController {
         startButton.configuration?.image = UIImage(systemName: "arrow.down.doc.fill")
         startButton.configuration?.imagePadding = 8
         startButton.configuration?.cornerStyle = .capsule
-        startButton.configuration?.baseBackgroundColor = Palette.terracotta
+        startButton.configuration?.background.backgroundColor = .clear
         startButton.configuration?.baseForegroundColor = .white
         startButton.titleLabel?.font = scaledFont(size: 16, weight: .black, textStyle: .headline)
         startButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 54).isActive = true
         startButton.addTarget(self, action: #selector(startImport), for: .touchUpInside)
         startButton.accessibilityIdentifier = "share-extension-start-import"
+        startButton.accessibilityHint = "Starts automatically after five seconds. Cancel import to stop."
+
+        startContainer.backgroundColor = Palette.terracotta.withAlphaComponent(0.65)
+        startContainer.layer.cornerRadius = 27
+        startContainer.clipsToBounds = true
+        countdownFill.backgroundColor = Palette.terracotta
+        countdownFill.isUserInteractionEnabled = false
+        countdownFill.translatesAutoresizingMaskIntoConstraints = false
+        startButton.translatesAutoresizingMaskIntoConstraints = false
+        startContainer.addSubview(countdownFill)
+        startContainer.addSubview(startButton)
+        fillWidth = countdownFill.widthAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            countdownFill.leadingAnchor.constraint(equalTo: startContainer.leadingAnchor),
+            countdownFill.topAnchor.constraint(equalTo: startContainer.topAnchor),
+            countdownFill.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor),
+            fillWidth!,
+            startButton.leadingAnchor.constraint(equalTo: startContainer.leadingAnchor),
+            startButton.trailingAnchor.constraint(equalTo: startContainer.trailingAnchor),
+            startButton.topAnchor.constraint(equalTo: startContainer.topAnchor),
+            startButton.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor)
+        ])
 
         errorLabel.font = .preferredFont(forTextStyle: .footnote)
         errorLabel.textColor = Palette.error
@@ -208,7 +271,7 @@ final class ShareViewController: UIViewController {
         contentStack.addArrangedSubview(headline)
         contentStack.addArrangedSubview(detail)
         contentStack.addArrangedSubview(linkContainer)
-        contentStack.addArrangedSubview(startButton)
+        contentStack.addArrangedSubview(startContainer)
         contentStack.addArrangedSubview(errorLabel)
         contentStack.addArrangedSubview(retryButton)
         contentStack.setCustomSpacing(12, after: title)
@@ -225,13 +288,13 @@ final class ShareViewController: UIViewController {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = false
         scrollView.keyboardDismissMode = .interactive
-        view.addSubview(scrollView)
+        cardView.addSubview(scrollView)
         scrollView.addSubview(contentStack)
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
-            scrollView.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
-            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 24),
+            scrollView.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -24),
+            scrollView.topAnchor.constraint(equalTo: cardView.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: cardView.safeAreaLayoutGuide.bottomAnchor),
             contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
             contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 18),
@@ -264,6 +327,7 @@ final class ShareViewController: UIViewController {
     }
 
     private func loadSharedItems() {
+        pauseCountdown()
         isSubmitting = false
         loadingIndicator.isHidden = false
         scrollView.isHidden = true
@@ -273,7 +337,7 @@ final class ShareViewController: UIViewController {
         }
         ShareExtensionItemLoader.load(from: extensionContext.inputItems) { [weak self] result in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, !self.isClosing else { return }
                 switch result {
                 case .success(let inputs):
                     self.inputs = inputs
@@ -296,10 +360,13 @@ final class ShareViewController: UIViewController {
         retryButton.isHidden = true
         loadingIndicator.isHidden = true
         scrollView.isHidden = false
+        view.layoutIfNeeded()
+        startCountdown()
         UIAccessibility.post(notification: .screenChanged, argument: linkField)
     }
 
     private func showError(_ message: String) {
+        pauseCountdown()
         configureImportSheetIfNeeded()
         loadingIndicator.isHidden = true
         scrollView.isHidden = false
@@ -312,7 +379,8 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func startImport() {
-        guard !isSubmitting, canStartImport else { return }
+        guard !isClosing, !isSubmitting, canStartImport else { return }
+        pauseCountdown()
         isSubmitting = true
         startButton.isEnabled = false
         startButton.configuration?.showsActivityIndicator = true
@@ -332,6 +400,7 @@ final class ShareViewController: UIViewController {
     }
 
     private func completeImportCapture() {
+        isClosing = true
         extensionContext?.completeRequest(returningItems: nil)
     }
 
@@ -341,6 +410,8 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func cancelShare() {
+        isClosing = true
+        pauseCountdown()
         extensionContext?.cancelRequest(
             withError: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)
         )
@@ -355,8 +426,33 @@ final class ShareViewController: UIViewController {
         }.first
     }
 
-    @objc private func linkEdited() {
-        startButton.isEnabled = !isSubmitting && canStartImport
+    @objc private func pauseCountdown() {
+        countdownWorkItem?.cancel()
+        countdownWorkItem = nil
+        countdownFill.layer.removeAllAnimations()
+    }
+
+    @objc private func startCountdown() {
+        guard !isClosing, !isSubmitting, canStartImport,
+              errorLabel.isHidden, !scrollView.isHidden,
+              countdownWorkItem == nil else { return }
+        fillWidth?.constant = 0
+        view.layoutIfNeeded()
+        // Preserve main's explicit-submit accessibility exception. Reading
+        // with VoiceOver or Switch Control must never race an automatic timer.
+        guard !UIAccessibility.isVoiceOverRunning, !UIAccessibility.isSwitchControlRunning else {
+            fillWidth?.constant = startContainer.bounds.width
+            startButton.accessibilityHint = "Start importing the shared link."
+            return
+        }
+        fillWidth?.constant = startContainer.bounds.width
+        UIView.animate(withDuration: Self.countdownDuration, delay: 0,
+                       options: [.curveLinear, .beginFromCurrentState, .allowUserInteraction]) {
+            self.view.layoutIfNeeded()
+        }
+        let workItem = DispatchWorkItem { [weak self] in self?.startImport() }
+        countdownWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.countdownDuration, execute: workItem)
     }
 
     private var canStartImport: Bool {
@@ -371,15 +467,6 @@ final class ShareViewController: UIViewController {
     }
 
     private var captureInputs: [SharedPlaceImportCaptureInput] {
-        guard inputs.count == 1,
-              case .sharedLink(let originalURL, let contextText, let suggestedName) = inputs[0],
-              let edited = linkField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-              let editedURL = URL(string: edited),
-              ["http", "https"].contains(editedURL.scheme?.lowercased() ?? ""),
-              editedURL != originalURL
-        else {
-            return inputs
-        }
-        return [.sharedLink(editedURL, contextText: contextText, suggestedName: suggestedName)]
+        inputs
     }
 }

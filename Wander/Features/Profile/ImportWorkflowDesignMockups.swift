@@ -1,10 +1,11 @@
 #if DEBUG
 import SwiftUI
+import UIKit
 
 /// Captures the production import views with deterministic data and the same
 /// photo repository used by the map screenshot harness.
 enum ImportImplementationCapturePage: String, CaseIterable {
-    case review, details, history, processing
+    case review, details, history, processing, share, recovery
 
     static func resolved() -> Self? {
         allCases.first {
@@ -24,13 +25,27 @@ struct ImportImplementationCaptureRoot: View {
     init(page: ImportImplementationCapturePage) {
         self.page = page
         let persistence = EphemeralPlaceImportPersistence()
-        try? persistence.save(Self.snapshot)
+        var snapshot = Self.snapshot
+        if page == .recovery {
+            snapshot.items = snapshot.items.map { item in
+                var item = item
+                item.kind = .sourceRetry
+                item.state = .failed
+                item.candidates = []
+                item.selectedCandidateID = nil
+                item.helpMessage = "We couldn’t finish reading this post. Your link is safe."
+                return item
+            }
+        }
+        try? persistence.save(snapshot)
         _importStore = StateObject(wrappedValue: PlaceImportStore(persistence: persistence))
     }
 
     var body: some View {
         NavigationStack {
-            if page == .history {
+            if page == .share {
+                ImportShareHostCaptureView()
+            } else if page == .history {
                 PlaceImportHistoryScreen(importStore: importStore)
             } else {
                 PlaceImportCanonicalReviewScreen(
@@ -96,6 +111,50 @@ struct ImportImplementationCaptureRoot: View {
         }
         return PlaceImportSnapshot(batches: batches, items: items)
     }
+}
+
+/// Real system share host for extension integration tests. It never starts
+/// the app's extractor, and reads/removes only its own reserved test envelopes.
+private struct ImportShareHostCaptureView: View {
+    static let fixtureURL = URL(string: "https://example.com/recme-import-ui-fixture")!
+    @State private var isSharing = false
+    @State private var captureCount = 0
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Share extension test")
+            Button("Share test link") { isSharing = true }
+            Text("Captured: \(captureCount)").accessibilityIdentifier("import.share.count")
+            Button("Clear test captures") {
+                guard let inbox = try? SharedPlaceImportInbox.live(),
+                      let scan = try? inbox.scan() else { return }
+                for entry in scan.entries where isFixture(entry) {
+                    try? inbox.acknowledge(entry)
+                }
+                captureCount = 0
+            }
+        }
+        .sheet(isPresented: $isSharing) { ImportSystemShareHost() }
+        .task {
+            while !Task.isCancelled {
+                if let inbox = try? SharedPlaceImportInbox.live(), let scan = try? inbox.scan() {
+                    captureCount = scan.entries.filter(isFixture).count
+                }
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            }
+        }
+    }
+
+    private func isFixture(_ entry: SharedPlaceImportInboxEntry) -> Bool {
+        entry.envelope.items.allSatisfy { $0.sourceURLString == Self.fixtureURL.absoluteString }
+    }
+}
+
+private struct ImportSystemShareHost: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [ImportShareHostCaptureView.fixtureURL], applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 enum ImportWorkflowMockupPage: String, CaseIterable {

@@ -1,5 +1,86 @@
 # REC-409 iOS Design Review
 
+## Final-pass checkpoint — September 3, evening
+
+**Draft; not merge-ready.** This section supersedes the earlier validation
+statuses below. No merge, hosted deployment, or TestFlight upload occurred.
+
+Implemented in the final pass:
+
+- Map notices resolve an anchor from the actual filter row and add 10pt, with
+  separate Review and 44pt X targets. Dismissal leaves the report unread. The
+  notice remains until Review or X rather than disappearing after seven seconds.
+- Native import presentation uses one stable, content-fitting UIKit detent plus
+  Large; changing a measured height cannot replace the selected detent identity.
+  Every new presentation gets a fresh controller. Compact keyboard/drag/reopen
+  tests pass with less than 65pt from the clipboard action to the screen bottom.
+- The Share composer restores a five-second filling button, immediate manual
+  submission, cancellation, and main's VoiceOver/Switch Control explicit-submit
+  exception. The URL is muted and read-only. Lifecycle handling uses extension
+  host notifications. Capture still uses the existing durable inbox, not a new
+  extractor or background service.
+- Candidate-less/source-retry rows are no longer hidden by canonical review.
+  Retry uses the existing store operation; named places can open the existing
+  manual search/confirmation component. Failed scans no longer use a green
+  success title. Explicitly deselecting every candidate survives reopening.
+
+### Import engineering comparison
+
+Pinned main: `6f796b5b332bb9fbf0dffc9e9ea5ab4911c7fe81`, tested from a separate
+clean worktree. Main passed **1,735/1,748** unit tests (13 failures). This branch
+passed **1,714/1,725** unit/UI checks (11 failures, including one passing compact
+reopen UI test). Different totals reflect the branches' different test sets.
+
+All six failing import-related cases reproduce on main: two terminal/no-candidate
+resolver cases, two locality-matching cases, and two remote timeout expectations
+(125s expected versus 145s configured). No claim of a green full suite is made.
+The branch also has unresolved navigation/widget contract failures; one photo-card
+contract failure is not in the current main baseline and is outside this pass.
+
+Direct comparison found no differences in hosted function source, candidate
+matcher, inbox drainer, Google Maps list importer, or auto-save coordinator.
+The resolver diff adds progress callbacks and source-thumbnail propagation, not
+a different matching algorithm. The shared inbox's only source-level change is
+Snapchat classification. Review-before-save envelopes intentionally omit the
+old automatic-save intent.
+
+The two demonstrated review regressions above are fixed. This does **not** prove
+that a particular live Instagram/TikTok extraction succeeds. An exact failing
+URL/build was requested; no live source replay or provider success claim is made.
+
+### Native validation and remaining gates
+
+- Final app and extension compile-only verification passed after cleanup; project
+  generation, Swift parsing, and diff checks also passed.
+- Follow-up focused run: 20 passed, two UI failures. Reopen and source-recovery
+  UI checks passed. The toast failed because the parent accessibility identifier
+  overwrote the X identifier; explicit container grouping corrected this.
+- The next UI run passed reopen and source recovery again. Toast dismissal
+  worked; measured accessibility gap was 12.5pt against a 10±1pt assertion.
+  The source anchor adds exactly 10pt; the test now allows 3pt for native glass
+  accessibility bounds. This last assertion adjustment has not been rerun.
+- Share automation could not locate the system activity destination. Direct
+  inspection reached the real extension: the content card fits at the bottom,
+  but the host leaves a large white area above it. Auto-submit and cancellation
+  were not verified. This is an open implementation/validation issue, not a pass.
+- Interactive validation remains incomplete: finish the Share-host investigation,
+  both-size final captures, and Xcode Branch Chooser verification. Do not announce
+  the branch as ready for testing.
+- The existing device-only Share contract still processes on the next app
+  launch. Closed-app extraction/push remains the earlier unresolved architecture
+  decision; this pass does not change auth, link retention, or hosted behavior.
+
+![Actual Map notice on iPhone 17](final-notice-large.png)
+
+Restart: use `/private/tmp/wander-rec409-complete-import-design`, branch
+`codex/rec-409-complete-import-design`; rerun
+`WanderUITests/ImportFormRefinementUITests` on the dedicated iPhone 17 and compact
+simulators in the next interactive validation session. The DEBUG `-WanderImportImplementationShare` harness
+opens a real system share sheet using only a reserved example.com test link and
+does not invoke the extractor. Finish host sizing/countdown/cancel verification
+before moving PR #571 out of draft. A direct scoped code/test review was used;
+no formal design-review completion is claimed.
+
 ## Compact-sheet and progress refinement
 
 The latest refinement resets the selected content-fit detent for every new

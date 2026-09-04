@@ -2,6 +2,56 @@ import XCTest
 
 @MainActor
 final class ImportFormRefinementUITests: XCTestCase {
+    func testShareExtensionAutomaticallyCapturesExactlyOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationShare"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Clear test captures"].waitForExistence(timeout: 15))
+        app.buttons["Clear test captures"].tap()
+        defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
+        app.buttons["Share test link"].tap()
+        let shareService = XCUIApplication(bundleIdentifier: "com.apple.UIKit.activityViewService")
+        let activity = shareService.buttons["rec.me"].firstMatch
+        if !activity.waitForExistence(timeout: 5) {
+            let more = shareService.buttons["More"].firstMatch
+            if more.exists { more.tap() }
+        }
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        activity.tap()
+        let captured = app.staticTexts["Captured: 1"]
+        XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
+        XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
+        keepScreenshot("Share extension — automatic capture returned to host")
+    }
+
+    func testMapImportNoticeTracksFiltersAndDismisses() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderImportNoticeUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let dismiss = app.buttons["import.notice.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 15))
+        let filters = app.buttons["map.filter.more"]
+        XCTAssertTrue(filters.exists)
+        let banner = app.descendants(matching: .any)["import.notice"].firstMatch
+        let filterRow = app.otherElements["map.filters"]
+        // Liquid Glass accessibility bounds differ from SwiftUI's layout
+        // anchor by a few points; the rendered gap should remain about 10pt.
+        XCTAssertEqual(banner.frame.minY - filterRow.frame.maxY, 10, accuracy: 3)
+        keepScreenshot("Import notice — anchored below filters")
+        dismiss.tap()
+        XCTAssertTrue(dismiss.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(filters.isHittable)
+    }
+
+    func testFailedSourceRemainsRecoverableInCanonicalReview() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationRecovery"]
+        app.launch()
+        XCTAssertTrue(app.buttons["import.retry.capture-instagram-0"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["No places matched"].exists)
+        keepScreenshot("Import review — source retry")
+    }
+
     func testImportFormReturnsToCompactHeightAfterKeyboardAndDragging() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -14,7 +64,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertTrue(input.waitForExistence(timeout: 15))
         XCTAssertTrue(clipboard.isHittable)
         let firstTop = app.buttons["Close import"].frame.minY
-        XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 100)
+        XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
         keepScreenshot("Import entry — first open")
 
         let inputHeight = input.frame.height
@@ -43,7 +93,7 @@ final class ImportFormRefinementUITests: XCTestCase {
             expectation(for: settlesAtCompactHeight, evaluatedWith: app)
             waitForExpectations(timeout: 5)
             XCTAssertTrue(clipboard.isHittable)
-            XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 100)
+            XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
             keepScreenshot("Import entry — open \(opening)")
             let handle = app.coordinate(withNormalizedOffset: .zero)
                 .withOffset(CGVector(dx: app.frame.midX, dy: firstTop - 10))

@@ -210,7 +210,7 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
     }
 
     var bannerTitle: String {
-        "Your import is ready"
+        foundCount == 0 && sourceRetryCount > 0 ? "Import needs a retry" : "Your import is ready"
     }
 
     var bannerDetail: String {

@@ -21,21 +21,24 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var isCommitting = false
     @State private var showsCommitError = false
     @State private var didExpandInitialDetails = false
+    @State private var rescueItem: PlaceImportItem?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 if processingCount > 0 {
                     processingContent
-                } else if displayItems.isEmpty {
+                } else if displayItems.isEmpty && recoveryItems.isEmpty {
                     ContentUnavailableView(
                         "No places matched",
                         systemImage: "mappin.slash",
                         description: Text("Nothing from this import is ready to add.")
                     )
                 } else {
-                    reviewHeader
-                    applyToAllControls
+                    if !displayItems.isEmpty {
+                        reviewHeader
+                        applyToAllControls
+                    }
 
                     if !readyItems.isEmpty {
                         importSection("Ready to add") {
@@ -52,6 +55,36 @@ struct PlaceImportCanonicalReviewScreen: View {
                             }
                         }
                     }
+                    if !recoveryItems.isEmpty {
+                        importSection("Needs attention") {
+                            ForEach(recoveryItems) { item in
+                                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                                    Text(item.isSourceRetry ? "Source scan incomplete" : (item.seed.nameHint ?? "Import needs a retry"))
+                                        .font(WanderTypography.label)
+                                    Text(item.helpMessage ?? "We couldn’t finish matching this source. Your link is safe.")
+                                        .font(WanderTypography.metadata)
+                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                    HStack {
+                                        Button("Retry", systemImage: "arrow.clockwise") {
+                                            importStore.retry(itemID: item.id)
+                                        }
+                                        .accessibilityIdentifier("import.retry.\(item.id)")
+                                        .frame(minHeight: 44)
+                                        if !item.isSourceRetry, item.seed.nameHint != nil {
+                                            Button("Find place", systemImage: "magnifyingglass") {
+                                                rescueItem = item
+                                            }
+                                            .frame(minHeight: 44)
+                                        }
+                                    }
+                                    .tint(WanderTheme.terracottaDark.color)
+                                }
+                                .padding(WanderTheme.spacing3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(WanderTheme.surfaceRaised.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -62,6 +95,20 @@ struct PlaceImportCanonicalReviewScreen: View {
         .wanderScreen()
         .navigationTitle("Review places")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $rescueItem) { item in
+            PlaceImportRescueScreen(
+                item: item,
+                searchAction: { name, area in
+                    await importStore.previewManualSearch(itemID: item.id, name: name, area: area)
+                },
+                confirmationAction: { name, area, candidates, selectedCandidateID in
+                    importStore.confirmManualSearch(
+                        itemID: item.id, name: name, area: area,
+                        candidates: candidates, selectedCandidateID: selectedCandidateID
+                    )
+                }
+            )
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             floatingCommitButton
         }
@@ -668,6 +715,13 @@ struct PlaceImportCanonicalReviewScreen: View {
             !$0.isSourceRetry
                 && !$0.candidates.isEmpty
                 && ![.saved, .dismissed].contains($0.state)
+        }
+    }
+
+    private var recoveryItems: [PlaceImportItem] {
+        scopedItems.filter {
+            [.needsHelp, .failed].contains($0.state)
+                && ($0.isSourceRetry || $0.candidates.isEmpty)
         }
     }
 

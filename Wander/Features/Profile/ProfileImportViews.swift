@@ -357,49 +357,118 @@ struct PlaceImportHubOverlay: View {
 
 struct PlaceImportCompletionBanner: View {
     let notice: PlaceImportCompletionNotice
+    let onDismiss: () -> Void
     let onOpen: () -> Void
 
+    private var accent: Color {
+        notice.sourceRetryCount > 0 ? WanderTheme.terracottaDark.color : WanderTheme.stateSuccess.color
+    }
+
     var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(WanderTheme.stateSuccess.color)
-                    .frame(width: 42, height: 42)
-                    .background(WanderTheme.stateSuccess.color.opacity(0.13))
-                    .clipShape(Circle())
+        HStack(alignment: .top, spacing: 0) {
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: notice.sourceRetryCount > 0 ? "exclamationmark" : "checkmark")
+                        .font(.system(size: 20, weight: .black))
+                        .foregroundStyle(accent)
+                        .frame(width: 42, height: 42)
+                        .background(accent.opacity(0.13))
+                        .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(notice.bannerTitle)
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                    Text(notice.bannerDetail)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(notice.bannerTitle)
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text(notice.bannerDetail)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text("Review")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text("Review")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                .padding(.vertical, WanderTheme.spacing3)
+                .padding(.leading, WanderTheme.spacing3)
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(WanderTheme.stateSuccess.color)
-                    .frame(width: 4)
-                    .padding(.vertical, WanderTheme.spacing2)
+            .accessibilityLabel("\(notice.bannerTitle). \(notice.bannerDetail). Review import")
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(width: 44, height: 44)
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
-            }
-            .shadow(color: WanderTheme.textInk.color.opacity(0.15), radius: 10, y: 5)
+            .accessibilityLabel("Dismiss import notification")
+            .accessibilityIdentifier("import.notice.dismiss")
         }
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(accent)
+                .frame(width: 4)
+                .padding(.vertical, WanderTheme.spacing2)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
+        }
+        .shadow(color: WanderTheme.textInk.color.opacity(0.15), radius: 10, y: 5)
         .buttonStyle(.plain)
-        .accessibilityLabel("\(notice.bannerTitle). \(notice.bannerDetail). Review import")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("import.notice")
+    }
+}
+
+/// A stable UIKit detent identity is important here: replacing SwiftUI's
+/// selected `.height(old)` detent with `.height(new)` can promote the sheet to
+/// `.large` during a measurement/keyboard transition and retain that blank area.
+struct ImportContentFittingSheet: UIViewControllerRepresentable {
+    let height: CGFloat
+
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.contentHeight = height
+        controller.updateSheet()
+    }
+
+    final class Controller: UIViewController {
+        var contentHeight: CGFloat = 440
+        private weak var configuredSheet: UISheetPresentationController?
+        private let compactID = UISheetPresentationController.Detent.Identifier("import.content")
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            updateSheet()
+        }
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            updateSheet()
+        }
+
+        func updateSheet() {
+            var ancestor = parent
+            while let current = ancestor {
+                if let sheet = current.presentationController as? UISheetPresentationController {
+                    if configuredSheet !== sheet {
+                        configuredSheet = sheet
+                        sheet.detents = [
+                            .custom(identifier: compactID) { [weak self] context in
+                                min(self?.contentHeight ?? 440, context.maximumDetentValue)
+                            },
+                            .large()
+                        ]
+                        sheet.selectedDetentIdentifier = compactID
+                        sheet.prefersGrabberVisible = true
+                    }
+                    sheet.invalidateDetents()
+                    return
+                }
+                ancestor = current.parent
+            }
+        }
     }
 }
 
@@ -4446,7 +4515,7 @@ private func usableImportCoordinate(
     return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
 }
 
-private struct PlaceImportRescueScreen: View {
+struct PlaceImportRescueScreen: View {
     let item: PlaceImportItem
     let searchAction: (String, String?) async -> PlaceImportCandidateSearchOutcome
     let confirmationAction: (String, String?, [PlaceCandidate], String) -> Void

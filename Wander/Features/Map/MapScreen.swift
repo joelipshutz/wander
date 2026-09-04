@@ -3,6 +3,15 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+/// The root resolves this anchor in its own coordinate space, avoiding a
+/// second safe-area offset on notices displayed below the map filters.
+struct MapFilterBoundsKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 enum SharedVisitOutboxNotice {
     static func message(
         pendingInvites: [PendingSharedVisitInvite],
@@ -1887,6 +1896,9 @@ struct MapScreen: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(height: 52)
+                        .anchorPreference(key: MapFilterBoundsKey.self, value: .bounds) { $0 }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("map.filters")
                         .overlay(alignment: .topTrailing) {
                             if isMoreFiltersPresented {
                                 MapMoreFiltersPopover(

@@ -473,6 +473,7 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
         XCTAssertEqual(notice.matchedCount, 0)
         XCTAssertEqual(notice.needsReviewCount, 0)
         XCTAssertEqual(notice.sourceRetryCount, 1)
+        XCTAssertEqual(notice.bannerTitle, "Import needs a retry")
         XCTAssertEqual(notice.bannerDetail, "Source scan needs a retry")
     }
 }
@@ -1337,6 +1338,13 @@ final class PlaceImportMultiMatchSelectionTests: XCTestCase {
         store?.setStagedStatus(.been, itemID: item.id)
         XCTAssertEqual(store?.item(id: item.id)?.stagedStatus, .been)
         XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [second.id])
+
+        // Reopening review must not undo an intentional empty selection.
+        store?.toggleCandidateSelection(itemID: item.id, candidateID: second.id)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        store?.prepareCandidateSelections(batchIDs: [batch.id])
+        XCTAssertEqual(store?.item(id: item.id)?.selectedCandidateIDs, [])
+        XCTAssertEqual(store?.item(id: item.id)?.isSelectedForImport, false)
     }
 
     func testReviewPlanCountsConcreteCandidateSelectionsInCTA() {

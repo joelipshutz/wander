@@ -1557,6 +1557,7 @@ final class PlaceImportStore: ObservableObject {
             guard !items[index].isSourceRetry,
                   !items[index].candidates.isEmpty,
                   ![.duplicate, .saved, .dismissed].contains(items[index].state),
+                  items[index].selectedCandidateIDsRaw == nil,
                   items[index].selectedCandidates.isEmpty
             else { continue }
             let primaryID = items[index].candidates[0].id
