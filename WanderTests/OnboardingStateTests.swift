@@ -55,6 +55,54 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testSimulatorOnboardingStepRoutesThroughTheActualAppEntryFlow() async {
+        XCTAssertEqual(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: [
+                    "Wander",
+                    "-WanderAuthenticatedUITest",
+                    "-WanderOnboardingUITestStep",
+                    "contacts"
+                ],
+                isSimulator: true
+            ),
+            .contacts
+        )
+        XCTAssertNil(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: ["Wander", "-WanderOnboardingUITestStep", "contacts"],
+                isSimulator: true
+            ),
+            "The production onboarding route requires the explicit authenticated UI-test session."
+        )
+        XCTAssertNil(
+            SimulatorTestSessionPolicy.forcedOnboardingStep(
+                arguments: [
+                    "Wander",
+                    "-WanderAuthenticatedUITest",
+                    "-WanderOnboardingUITestStep",
+                    "contacts"
+                ],
+                isSimulator: false
+            ),
+            "Physical and App Store builds must never accept the simulator route."
+        )
+
+        let session = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: PreviewAuthSessionProvider(state: .signedIn(session))
+            ),
+            backend: WanderBackend(),
+            usesLocalSimulatorTestSession: true,
+            forcedLocalSimulatorOnboardingStep: .location
+        )
+
+        await coordinator.start()
+
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .location))
+    }
+
     func testLocalSimulatorSessionEntersAppWithoutHostedProfileResolution() async {
         let session = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
         let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedIn(session)))
@@ -744,6 +792,10 @@ final class OnboardingStateTests: XCTestCase {
             .request
         )
         XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.primaryTitle(for: .notDetermined),
+            "Continue"
+        )
+        XCTAssertEqual(
             OnboardingLocationPermissionPolicy.action(for: .denied),
             .openSettings
         )
@@ -755,6 +807,40 @@ final class OnboardingStateTests: XCTestCase {
             OnboardingLocationPermissionPolicy.action(for: .restricted),
             .continueWithoutAccess
         )
+    }
+
+    func testNotificationPermissionPolicyRequiresOneNeutralActionBeforeTheSystemPrompt() {
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.action(for: .notDetermined),
+            .request
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.primaryTitle(for: .notDetermined),
+            "Continue"
+        )
+        XCTAssertFalse(
+            OnboardingNotificationPermissionPolicy.allowsSecondaryAction(for: .notDetermined)
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.action(for: .denied),
+            .openSettings
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.primaryTitle(for: .denied),
+            "Open Settings"
+        )
+        XCTAssertTrue(
+            OnboardingNotificationPermissionPolicy.allowsSecondaryAction(for: .denied)
+        )
+    }
+
+    func testCalendarPermissionPolicyUsesNeutralRequestAndSettingsRecovery() {
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "continue")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .denied), .openSettings)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "open settings")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .fullAccess), .sync)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "sync now")
     }
 
     func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {

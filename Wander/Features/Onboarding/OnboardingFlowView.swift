@@ -60,7 +60,7 @@ struct OnboardingFlowView: View {
                     title: "Find friends already here",
                     message: "Allow contacts so rec.me can help connect you with people you know. We won’t message anyone.",
                     bullets: ["See friends’ place maps", "Share trusted recommendations"],
-                    primaryTitle: "Allow contacts",
+                    primaryTitle: "Continue",
                     analytics: analytics,
                     request: { await contactsPermission.requestAccess() },
                     continueAction: { advance(from: .contacts) }
@@ -463,13 +463,15 @@ private struct OnboardingLocationPermissionView: View {
                 }
                 .accessibilityIdentifier("onboarding.location.primary")
 
-                Button("Not now") {
-                    trackResult("skipped")
-                    continueAction()
+                if permissionAction == .openSettings {
+                    Button("Not now") {
+                        trackResult("skipped")
+                        continueAction()
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
         }
         .task {
@@ -496,9 +498,7 @@ private struct OnboardingLocationPermissionView: View {
                 let granted = await permission.requestAccess()
                 trackResult(granted ? "true" : "false")
                 isRequesting = false
-                if granted {
-                    continueAction()
-                }
+                continueAction()
             }
         case .openSettings:
             trackResult("settings")
@@ -541,60 +541,50 @@ private struct OnboardingPermissionView: View {
 
     var body: some View {
         OnboardingStepScaffold(step: step) {
-            VStack(spacing: WanderTheme.spacing6) {
-                Spacer(minLength: WanderTheme.spacing4)
-                ZStack {
-                    RoundedRectangle(cornerRadius: 42, style: .continuous)
-                        .fill(accent.opacity(0.12))
-                        .frame(width: 270, height: 210)
-                        .rotationEffect(.degrees(-5))
-                    Image(systemName: systemImage)
-                        .font(.system(size: 88, weight: .medium))
-                        .foregroundStyle(accent)
-                        .symbolEffect(.bounce, value: isRequesting)
-                }
-
-                OnboardingHeadline(eyebrow: "ONE QUICK THING", title: title, message: message)
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    ForEach(bullets, id: \.self) { bullet in
-                        Label(bullet, systemImage: "checkmark.circle.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: WanderTheme.spacing6) {
+                    Spacer(minLength: WanderTheme.spacing4)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 42, style: .continuous)
+                            .fill(accent.opacity(0.12))
+                            .frame(width: 270, height: 210)
+                            .rotationEffect(.degrees(-5))
+                        Image(systemName: systemImage)
+                            .font(.system(size: 88, weight: .medium))
+                            .foregroundStyle(accent)
+                            .symbolEffect(.bounce, value: isRequesting)
                     }
+
+                    OnboardingHeadline(eyebrow: "ONE QUICK THING", title: title, message: message)
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                        ForEach(bullets, id: \.self) { bullet in
+                            Label(bullet, systemImage: "checkmark.circle.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing8)
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, WanderTheme.spacing8)
-                Spacer(minLength: 0)
+                .padding(.horizontal, WanderTheme.spacing4)
             }
-            .padding(.horizontal, WanderTheme.spacing4)
         } footer: {
-            VStack(spacing: WanderTheme.spacing1) {
-                WanderPrimaryButton(
-                    title: isRequesting ? "Opening settings…" : primaryTitle,
-                    isDisabled: isRequesting
-                ) {
-                    Task {
-                        isRequesting = true
-                        let granted = await request()
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingPermissionResult,
-                            properties: ["permission": step.rawValue, "granted": granted ? "true" : "false"]
-                        ))
-                        isRequesting = false
-                        continueAction()
-                    }
-                }
-                Button("Not now") {
+            WanderPrimaryButton(
+                title: isRequesting ? "Opening settings…" : primaryTitle,
+                isDisabled: isRequesting
+            ) {
+                Task {
+                    isRequesting = true
+                    let granted = await request()
                     analytics.track(AnalyticsEvent(
                         name: WanderAnalyticsEvents.onboardingPermissionResult,
-                        properties: ["permission": step.rawValue, "granted": "skipped"]
+                        properties: ["permission": step.rawValue, "granted": granted ? "true" : "false"]
                     ))
+                    isRequesting = false
                     continueAction()
                 }
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
         }
     }
@@ -788,6 +778,8 @@ private struct OnboardingNotificationView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     let analytics: AnalyticsClient
     let finish: () async -> Void
     @State private var isWorking = false
@@ -816,11 +808,28 @@ private struct OnboardingNotificationView: View {
         } footer: {
             VStack(spacing: WanderTheme.spacing1) {
                 WanderPrimaryButton(
-                    title: isWorking ? "Turning on notifications…" : "Allow notifications",
+                    title: isWorking ? "Turning on notifications…" : OnboardingNotificationPermissionPolicy.primaryTitle(
+                        for: pushNotifications.authorizationStatus
+                    ),
                     isDisabled: isWorking
                 ) {
+                    guard !isWorking else { return }
+                    isWorking = true
                     Task {
-                        isWorking = true
+                        await pushNotifications.refreshAuthorizationStatus()
+                        if OnboardingNotificationPermissionPolicy.action(
+                            for: pushNotifications.authorizationStatus
+                        ) == .openSettings {
+                            isWorking = false
+                            analytics.track(AnalyticsEvent(
+                                name: WanderAnalyticsEvents.onboardingPermissionResult,
+                                properties: ["permission": "notifications", "granted": "settings"]
+                            ))
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                            openURL(url)
+                            return
+                        }
+
                         let enabled = await pushNotifications.enableNotifications(backend: backend, authState: auth.state) != nil
                         analytics.track(AnalyticsEvent(
                             name: WanderAnalyticsEvents.onboardingPermissionResult,
@@ -829,17 +838,29 @@ private struct OnboardingNotificationView: View {
                         await finish()
                     }
                 }
-                Button("Not now") {
-                    analytics.track(AnalyticsEvent(
-                        name: WanderAnalyticsEvents.onboardingPermissionResult,
-                        properties: ["permission": "notifications", "granted": "skipped"]
-                    ))
-                    Task { await finish() }
+                if !isWorking,
+                   OnboardingNotificationPermissionPolicy.allowsSecondaryAction(
+                    for: pushNotifications.authorizationStatus
+                ) {
+                    Button("Not now") {
+                        analytics.track(AnalyticsEvent(
+                            name: WanderAnalyticsEvents.onboardingPermissionResult,
+                            properties: ["permission": "notifications", "granted": "skipped"]
+                        ))
+                        Task { await finish() }
+                    }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
+        }
+        .task {
+            await pushNotifications.refreshAuthorizationStatus()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await pushNotifications.refreshAuthorizationStatus() }
         }
     }
 }

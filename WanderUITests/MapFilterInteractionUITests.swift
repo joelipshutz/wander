@@ -547,6 +547,11 @@ final class MapFilterInteractionUITests: XCTestCase {
 
     func testNearbyPermissionEducationAppearsBeforeTheSystemPrompt() throws {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+        }
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures"
@@ -555,20 +560,23 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let nearby = app.buttons["map.nearby"]
         XCTAssertTrue(nearby.waitForExistence(timeout: 5))
-        guard nearby.value as? String == "Location permission needed" else {
-            throw XCTSkip("Simulator already has location permission")
-        }
+        XCTAssertEqual(nearby.value as? String, "Location permission needed")
 
         nearby.tap()
         XCTAssertTrue(
             app.buttons["map.locationEducation.allow"].waitForExistence(timeout: 2)
         )
-        XCTAssertTrue(app.buttons["map.locationEducation.cancel"].isHittable)
+        XCTAssertEqual(app.buttons["map.locationEducation.allow"].label, "Continue")
+        XCTAssertFalse(app.buttons["map.locationEducation.cancel"].exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-289 Nearby location education"
+        screenshot.name = "REC-396 actual Map location permission"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        app.buttons["map.locationEducation.allow"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
     }
 
     private func launchMoreFilters(source: String = "friends", resetSeconds: String? = nil) -> XCUIApplication {

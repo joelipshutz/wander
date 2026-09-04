@@ -574,7 +574,19 @@ struct NotificationSettingsSheet: View {
         if isChangingEnabledState || pushNotifications.isRequestingAuthorization || pushNotifications.isRegisteringToken {
             return notificationsEnabled ? "disabling" : "allowing"
         }
-        return notificationsEnabled ? "disable notifications" : "allow notifications"
+        if notificationsEnabled {
+            return "disable notifications"
+        }
+        switch pushNotifications.authorizationStatus {
+        case .notDetermined:
+            return "continue"
+        case .denied:
+            return "open settings"
+        case .authorized, .provisional, .ephemeral:
+            return "allow notifications"
+        @unknown default:
+            return "continue"
+        }
     }
 
     private func actionLabel(title: String, systemImage: String) -> some View {

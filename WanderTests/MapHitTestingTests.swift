@@ -2267,7 +2267,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(repository.contains("defer { session.invalidateAndCancel() }"))
     }
 
-    func testNearbyPermissionEducationIsGatedBeforeTheSystemRequest() throws {
+    func testMapLocationPermissionUsesExplicitEducationBeforeTheSystemPrompt() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -2277,8 +2277,13 @@ final class MapSelectionMotionTests: XCTestCase {
 
         XCTAssertTrue(map.contains("MapNearbyPermissionPolicy.showsAttentionBadge"))
         XCTAssertTrue(map.contains("MapLocationEducationPrompt("))
+        XCTAssertTrue(map.contains("permissionAction: OnboardingLocationPermissionPolicy.action("))
         XCTAssertTrue(map.contains("map.locationEducation.allow"))
         XCTAssertTrue(map.contains("map.locationEducation.cancel"))
+        XCTAssertTrue(map.contains("if permissionAction != .request"))
+        XCTAssertTrue(
+            map.contains("OnboardingLocationPermissionPolicy.primaryTitle(for: permissionAction)")
+        )
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
         XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
