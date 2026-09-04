@@ -540,6 +540,18 @@ enum WanderGlassTone: Equatable {
         }
     }
 
+    /// Opaque backing used when Reduce Transparency is enabled. The semantic
+    /// tint remains layered above this base without letting moving content
+    /// bleed through the control.
+    var opaqueFallbackBase: Color {
+        switch self {
+        case .blackAction, .deepBlackAction, .darkOverlay:
+            .black
+        case .neutral, .selected, .accent, .lightAction:
+            Color(uiColor: .systemBackground)
+        }
+    }
+
     var border: Color {
         switch self {
         case .neutral:
@@ -573,13 +585,26 @@ enum WanderGlassMaterial: Equatable {
 }
 
 private struct WanderGlassCapsuleModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let tone: WanderGlassTone
     let isInteractive: Bool
     let showsBorder: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
+        if reduceTransparency {
+            content
+                .background(tone.opaqueFallbackBase, in: Capsule())
+                .background(tone.fallbackFill, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            showsBorder ? tone.border : Color.clear,
+                            lineWidth: showsBorder ? tone.borderWidth : 0
+                        )
+                        .allowsHitTesting(false)
+                }
+        } else if #available(iOS 26.0, *) {
             content
                 .glassEffect(
                     .regular
@@ -620,6 +645,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
 }
 
 private struct WanderGlassRoundedRectangleModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let tone: WanderGlassTone
     let cornerRadius: CGFloat
     let material: WanderGlassMaterial
@@ -629,7 +655,18 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        if #available(iOS 26.0, *) {
+        if reduceTransparency {
+            content
+                .background(tone.opaqueFallbackBase, in: shape)
+                .background(tone.fallbackFill, in: shape)
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                    .allowsHitTesting(false)
+                }
+        } else if #available(iOS 26.0, *) {
             let glass: Glass = material == .clear ? .clear : .regular
             content
                 .glassEffect(
@@ -669,6 +706,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
 }
 
 private struct WanderGlassPanelModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let cornerRadius: CGFloat
     let tone: WanderGlassTone
     let isInteractive: Bool
@@ -677,7 +715,17 @@ private struct WanderGlassPanelModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        if #available(iOS 26.0, *) {
+        if reduceTransparency {
+            content
+                .background(tone.opaqueFallbackBase, in: shape)
+                .background(tone.fallbackFill, in: shape)
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                }
+        } else if #available(iOS 26.0, *) {
             content
                 .glassEffect(
                     .regular

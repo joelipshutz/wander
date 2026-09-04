@@ -240,28 +240,43 @@ private struct AstirMastheadPresentationModifier: ViewModifier {
                 .padding(.horizontal, isCompact ? 7 : 9)
                 .padding(.vertical, isCompact ? 5 : 7)
                 .background {
-                    Rectangle()
-                        .fill(
-                            reduceTransparency
-                                ? AnyShapeStyle(brandMode.background.opacity(0.82))
-                                : AnyShapeStyle(.ultraThinMaterial)
+                    if reduceTransparency {
+                        RoundedRectangle(
+                            cornerRadius: isCompact ? 10 : 12,
+                            style: .continuous
                         )
-                        .mask {
-                            RadialGradient(
-                                colors: [.black, .black.opacity(0.72), .clear],
-                                center: .center,
-                                startRadius: 2,
-                                endRadius: isCompact ? 46 : 58
+                        .fill(brandMode.background)
+                        .overlay {
+                            RoundedRectangle(
+                                cornerRadius: isCompact ? 10 : 12,
+                                style: .continuous
                             )
+                            .stroke(brandMode.border, lineWidth: 1)
                         }
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
+                    } else {
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .mask {
+                                RadialGradient(
+                                    colors: [.black, .black.opacity(0.72), .clear],
+                                    center: .center,
+                                    startRadius: 2,
+                                    endRadius: isCompact ? 46 : 58
+                                )
+                            }
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
         }
     }
 }
 
 private struct AstirGlassSurface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.astirBrandMode) private var brandMode
     let cornerRadius: CGFloat
     let selected: Bool
@@ -271,7 +286,24 @@ private struct AstirGlassSurface: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
-        if #available(iOS 26.0, *) {
+        if reduceTransparency {
+            content
+                .background(
+                    selected ? brandMode.accent : brandMode.raisedBackground,
+                    in: shape
+                )
+                .overlay {
+                    shape.stroke(
+                        selected ? brandMode.accent : brandMode.border,
+                        lineWidth: resolvedBorderWidth
+                    )
+                }
+                .shadow(
+                    color: castsShadow ? Color.black.opacity(0.20) : .clear,
+                    radius: castsShadow ? 12 : 0,
+                    y: castsShadow ? 5 : 0
+                )
+        } else if #available(iOS 26.0, *) {
             let glass = selected
                 ? Glass.regular.tint(brandMode.accent.opacity(0.24))
                 : Glass.regular.tint(brandMode.background.opacity(0.035))
@@ -282,7 +314,7 @@ private struct AstirGlassSurface: ViewModifier {
                     in: shape
                 )
                 .overlay {
-                    shape.stroke(edgeHighlight, lineWidth: selected ? 1.15 : 0.75)
+                    shape.stroke(edgeHighlight, lineWidth: resolvedBorderWidth)
                 }
                 .shadow(
                     color: castsShadow ? Color.black.opacity(0.20) : .clear,
@@ -298,7 +330,7 @@ private struct AstirGlassSurface: ViewModifier {
                     in: shape
                 )
                 .overlay {
-                    shape.stroke(edgeHighlight, lineWidth: selected ? 1.15 : 0.75)
+                    shape.stroke(edgeHighlight, lineWidth: resolvedBorderWidth)
                 }
                 .shadow(
                     color: castsShadow ? Color.black.opacity(0.18) : .clear,
@@ -306,6 +338,13 @@ private struct AstirGlassSurface: ViewModifier {
                     y: castsShadow ? 7 : 0
                 )
         }
+    }
+
+    private var resolvedBorderWidth: CGFloat {
+        if colorSchemeContrast == .increased {
+            return selected ? 2 : 1.5
+        }
+        return selected ? 1.15 : 0.75
     }
 
     private var edgeHighlight: LinearGradient {

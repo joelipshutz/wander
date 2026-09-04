@@ -8896,6 +8896,8 @@ private struct SearchBar: View {
 }
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.wanderMapAppearance) private var appearance
     @Environment(\.astirBrandMode) private var astirBrandMode
 
@@ -8903,7 +8905,14 @@ private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
-        if #available(iOS 26.0, *) {
+        if reduceTransparency {
+            content
+                .background(astirBrandMode.raisedBackground, in: shape)
+                .overlay {
+                    shape
+                        .stroke(astirBrandMode.border, lineWidth: resolvedBorderWidth)
+                }
+        } else if #available(iOS 26.0, *) {
             content
                 .glassEffect(
                     .regular
@@ -8913,7 +8922,7 @@ private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
                 )
                 .overlay {
                     shape
-                        .stroke(astirBrandMode.border, lineWidth: 1)
+                        .stroke(astirBrandMode.border, lineWidth: resolvedBorderWidth)
                 }
         } else {
             content
@@ -8921,9 +8930,13 @@ private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
                 .background(astirBrandMode.raisedBackground.opacity(0.88), in: shape)
                 .overlay {
                     shape
-                        .stroke(astirBrandMode.border, lineWidth: 1)
+                        .stroke(astirBrandMode.border, lineWidth: resolvedBorderWidth)
                 }
         }
+    }
+
+    private var resolvedBorderWidth: CGFloat {
+        colorSchemeContrast == .increased ? 1.5 : 1
     }
 }
 
