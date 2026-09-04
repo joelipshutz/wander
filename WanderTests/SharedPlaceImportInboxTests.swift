@@ -487,6 +487,32 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         XCTAssertFalse(shareController.contains("share-extension-captured"))
     }
 
+    func testShareCountdownFillsLeftToRightWithTranslucentBlackBehindTheButton() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let controller = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderShareExtension/ShareViewController.swift"
+            )
+        )
+
+        XCTAssertTrue(controller.contains("countdownFill.backgroundColor = UIColor.black.withAlphaComponent(0.22)"))
+        XCTAssertTrue(controller.contains("countdownFill.leftAnchor.constraint(equalTo: startContainer.leftAnchor)"))
+        XCTAssertTrue(controller.contains("countdownFill.topAnchor.constraint(equalTo: startContainer.topAnchor)"))
+        XCTAssertTrue(controller.contains("countdownFill.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor)"))
+        XCTAssertTrue(controller.contains("startContainer.clipsToBounds = true"))
+        XCTAssertTrue(controller.contains("countdownFill.isUserInteractionEnabled = false"))
+        let fillInsertion = try XCTUnwrap(controller.range(of: "startContainer.addSubview(countdownFill)"))
+        let buttonInsertion = try XCTUnwrap(controller.range(of: "startContainer.addSubview(startButton)"))
+        XCTAssertLessThan(fillInsertion.lowerBound, buttonInsertion.lowerBound)
+        XCTAssertTrue(controller.contains("fillWidth?.constant = 0"))
+        XCTAssertTrue(controller.contains("fillWidth?.constant = startContainer.bounds.width"))
+        XCTAssertTrue(controller.contains("countdownDuration: TimeInterval = 5"))
+        XCTAssertTrue(controller.contains("UIView.animate(withDuration: Self.countdownDuration"))
+        XCTAssertTrue(controller.contains("[.curveLinear, .beginFromCurrentState, .allowUserInteraction]"))
+    }
+
     private func propertyList(_ url: URL) throws -> [String: Any] {
         let data = try Data(contentsOf: url)
         return try XCTUnwrap(

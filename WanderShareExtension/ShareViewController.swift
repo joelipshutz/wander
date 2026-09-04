@@ -233,7 +233,8 @@ final class ShareViewController: UIViewController {
         startContainer.backgroundColor = Palette.terracotta.withAlphaComponent(0.65)
         startContainer.layer.cornerRadius = 27
         startContainer.clipsToBounds = true
-        countdownFill.backgroundColor = Palette.terracotta
+        // A translucent black sweep stays behind the label and keeps the CTA tappable.
+        countdownFill.backgroundColor = UIColor.black.withAlphaComponent(0.22)
         countdownFill.isUserInteractionEnabled = false
         countdownFill.translatesAutoresizingMaskIntoConstraints = false
         startButton.translatesAutoresizingMaskIntoConstraints = false
@@ -241,7 +242,7 @@ final class ShareViewController: UIViewController {
         startContainer.addSubview(startButton)
         fillWidth = countdownFill.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
-            countdownFill.leadingAnchor.constraint(equalTo: startContainer.leadingAnchor),
+            countdownFill.leftAnchor.constraint(equalTo: startContainer.leftAnchor),
             countdownFill.topAnchor.constraint(equalTo: startContainer.topAnchor),
             countdownFill.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor),
             fillWidth!,
