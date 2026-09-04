@@ -211,11 +211,10 @@ struct NativeAuthFlowView: View {
         ZStack {
             NativeAppleIDButton(
                 type: mode == .signIn ? .signIn : .continue,
-                style: brandMode.prefersDarkInterface ? .white : .black,
+                style: .black,
                 isEnabled: !auth.isPerformingNativeAuth,
                 action: { authenticate(with: .apple) }
             )
-            .id(brandMode.prefersDarkInterface)
             .opacity(auth.isPerformingNativeAuth ? 0.72 : 1)
 
             if auth.activeSocialAuthProvider == .apple {

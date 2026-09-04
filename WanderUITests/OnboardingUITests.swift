@@ -2152,6 +2152,41 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
 
+    func testFeedPeopleAddDismissesKeyboardBeforePresentingAdd() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab",
+            "discover"
+        ]
+        app.launch()
+
+        let peopleTab = app.buttons["People"]
+        XCTAssertTrue(peopleTab.waitForExistence(timeout: 6))
+        peopleTab.tap()
+
+        let peopleSearch = app.textFields["Search name or @handle"]
+        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
+        peopleSearch.tap()
+        peopleSearch.typeText("ryan")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+
+        let addButton = app.buttons["feed.headerAdd"]
+        XCTAssertTrue(addButton.isHittable)
+        addButton.tap()
+
+        XCTAssertTrue(app.staticTexts["add a place"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-434 Add presented with keyboard dismissed"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderOnboardingUITestSignedOut"]
@@ -2175,7 +2210,8 @@ final class OnboardingUITests: XCTestCase {
 
     func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthUITest"]
+        app.terminate()
+        app.launchArguments = ["-WanderAuthUITest", "-WanderAuthenticatedUITest"]
         app.launch()
 
         let apple = app.buttons["auth.continueWithApple"]
@@ -2193,6 +2229,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertLessThan(apple.frame.minY, google.frame.minY)
         XCTAssertLessThan(google.frame.minY, email.frame.minY)
         XCTAssertFalse(app.buttons["auth.useOtherMethod"].exists)
+
+        let appleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        appleScreenshot.name = "REC-440 Apple logo visible in authentication"
+        appleScreenshot.lifetime = .keepAlways
+        add(appleScreenshot)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let systemAlert = springboard.alerts.firstMatch

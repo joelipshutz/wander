@@ -247,7 +247,10 @@ struct FeedScreen: View {
                     systemImage: "plus",
                     accessibilityLabel: "Add a place",
                     accessibilityIdentifier: "feed.headerAdd",
-                    action: onAdd
+                    action: {
+                        peopleSearchFieldFocused = false
+                        onAdd()
+                    }
                 )
             }
         }

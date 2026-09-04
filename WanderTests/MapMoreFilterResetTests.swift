@@ -59,7 +59,7 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertTrue(map.contains("MapMoreFilterMotionStyle.panelTransition"))
     }
 
-    func testMorePanelUsesOpaqueAstirSurfaceAndOptionsUseUnderlineSelection() throws {
+    func testMorePanelUsesAdaptiveMapGlassAndOptionsUseUnderlineSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -76,12 +76,10 @@ final class MapMoreFilterResetTests: XCTestCase {
         let popover = String(map[popoverStart.lowerBound..<popoverEnd.lowerBound])
         let optionChip = String(map[popoverEnd.lowerBound..<optionEnd.lowerBound])
 
-        XCTAssertFalse(popover.contains(".wanderGlassPanel("))
-        XCTAssertTrue(popover.contains(".background(appearance.raisedSurface)"))
+        XCTAssertTrue(popover.contains(".wanderGlassPanel("))
         XCTAssertTrue(
-            popover.contains(".overlay(Rectangle().stroke(appearance.border, lineWidth: 1))")
+            popover.contains("tone: appearance.neutralGlassTone")
         )
-        XCTAssertFalse(popover.contains(".background(\n            WanderTheme.surfaceBone.color"))
         XCTAssertFalse(optionChip.contains(".wanderGlassPanel("))
         XCTAssertFalse(optionChip.contains(".background(astirBrandMode.raisedBackground"))
         XCTAssertTrue(optionChip.contains("Rectangle()"))

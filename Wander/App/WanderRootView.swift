@@ -635,6 +635,11 @@ struct WanderRootView: View {
         .walkthroughPresenterScrim(
             isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
         )
+        .onChange(of: isPresentingAdd) { _, isPresented in
+            if isPresented {
+                dismissKeyboard()
+            }
+        }
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -1027,6 +1032,7 @@ struct WanderRootView: View {
     }
 
     private func presentAddSheet() {
+        dismissKeyboard()
         if walkthroughs.currentStep?.target == .mapAddAgain {
             walkthroughs.perform(.mapAddAgain)
         } else {
@@ -1044,6 +1050,15 @@ struct WanderRootView: View {
                 name: WanderAnalyticsEvents.appSurfaceViewed,
                 properties: ["surface": "add"]
             )
+        )
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
         )
     }
 

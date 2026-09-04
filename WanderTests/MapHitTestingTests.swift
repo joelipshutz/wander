@@ -2115,7 +2115,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
         XCTAssertTrue(map.contains("mapView.convert(annotation.coordinate, toPointTo: mapView)"))
         XCTAssertTrue(map.contains("MapHitTesting.nextColocatedMarkerID"))
-        XCTAssertTrue(map.contains("annotation.descriptor.isSelected"))
+        XCTAssertTrue(map.contains("$0.0.descriptor.isSelected"))
+        XCTAssertTrue(map.contains("if view.annotation is MKUserLocation"))
+        XCTAssertTrue(map.contains("view.isEnabled = false"))
+        XCTAssertTrue(map.contains("if annotation is MKUserLocation"))
+        XCTAssertTrue(map.contains("mapView.view(for: mapView.userLocation)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
@@ -2465,7 +2469,7 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
         XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity, alignment: .center)"))
-        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 48)"))
+        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 44)"))
     }
 
     func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
@@ -2603,7 +2607,8 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
         XCTAssertTrue(map.contains("private final class NativeMapPinAnnotationView"))
         XCTAssertTrue(map.contains("private var presentedAnnotationID: String?"))
-        XCTAssertTrue(map.contains("let shouldAnimateEntrance = presentedAnnotationID != descriptor.id"))
+        XCTAssertTrue(map.contains("let isNewAnnotation = presentedAnnotationID != descriptor.id"))
+        XCTAssertTrue(map.contains("let shouldAnimateEntrance = isNewAnnotation"))
         XCTAssertTrue(map.contains("animateEntrance("))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
@@ -2619,7 +2624,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(theme.contains("isElevated"))
     }
 
-    func testMapSearchRoundedRectangleUsesLiquidGlassOnIOS26WithFlatFallback() throws {
+    func testMapSearchAndFilterChipsUseAdaptiveAstirGlassSurfaces() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -2658,11 +2663,9 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: shape)"))
         XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
         XCTAssertFalse(filterChipSource.contains(".wanderGlassCapsule("))
-        XCTAssertTrue(filterChipSource.contains(".overlay(alignment: .bottom)"))
-        XCTAssertTrue(filterChipSource.contains("Rectangle()"))
         XCTAssertTrue(
             filterChipSource.contains(
-                ".fill(isSelected ? astirBrandMode.accent : astirBrandMode.border)"
+                ".astirGlassSurface(cornerRadius: 18, selected: isSelected, castsShadow: true)"
             )
         )
     }

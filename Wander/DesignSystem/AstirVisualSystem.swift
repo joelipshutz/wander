@@ -258,6 +258,7 @@ private struct AstirMastheadPresentationModifier: ViewModifier {
                     } else {
                         Rectangle()
                             .fill(.ultraThinMaterial)
+                            .saturation(0)
                             .mask {
                                 RadialGradient(
                                     colors: [.black, .black.opacity(0.72), .clear],
@@ -306,7 +307,11 @@ private struct AstirGlassSurface: ViewModifier {
         } else if #available(iOS 26.0, *) {
             let glass = selected
                 ? Glass.regular.tint(brandMode.accent.opacity(0.24))
-                : Glass.regular.tint(brandMode.background.opacity(0.035))
+                : Glass.regular.tint(
+                    brandMode.prefersDarkInterface
+                        ? brandMode.raisedBackground.opacity(0.82)
+                        : brandMode.background.opacity(0.035)
+                )
 
             content
                 .glassEffect(

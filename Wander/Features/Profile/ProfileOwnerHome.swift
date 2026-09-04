@@ -713,23 +713,26 @@ private struct ProfileInvitationButton: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            ProfileHeaderActionLabel(systemImage: "envelope")
-                .overlay(alignment: .topTrailing) {
-                    if badgeState.isVisible {
-                        Circle()
-                            .fill(Color(uiColor: .systemRed))
-                            .frame(width: 10, height: 10)
-                            .offset(x: -1, y: 1)
-                            .accessibilityHidden(true)
-                    }
-                }
+        ZStack(alignment: .topTrailing) {
+            Button(action: action) {
+                ProfileHeaderActionLabel(systemImage: "envelope")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Check-in invitations")
+            .accessibilityValue(badgeState.accessibilityValue)
+            .accessibilityHint("Opens check-in invitations")
+            .accessibilityIdentifier("profile.checkInInvitations")
+
+            if badgeState.isVisible {
+                Circle()
+                    .fill(Color(uiColor: .systemRed))
+                    .frame(width: 10, height: 10)
+                    .offset(x: 2, y: -2)
+                    .zIndex(1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Check-in invitations")
-        .accessibilityValue(badgeState.accessibilityValue)
-        .accessibilityHint("Opens check-in invitations")
-        .accessibilityIdentifier("profile.checkInInvitations")
     }
 }
 

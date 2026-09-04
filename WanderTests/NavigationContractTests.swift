@@ -65,7 +65,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("retiredWalkthroughUserIDs.insert(userID).inserted"))
         XCTAssertFalse(walkthrough.contains("isRolloutEnabledByDefault"))
         XCTAssertTrue(root.contains(".task(id: featureFlagLoadUserID)"))
-        XCTAssertTrue(root.contains("backend.featureFlag(.firstVisitNUX, for: userID)"))
         XCTAssertTrue(root.contains("backend.resolvedFeatureFlag(.firstVisitNUX, for: userID)"))
         XCTAssertTrue(root.contains("resolvedFlag?.explicitAccountOverride"))
         XCTAssertTrue(root.contains("refreshWalkthroughFeatureFlagsAfterForeground()"))
@@ -108,6 +107,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(authView.contains("accessibilityIdentifier(\"auth.email\")"))
         XCTAssertTrue(authView.contains("auth.authenticate(with: provider)"))
         XCTAssertTrue(authView.contains("ASAuthorizationAppleIDButton"))
+        XCTAssertTrue(authView.contains("style: .black"))
+        XCTAssertFalse(authView.contains("style: brandMode.prefersDarkInterface ? .white : .black"))
         XCTAssertTrue(authView.contains("Sign in with Google"))
         XCTAssertTrue(authView.contains("Continue with email"))
         XCTAssertTrue(authView.contains("Button(\"Use a password\")"))
@@ -410,6 +411,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(astir.contains("struct AstirFloatingHeaderSurface<Content: View>"))
         XCTAssertTrue(astir.contains("struct AstirIconActionButton: View"))
         XCTAssertTrue(astir.contains("struct AstirEditorialSegmentedSwitch: View"))
+        XCTAssertTrue(astir.contains(".saturation(0)"))
         XCTAssertTrue(astir.contains("if dynamicTypeSize.isAccessibilitySize"))
         XCTAssertTrue(astir.contains("ScrollView(.horizontal, showsIndicators: false)"))
         XCTAssertTrue(astir.contains("optionsRow(usesAccessibilityWidths: true)"))
@@ -1561,6 +1563,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(glassSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
         XCTAssertTrue(glassSurface.contains("if reduceTransparency"))
         XCTAssertTrue(glassSurface.contains("selected ? brandMode.accent : brandMode.raisedBackground"))
+        XCTAssertTrue(glassSurface.contains("brandMode.prefersDarkInterface"))
+        XCTAssertTrue(glassSurface.contains("brandMode.raisedBackground.opacity(0.82)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.colorSchemeContrast)"))
         XCTAssertTrue(glassSurface.contains("colorSchemeContrast == .increased"))
     }
@@ -1693,17 +1697,23 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("sectionTitle = Font.system(.title3, design: .serif).weight(.semibold)"))
         XCTAssertTrue(typography.contains("cardTitle = Font.custom(\"AvenirNext-DemiBold\", size: 16, relativeTo: .body)"))
 
-        XCTAssertTrue(lists.contains("Text(\"lists\")\n                    .font(AstirTypography.screenTitle)"))
+        XCTAssertTrue(lists.contains("AstirFloatingHeaderSurface {"))
         XCTAssertTrue(lists.contains(".font(AstirTypography.cardTitle)"))
         XCTAssertTrue(lists.contains(".font(AstirTypography.caption)"))
         XCTAssertFalse(lists.contains("WanderTypography.editorial"))
-        XCTAssertTrue(lists.contains("Text(\"save places into a plan you can actually use\")"))
+        XCTAssertFalse(lists.contains("save places into a plan you can actually use"))
         XCTAssertFalse(lists.contains("WanderGlassHeader("))
 
-        let discoverMastheadUses = discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1
-        XCTAssertEqual(discoverMastheadUses, 1)
+        XCTAssertFalse(discover.contains("WanderTypography.editorialMasthead"))
         XCTAssertFalse(discover.contains("Text(\"Ask for a place the way you'd ask a friend\")"))
-        XCTAssertEqual(discover.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 2)
+        XCTAssertGreaterThanOrEqual(
+            discover.components(separatedBy: "AstirTypography.sectionTitle").count - 1,
+            2
+        )
+        XCTAssertGreaterThanOrEqual(
+            discover.components(separatedBy: "AstirTypography.cardTitle").count - 1,
+            2
+        )
         let discoverSearch = try XCTUnwrap(
             discover.components(separatedBy: "private struct DiscoverSearchField: View").last?
                 .components(separatedBy: "private struct DiscoverPlaceResultCard: View").first
@@ -2333,7 +2343,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = true"))
         XCTAssertFalse(mapScreen.contains("didSelectStatus"))
         XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"))
-        XCTAssertTrue(mapScreen.contains("return status == .wannaGo ? \"Wanna go\" : \"Check in\""))
+        XCTAssertTrue(mapScreen.contains("action.displayTitle("))
+        XCTAssertTrue(mapScreen.contains("return currentUserSave.userPlace.status == .been ? .addVisit : .reselectWant"))
         XCTAssertTrue(mapScreen.contains(".overlay(alignment: .bottom)"))
         XCTAssertTrue(mapScreen.contains("WanderTheme.spacing16 + WanderTheme.spacing12"))
         XCTAssertTrue(mapScreen.contains(".shadow(color: Color.black.opacity(0.2), radius: 16, y: 8)"))
@@ -3077,6 +3088,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains(".toolbarBackground(astirBrandMode.background, for: .tabBar)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(.light)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(mapAppearanceColorScheme)"))
+
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(
+            map.contains("isDark: store.isDarkMapEnabled || astirBrandMode.prefersDarkInterface")
+        )
     }
 
     @MainActor
@@ -3428,7 +3446,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(photoMedia.contains("store.follows"))
         XCTAssertFalse(photoMedia.contains("store.blocks"))
         XCTAssertTrue(source.contains("store.listPhotoAuthorizationScopeKey()"))
-        XCTAssertTrue(photoMedia.contains("WanderCategoryEmoji(emoji: place.emoji"))
+        XCTAssertTrue(photoMedia.contains("AstirPlacePhotoAsset(stableKey: place.id)"))
         XCTAssertTrue(photoMedia.contains("eligibleUserIDs: eligibleUserIDs"))
         XCTAssertTrue(previewMosaic.contains("Image(systemName: \"bookmark.fill\")"))
         XCTAssertFalse(previewMosaic.contains("String(list.name.prefix(1))"))
@@ -4839,6 +4857,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
         XCTAssertTrue(invitationButton.contains("Circle()"))
         XCTAssertTrue(invitationButton.contains("Color(uiColor: .systemRed)"))
+        XCTAssertTrue(invitationButton.contains(".zIndex(1)"))
         XCTAssertFalse(invitationButton.contains(".stroke("))
         XCTAssertTrue(invitationButton.contains("profile.checkInInvitations"))
         XCTAssertFalse(invitationButton.contains("Text("))
@@ -5087,7 +5106,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains(".stroke(WanderTheme.categorySun.color"))
 
         XCTAssertEqual(
-            feed.components(separatedBy: "FeedSectionHeading(title: \"Activity\"").count - 1,
+            feed.components(separatedBy: "FeedSectionHeading(title: \"Recent\"").count - 1,
             4
         )
         XCTAssertEqual(

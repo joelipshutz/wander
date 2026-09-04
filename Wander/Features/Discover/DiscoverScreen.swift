@@ -1034,6 +1034,7 @@ struct DiscoverScreen: View {
                 }
                 .padding(.vertical, 1)
             }
+            .discoverSearchRailBleed()
         }
         .walkthroughTarget(.feedSmartSearch)
     }
@@ -1331,6 +1332,7 @@ struct DiscoverScreen: View {
                     }
                     .padding(.vertical, WanderTheme.spacing1)
                 }
+                .discoverSearchRailBleed()
             }
         }
     }
@@ -1919,7 +1921,19 @@ struct PeopleRecommendationShelf: View {
                 }
                 .padding(.vertical, WanderTheme.spacing1)
             }
+            .discoverSearchRailBleed()
         }
+    }
+}
+
+private extension View {
+    func discoverSearchRailBleed() -> some View {
+        contentMargins(
+            .horizontal,
+            WanderTheme.spacing4,
+            for: .scrollContent
+        )
+        .padding(.horizontal, -WanderTheme.spacing4)
     }
 }
 

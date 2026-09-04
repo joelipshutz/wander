@@ -239,7 +239,7 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
-    func testOnboardingMastheadUsesMapWordmarkAsset() throws {
+    func testOnboardingMastheadUsesAstirLockupAndKeepsMapWordmarkAssetValid() throws {
         let assetDirectory = projectRoot.appendingPathComponent(
             "Wander/Resources/Assets.xcassets/RecmeMapWordmark.imageset",
             isDirectory: true
@@ -260,7 +260,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(image.width, 896)
         XCTAssertEqual(image.height, 200)
         XCTAssertTrue(manifest.contains(#""filename" : "RecmeMapWordmark.png""#))
-        XCTAssertTrue(onboardingSource.contains(#"Image("RecmeMapWordmark")"#))
+        XCTAssertTrue(onboardingSource.contains("AstirMastheadLockup(isCompact: true)"))
     }
 
     func testIconComposerAppIconIsProjectBound() throws {

@@ -181,7 +181,7 @@ struct ProfileScreen: View {
                 saveStreak: store.saveStreakSummary,
                 followerCount: presentation.followerCount,
                 followingCount: presentation.followingCount,
-                sharedVisitInvitationCount: store.sharedVisitInvitations.count,
+                sharedVisitInvitationCount: sharedVisitInvitationBadgeCount,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
                 avatarAction: presentProfilePhotoViewer,
@@ -358,6 +358,15 @@ struct ProfileScreen: View {
                 onCalendarLaunchRequestHandled(request.id)
             }
         }
+    }
+
+    private var sharedVisitInvitationBadgeCount: Int {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderPendingInvitationBadge") {
+            return max(store.sharedVisitInvitations.count, 1)
+        }
+        #endif
+        return store.sharedVisitInvitations.count
     }
 
     private func handlePresentationResetRequest(_ request: WanderPresentationResetRequest?) {

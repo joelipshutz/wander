@@ -1773,7 +1773,7 @@ struct MapScreen: View {
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
                     showsUserLocation: Self.canShowUserLocation,
-                    isDark: store.isDarkMapEnabled,
+                    isDark: store.isDarkMapEnabled || astirBrandMode.prefersDarkInterface,
                     reduceMotion: reduceMotion,
                     onAnnotationTap: handleNativeMapAnnotationTap,
                     onEmptyMapTap: handleEmptyMapTap,
@@ -6374,6 +6374,13 @@ private struct NativeMapView: UIViewRepresentable {
             MapPerformanceProbe.recordNativeAnnotationViewsAdded(views.count)
             #endif
             for view in views {
+                if view.annotation is MKUserLocation {
+                    // Keep the native location dot visible without MapKit's
+                    // selected marker or current-location callout.
+                    view.isEnabled = false
+                    view.canShowCallout = false
+                    continue
+                }
                 guard let pinView = view as? NativeMapPinAnnotationView else { continue }
                 // Keep newly added views out of the accessibility tree until
                 // the coalesced refresh confirms they remain in the visible set.
@@ -6383,6 +6390,10 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            if annotation is MKUserLocation {
+                mapView.deselectAnnotation(annotation, animated: false)
+                return
+            }
             if let feature = annotation as? MKMapFeatureAnnotation {
                 parent.onNativeFeatureSelection(feature)
                 return
@@ -6577,6 +6588,13 @@ private struct NativeMapView: UIViewRepresentable {
             guard let mapView = tapRecognizer.view as? MKMapView else { return }
             if suppressNextCompletedTap {
                 suppressNextCompletedTap = false
+                return
+            }
+            if let locationView = mapView.view(for: mapView.userLocation),
+               !locationView.isHidden,
+               locationView.alpha > 0,
+               locationView.bounds.contains(locationView.convert(point, from: mapView)) {
+                // Treat the native current-location indicator as passive.
                 return
             }
             if let annotation = annotation(at: point, in: mapView) {
