@@ -817,7 +817,15 @@ final class MapCameraRegionTracker {
         }
     }
 
-    func finishCameraChange(_ region: MKCoordinateRegion) -> MapCameraInteraction {
+    func finishCameraChange(
+        _ region: MKCoordinateRegion,
+        isUserInitiated: Bool = true
+    ) -> MapCameraInteraction {
+        guard isUserInitiated else {
+            synchronize(with: region)
+            return .stationary
+        }
+
         let startRegion = interactionStartRegion ?? self.region
         self.region = region
         interactionStartRegion = nil
@@ -1779,8 +1787,11 @@ struct MapScreen: View {
                     onLongPress: handleNativeMapLongPress,
                     onNativeFeatureSelection: handleNativeMapFeatureSelection,
                     onCameraChange: handleMapCameraChange,
-                    onCameraInteractionEnd: { region in
-                        handleMapCameraInteractionEnd(region)
+                    onCameraInteractionEnd: { region, isUserInitiated in
+                        handleMapCameraInteractionEnd(
+                            region,
+                            isUserInitiated: isUserInitiated
+                        )
                         handleFeaturedCameraChange(region)
                     }
                 )
@@ -2914,8 +2925,14 @@ struct MapScreen: View {
         cameraRegionTracker.recordCameraChange(region)
     }
 
-    private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
-        switch cameraRegionTracker.finishCameraChange(region) {
+    private func handleMapCameraInteractionEnd(
+        _ region: MKCoordinateRegion,
+        isUserInitiated: Bool
+    ) {
+        switch cameraRegionTracker.finishCameraChange(
+            region,
+            isUserInitiated: isUserInitiated
+        ) {
         case .stationary:
             break
         case .zoom:
@@ -6239,7 +6256,7 @@ private struct NativeMapView: UIViewRepresentable {
     let onLongPress: (CLLocationCoordinate2D) -> Void
     let onNativeFeatureSelection: (MKMapFeatureAnnotation) -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
-    let onCameraInteractionEnd: (MKCoordinateRegion) -> Void
+    let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -6290,6 +6307,7 @@ private struct NativeMapView: UIViewRepresentable {
         private var annotationAccessibilityRefreshScheduled = false
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
+        private var isProgrammaticCameraChangeInFlight = false
         private var suppressNextCompletedTap = false
         private lazy var tapRecognizer: PassiveMapTapGestureRecognizer = {
             let recognizer = PassiveMapTapGestureRecognizer()
@@ -6397,8 +6415,10 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let isUserInitiated = !isProgrammaticCameraChangeInFlight
+            isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
-            parent.onCameraInteractionEnd(mapView.region)
+            parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
 
         func gestureRecognizer(
@@ -6498,6 +6518,10 @@ private struct NativeMapView: UIViewRepresentable {
             guard lastCameraRevision != parent.cameraRequest.revision else { return }
             let isInitialRequest = lastCameraRevision == nil
             lastCameraRevision = parent.cameraRequest.revision
+            isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify(
+                from: mapView.region,
+                to: parent.cameraRequest.region
+            ) != .stationary
             mapView.setRegion(
                 parent.cameraRequest.region,
                 animated: isInitialRequest ? false : parent.cameraRequest.animated
