@@ -1,20 +1,20 @@
 import SwiftUI
 
 enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
-    case ratings
+    case fitScore
 
     var id: String { rawValue }
 
     var title: String {
-        "Ratings"
+        "Fit score"
     }
 
     var message: String {
-        "Friends rating averages ratings from people you follow who checked in here. If none have rated it, rec.me rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
+        "Fit score predicts how well this place matches your taste. It uses your ratings, the categories and tags you like, and places saved by trusted people."
     }
 
     var accessibilityLabel: String {
-        "About the \(title)"
+        "About \(title)"
     }
 }
 
@@ -57,7 +57,7 @@ struct PlaceProfileRatingsRail: View {
                 Spacer(minLength: WanderTheme.spacing2)
 
                 PlaceRatingInfoButton(
-                    explanation: .ratings,
+                    explanation: .fitScore,
                     tint: WanderTheme.textMuted.color
                 )
             }
