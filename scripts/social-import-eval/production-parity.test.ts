@@ -17,6 +17,111 @@ import {
   runProductionParityDiagnostic,
 } from "./production-parity.ts";
 
+test("an uncounted hike list folds a same-item route qualifier into its destination in either order", () => {
+  const base: ModelCandidate = {
+    name: "Multnomah Falls",
+    sourceMention: "Multnomah Falls",
+    area: "Oregon",
+    entityType: "poi",
+    itemIndex: 5,
+    classification: "destination",
+    modality: "caption",
+    evidenceIds: ["caption:0"],
+    confidence: .99,
+    startMs: -1,
+    endMs: -1,
+  };
+  const route: ModelCandidate = {
+    ...base,
+    name: "Multnomah Falls via Larch Mountain Trail",
+    sourceMention: "Multnomah Falls via Larch Mountain",
+    entityType: "route",
+    modality: "image_text",
+    evidenceIds: ["media:6"],
+  };
+  const catalog = {
+    texts: [{
+      id: "caption:0",
+      modality: "caption" as const,
+      text: "My favorite hikes in Oregon: Multnomah Falls",
+      area: null,
+      mediaID: null,
+    }],
+    media: [{
+      id: "media:6",
+      index: 6,
+      kind: "image" as const,
+      url: "https://example.com/hike.jpg",
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const ingestions = [{
+    mediaID: "media:6",
+    kind: "image" as const,
+    status: "ok" as const,
+    byteCount: 1,
+    mimeType: "image/jpeg",
+    errorCode: null,
+  }];
+  const context = {
+    intent: "place_list" as const,
+    declaredCount: -1,
+    declaredCountEvidenceIds: [],
+    globalArea: "Oregon",
+    globalAreaEvidenceIds: ["caption:0"],
+  };
+  for (const candidates of [[base, route], [route, base]]) {
+    const result = groundedHints(candidates, catalog, ingestions, 150, context);
+    assert.equal(result.hints.length, 1);
+    assert.equal(result.hints[0].name, "Multnomah Falls");
+    assert.ok(result.hints[0].evidence_ids.includes("caption:0"));
+    assert.ok(result.hints[0].evidence_ids.includes("media:6"));
+  }
+  for (
+    const different of [
+      { ...route, itemIndex: 6 },
+      { ...route, area: "Washington" },
+      {
+        ...route,
+        name: "Multnomah Falls Trailhead",
+        sourceMention: "Multnomah Falls Trailhead",
+      },
+      {
+        ...route,
+        name: "Multnomah Falls Cafe",
+        sourceMention: "Multnomah Falls Cafe",
+        entityType: "poi" as const,
+      },
+    ]
+  ) {
+    assert.equal(
+      groundedHints([base, different], catalog, ingestions, 150, context).hints
+        .length,
+      2,
+    );
+  }
+  const otherRoute = {
+    ...route,
+    name: "Multnomah Falls via Wahkeena Trail",
+    sourceMention: "Multnomah Falls via Wahkeena Trail",
+  };
+  assert.equal(
+    groundedHints([route, otherRoute], catalog, ingestions, 150, context).hints
+      .length,
+    2,
+  );
+  assert.equal(
+    groundedHints([base, route, otherRoute], catalog, ingestions, 150, context)
+      .hints.length,
+    3,
+  );
+  assert.equal(
+    groundedHints([base, route], catalog, ingestions, 150).hints.length,
+    2,
+  );
+});
+
 test("production grounding combines caption and slide names with expanded city labels without conflating venues", () => {
   const candidate = (
     name: string,

@@ -545,6 +545,8 @@ export function groundedHints(
         sameUncountedLogicalItemVariant(
           withoutDuplicateItems[index],
           candidate,
+          context.intent === "place_list",
+          withoutGeographyContext,
         )
       )
       : matchingIndexes[0];
@@ -647,6 +649,11 @@ function preferredSameItemCandidate(
   existing: PreparedHint,
   candidate: PreparedHint,
 ): boolean {
+  // Keep the destination as the canonical POI query. The route remains
+  // represented in the merged source evidence, not as a second saved place.
+  if (sameDestinationWithRouteQualifier(existing, candidate)) {
+    return candidate.entityType === "poi";
+  }
   if (
     existing.usesLiteralHandleFallback !== candidate.usesLiteralHandleFallback
   ) return existing.usesLiteralHandleFallback;
@@ -666,11 +673,54 @@ function preferredSameItemCandidate(
 function sameUncountedLogicalItemVariant(
   left: PreparedHint,
   right: PreparedHint,
+  placeList: boolean,
+  allCandidates: PreparedHint[],
 ): boolean {
   return left.itemIndex >= 0 && left.itemIndex === right.itemIndex &&
     sourceAreasReferToSamePlace(left.hint.area, right.hint.area) &&
-    sharesDirectEvidence(left, right) &&
-    sameOrSimpleSingularPluralName(left.hint.name, right.hint.name);
+    ((sharesDirectEvidence(left, right) &&
+      sameOrSimpleSingularPluralName(left.hint.name, right.hint.name)) ||
+      (placeList && sameDestinationWithRouteQualifier(left, right) &&
+        hasSingleRouteQualifier(left, right, allCandidates)));
+}
+
+function hasSingleRouteQualifier(
+  left: PreparedHint,
+  right: PreparedHint,
+  allCandidates: PreparedHint[],
+): boolean {
+  const destination = left.entityType === "poi" ? left : right;
+  const routes = new Set(
+    allCandidates
+      .filter((candidate) =>
+        sameDestinationWithRouteQualifier(destination, candidate)
+      )
+      .map((candidate) => normalizedValue(candidate.hint.name)),
+  );
+  // A base destination must not bridge two independently named route options.
+  return routes.size === 1;
+}
+
+function sameDestinationWithRouteQualifier(
+  left: PreparedHint,
+  right: PreparedHint,
+): boolean {
+  const destination = left.entityType === "poi" ? left : right;
+  const route = destination === left ? right : left;
+  if (
+    destination.entityType !== "poi" || route.entityType !== "route" ||
+    destination.itemIndex < 0 || destination.itemIndex !== route.itemIndex ||
+    !destination.hint.area || !route.hint.area ||
+    !sourceAreasReferToSamePlace(destination.hint.area, route.hint.area)
+  ) return false;
+  // An explicit `via` relationship is stronger than substring containment.
+  // Do not merge a trailhead, a nested venue, or two separately named routes.
+  const destinationWords = words(destination.hint.name);
+  const routeWords = words(route.hint.name);
+  return destinationWords.length >= 2 &&
+    routeWords.length > destinationWords.length + 1 &&
+    destinationWords.every((word, index) => routeWords[index] === word) &&
+    routeWords[destinationWords.length] === "via";
 }
 
 function sameOrSimpleSingularPluralName(left: string, right: string): boolean {
