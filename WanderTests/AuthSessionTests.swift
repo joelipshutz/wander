@@ -711,6 +711,45 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(fenceStore.load(), .fence(.blockUncorrelated))
     }
 
+    func testUnrelatedSignedOutEventPreservesNativeAuthFence() async throws {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let fenceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-auth-signed-out-event-\(UUID().uuidString).json")
+        let fenceStore = NativeAuthSessionFenceStore.file(url: fenceURL)
+        defer { try? FileManager.default.removeItem(at: fenceURL) }
+        let unrelatedSession = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(unrelatedSession, clerkSessionID: "sess_active")
+            },
+            resolveSessionID: { "sess_active" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: fenceStore,
+            configureClerk: { $0 }
+        )
+
+        try service.prepareForInteractiveAuth()
+        let didApplyEvent = service.applySDKSessionSignedOut(
+            signedOutSessionID: "sess_old",
+            activeSessionID: "sess_active"
+        )
+
+        XCTAssertFalse(didApplyEvent)
+        XCTAssertEqual(fenceStore.load(), .fence(.blockUncorrelated))
+
+        await service.refreshSession()
+
+        XCTAssertEqual(service.state, .signedOut)
+        XCTAssertEqual(fenceStore.load(), .fence(.blockUncorrelated))
+    }
+
     func testInteractiveAuthRefusesWhenFenceCannotPersist() {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"

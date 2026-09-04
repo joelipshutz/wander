@@ -122,7 +122,16 @@ final class ClerkAuthService: AuthSessionProviding {
                         // refresh and incorrectly turn a valid login into a
                         // signed-out result.
                         break
-                    case .signedOut, .accountDeleted:
+                    case .signedOut(let session):
+                        guard let self else { return }
+                        guard self.applySDKSessionSignedOut(
+                            signedOutSessionID: session.id,
+                            activeSessionID: self.resolveActiveSessionID()
+                        ) else {
+                            continue
+                        }
+                        continuation.yield(.signedOut)
+                    case .accountDeleted:
                         guard let self else { return }
                         self.applyTerminalSignedOutState()
                         continuation.yield(.signedOut)
@@ -712,8 +721,23 @@ final class ClerkAuthService: AuthSessionProviding {
     /// must prevent an older in-flight refresh from restoring a removed session.
     func applyTerminalSignedOutState() {
         refreshGeneration &+= 1
-        setNativeAuthSessionFence(nil)
         applyObservedClientState(.signedOut)
+    }
+
+    /// Clerk emits `signedOut` for any removed session, including a non-active
+    /// session revoked from account settings. Ignore those events while another
+    /// session remains active, and never let an SDK event clear the persistent
+    /// correlation fence for a newer interactive auth attempt.
+    @discardableResult
+    func applySDKSessionSignedOut(
+        signedOutSessionID: String,
+        activeSessionID: String?
+    ) -> Bool {
+        guard activeSessionID == nil || activeSessionID == signedOutSessionID else {
+            return false
+        }
+        applyTerminalSignedOutState()
+        return true
     }
     #endif
 
