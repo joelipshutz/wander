@@ -25,6 +25,7 @@ struct ProfileSettingsHome: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var importStore: PlaceImportStore
 
     @State private var showsAccountManagement = false
     @State private var showsNotifications = false
@@ -122,6 +123,7 @@ struct ProfileSettingsHome: View {
             mapSection
             notificationsSection
             privacySection
+            importsSection
             if isDebugSettingsEntitled {
                 featureFlagsSection
             }
@@ -266,6 +268,17 @@ struct ProfileSettingsHome: View {
                 }
             }
             .foregroundStyle(WanderTheme.textInk.color)
+        }
+    }
+
+    private var importsSection: some View {
+        Section("Imports") {
+            NavigationLink {
+                PlaceImportHistoryScreen(importStore: importStore)
+            } label: {
+                Label("Import history", systemImage: "clock.arrow.circlepath")
+            }
+            .accessibilityIdentifier("settings.importHistory")
         }
     }
 
@@ -547,10 +560,29 @@ struct ProfileSettingsHome: View {
 
     @MainActor
     private func signOut() async {
-        if case .signedIn = auth.state {
-            await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
+        let signingOutUserID: String? = if case .signedIn(let session) = auth.state {
+            session.userID
+        } else {
+            nil
         }
-        try? await auth.signOut()
+        if let signingOutUserID {
+            await pushNotifications.unregisterStoredDeviceTokenIfPossible(
+                backend: backend,
+                userID: signingOutUserID,
+                authSession: auth
+            )
+        }
+        do {
+            try await auth.signOut()
+        } catch {
+            if let signingOutUserID {
+                await pushNotifications.restoreRegistrationAfterFailedAccountTeardown(
+                    userID: signingOutUserID,
+                    backend: backend,
+                    authSession: auth
+                )
+            }
+        }
     }
 
     @MainActor
@@ -565,7 +597,13 @@ struct ProfileSettingsHome: View {
         errorMessage = nil
         defer { isDeleting = false }
         do {
-            await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
+            if let deletingUserID {
+                await pushNotifications.unregisterStoredDeviceTokenIfPossible(
+                    backend: backend,
+                    userID: deletingUserID,
+                    authSession: auth
+                )
+            }
             try await auth.deleteAccount()
             if let deletingUserID {
                 OnboardingCompletionStore().clear(for: deletingUserID)
@@ -573,6 +611,13 @@ struct ProfileSettingsHome: View {
             store.resetAfterAccountDeletion()
             closeSettings()
         } catch {
+            if let deletingUserID {
+                await pushNotifications.restoreRegistrationAfterFailedAccountTeardown(
+                    userID: deletingUserID,
+                    backend: backend,
+                    authSession: auth
+                )
+            }
             errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
         }
     }
@@ -966,7 +1011,9 @@ struct ProfilePrivacyTrustScreen: View {
                               : "calendar.badge.plus")
                         Text(isConnectingCalendar
                              ? "working"
-                             : (calendarReservations.hasFullAccess ? "sync now" : "connect calendar"))
+                             : CalendarPermissionPolicy.primaryTitle(
+                                 for: calendarReservations.authorizationStatus
+                             ))
                     }
                     .font(.system(size: 15, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
@@ -1000,6 +1047,12 @@ struct ProfilePrivacyTrustScreen: View {
 
     @MainActor
     private func connectOrSyncCalendar() async {
+        if CalendarPermissionPolicy.action(for: calendarReservations.authorizationStatus) == .openSettings {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            await UIApplication.shared.open(url)
+            return
+        }
+
         isConnectingCalendar = true
         calendarErrorMessage = nil
         defer { isConnectingCalendar = false }

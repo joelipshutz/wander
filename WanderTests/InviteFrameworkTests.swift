@@ -324,6 +324,20 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(provider.contains("guard let phoneNumber, !phoneNumber.isEmpty else { return nil }"))
     }
 
+    func testContactPrimerCannotDismissBeforeTheSystemPermissionPrompt() throws {
+        let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
+        let primer = try XCTUnwrap(
+            sheet.components(separatedBy: "private var permissionPrimer").last?
+                .components(separatedBy: "private func permissionPromise").first
+        )
+
+        XCTAssertTrue(sheet.contains(".interactiveDismissDisabled(accessState == .primer)"))
+        XCTAssertTrue(sheet.contains("if canDismiss && accessState != .primer"))
+        XCTAssertTrue(primer.contains("Text(\"Continue\")"))
+        XCTAssertTrue(primer.contains("invite.permissionContinue"))
+        XCTAssertFalse(primer.contains("Button(\"not now\")"))
+    }
+
     func testContactInviteAddUsesMessagesDeliveryAndInteractiveAlphabetScrubber() throws {
         let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
 

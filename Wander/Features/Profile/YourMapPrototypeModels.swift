@@ -543,8 +543,10 @@ struct YourMapPrototypeInsights: Equatable {
             return lhs.title < rhs.title
         }
 
-        cityBreakdown = Self.breakdown(places.map(\.city), totalCount: places.count)
-        countryBreakdown = Self.breakdown(places.map(\.country), totalCount: places.count)
+        // Missing geography never becomes a ranked location. Keep the denominator
+        // as all filtered places so hiding a bucket does not inflate other shares.
+        cityBreakdown = Self.breakdown(places.compactMap { Self.knownGeographyName($0.city) }, totalCount: places.count)
+        countryBreakdown = Self.breakdown(places.compactMap { Self.knownGeographyName($0.country) }, totalCount: places.count)
 
         let monthCounts = Dictionary(
             grouping: places,
@@ -569,6 +571,13 @@ struct YourMapPrototypeInsights: Equatable {
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
 
+    }
+
+    private static func knownGeographyName(_ value: String) -> String? {
+        let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let placeholders: Set<String> = ["unknown", "unknown city", "unknown country", "unknown region"]
+        guard !name.isEmpty, !placeholders.contains(name.lowercased()) else { return nil }
+        return name
     }
 
     private static func breakdown(

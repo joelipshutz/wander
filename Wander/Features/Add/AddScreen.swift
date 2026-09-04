@@ -111,7 +111,9 @@ enum AddCameraPreviewLayout {
 enum AddSheetLayout {
     static let emptyRestingHeight: CGFloat = 520
     static let pendingReviewRestingHeight: CGFloat = 570
-    static let importEntryHeight: CGFloat = 410
+    /// Content-height resting detent for the import entry. The native sheet can
+    /// still be dragged to full height for keyboard or accessibility needs.
+    static let importEntryHeight: CGFloat = 440
     static let importCompletionHeight: CGFloat = 710
 
     static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
@@ -435,21 +437,38 @@ struct AddScreen: View {
                 }
             }
             .navigationDestination(isPresented: $showsImportReview) {
-                PlaceImportAdaptiveReviewScreen(
-                    importStore: importStore,
-                    batchIDs: importReviewBatchIDs,
-                    onDone: onClose
-                )
+                importCompletionDestination
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
-                PlaceImportInboxScreen(importStore: importStore)
+                PlaceImportHistoryScreen(importStore: importStore)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var importCompletionDestination: some View {
+        if importReviewBatchIDs.count == 1, let batchID = importReviewBatchIDs.first {
+            PlaceImportHistoryDestination(importStore: importStore, batchID: batchID)
+        } else if importReviewBatchIDs.allSatisfy({ batchID in
+            let activeCount = importStore.items(for: batchID).filter {
+                ![.saved, .dismissed].contains($0.state)
+            }.count
+            return importStore.batches.first(where: { $0.id == batchID })?.receipt != nil
+                && PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(activeItemCount: activeCount)
+        }) {
+            PlaceImportHistoryScreen(importStore: importStore)
+        } else {
+            PlaceImportCanonicalReviewScreen(
+                importStore: importStore,
+                batchIDs: importReviewBatchIDs,
+                onDone: onClose
+            )
         }
     }
 

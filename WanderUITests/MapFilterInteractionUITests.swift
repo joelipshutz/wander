@@ -291,7 +291,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testPerformanceFixtureTracesDenseMapPanZoomAndClusterChurn() {
+    func testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -336,7 +336,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 .completed
             )
             let snapshot = probe.value as? String ?? ""
-            print("REC404_MAP_CLUSTER_TRACE \(label) \(snapshot)")
+            print("REC404_MAP_INDIVIDUAL_PIN_TRACE \(label) \(snapshot)")
             XCTAssertLessThanOrEqual(
                 metric("nativeA11yVisits", in: snapshot) ?? .max,
                 200,
@@ -417,6 +417,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", "friends"
         ]
@@ -441,6 +442,32 @@ final class MapFilterInteractionUITests: XCTestCase {
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 3))
         XCTAssertTrue(card.label.contains("Bar Nido"))
+
+        let unexpectedRecenterDismissal = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: card
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [unexpectedRecenterDismissal], timeout: 1.2),
+            .timedOut,
+            "A programmatic pin recenter must not dismiss the selected place card."
+        )
+        XCTAssertTrue(card.exists)
+
+        card.tap()
+        XCTAssertTrue(
+            app.staticTexts["Ratings"].waitForExistence(timeout: 3),
+            "The first collapsed-card tap should open the place profile."
+        )
+        let unexpectedProfileDismissal = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.staticTexts["Ratings"]
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [unexpectedProfileDismissal], timeout: 1),
+            .timedOut,
+            "The place profile should remain presented after the recenter animation finishes."
+        )
     }
 
     func testSourceFiltersFitWithoutOverlapOnSmallPhones() {
@@ -541,6 +568,11 @@ final class MapFilterInteractionUITests: XCTestCase {
 
     func testNearbyPermissionEducationAppearsBeforeTheSystemPrompt() throws {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+        }
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures"
@@ -549,28 +581,31 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let nearby = app.buttons["map.nearby"]
         XCTAssertTrue(nearby.waitForExistence(timeout: 5))
-        guard nearby.value as? String == "Location permission needed" else {
-            throw XCTSkip("Simulator already has location permission")
-        }
+        XCTAssertEqual(nearby.value as? String, "Location permission needed")
 
         nearby.tap()
         XCTAssertTrue(
             app.buttons["map.locationEducation.allow"].waitForExistence(timeout: 2)
         )
-        XCTAssertTrue(app.buttons["map.locationEducation.cancel"].isHittable)
+        XCTAssertEqual(app.buttons["map.locationEducation.allow"].label, "Continue")
+        XCTAssertFalse(app.buttons["map.locationEducation.cancel"].exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-289 Nearby location education"
+        screenshot.name = "REC-396 actual Map location permission"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        app.buttons["map.locationEducation.allow"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
     }
 
-    private func launchFriendsMore(resetSeconds: String? = nil) -> XCUIApplication {
+    private func launchMoreFilters(source: String = "friends", resetSeconds: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderMapCaptureMode", "friends",
+            "-WanderMapCaptureMode", source,
             "-WanderMapMoreFiltersOpen"
         ]
         if let resetSeconds {
@@ -580,8 +615,58 @@ final class MapFilterInteractionUITests: XCTestCase {
         return app
     }
 
+    func testPeopleSelectionFromFeaturedSwitchesToFriends() {
+        assertPeopleSelectionSwitchesToFriends(from: "featured")
+    }
+
+    func testPeopleSelectionFromYouSwitchesToFriends() {
+        assertPeopleSelectionSwitchesToFriends(from: "you")
+    }
+
+    func testPeopleSelectionFromFriendsKeepsFriends() {
+        assertPeopleSelectionSwitchesToFriends(from: "friends")
+    }
+
+    private func assertPeopleSelectionSwitchesToFriends(from source: String) {
+        let app = launchMoreFilters(source: source)
+        let panel = app.scrollViews["map.moreFilters.popover"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        let allPeople = app.buttons["map.more.people.all"]
+        for _ in 0..<5 where !allPeople.isHittable {
+            panel.swipeUp()
+        }
+        XCTAssertTrue(allPeople.isHittable)
+        allPeople.tap()
+        XCTAssertTrue(
+            (app.buttons["map.filter.\(source)"].value as? String)?.contains("Selected") == true
+        )
+
+        let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        before.name = "REC-418 People available on \(source)"
+        before.lifetime = .keepAlways
+        add(before)
+
+        selectDemoPerson(in: app, panel: panel)
+        XCTAssertTrue(panel.exists)
+        XCTAssertTrue(
+            (app.buttons["map.filter.friends"].value as? String)?.contains("Selected") == true
+        )
+        assertOneSelectedFilter(in: app)
+
+        let after = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        after.name = "REC-418 \(source) to Friends with person selected"
+        after.lifetime = .keepAlways
+        add(after)
+
+        app.buttons["map.more.person.user_demo"].tap()
+        XCTAssertTrue(
+            (app.buttons["map.filter.friends"].value as? String)?.contains("Selected") == true
+        )
+        XCTAssertEqual(allPeople.value as? String, "Selected")
+    }
+
     func testSourceTapDismissesAndResetsMoreFiltersInOneTap() {
-        let app = launchFriendsMore()
+        let app = launchMoreFilters()
         let panel = app.scrollViews["map.moreFilters.popover"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
 
@@ -599,7 +684,7 @@ final class MapFilterInteractionUITests: XCTestCase {
     }
 
     func testSearchNearbyAndBottomNavigationDismissWithoutResettingMoreFilters() {
-        let app = launchFriendsMore()
+        let app = launchMoreFilters()
         let panel = app.scrollViews["map.moreFilters.popover"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         selectDemoPerson(in: app, panel: panel)
@@ -647,7 +732,7 @@ final class MapFilterInteractionUITests: XCTestCase {
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {
-        let app = launchFriendsMore(resetSeconds: "0.2")
+        let app = launchMoreFilters(resetSeconds: "0.2")
         let panel = app.scrollViews["map.moreFilters.popover"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         selectDemoPerson(in: app, panel: panel)

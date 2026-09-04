@@ -386,6 +386,9 @@ enum PlaceImportSourceDetector {
         if host == "tiktok.com" || host.hasSuffix(".tiktok.com") {
             return .tiktok
         }
+        if host == "snapchat.com" || host.hasSuffix(".snapchat.com") {
+            return .snapchat
+        }
         return .textNotes
     }
 }

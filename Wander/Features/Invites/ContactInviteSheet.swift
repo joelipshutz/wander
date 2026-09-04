@@ -229,6 +229,7 @@ struct ContactInviteSheet: View {
             .padding(.top, WanderTheme.spacing2)
         }
         .preferredColorScheme(.light)
+        .interactiveDismissDisabled(accessState == .primer)
         .task {
             analytics.track(
                 AnalyticsEvent(
@@ -294,7 +295,7 @@ struct ContactInviteSheet: View {
             }
 
             HStack {
-                if canDismiss {
+                if canDismiss && accessState != .primer {
                     Button {
                         onWalkthroughDismiss?()
                         dismiss()
@@ -678,7 +679,7 @@ struct ContactInviteSheet: View {
                         ProgressView()
                             .tint(WanderTheme.textOnAction.color)
                     } else {
-                        Text("continue to contacts")
+                        Text("Continue")
                     }
                 }
                 .font(.system(size: 15, weight: .black))
@@ -689,13 +690,7 @@ struct ContactInviteSheet: View {
             }
             .buttonStyle(.plain)
             .disabled(isLoadingContacts)
-
-            Button("not now") {
-                if canDismiss { dismiss() }
-            }
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(WanderTheme.textMuted.color)
-            .frame(minHeight: WanderTheme.tapMinimum)
+            .accessibilityIdentifier("invite.permissionContinue")
 
             Spacer()
         }

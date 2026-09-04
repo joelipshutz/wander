@@ -140,6 +140,11 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+            .blocksProductUpsells(
+                while: selectedProfile != nil
+                    || placeSaveFlow != nil
+                    || savedMessage != nil
+            )
             .onChange(of: selectedSurface) { _, surface in
                 if surface == .people {
                     hasMountedPeopleSurface = true
@@ -367,19 +372,25 @@ struct FeedScreen: View {
     @MainActor
     private func resolveCommentsRouteIfNeeded() async {
         guard let route = activityNavigation.commentsRoute else { return }
+        let requestUserID = store.currentUser.id
+        let allowsCachedContext = !auth.isSignedIn
+            || backend.activityEngagementRepository == nil
+            || UUID(uuidString: route.activityID) == nil
         focusedActivityID = route.activityID
+
+        if !allowsCachedContext {
+            activityNavigation.resolve(requestID: route.id, activity: nil)
+        }
 
         let activity = await store.activity(
             id: route.activityID,
             backend: auth.isSignedIn ? backend : nil
         )
-        guard let context = activity?.activityEngagementContext ?? route.context else {
-            return
-        }
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
         activityNavigation.resolve(
             requestID: route.id,
-            context: context,
-            visiblePlace: route.visiblePlace ?? activity?.place
+            activity: activity,
+            allowsCachedContext: allowsCachedContext
         )
     }
 
@@ -1500,7 +1511,7 @@ private struct FeedActivityModule: View {
     }
 }
 
-private extension FeedActivity {
+extension FeedActivity {
     var activityEngagementContext: ActivityEngagementContext? {
         let subjectName: String
         let subjectServerID: String?
@@ -1536,11 +1547,11 @@ private extension FeedActivity {
         )
     }
 
-    var postcardTicketEyebrow: String {
+    fileprivate var postcardTicketEyebrow: String {
         kind == .listCreated ? "CREATED A LIST" : resolvedTicketKind.defaultTicketEyebrow
     }
 
-    var postcardAttributionAction: String {
+    fileprivate var postcardAttributionAction: String {
         kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
     }
 }

@@ -171,6 +171,14 @@ struct ListsScreen: View {
         } message: {
             Text(listInviteErrorMessage ?? "This invitation is no longer available.")
         }
+        .blocksProductUpsells(
+            while: editorPresentation != nil
+                || collaboratorList != nil
+                || pendingListInvite != nil
+                || mapList != nil
+                || selectedProfileID != nil
+                || listInviteErrorMessage != nil
+        )
         .environment(
             \.listPhotoAuthorizationScopeKey,
             store.listPhotoAuthorizationScopeKey()
@@ -859,6 +867,15 @@ private struct ListPreviewMosaic: View {
 
     @ViewBuilder
     private var mosaicContent: some View {
+        if list.snapshotCoverData != nil || list.snapshotCoverPath != nil {
+            ListSnapshotCover(data: list.snapshotCoverData, path: list.snapshotCoverPath)
+        } else {
+            photoMosaicContent
+        }
+    }
+
+    @ViewBuilder
+    private var photoMosaicContent: some View {
         switch min(list.previewPlaces.count, 4) {
         case 0:
             emptyCover
@@ -1315,7 +1332,9 @@ private struct ListDetailScreen: View {
     private var suggestionsSection: some View {
         if canAddPlaces {
             ListSuggestionsSection(
-                suggestions: suggestionBatch.suggestions,
+                suggestions: sourceList.map {
+                    store.availableListSuggestions(suggestionBatch.suggestions, for: $0)
+                } ?? [],
                 isLoading: isLoadingSuggestions,
                 outlineCatalog: savedPlaceOutlineCatalog,
                 currentUserID: store.currentUser.id,
@@ -1715,6 +1734,7 @@ private struct ListAddPlacesScreen: View {
     @ViewBuilder
     private var suggestionsContent: some View {
         let outlineCatalog = savedPlaceOutlineCatalog
+        let suggestions = store.availableListSuggestions(suggestionBatch.suggestions, for: list)
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
@@ -1722,7 +1742,7 @@ private struct ListAddPlacesScreen: View {
 
             if isLoadingSuggestions {
                 ListLoadingRow(title: "Finding places that fit")
-            } else if suggestionBatch.suggestions.isEmpty {
+            } else if suggestions.isEmpty {
                 Text("Start with search, then suggestions will get sharper as the list fills in.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -1732,7 +1752,7 @@ private struct ListAddPlacesScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
                 LazyVStack(spacing: WanderTheme.spacing2) {
-                    ForEach(suggestionBatch.suggestions) { suggestion in
+                    ForEach(suggestions) { suggestion in
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
@@ -4115,6 +4135,9 @@ private struct ListEditorDraft {
 }
 
 private struct ListEditorSheet: View {
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var isAddingPlaces = false
+    @State private var removingPlaceIDs = Set<String>()
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -4200,6 +4223,9 @@ private struct ListEditorSheet: View {
                             .accessibilityIdentifier("listEditor.contentError")
                     }
 
+                    if let sourceList {
+                        snapshotPlacesBlock(list: sourceList)
+                    }
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
                     stealthToggle
@@ -4209,6 +4235,7 @@ private struct ListEditorSheet: View {
                 .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)
                 .scrollTargetLayout()
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollPosition(id: $walkthroughScrollPosition, anchor: .center)
             .wanderScreen()
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -4274,6 +4301,18 @@ private struct ListEditorSheet: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
+        .sheet(isPresented: $isAddingPlaces) {
+            if let sourceList {
+                NavigationStack {
+                    ListAddPlacesScreen(list: sourceList) { _ in }
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { isAddingPlaces = false }
+                            }
+                        }
+                }
+            }
+        }
     }
 
     private var newListBackButton: some View {
@@ -4288,6 +4327,56 @@ private struct ListEditorSheet: View {
         .buttonStyle(.plain)
         .foregroundStyle(WanderTheme.textInk.color)
         .accessibilityLabel("Back to lists")
+    }
+
+    private var sourceList: LocalPlaceList? {
+        guard case .edit(let list) = presentation, let id = list.sourceListID else { return nil }
+        return store.placeLists.first { ($0.id == id || $0.localID == id || $0.serverID == id) && $0.deletedAt == nil }
+    }
+
+    private func snapshotPlacesBlock(list: LocalPlaceList) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            if list.snapshotCoverData != nil || list.snapshotCoverPath != nil {
+                ListSnapshotCover(data: list.snapshotCoverData, path: list.snapshotCoverPath)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                Text("Snapshot cover stays as captured.")
+                    .font(.footnote)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            HStack {
+                Text("places").font(.headline)
+                Spacer()
+                Button("Add places") { isAddingPlaces = true }
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .accessibilityIdentifier("listEditor.addPlaces")
+            }
+            Text("Place changes save immediately.")
+                .font(.footnote)
+                .foregroundStyle(WanderTheme.textMuted.color)
+            ForEach(store.visiblePlaces(in: list)) { place in
+                HStack {
+                    Text(place.place.canonicalName)
+                    Spacer()
+                    Button {
+                        removingPlaceIDs.insert(place.id)
+                        Task {
+                            let removed = await store.removePlace(
+                                placeID: place.place.id, visiblePlaceID: place.id,
+                                from: list, backend: backend
+                            )
+                            removingPlaceIDs.remove(place.id)
+                            if !removed { contentErrorMessage = "Couldn’t remove this place. Try again." }
+                        }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    }
+                    .disabled(!store.canManage(list) || removingPlaceIDs.contains(place.id))
+                    .accessibilityLabel("Remove \(place.place.canonicalName) from list")
+                }
+            }
+        }
     }
 
     private var isEditing: Bool {
@@ -4668,6 +4757,8 @@ private struct PlaceListMock: Identifiable, Hashable {
     let collaborators: [ListCollaboratorMock]
     let places: [ListPlaceMock]
     var itemCountOverride: Int? = nil
+    var snapshotCoverData: Data? = nil
+    var snapshotCoverPath: String? = nil
     var sourceListID: String? = nil
     var ownerUserID: String = "you"
     var canManage: Bool = true
@@ -4768,7 +4859,9 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 
     static func == (lhs: PlaceListMock, rhs: PlaceListMock) -> Bool {
-        lhs.id == rhs.id
+        // SwiftUI also compares these snapshots when updating the grid. A
+        // membership change must invalidate the card even when its ID is stable.
+        lhs.id == rhs.id && lhs.itemCount == rhs.itemCount
     }
 
     func hash(into hasher: inout Hasher) {
@@ -4817,6 +4910,8 @@ private extension PlaceListMock {
             canAddPlaces: store.canAddPlaces(to: list),
             canLeave: store.canLeave(list)
         )
+        snapshotCoverData = list.snapshotCoverData
+        snapshotCoverPath = list.snapshotCoverPath
     }
 
     init(list: LocalPlaceList, store: WanderStore) {
@@ -4878,6 +4973,8 @@ private extension PlaceListMock {
             canAddPlaces: store.canAddPlaces(to: list),
             canLeave: store.canLeave(list)
         )
+        snapshotCoverData = list.snapshotCoverData
+        snapshotCoverPath = list.snapshotCoverPath
     }
 }
 
@@ -5667,5 +5764,67 @@ private extension String {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+}
+
+
+struct SnapshotListEditorScreen: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.dismiss) private var dismiss
+    let listID: String
+
+    var body: some View {
+        if let list = store.placeLists.first(where: {
+            ($0.localID == listID || $0.id == listID || $0.serverID == listID)
+                && $0.deletedAt == nil && store.canManage($0)
+        }) {
+            ListEditorSheet(presentation: .edit(PlaceListMock(list: list, store: store))) { draft in
+                _ = store.updatePlaceList(
+                    id: list.localID, name: draft.title, description: draft.description,
+                    visibility: draft.isStealth ? .stealth : .followers,
+                    collaboratorUserIDs: draft.collaborators.map(\.id)
+                )
+                Task { _ = await store.syncPendingPlaceLists(backend: backend) }
+            } onDelete: { _ in
+                _ = store.deletePlaceList(id: list.localID)
+                Task { _ = await store.syncPendingPlaceLists(backend: backend) }
+                dismiss()
+            }
+        } else {
+            ContentUnavailableView("List unavailable", systemImage: "list.bullet")
+        }
+    }
+}
+
+private struct ListSnapshotCover: View {
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
+    let data: Data?
+    let path: String?
+    @State private var downloadedData: Data?
+
+    var body: some View {
+        Group {
+            if let imageData = data ?? downloadedData, let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .accessibilityLabel("Saved map snapshot")
+            } else {
+                Image(systemName: "map")
+                    .font(.largeTitle)
+                    .accessibilityLabel("Map snapshot cover")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WanderTheme.surfaceSand.color)
+        .task(id: "\(store.currentUser.id):\(path ?? "local")") {
+            downloadedData = nil
+            guard data == nil, let path else { return }
+            let result = try? await backend.listSnapshotCoverData(path: path)
+            guard !Task.isCancelled else { return }
+            downloadedData = result
+        }
     }
 }

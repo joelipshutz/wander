@@ -1,8 +1,16 @@
 # Open Questions
 
-Last updated: 2026-07-25
+Last updated: 2026-09-03
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## REC-409 Share Extension Background Import
+
+The revised extension can prefill a shared link and durably capture it without choosing Wanna, Check-in, or a rating. Its existing processing boundary remains the containing app. Apple documents URL opening from an extension for Today and iMessage extension points, not Share extensions, so a containing-app launch is not a supported background-import strategy.
+
+Decision needed: approve a narrowly scoped authenticated submission path plus a durable server import job and completion push. The current paid-work admission schema deliberately does not store URLs, captions, media, or extracted results (`20260830104500_social_import_finished_replay.sql`); background processing changes this data-retention boundary. Recommendation: retain owner-private links/results only until the app retrieves them, with a seven-day hard expiry, and use a revocable import-only credential rather than copying the primary sign-in session into shared preferences. This adds a server-side retention/security contract; the alternative is the current device-only inbox, which cannot promise completion before the next app launch. Until approved, implemented, and tested on a physical phone, the extension must say that matching starts on the next rec.me launch. The REC-409 PR remains draft for this gap.
+
+Reference: [Apple background transfers for extensions](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html).
 
 ## Needs Answer Before M2 Is Accepted
 

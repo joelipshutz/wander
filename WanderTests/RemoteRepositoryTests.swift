@@ -3,6 +3,39 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testListSnapshotUploadUsesPrivateStorageThenOwnerRPC() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["set_place_list_snapshot_cover"] = Data("null".utf8)
+        let storage = RecordingStorage()
+        let repository = SupabasePlaceListRepository(rpc: rpc, storage: storage)
+        let id = "11111111-1111-4111-8111-111111111111"
+        let data = Data([1, 2, 3])
+        let path = try await repository.uploadSnapshotCover(listID: id, jpegData: data)
+        XCTAssertEqual(path, "\(id)/snapshot.jpg")
+        XCTAssertEqual(storage.uploads, [.init(bucket: "list-snapshots", path: path, data: data, contentType: "image/jpeg", upsert: true)])
+        XCTAssertEqual(rpc.calls.map(\.name), ["set_place_list_snapshot_cover"])
+        XCTAssertEqual(rpc.calls[0].body["input_list_id"] as? String, id)
+        storage.downloadData = data
+        let downloaded = try await repository.snapshotCoverData(path: path)
+        XCTAssertEqual(downloaded, data)
+        XCTAssertEqual(storage.downloads, [.init(bucket: "list-snapshots", path: path)])
+        XCTAssertTrue(storage.signedURLs.isEmpty)
+    }
+
+    func testListSnapshotRejectsInvalidIDAndOversizeBeforeUpload() async {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        let repository = SupabasePlaceListRepository(rpc: rpc, storage: storage)
+        for (id, data) in [("invalid", Data([1])), ("11111111-1111-4111-8111-111111111111", Data(repeating: 1, count: 1_048_577))] {
+            do {
+                _ = try await repository.uploadSnapshotCover(listID: id, jpegData: data)
+                XCTFail("Invalid cover should fail")
+            } catch {}
+        }
+        XCTAssertTrue(storage.uploads.isEmpty)
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
     func testSocialImportUnderstandingInvokesAuthenticatedFunctionAndKeepsOnlyGroundedPlaceHints() async throws {
         let functions = RecordingRPC()
         functions.responses["function:social-import-understand"] = Data(
@@ -2318,6 +2351,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let body = rpc.rawBodies[0]
         let userPlaceBody = try XCTUnwrap(body["input_user_place"] as? [String: Any])
         XCTAssertEqual(userPlaceBody["status"] as? String, "been")
+        XCTAssertNil(userPlaceBody["id"])
 
         let visit = try XCTUnwrap(body["input_visit"] as? [String: Any])
         XCTAssertEqual(visit["id"] as? String, visitID)
@@ -2333,6 +2367,28 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(historicalWant["note"] as? String, "Joe recommended it")
         XCTAssertEqual(historicalWant["tags"] as? [String], ["coffee"])
         XCTAssertEqual(historicalWant["wanted_at"] as? String, "2026-07-01T17:00:00Z")
+
+        let existingParentID = "E7000000-0000-4000-8000-000000000001"
+        _ = try await repository.saveCheckIn(
+            CheckInSaveDraft(
+                userPlace: userPlace,
+                visit: PlaceVisitDraft(
+                    id: "38D2B5B8-7F95-42CF-991B-253991C8C6C8",
+                    userPlaceID: existingParentID,
+                    visitedAt: visitedAt,
+                    note: "repeat check-in",
+                    ratingScore: 5,
+                    attributeAnswersJSON: "[]",
+                    backfilledFromUserPlace: false
+                ),
+                historicalWant: nil
+            )
+        )
+
+        let repeatUserPlaceBody = try XCTUnwrap(
+            rpc.rawBodies[1]["input_user_place"] as? [String: Any]
+        )
+        XCTAssertEqual(repeatUserPlaceBody["id"] as? String, existingParentID)
     }
 
     func testCheckInDeleteUsesAtomicRPCAndDecodesRemovalTransition() async throws {

@@ -19,6 +19,7 @@ enum PlaceListScope: String, Codable, CaseIterable {
 }
 
 struct LocalPlaceList: Identifiable, Equatable, Hashable {
+    static let maximumSnapshotCoverBytes = 1_048_576
     let localID: String
     var serverID: String?
     var ownerUserID: String
@@ -26,6 +27,8 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
     var description: String
     var visibilityRaw: String
     var syncStateRaw: String
+    var snapshotCoverData: Data?
+    var snapshotCoverPath: String?
     var cachedItemCount: Int?
     var createdAt: Date
     var updatedAt: Date
@@ -40,6 +43,8 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
         visibility: PlaceListVisibility = .followers,
         syncState: SyncState = .localOnly,
         cachedItemCount: Int? = nil,
+        snapshotCoverData: Data? = nil,
+        snapshotCoverPath: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil
@@ -51,6 +56,8 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
         self.description = description
         self.visibilityRaw = visibility.rawValue
         self.syncStateRaw = syncState.rawValue
+        self.snapshotCoverData = snapshotCoverData
+        self.snapshotCoverPath = snapshotCoverPath
         self.cachedItemCount = cachedItemCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt

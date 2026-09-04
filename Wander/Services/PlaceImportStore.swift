@@ -78,10 +78,21 @@ enum PlaceImportCandidateSearchOutcome: Equatable {
 @MainActor
 protocol PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution
     func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
 }
 
 extension PlaceImportResolving {
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source)
+    }
+
     func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         try await resolve(seed: seed, source: source)
     }
@@ -125,6 +136,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     }
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source, onProgress: { _ in })
+    }
+
+    func resolve(
+        seed: PlaceImportSeed, source: PlaceImportSource,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
+    ) async throws -> PlaceImportResolution {
         if let name = normalized(seed.nameHint) {
             if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
                 return await googleSeedResolution(seed, name: name)
@@ -162,8 +180,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .needsHelp(message)
             }
         case .tiktok, .instagram:
-            return try await socialResolution(url: sourceURL, source: source, seed: seed)
-        case .textNotes:
+            return try await socialResolution(
+                url: sourceURL, source: source, seed: seed, onProgress: onProgress
+            )
+        case .snapchat, .textNotes:
             do {
                 let candidates = try await placeResolver.resolveLink(
                     LinkPlaceInput(rawValue: sourceURLString)
@@ -196,8 +216,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     private func socialResolution(
         url: URL,
         source: PlaceImportSource,
-        seed: PlaceImportSeed
+        seed: PlaceImportSeed,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
     ) async throws -> PlaceImportResolution {
+        var sourceSeed = seed
         var recognition = SocialMediaRecognition(
             recognizedTexts: [],
             attemptedCount: 0,
@@ -327,7 +349,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         discoveredMediaCount: discoveredMediaCount,
                         understandingPath: understandingPath,
                         understandingWasPartial: understandingWasPartial,
-                        remoteHintsWereAccepted: remoteHintsWereAccepted
+                        remoteHintsWereAccepted: remoteHintsWereAccepted,
+                        onProgress: onProgress
                     )
                 }
                 if understandingWasPartial {
@@ -340,6 +363,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 )
             }
             recognition = try await recognizeSocialMedia(in: metadata)
+            sourceSeed.sourceThumbnailURLString = (
+                metadata.mediaItems.compactMap(\.imageURL).first
+                    ?? metadata.thumbnailURL
+            )?.absoluteString
             let localMediaCount = metadata.mediaItems.isEmpty
                 ? (metadata.thumbnailURL == nil ? 0 : 1)
                 : metadata.mediaItems.count
@@ -358,12 +385,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return try await resolveSocialHints(
             hints,
             source: source,
-            seed: seed,
+            seed: sourceSeed,
             recognition: recognition,
             discoveredMediaCount: discoveredMediaCount,
             understandingPath: understandingPath,
             understandingWasPartial: understandingWasPartial,
-            remoteHintsWereAccepted: remoteHintsWereAccepted
+            remoteHintsWereAccepted: remoteHintsWereAccepted,
+            onProgress: onProgress
         )
     }
 
@@ -375,7 +403,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         discoveredMediaCount: Int,
         understandingPath: String,
         understandingWasPartial: Bool,
-        remoteHintsWereAccepted: Bool
+        remoteHintsWereAccepted: Bool,
+        onProgress: @escaping @MainActor (PlaceImportMatchingProgress) -> Void
     ) async throws -> PlaceImportResolution {
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
@@ -414,8 +443,17 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var rejectedHintCount = 0
         var lookupFailureCount = 0
         var recoveryHints: [SocialRecoveryHint] = []
+        var completedHintCount = 0
+        onProgress(.init(totalCount: hints.count, completedCount: 0, resolvedCount: 0))
         for hint in hints {
             try Task.checkCancellation()
+            defer {
+                completedHintCount += 1
+                onProgress(.init(
+                    totalCount: hints.count, completedCount: completedHintCount,
+                    resolvedCount: entries.filter { !$0.candidates.isEmpty }.count
+                ))
+            }
             var fetchedCandidates: [PlaceCandidate]
             var usedOCRRecoveryLookup = false
             if hint.isServerGrounded, !hint.resolvedCandidates.isEmpty {
@@ -949,7 +987,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
             sourceProviderPlaceID: candidate?.sourceProviderPlaceID,
-            socialCaptionHint: original.socialCaptionHint
+            socialCaptionHint: original.socialCaptionHint,
+            sourceThumbnailURLString: original.sourceThumbnailURLString
         )
     }
 
@@ -1095,6 +1134,7 @@ final class PlaceImportStore: ObservableObject {
     @Published private(set) var batches: [PlaceImportBatch]
     @Published private(set) var items: [PlaceImportItem]
     @Published private(set) var persistenceError: String?
+    @Published private(set) var matchingProgressByItemID: [String: PlaceImportMatchingProgress] = [:]
 
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
@@ -1211,6 +1251,7 @@ final class PlaceImportStore: ObservableObject {
                     sourceURLString: sourceURLString,
                     sourceLine: item.seed.sourceLine,
                     socialCaptionHint: item.seed.socialCaptionHint,
+                    sourceThumbnailURLString: item.seed.sourceThumbnailURLString,
                     socialUnderstandingRequestID: item.seed.socialUnderstandingRequestID
                 )
             }
@@ -1218,6 +1259,7 @@ final class PlaceImportStore: ObservableObject {
             upgraded.state = .queued
             upgraded.candidates = []
             upgraded.selectedCandidateID = nil
+            upgraded.selectedCandidateIDsRaw = nil
             upgraded.helpMessage = nil
             upgraded.duplicateUserPlaceID = nil
             upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
@@ -1233,6 +1275,46 @@ final class PlaceImportStore: ObservableObject {
     var primaryBatch: PlaceImportBatch? {
         let sorted = batches.sorted { $0.createdAt > $1.createdAt }
         return sorted.first(where: { ![.complete, .cancelled].contains($0.state) }) ?? sorted.first
+    }
+
+    var unreviewedImportCount: Int {
+        let itemsByBatch = Dictionary(grouping: items, by: \.batchID)
+        return batches.filter { batch in
+            PlaceImportHistoryPresentation.needsReview(batch: batch, items: itemsByBatch[batch.id] ?? [])
+        }.count
+    }
+
+    /// Each import contributes once while matching or awaiting its first review.
+    /// Keep this separate from review acknowledgement: opening an in-flight
+    /// report must not mark results that have not arrived yet as reviewed.
+    var recentImportBadgeCount: Int {
+        let itemsByBatch = Dictionary(grouping: items, by: \.batchID)
+        return batches.filter { batch in
+            let batchItems = itemsByBatch[batch.id] ?? []
+            return PlaceImportHistoryPresentation.isMatching(batch: batch, items: batchItems)
+                || PlaceImportHistoryPresentation.needsReview(batch: batch, items: batchItems)
+        }.count
+    }
+
+    func markReviewOpened(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        var changed = false
+        for index in batches.indices where ids.contains(batches[index].id) {
+            guard PlaceImportHistoryPresentation.needsReview(
+                batch: batches[index], items: items(for: batches[index].id)
+            ) else { continue }
+            batches[index].reviewOpenedAt = .now
+            changed = true
+        }
+        if changed { persist() }
+    }
+
+    func matchingProgress(batchIDs: [String]) -> PlaceImportMatchingProgress {
+        let ids = Set(batchIDs)
+        return .summarize(
+            items: items.filter { ids.contains($0.batchID) },
+            inFlight: matchingProgressByItemID
+        )
     }
 
     var summary: PlaceImportSummary {
@@ -1435,6 +1517,7 @@ final class PlaceImportStore: ObservableObject {
         var didChange = false
         for index in items.indices
         where ids.contains(items[index].batchID) && items[index].state == .resolving {
+            matchingProgressByItemID[items[index].id] = nil
             items[index].state = .queued
             items[index].updatedAt = .now
             didChange = true
@@ -1469,7 +1552,62 @@ final class PlaceImportStore: ObservableObject {
         else { return }
         items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
+        items[index].selectedCandidateIDsRaw = [candidateID]
         items[index].state = .ready
+        items[index].helpMessage = nil
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
+    }
+
+    /// Gives every candidate-bearing source row a useful default while keeping
+    /// lower-confidence alternatives visible and independently selectable.
+    func prepareCandidateSelections(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        guard !ids.isEmpty else { return }
+        var changedBatchIDs = Set<String>()
+        for index in items.indices where ids.contains(items[index].batchID) {
+            guard !items[index].isSourceRetry,
+                  !items[index].candidates.isEmpty,
+                  ![.duplicate, .saved, .dismissed].contains(items[index].state),
+                  items[index].selectedCandidateIDsRaw == nil,
+                  items[index].selectedCandidates.isEmpty
+            else { continue }
+            let primaryID = items[index].candidates[0].id
+            items[index].selectedCandidateID = primaryID
+            items[index].selectedCandidateIDsRaw = [primaryID]
+            items[index].state = .ready
+            items[index].isSelectedForImport = true
+            items[index].helpMessage = nil
+            items[index].updatedAt = .now
+            changedBatchIDs.insert(items[index].batchID)
+        }
+        for batchID in changedBatchIDs {
+            synchronizeBatch(batchID, persist: false)
+        }
+        if !changedBatchIDs.isEmpty { persist() }
+    }
+
+    /// Toggles one of at most five possible Apple Maps matches. Status and
+    /// optional details remain owned by the source row and therefore apply to
+    /// every selected match.
+    func toggleCandidateSelection(itemID: String, candidateID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].candidates.prefix(5).contains(where: { $0.id == candidateID }),
+              ![.duplicate, .saved, .dismissed].contains(items[index].state)
+        else { return }
+
+        var selectedIDs = items[index].selectedCandidateIDs
+        if let selectedIndex = selectedIDs.firstIndex(of: candidateID) {
+            selectedIDs.remove(at: selectedIndex)
+        } else {
+            selectedIDs.append(candidateID)
+        }
+        let candidateOrder = items[index].candidates.map(\.id)
+        selectedIDs = candidateOrder.filter(Set(selectedIDs).contains)
+        items[index].selectedCandidateIDsRaw = selectedIDs
+        items[index].selectedCandidateID = selectedIDs.first
+        items[index].state = .ready
+        items[index].isSelectedForImport = !selectedIDs.isEmpty
         items[index].helpMessage = nil
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
@@ -1521,6 +1659,7 @@ final class PlaceImportStore: ObservableObject {
         items = []
         replacedSocialItemsByPlaceholderID = [:]
         ownerUserID = userID
+        matchingProgressByItemID = [:]
         persist()
     }
 
@@ -1586,6 +1725,7 @@ final class PlaceImportStore: ObservableObject {
         items[index].state = .queued
         items[index].candidates = []
         items[index].selectedCandidateID = nil
+        items[index].selectedCandidateIDsRaw = nil
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
@@ -1651,6 +1791,7 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
 
@@ -1711,11 +1852,13 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].pendingManualSearch = nil
         items[index].candidates = candidates
         items[index].selectedCandidateID = selectedCandidateID
+        items[index].selectedCandidateIDsRaw = [selectedCandidateID]
         items[index].state = .ready
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
@@ -1741,10 +1884,12 @@ final class PlaceImportStore: ObservableObject {
             sourceProvider: existingSeed.sourceProvider,
             sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
             socialCaptionHint: existingSeed.socialCaptionHint,
+            sourceThumbnailURLString: existingSeed.sourceThumbnailURLString,
             socialUnderstandingRequestID: existingSeed.socialUnderstandingRequestID
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil
+        items[index].selectedCandidateIDsRaw = nil
         items[index].state = .queued
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
@@ -1866,6 +2011,9 @@ final class PlaceImportStore: ObservableObject {
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
             $0.value.first?.batchID != batchID
         }
+        for item in items where item.batchID == batchID {
+            matchingProgressByItemID[item.id] = nil
+        }
         items.removeAll(where: { $0.batchID == batchID })
         batches.removeAll(where: { $0.id == batchID })
         persist()
@@ -1877,6 +2025,7 @@ final class PlaceImportStore: ObservableObject {
         }
         processingTasks.removeAll()
         replacedSocialItemsByPlaceholderID.removeAll()
+        matchingProgressByItemID.removeAll()
         items.removeAll()
         batches.removeAll()
         persist()
@@ -1885,6 +2034,18 @@ final class PlaceImportStore: ObservableObject {
     func reconcileDuplicates(with existingPlaces: [PlaceImportExistingPlace]) {
         var changedBatchIDs = Set<String>()
         for index in items.indices where [.ready, .ambiguous, .duplicate].contains(items[index].state) {
+            // A multi-match row is independently selectable. One existing
+            // candidate must not collapse or disable its unsaved siblings;
+            // commit resolves duplicate status for each concrete candidate.
+            if items[index].candidates.count > 1 {
+                if items[index].state == .duplicate || items[index].duplicateUserPlaceID != nil {
+                    items[index].duplicateUserPlaceID = nil
+                    items[index].state = items[index].selectedCandidates.isEmpty ? .ambiguous : .ready
+                    items[index].updatedAt = .now
+                    changedBatchIDs.insert(items[index].batchID)
+                }
+                continue
+            }
             let match = items[index].candidates.lazy.compactMap { candidate in
                 existingPlaces.first(where: { self.existingPlaceMatches($0, candidate: candidate) })
                     .map { (candidate, $0) }
@@ -1894,6 +2055,7 @@ final class PlaceImportStore: ObservableObject {
                 if items[index].state != .duplicate || items[index].duplicateUserPlaceID != existing.userPlaceID {
                     items[index].state = .duplicate
                     items[index].selectedCandidateID = candidate.id
+                    items[index].selectedCandidateIDsRaw = [candidate.id]
                     items[index].duplicateUserPlaceID = existing.userPlaceID
                     items[index].helpMessage = nil
                     items[index].updatedAt = .now
@@ -1958,12 +2120,30 @@ final class PlaceImportStore: ObservableObject {
             guard !claims.isEmpty else { break }
 
             let tasks = claims.map { claim in
-                Task { @MainActor [resolver] in
+                Task { @MainActor [weak self, resolver] in
                     do {
                         let resolution = if claim.isManualSearch {
                             try await resolver.resolveManualSearch(seed: claim.seed, source: claim.source)
                         } else {
-                            try await resolver.resolve(seed: claim.seed, source: claim.source)
+                            try await resolver.resolve(seed: claim.seed, source: claim.source) { [weak self] progress in
+                                guard !Task.isCancelled,
+                                      let item = self?.item(id: claim.itemID),
+                                      item.state == .resolving, item.seed == claim.seed else { return }
+                                self?.matchingProgressByItemID[claim.itemID] = progress
+                            }
+                        }
+                        if claim.seed.nameHint != nil, !Task.isCancelled,
+                           let item = self?.item(id: claim.itemID),
+                           item.state == .resolving, item.seed == claim.seed {
+                            let matched: Bool
+                            if case .candidates(let candidates, _) = resolution {
+                                matched = !candidates.isEmpty
+                            } else {
+                                matched = false
+                            }
+                            self?.matchingProgressByItemID[claim.itemID] = .init(
+                                totalCount: 1, completedCount: 1, resolvedCount: matched ? 1 : 0
+                            )
                         }
                         return ProcessingAttempt.resolved(resolution)
                     } catch is CancellationError {
@@ -2026,6 +2206,7 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private func apply(_ attempt: ProcessingAttempt, to claim: ProcessingClaim) {
+        defer { matchingProgressByItemID[claim.itemID] = nil }
         guard let index = items.firstIndex(where: { $0.id == claim.itemID }),
               items[index].state == .resolving,
               items[index].seed == claim.seed
@@ -2167,6 +2348,7 @@ final class PlaceImportStore: ObservableObject {
             }
             items[index].candidates = candidates
             items[index].selectedCandidateID = selectedCandidateID
+            items[index].selectedCandidateIDsRaw = selectedCandidateID.map { [$0] }
             if selectedCandidateID != nil {
                 items[index].state = .ready
                 items[index].helpMessage = nil
@@ -2181,6 +2363,7 @@ final class PlaceImportStore: ObservableObject {
         case .needsHelp(let message):
             items[index].candidates = []
             items[index].selectedCandidateID = nil
+            items[index].selectedCandidateIDsRaw = nil
             items[index].state = .needsHelp
             items[index].helpMessage = message
         case .retrySocialUnderstanding(let requestID):
@@ -2188,6 +2371,7 @@ final class PlaceImportStore: ObservableObject {
             items[index].state = .queued
             items[index].candidates = []
             items[index].selectedCandidateID = nil
+            items[index].selectedCandidateIDsRaw = nil
             items[index].helpMessage = nil
         case .expanded(let seeds, let sourceName):
             let original = items[index]
@@ -2313,6 +2497,7 @@ final class PlaceImportStore: ObservableObject {
                 items[existingIndex].state = items[index].state
                 items[existingIndex].candidates = items[index].candidates
                 items[existingIndex].selectedCandidateID = items[index].selectedCandidateID
+                items[existingIndex].selectedCandidateIDsRaw = items[index].selectedCandidateIDsRaw
                 items[existingIndex].helpMessage = items[index].helpMessage
                 items[existingIndex].duplicateUserPlaceID = items[index].duplicateUserPlaceID
                 items[existingIndex].resolverVersion = items[index].resolverVersion

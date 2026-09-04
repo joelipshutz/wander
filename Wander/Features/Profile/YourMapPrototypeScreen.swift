@@ -3,6 +3,14 @@ import SwiftUI
 import UIKit
 
 struct YourMapPrototypeScreen: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @StateObject private var snapshotCapture = MapSnapshotCapture()
+    @State private var isCapturingSnapshot = false
+    @State private var snapshotListID: String?
+    @State private var editingSnapshotListID: String?
+    @State private var snapshotError: String?
+
     let dataset: YourMapPrototypeDataset
     let viewerID: String?
     let mapTitle: String
@@ -78,6 +86,22 @@ struct YourMapPrototypeScreen: View {
                 dismiss: { showsSharePreview = false }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { editingSnapshotListID != nil },
+            set: { if !$0 { editingSnapshotListID = nil } }
+        )) {
+            if let editingSnapshotListID {
+                SnapshotListEditorScreen(listID: editingSnapshotListID)
+            }
+        }
+        .alert("Couldn’t save snapshot", isPresented: Binding(
+            get: { snapshotError != nil },
+            set: { if !$0 { snapshotError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(snapshotError ?? "Please try again.")
+        }
         .navigationTitle(mode == .map ? mapTitle : "Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -110,7 +134,7 @@ struct YourMapPrototypeScreen: View {
     }
 
     private var renderedPlaces: [YourMapPrototypePlace] {
-        Array(filteredPlaces.prefix(80))
+        filteredPlaces
     }
 
     private var insights: YourMapPrototypeInsights {
@@ -147,6 +171,7 @@ struct YourMapPrototypeScreen: View {
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraRegion = context.region
             }
+            .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
             .ignoresSafeArea()
             .overlay {
                 if filteredPlaces.isEmpty {
@@ -159,6 +184,9 @@ struct YourMapPrototypeScreen: View {
                 .zIndex(30)
 
             VStack(spacing: 0) {
+                if let snapshotListID {
+                    snapshotToast(listID: snapshotListID)
+                }
                 mapHeader
                 Spacer(minLength: WanderTheme.spacing4)
                 modePicker
@@ -195,6 +223,28 @@ struct YourMapPrototypeScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             Spacer(minLength: 0)
 
+            if pinOwnership == .currentUser {
+                Button(action: saveMapSnapshot) {
+                    Group {
+                        if isCapturingSnapshot {
+                            ProgressView()
+                        } else {
+                            Label("Snapshot", systemImage: "camera")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                }
+                .buttonStyle(.plain)
+                .disabled(isCapturingSnapshot)
+                .accessibilityLabel("Save map snapshot as a list")
+                .accessibilityHint("Includes the saved Check-in and Wanna pins in this view")
+                .accessibilityIdentifier("yourMap.snapshot")
+            }
+
             Button {
                 showsFilters = true
             } label: {
@@ -229,6 +279,62 @@ struct YourMapPrototypeScreen: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private func saveMapSnapshot() {
+        guard !isCapturingSnapshot else { return }
+        isCapturingSnapshot = true
+        do {
+            let capture = try snapshotCapture.capture(places: filteredPlaces)
+            guard let list = store.createMapSnapshotList(placeIDs: capture.placeIDs, coverData: capture.jpegData) else {
+                throw MapSnapshotCapture.CaptureError.empty
+            }
+            snapshotListID = list.localID
+            UIAccessibility.post(notification: .announcement, argument: "Snapshot list saved. View snapshot list.")
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                isCapturingSnapshot = false
+                _ = await store.syncPendingPlaceLists(backend: backend)
+            }
+        } catch {
+            snapshotError = error.localizedDescription
+            isCapturingSnapshot = false
+        }
+    }
+
+    private func snapshotToast(listID: String) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .accessibilityHidden(true)
+
+            Text("View snapshot list")
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                editingSnapshotListID = listID
+                snapshotListID = nil
+            } label: {
+                Text("Edit")
+                    .font(.system(.subheadline, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+            }
+            .accessibilityIdentifier("yourMap.viewSnapshotList")
+            .accessibilityHint("Edit the snapshot list's name, details, and places")
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, WanderTheme.spacing4)
+        .padding(.trailing, WanderTheme.spacing1)
+        .padding(.vertical, WanderTheme.spacing2)
+        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing2)
     }
 
     private var modePicker: some View {
@@ -332,39 +438,7 @@ struct YourMapPrototypeScreen: View {
 
 
     private var locationFootprintCard: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("cities & countries", systemImage: "globe.americas.fill")
-                    .font(WanderTypography.editorialCardTitle)
-                Spacer()
-                Text("\(insights.cityBreakdown.count) · \(insights.countryBreakdown.count)")
-                    .font(WanderTypography.metadata.monospacedDigit())
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            ForEach(insights.cityBreakdown.prefix(4)) { item in
-                YourMapPrototypeBarRow(item: item)
-            }
-
-            ScrollView(.horizontal) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(insights.countryBreakdown) { item in
-                        Label("\(item.title) · \(item.count)", systemImage: "flag.fill")
-                            .font(WanderTypography.metadata)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(minHeight: 36)
-                            .background(WanderTheme.surfaceRaised.color, in: Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-        }
-        .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
-        .accessibilityIdentifier("yourMap.prototype.citiesCountries")
+        YourMapGeographyCard(cities: insights.cityBreakdown, countries: insights.countryBreakdown)
     }
 
     private var monthlyRhythmCard: some View {
@@ -860,6 +934,7 @@ private struct YourMapPrototypeSharePreview: View {
 
     @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
     @State private var createdLink: YourMapPrototypeShareLink?
+    @State private var showsShareSheet = false
     @State private var didCopyLink = false
 
     private var insights: YourMapPrototypeInsights {
@@ -884,11 +959,6 @@ private struct YourMapPrototypeSharePreview: View {
             ScrollView {
                 VStack(spacing: WanderTheme.spacing3) {
                     shareStoryCard
-                    privacyRow(
-                        title: "Anyone with the link",
-                        detail: "No account is required to open and explore this map.",
-                        systemImage: "link"
-                    )
 
                     Picker("Share format", selection: $format) {
                         ForEach(YourMapPrototypeShareFormat.allCases) { option in
@@ -910,8 +980,12 @@ private struct YourMapPrototypeSharePreview: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Button {
-                        createdLink = YourMapPrototypeShareLink.make(format: format)
-                        didCopyLink = false
+                        let link = YourMapPrototypeShareLink.make(format: format)
+                        createdLink = link
+                        UIPasteboard.general.url = link.url
+                        didCopyLink = true
+                        UIAccessibility.post(notification: .announcement, argument: "Copied")
+                        showsShareSheet = true
                     } label: {
                         Label("Create share link", systemImage: "link")
                             .font(WanderTypography.control)
@@ -921,11 +995,6 @@ private struct YourMapPrototypeSharePreview: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("yourMap.prototype.createShare")
-
-                    if let createdLink {
-                        createdLinkCard(createdLink)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
 
                     privacyRow(
                         title: "Private notes stay private",
@@ -941,6 +1010,38 @@ private struct YourMapPrototypeSharePreview: View {
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
         .accessibilityIdentifier("yourMap.prototype.sharePreview")
+        .overlay(alignment: .top) {
+            if didCopyLink {
+                Label("Copied", systemImage: "checkmark")
+                    .font(WanderTypography.control)
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.vertical, WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color, in: Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                    .padding(.top, WanderTheme.spacing2)
+                    .accessibilityIdentifier("yourMap.prototype.copiedToast")
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: didCopyLink) {
+            guard didCopyLink else { return }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            didCopyLink = false
+        }
+        .sheet(isPresented: $showsShareSheet, onDismiss: { didCopyLink = false }) {
+            if let createdLink {
+                WanderShareSheet(content: .place(
+                    item: createdLink.url,
+                    name: lensTitle,
+                    message: "Explore my saved places on rec.me"
+                ))
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     private var shareStoryCard: some View {
@@ -993,38 +1094,6 @@ private struct YourMapPrototypeSharePreview: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.borderHairline.color))
-    }
-
-    private func createdLinkCard(_ link: YourMapPrototypeShareLink) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("Your \(link.format.title.lowercased()) link is ready", systemImage: "checkmark.circle.fill")
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.categoryMoss.color)
-
-            Text(link.url.absoluteString)
-                .font(WanderTypography.metadata.monospaced())
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Button {
-                UIPasteboard.general.url = link.url
-                didCopyLink = true
-            } label: {
-                Label(didCopyLink ? "Copied" : "Copy link", systemImage: didCopyLink ? "checkmark" : "doc.on.doc")
-                    .font(WanderTypography.control)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.terracottaTint.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("yourMap.prototype.copyShareLink")
-        }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(WanderTheme.categoryMoss.color.opacity(0.5)))
     }
 
     private var lensTitle: String {
@@ -1282,16 +1351,122 @@ private struct YourMapPrototypeCircleButton: View {
     }
 }
 
+struct YourMapGeographyCard: View {
+    let cities: [YourMapPrototypeBreakdownItem]
+    let countries: [YourMapPrototypeBreakdownItem]
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = false
+
+    private var canExpand: Bool { max(cities.count, countries.count) > 5 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing4) {
+                column("cities", items: cities, identifier: "city")
+                column("countries", items: countries, identifier: "country")
+            }
+            .overlay {
+                Rectangle()
+                    .fill(WanderTheme.borderHairline.color.opacity(0.7))
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
+            }
+
+            if canExpand {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.28)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Text(isExpanded ? "See less" : "See more")
+                                .font(WanderTypography.metadata)
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(width: 25, height: 25)
+                                .background(WanderTheme.surfaceSand.color, in: Circle())
+                        }
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isExpanded ? "Show top five cities and countries" : "Show top ten cities and countries")
+                    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                    .accessibilityHint("Updates this section in place")
+                    .accessibilityIdentifier("yourMap.prototype.geography.expand")
+                }
+                .padding(.top, WanderTheme.spacing1)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing4)
+        .padding(.bottom, canExpand ? 6 : WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .strokeBorder(WanderTheme.borderHairline.color)
+        }
+        .accessibilityIdentifier("yourMap.prototype.citiesCountries")
+        .onChange(of: canExpand) { _, canExpand in
+            if !canExpand { isExpanded = false }
+        }
+    }
+
+    private func column(_ title: String, items: [YourMapPrototypeBreakdownItem], identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
+                    Text(title).font(WanderTypography.editorialCardTitle)
+                    Spacer(minLength: 0)
+                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(title).font(WanderTypography.editorialCardTitle)
+                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+
+            if items.isEmpty {
+                Text("No \(title) yet")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 14) {
+                    ForEach(items.prefix(isExpanded ? 10 : 5)) { item in
+                        YourMapPrototypeBarRow(item: item, minimumFraction: 0)
+                            .accessibilityLabel("\(item.title), \(Int((item.fraction * 100).rounded())) percent, \(item.count) places")
+                            .accessibilityIdentifier("yourMap.prototype.\(identifier)Row.\(item.id)")
+                            .transition(.opacity)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
 private struct YourMapPrototypeBarRow: View {
     let item: YourMapPrototypeBreakdownItem
+    var minimumFraction = 0.03
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(item.title)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text("\(Int((item.fraction * 100).rounded()))%")
                     .monospacedDigit()
+                    .fixedSize()
             }
             .font(WanderTypography.metadata)
             GeometryReader { geometry in
@@ -1300,7 +1475,7 @@ private struct YourMapPrototypeBarRow: View {
                     .overlay(alignment: .leading) {
                         Capsule()
                             .fill(categoryColor(item.title))
-                            .frame(width: geometry.size.width * max(item.fraction, 0.03))
+                            .frame(width: geometry.size.width * max(item.fraction, minimumFraction))
                     }
             }
             .frame(height: 6)
@@ -1359,7 +1534,7 @@ private enum YourMapPrototypeRatingOption: String, CaseIterable, Identifiable {
     }
 }
 
-private extension YourMapPrototypePlace {
+extension YourMapPrototypePlace {
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
