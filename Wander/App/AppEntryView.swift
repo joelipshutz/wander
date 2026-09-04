@@ -156,10 +156,6 @@ struct AppEntryView: View {
         .animation(.easeInOut(duration: 0.2), value: productUpsells.activePresentation?.id)
         .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
             auth.nativeAuthDidDismiss()
-            Task {
-                await auth.refreshSession()
-                coordinator.authStateChanged(auth.state)
-            }
         }) {
             ClerkNativeAuthView(mode: auth.activeNativeAuthMode)
                 .environmentObject(auth)

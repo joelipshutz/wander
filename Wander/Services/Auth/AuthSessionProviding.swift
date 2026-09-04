@@ -45,7 +45,7 @@ extension AuthState {
 }
 #endif
 
-struct AuthSession: Codable, Equatable, Identifiable {
+struct AuthSession: Codable, Equatable, Identifiable, Sendable {
     let userID: String
     let displayName: String?
     let handle: String?
@@ -117,6 +117,97 @@ struct AuthSessionCache {
                         "auth session cache write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
                     )
                     #endif
+                }
+            }
+        )
+    }
+}
+
+struct NativeAuthSessionFence: Codable, Equatable, Sendable {
+    /// Nil means no session can be adopted without a new correlated auth
+    /// result. A value permits only that exact Clerk session ID.
+    let requiredSessionID: String?
+
+    static let blockUncorrelated = NativeAuthSessionFence(requiredSessionID: nil)
+
+    static func require(_ sessionID: String) -> NativeAuthSessionFence {
+        NativeAuthSessionFence(requiredSessionID: sessionID)
+    }
+}
+
+@MainActor
+struct NativeAuthSessionFenceStore {
+    enum LoadResult: Equatable {
+        case missing
+        case fence(NativeAuthSessionFence)
+        case invalid
+    }
+
+    let load: () -> LoadResult
+    let save: (NativeAuthSessionFence?) -> Bool
+
+    static let disabled = NativeAuthSessionFenceStore(
+        load: { .missing },
+        save: { _ in true }
+    )
+
+    static let live = file(
+        url: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Wander", isDirectory: true)
+            .appendingPathComponent("native-auth-session-fence-v1.json")
+    )
+
+    static func file(url: URL) -> NativeAuthSessionFenceStore {
+        NativeAuthSessionFenceStore(
+            load: {
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    return .missing
+                }
+                guard let data = try? Data(contentsOf: url),
+                      let fence = try? JSONDecoder().decode(NativeAuthSessionFence.self, from: data)
+                else {
+                    return .invalid
+                }
+                return .fence(fence)
+            },
+            save: { fence in
+                guard let fence else {
+                    guard FileManager.default.fileExists(atPath: url.path) else {
+                        return true
+                    }
+                    do {
+                        try FileManager.default.removeItem(at: url)
+                        return true
+                    } catch {
+                        #if DEBUG
+                        WanderDebugLog.remote.error(
+                            "native auth fence removal failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                        )
+                        #endif
+                        return false
+                    }
+                }
+
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+                    )
+                    let data = try JSONEncoder().encode(fence)
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
+                    return true
+                } catch {
+                    #if DEBUG
+                    WanderDebugLog.remote.error(
+                        "native auth fence write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                    )
+                    #endif
+                    return false
                 }
             }
         )
@@ -247,13 +338,33 @@ enum NativeAuthOutcome: Equatable {
     case requiresAdditionalVerification
 }
 
+enum NativeAuthSessionAdoption: String, Equatable {
+    case notRequired = "not_required"
+    case immediate
+    case afterCompletionRetry = "after_completion_retry"
+}
+
+struct NativeSocialAuthResult: Equatable {
+    let outcome: NativeAuthOutcome
+    let sessionAdoption: NativeAuthSessionAdoption
+
+    init(
+        outcome: NativeAuthOutcome,
+        sessionAdoption: NativeAuthSessionAdoption? = nil
+    ) {
+        self.outcome = outcome
+        self.sessionAdoption = sessionAdoption
+            ?? (outcome == .completed ? .immediate : .notRequired)
+    }
+}
+
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
     func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
-    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome
+    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeSocialAuthResult
     func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws
     func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome
     func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome
@@ -265,7 +376,7 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
-    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome {
+    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeSocialAuthResult {
         throw AuthSessionError.notConfigured
     }
 
@@ -318,6 +429,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var isSessionValidated = false
 
     private let provider: AuthSessionProviding
+    private let analytics: AnalyticsClient
     private var sessionObservationTask: Task<Void, Never>?
     private var inFlightSessionRefresh: InFlightSessionRefresh?
     private var refreshGeneration = 0
@@ -328,8 +440,12 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         terminalAuthMutationID != nil
     }
 
-    init(provider: AuthSessionProviding) {
+    init(
+        provider: AuthSessionProviding,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
         self.provider = provider
+        self.analytics = analytics
         self.state = provider.state
         sessionObservationTask = Task { @MainActor [weak self] in
             guard !Task.isCancelled else { return }
@@ -342,6 +458,11 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 // read current provider state so a buffered stale payload cannot
                 // overwrite a newer authoritative result.
                 guard let self else { return }
+                // Interactive auth is synchronized explicitly only after its
+                // provider has validated the exact completed session. This
+                // must precede in-flight handling so a foreground refresh
+                // cannot publish an unrelated account mid-attempt.
+                guard !self.isNativeAuthAttemptActive else { continue }
                 if let inFlight = self.inFlightSessionRefresh {
                     let observedState = provider.state
                     if let startingUserID = inFlight.startingUserID,
@@ -419,7 +540,9 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     @discardableResult
     private func startSessionRefreshIfNeeded() -> InFlightSessionRefresh? {
-        guard !isTerminalAuthMutationInProgress else { return nil }
+        guard !isTerminalAuthMutationInProgress,
+              !isNativeAuthAttemptActive
+        else { return nil }
         if let inFlightSessionRefresh {
             return inFlightSessionRefresh
         }
@@ -442,6 +565,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                   let self,
                   generation == self.refreshGeneration,
                   !self.isTerminalAuthMutationInProgress,
+                  !self.isNativeAuthAttemptActive,
                   self.inFlightSessionRefresh?.id == refreshID
             else { return }
             // Remove the slot before publishing the authoritative state. There
@@ -514,7 +638,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         resetNativeAuthForm()
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
-            isNativeAuthAttemptActive = true
+            beginNativeAuthAttempt()
             isPresentingNativeAuth = true
         } else {
             nativeAuthDidDismiss()
@@ -530,24 +654,40 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     @discardableResult
     func authenticate(with socialProvider: NativeSocialAuthProvider) async -> NativeAuthOutcome? {
+        let authMode = activeNativeAuthMode
         guard provider.canPresentNativeAuth else {
+            recordNativeSocialAuthResult(
+                provider: socialProvider,
+                mode: authMode,
+                result: "failed",
+                sessionAdoption: nil,
+                failureCategory: "not_configured"
+            )
             nativeAuthError = "Sign in is not available in this build."
             return nil
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         activeSocialAuthProvider = socialProvider
         defer { activeSocialAuthProvider = nil }
 
         do {
-            let outcome = try await provider.authenticate(
+            let result = try await provider.authenticate(
                 with: socialProvider,
-                mode: activeNativeAuthMode
+                mode: authMode
             )
+            let outcome = result.outcome
             if outcome == .completed {
                 synchronizeState(provider.state)
                 guard state.isSignedIn else {
+                    recordNativeSocialAuthResult(
+                        provider: socialProvider,
+                        mode: authMode,
+                        result: "failed",
+                        sessionAdoption: result.sessionAdoption,
+                        failureCategory: "store_session_missing"
+                    )
                     nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
                     return nil
                 }
@@ -557,8 +697,22 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                     outcome: outcome
                 )
             }
+            recordNativeSocialAuthResult(
+                provider: socialProvider,
+                mode: authMode,
+                result: Self.analyticsResult(for: outcome),
+                sessionAdoption: result.sessionAdoption,
+                failureCategory: nil
+            )
             return outcome
         } catch AuthSessionError.cancelled, is CancellationError {
+            recordNativeSocialAuthResult(
+                provider: socialProvider,
+                mode: authMode,
+                result: "cancelled",
+                sessionAdoption: nil,
+                failureCategory: nil
+            )
             return nil
         } catch {
             #if DEBUG
@@ -566,6 +720,13 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 "social sign-in failed provider=\(socialProvider.rawValue, privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
+            recordNativeSocialAuthResult(
+                provider: socialProvider,
+                mode: authMode,
+                result: "failed",
+                sessionAdoption: nil,
+                failureCategory: Self.analyticsFailureCategory(for: error)
+            )
             nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
             return nil
         }
@@ -584,7 +745,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         isSendingEmailCode = true
         defer { isSendingEmailCode = false }
 
@@ -671,7 +832,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         isSigningInWithPassword = true
         defer { isSigningInWithPassword = false }
 
@@ -794,6 +955,15 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         return mutationID
     }
 
+    private func beginNativeAuthAttempt() {
+        guard !isNativeAuthAttemptActive else { return }
+        isNativeAuthAttemptActive = true
+        refreshGeneration &+= 1
+        inFlightSessionRefresh?.task.cancel()
+        inFlightSessionRefresh = nil
+        beginSessionValidation()
+    }
+
     private func finishTerminalAuthMutation(_ mutationID: UUID) {
         guard terminalAuthMutationID == mutationID else { return }
         terminalAuthMutationID = nil
@@ -820,6 +990,64 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             return "We couldn’t match that \(provider.displayName) login to an existing account. Sign in with the method you originally used. Your saved places and people are still there."
         case .requiresAdditionalVerification:
             return "This \(provider.displayName) account needs another verification step. Try email or your other sign-in method."
+        }
+    }
+
+    private func recordNativeSocialAuthResult(
+        provider: NativeSocialAuthProvider,
+        mode: NativeAuthMode,
+        result: String,
+        sessionAdoption: NativeAuthSessionAdoption?,
+        failureCategory: String?
+    ) {
+        var properties = [
+            "provider": provider.rawValue,
+            "mode": Self.analyticsMode(for: mode),
+            "result": result,
+            "session_adoption": sessionAdoption?.rawValue ?? "none"
+        ]
+        if let failureCategory {
+            properties["failure_category"] = failureCategory
+        }
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.nativeSocialAuthResult,
+                properties: properties
+            )
+        )
+    }
+
+    private static func analyticsMode(for mode: NativeAuthMode) -> String {
+        switch mode {
+        case .signInOrUp: "sign_in_or_up"
+        case .signIn: "sign_in"
+        case .signUp: "sign_up"
+        }
+    }
+
+    private static func analyticsResult(for outcome: NativeAuthOutcome) -> String {
+        switch outcome {
+        case .completed: "completed"
+        case .requiresExistingAccountVerification: "requires_existing_account_verification"
+        case .requiresAdditionalVerification: "requires_additional_verification"
+        }
+    }
+
+    private static func analyticsFailureCategory(for error: Error) -> String {
+        guard let authError = error as? AuthSessionError else {
+            return "provider_error"
+        }
+        return switch authError {
+        case .notSignedIn: "not_signed_in"
+        case .notConfigured: "not_configured"
+        case .tokenUnavailable: "token_unavailable"
+        case .cancelled: "cancelled"
+        case .sessionUnavailable: "session_unavailable"
+        case .accountNotFound: "account_not_found"
+        case .emailAlreadyInUse: "email_already_in_use"
+        case .invalidVerificationCode: "invalid_verification_code"
+        case .emailVerificationUnavailable: "email_verification_unavailable"
+        case .invalidCredentials: "invalid_credentials"
         }
     }
 
@@ -870,6 +1098,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     private let nativeAuthOutcome: NativeAuthOutcome
     private let nativeAuthSession: AuthSession?
     private let nativeAuthFailure: Error?
+    private let nativeAuthSessionAdoption: NativeAuthSessionAdoption?
     private let emailVerificationOutcome: NativeAuthOutcome
     private let emailVerificationSession: AuthSession?
     private let emailCodeFailure: Error?
@@ -894,6 +1123,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         nativeAuthOutcome: NativeAuthOutcome = .completed,
         nativeAuthSession: AuthSession? = nil,
         nativeAuthFailure: Error? = nil,
+        nativeAuthSessionAdoption: NativeAuthSessionAdoption? = nil,
         emailVerificationOutcome: NativeAuthOutcome = .completed,
         emailVerificationSession: AuthSession? = nil,
         emailCodeFailure: Error? = nil,
@@ -910,6 +1140,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         self.nativeAuthOutcome = nativeAuthOutcome
         self.nativeAuthSession = nativeAuthSession
         self.nativeAuthFailure = nativeAuthFailure
+        self.nativeAuthSessionAdoption = nativeAuthSessionAdoption
         self.emailVerificationOutcome = emailVerificationOutcome
         self.emailVerificationSession = emailVerificationSession
         self.emailCodeFailure = emailCodeFailure
@@ -940,7 +1171,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     func authenticate(
         with provider: NativeSocialAuthProvider,
         mode: NativeAuthMode
-    ) async throws -> NativeAuthOutcome {
+    ) async throws -> NativeSocialAuthResult {
         requestedSocialAuth.append(.init(provider: provider, mode: mode))
         if let nativeAuthFailure {
             throw nativeAuthFailure
@@ -949,7 +1180,10 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
             state = .signedIn(nativeAuthSession)
             sessionChangeContinuation.yield(state)
         }
-        return nativeAuthOutcome
+        return NativeSocialAuthResult(
+            outcome: nativeAuthOutcome,
+            sessionAdoption: nativeAuthSessionAdoption
+        )
     }
 
     func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws {
