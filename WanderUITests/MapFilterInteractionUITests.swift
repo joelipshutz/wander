@@ -417,6 +417,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", "friends"
         ]
