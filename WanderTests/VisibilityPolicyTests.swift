@@ -33,6 +33,23 @@ final class VisibilityPolicyTests: XCTestCase {
         XCTAssertEqual(PlaceVisibility.selfOnly.normalizedForStealthMode, .selfOnly)
     }
 
+    func testServerAuthorizedProjectionKeepsStealthOwnerOnlyWithoutRequiringALocalGraph() {
+        for visibility in PlaceVisibility.allCases {
+            XCTAssertTrue(policy.canDisplayServerAuthorizedPlace(
+                viewerID: "owner", ownerID: "owner", visibility: visibility, isBlocked: false
+            ))
+            XCTAssertEqual(policy.canDisplayServerAuthorizedPlace(
+                viewerID: "viewer", ownerID: "owner", visibility: visibility, isBlocked: false
+            ), visibility != .selfOnly)
+            XCTAssertFalse(policy.canDisplayServerAuthorizedPlace(
+                viewerID: nil, ownerID: "owner", visibility: visibility, isBlocked: false
+            ))
+            XCTAssertFalse(policy.canDisplayServerAuthorizedPlace(
+                viewerID: "viewer", ownerID: "owner", visibility: visibility, isBlocked: true
+            ))
+        }
+    }
+
     func testStealthModeToggleWritesOnlyPrivateOrFollowersVisibility() {
         XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: true), .selfOnly)
         XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: false), .followers)

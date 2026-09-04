@@ -308,12 +308,16 @@ final class ActivityNavigationCoordinator: ObservableObject {
 
     func resolve(
         requestID: UUID,
-        context: ActivityEngagementContext,
-        visiblePlace: VisiblePlace?
+        activity: FeedActivity?,
+        allowsCachedContext: Bool = false
     ) {
         guard var route = commentsRoute, route.id == requestID else { return }
-        route.context = context
-        route.visiblePlace = visiblePlace
+        // Remote resolution is authoritative, including a denied/missing
+        // ticket. Only local fixture routes may retain their supplied preview.
+        route.context = activity?.activityEngagementContext
+            ?? (allowsCachedContext ? route.context : nil)
+        route.visiblePlace = activity?.place
+            ?? (allowsCachedContext ? route.visiblePlace : nil)
         commentsRoute = route
     }
 

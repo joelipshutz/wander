@@ -2351,6 +2351,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let body = rpc.rawBodies[0]
         let userPlaceBody = try XCTUnwrap(body["input_user_place"] as? [String: Any])
         XCTAssertEqual(userPlaceBody["status"] as? String, "been")
+        XCTAssertNil(userPlaceBody["id"])
 
         let visit = try XCTUnwrap(body["input_visit"] as? [String: Any])
         XCTAssertEqual(visit["id"] as? String, visitID)
@@ -2366,6 +2367,28 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(historicalWant["note"] as? String, "Joe recommended it")
         XCTAssertEqual(historicalWant["tags"] as? [String], ["coffee"])
         XCTAssertEqual(historicalWant["wanted_at"] as? String, "2026-07-01T17:00:00Z")
+
+        let existingParentID = "E7000000-0000-4000-8000-000000000001"
+        _ = try await repository.saveCheckIn(
+            CheckInSaveDraft(
+                userPlace: userPlace,
+                visit: PlaceVisitDraft(
+                    id: "38D2B5B8-7F95-42CF-991B-253991C8C6C8",
+                    userPlaceID: existingParentID,
+                    visitedAt: visitedAt,
+                    note: "repeat check-in",
+                    ratingScore: 5,
+                    attributeAnswersJSON: "[]",
+                    backfilledFromUserPlace: false
+                ),
+                historicalWant: nil
+            )
+        )
+
+        let repeatUserPlaceBody = try XCTUnwrap(
+            rpc.rawBodies[1]["input_user_place"] as? [String: Any]
+        )
+        XCTAssertEqual(repeatUserPlaceBody["id"] as? String, existingParentID)
     }
 
     func testCheckInDeleteUsesAtomicRPCAndDecodesRemovalTransition() async throws {

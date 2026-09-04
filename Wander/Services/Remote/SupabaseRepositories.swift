@@ -3800,7 +3800,12 @@ private struct SaveOwnCheckInParams: Encodable {
 
     init(draft: CheckInSaveDraft) throws {
         inputPlace = SaveOwnPlacePlaceParams(place: draft.userPlace.place)
-        inputUserPlace = SaveOwnPlaceUserPlaceParams(draft: draft.userPlace)
+        inputUserPlace = SaveOwnPlaceUserPlaceParams(
+            draft: draft.userPlace,
+            id: UUID(uuidString: draft.visit.userPlaceID) == nil
+                ? nil
+                : draft.visit.userPlaceID
+        )
         inputAttributes = try draft.userPlace.attributes.map(SaveOwnPlaceAttributeParams.init)
         inputVisit = try SaveOwnCheckInVisitParams(draft: draft.visit)
         inputHistoricalWant = try draft.historicalWant.map(SaveOwnCheckInHistoricalWantParams.init)
@@ -3988,6 +3993,7 @@ private struct SaveOwnPlacePlaceParams: Encodable {
 }
 
 private struct SaveOwnPlaceUserPlaceParams: Encodable {
+    let id: String?
     let status: String
     let visibility: String
     let note: String?
@@ -4001,7 +4007,8 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let plannedDate: String?
     let sourceType: String
 
-    init(draft: UserPlaceDraft) {
+    init(draft: UserPlaceDraft, id: String? = nil) {
+        self.id = id
         self.status = draft.status.rawValue
         self.visibility = draft.visibility.rawValue
         self.note = draft.note
@@ -4017,6 +4024,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case id
         case status
         case visibility
         case note
@@ -4033,6 +4041,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
         try container.encode(status, forKey: .status)
         try container.encode(visibility, forKey: .visibility)
         try container.encodeIfPresent(note, forKey: .note)

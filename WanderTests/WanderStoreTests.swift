@@ -696,6 +696,78 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testRepeatCheckInMaterializesRemoteOnlyOwnedSaveBeforeSyncing() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_current", displayName: "Current", handle: "current")
+            )
+        )
+        let remoteUserPlaceID = "e7000000-0000-4000-8000-000000000001"
+        let remotePlaceID = "a0000000-0000-4000-8000-000000000001"
+        let savedAt = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-09-02T23:19:55Z")
+        )
+        let remotePlace = makeRemoteCalendarVisiblePlace(
+            owner: store.currentUser,
+            userPlaceID: remoteUserPlaceID,
+            placeID: remotePlaceID,
+            name: "Remote-Only Park",
+            status: .been,
+            visibility: .followers,
+            savedAt: savedAt,
+            visitedAt: savedAt
+        )
+        let hydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [store.currentUser.id: [remotePlace]]
+                )
+            )
+        )
+        XCTAssertTrue(hydrated)
+        XCTAssertTrue(store.userPlaces.isEmpty)
+
+        let context = MapPlaceSaveContext.addVisitVisiblePlace(
+            remotePlace,
+            attributes: store.attributes(for: remoteUserPlaceID),
+            latestVisit: nil
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: context.candidate,
+            status: .been,
+            visibility: .followers,
+            ratingScore: 4.5,
+            note: "repeat visit",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: Date(timeIntervalSince1970: 1_788_467_321)
+        )
+        let repository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: remoteUserPlaceID,
+                syncState: .synced,
+                placeID: remotePlaceID
+            )
+        )
+
+        let (result, visit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: WanderBackend(userPlaceRepository: repository)
+        )
+
+        XCTAssertEqual(result?.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(visit?.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(repository.savedCheckInDrafts.count, 1)
+        XCTAssertEqual(repository.savedCheckInDrafts.first?.visit.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(store.userPlaces.map(\.id), [remoteUserPlaceID])
+        XCTAssertEqual(store.currentUserCalendarProjection.visiblePlaces.count, 1)
+    }
+
     func testCurrentUserCalendarProjectionPreservesPendingLocalMutationOverRemote() async throws {
         let store = WanderStore(fixtures: .seed())
         let pendingSavedAt = try XCTUnwrap(
@@ -1954,6 +2026,76 @@ final class WanderStoreTests: XCTestCase {
                 contactProvider: FakeContactProvider(seededMatches: [])
             )
         )
+    }
+
+    func testStealthSavesKeepOwnerActivityAfterRelaunchAndPrivateProfileChanges() throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+        let cache = ProfilePresentationCache()
+        store.defaultVisibility = .visibilityForStealthMode(isPrivate: true)
+        let wanna = store.saveCandidate(
+            PlaceCandidate(id: "stealth-wanna", name: "Private Wanna", category: "coffee", latitude: 34, longitude: -118, confidence: 1),
+            status: .wannaGo, visibility: store.effectiveDefaultVisibility, note: "private", sourceType: .manual
+        )
+        let been = store.saveCandidate(
+            PlaceCandidate(id: "stealth-been", name: "Private Check-In", category: "restaurant", latitude: 35, longitude: -119, confidence: 1),
+            status: .been, visibility: store.effectiveDefaultVisibility, note: "private", sourceType: .manual
+        )
+        XCTAssertNotNil(store.createVisit(userPlaceID: been.userPlaceID))
+
+        func assertHistory(_ candidateStore: WanderStore, using presentationCache: ProfilePresentationCache) {
+            let presentation = presentationCache.present(store: candidateStore, profileID: candidateStore.currentUser.id)
+            XCTAssertEqual(presentation.activityItems.filter { $0.kind == .wanna }.count, 1)
+            XCTAssertEqual(presentation.activityItems.filter { $0.kind == .checkIn }.count, 2)
+            XCTAssertEqual(Set(presentation.activityItems.map { $0.visiblePlace.userPlace.id }), [wanna.userPlaceID, been.userPlaceID])
+            XCTAssertTrue(presentation.activityItems.allSatisfy { $0.visiblePlace.userPlace.visibility == .selfOnly })
+        }
+        assertHistory(store, using: cache)
+        store.setPrivateProfile(true)
+        assertHistory(store, using: cache)
+        store.setPrivateProfile(false)
+        assertHistory(store, using: cache)
+
+        let relaunched = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+        assertHistory(relaunched, using: ProfilePresentationCache())
+    }
+
+    func testRemoteStealthCalendarRetainsOwnerProfileActivity() async {
+        let store = WanderStore(fixtures: .empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "stealth_owner", displayName: "Owner", handle: "owner")))
+        let date = Date(timeIntervalSince1970: 1_780_000_000)
+        let wanna = makeRemoteCalendarVisiblePlace(owner: store.currentUser, userPlaceID: "stealth_wanna", placeID: "wanna_place", name: "Private Wanna", status: .wannaGo, visibility: .selfOnly, savedAt: date)
+        let been = makeRemoteCalendarVisiblePlace(owner: store.currentUser, userPlaceID: "stealth_been", placeID: "been_place", name: "Private Check-In", status: .been, visibility: .selfOnly, savedAt: date, visitedAt: date)
+        let hydrated = await store.refreshRemoteCurrentUserCalendarData(backend: WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [store.currentUser.id: [wanna, been]]),
+            visitRepository: FakeVisitRepository(visitsByUserPlaceID: [been.id: [
+                PlaceVisitResult(visitID: "stealth_visit", userPlaceID: been.id, visitedAt: date, note: nil, ratingScore: nil, tags: [], backfilledFromUserPlace: false)
+            ]])
+        ))
+        XCTAssertTrue(hydrated)
+        let presentation = ProfilePresentationCache().present(store: store, profileID: store.currentUser.id)
+        XCTAssertEqual(presentation.activityItems.count, 2)
+        XCTAssertEqual(presentation.stats.wanna, 1)
+        XCTAssertEqual(presentation.stats.checkIns, 1)
+        XCTAssertEqual(presentation.activityItems.first { $0.kind == .checkIn }?.visitID, "stealth_visit")
+    }
+
+    func testRemoteStealthSaveIsExcludedFromOtherProfileAndPlaceCardInputs() async {
+        let store = WanderStore(fixtures: .empty())
+        let owner = LocalProfile(localID: "other_stealth_owner", handle: "other", displayName: "Other")
+        let date = Date(timeIntervalSince1970: 1_780_000_000)
+        let stealth = makeRemoteCalendarVisiblePlace(owner: owner, userPlaceID: "private_save", placeID: "private_place", name: "Private", status: .been, visibility: .selfOnly, savedAt: date, visitedAt: date)
+        let shared = makeRemoteCalendarVisiblePlace(owner: owner, userPlaceID: "shared_save", placeID: "shared_place", name: "Shared", status: .wannaGo, visibility: .followers, savedAt: date)
+        await store.refreshRemoteProfileVisiblePlaces(profileID: owner.id, backend: WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [owner.id: [stealth, shared]])
+        ))
+        XCTAssertEqual(store.visiblePlaces().map(\.id), [shared.id])
+        XCTAssertEqual(store.visiblePlaces(for: owner.id).map(\.id), [shared.id])
+        XCTAssertEqual(store.visiblePlaceGroups().flatMap(\.places).map(\.id), [shared.id])
+        let presentation = ProfilePresentationCache().present(store: store, profileID: owner.id)
+        XCTAssertEqual(presentation.activityItems.map { $0.visiblePlace.id }, [shared.id])
+        XCTAssertEqual(presentation.stats.checkIns, 0)
     }
 
     private func makeTemporaryPersistence() -> (persistence: WanderStorePersistence, directory: URL) {
