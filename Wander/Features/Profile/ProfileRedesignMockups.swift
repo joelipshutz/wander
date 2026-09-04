@@ -6,6 +6,8 @@ enum ProfileRedesignMockupPage: String, CaseIterable {
     case ownerProfile
     case ownerCalendar
     case ownerDiningMap
+    case patternsGeography
+    case patternsGeographyEmpty
     case socialGraph
     case socialGraphEmpty
     case editProfile
@@ -48,6 +50,13 @@ struct ProfileRedesignMockupRoot: View {
                 ProfileMockupScreen(title: "profile") {
                     ProfileDiningMapMockup()
                 }
+            case .patternsGeography, .patternsGeographyEmpty:
+                NavigationStack {
+                    YourMapPrototypeScreen(
+                        dataset: Self.geographyDataset(onlyUnknown: page == .patternsGeographyEmpty),
+                        initialMode: .patterns
+                    )
+                }
             case .socialGraph:
                 SocialGraphMockup(isEmpty: false)
             case .socialGraphEmpty:
@@ -73,6 +82,42 @@ struct ProfileRedesignMockupRoot: View {
             }
         }
         .preferredColorScheme(.light)
+    }
+
+    /// Deterministic fixture for the production Patterns card's 5/10/empty states.
+    private static func geographyDataset(onlyUnknown: Bool) -> YourMapPrototypeDataset {
+        let locations = [
+            ("Los Angeles", "United States"), ("Vancouver", "Canada"),
+            ("Mexico City", "Mexico"), ("Paris", "France"), ("Tokyo", "Japan"),
+            ("Rome", "Italy"), ("Madrid", "Spain"), ("Lisbon", "Portugal"),
+            ("London", "United Kingdom"), ("Amsterdam", "Netherlands"),
+            ("Berlin", "Germany"), ("Sydney", "Australia")
+        ]
+        let now = Date(timeIntervalSince1970: 1_787_623_200)
+        var places: [YourMapPrototypePlace] = []
+        for (index, location) in (onlyUnknown ? [] : locations).enumerated() {
+            for ordinal in 0..<(12 - index) {
+                places.append(YourMapPrototypePlace(
+                    id: "geography-\(index)-\(ordinal)", name: "Fixture \(index)-\(ordinal)",
+                    latitude: 34.05, longitude: -118.24, status: .been,
+                    category: "Restaurants", city: location.0, country: location.1,
+                    tags: [], rating: 4, visitCount: 1, lastVisitedAt: now
+                ))
+            }
+        }
+        // A dominant unknown bucket must not displace known locations in either ranking.
+        for index in 0..<20 {
+            places.append(YourMapPrototypePlace(
+                id: "missing-geography-\(index)", name: "Fixture missing \(index)",
+                latitude: 34.05, longitude: -118.24, status: .been,
+                category: "Restaurants", city: "Unknown city", country: "Unknown country",
+                tags: [], rating: 4, visitCount: 1, lastVisitedAt: now
+            ))
+        }
+        return YourMapPrototypeDataset(
+            volume: .medium, places: places, now: now,
+            initialLens: YourMapPrototypeLens(), visiblePlaceByPlaceID: [:]
+        )
     }
 }
 
