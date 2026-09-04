@@ -29901,3 +29901,18 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+
+Map layout validation run — 2026-08-16 21:10 PDT:
+
+- Branch: `codex/feature-456-map-layout`
+- Goal: run focused UI map tests (`WanderTests/MapHitTestingTests` and
+  `WanderTests/MapMoreFilterResetTests`) on the branch.
+- Result: not yet runnable in this environment due host resource constraints.
+- First sandboxed run started from repo `DerivedData` and failed with
+  `No space left on device` writing xcode caches and result bundles.
+- Elevated rerun failed at package resolution (`Could not resolve host: github.com`)
+  before build due network restriction in the sandbox.
+- Further elevated run resolved packages but still failed during compile with
+  `No space left on device` (`SwiftUI` module cache and XCBuild DB).
+- Current status: test execution blocked by local disk and cache-permission limits;
+  no app behavior findings can be confirmed yet.
