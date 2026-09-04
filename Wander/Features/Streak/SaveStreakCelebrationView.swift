@@ -187,7 +187,7 @@ private struct SaveStreakTicketCard: View {
                 Text(ticketEyebrow)
                     .font(AstirTypography.metadata)
                     .tracking(1.3)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
 
                 Spacer(minLength: 0)
 
@@ -228,7 +228,7 @@ private struct SaveStreakTicketCard: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "flame.fill")
                 .font(.system(size: 30, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("REC.ME")
                 .font(AstirTypography.metadata)
                 .tracking(2.2)
@@ -287,7 +287,7 @@ private struct SaveStreakWeekCard: View {
                         if day.isRecoveryDay {
                             Image(systemName: "shield.fill")
                                 .font(.system(size: 10, weight: .black))
-                                .foregroundStyle(brandMode.accent)
+                                .foregroundStyle(brandMode.accentText)
                         } else if day.isCovered {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .black))

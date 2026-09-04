@@ -493,12 +493,12 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 title: isSaving ? "Saving…" : title,
                 systemImage: isSaving ? nil : bottomActionSystemImage,
                 isDisabled: isSaving,
-                tone: .espressoConfirmation,
+                tone: .brand,
                 action: primaryBottomAction
             )
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, WanderTheme.spacing2)
-            .background(WanderTheme.canvasWarm.color.opacity(0.97))
+            .background(brandMode.background.opacity(0.97))
             .accessibilityHint(
                 reviewPlan.committableCount > 0
                     ? "Adds only the checked places that are ready"
@@ -969,7 +969,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     setAllIncluded(!allItemsSelected)
                 }
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .buttonStyle(.plain)
             }
@@ -1047,7 +1047,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         rescueItem = item
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .buttonStyle(.plain)
                 }
@@ -1109,7 +1109,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 } label: {
                     Label("Optional details", systemImage: "slider.horizontal.3")
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -1171,7 +1171,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     rescueItem = item
                 }
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .buttonStyle(.plain)
 
@@ -1232,7 +1232,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         systemImage: "flame.fill"
                     )
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(minHeight: 36, alignment: .leading)
                     .overlay(alignment: .bottom) {
                         Rectangle()
@@ -1296,7 +1296,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
             Label(captureSourceCopy, systemImage: "arrow.down.circle")
                 .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
         }
     }
 
@@ -1516,7 +1516,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         rescueItem = item
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .buttonStyle(.plain)
                 } else if item.isSelectedForImport,
@@ -1546,7 +1546,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         } label: {
                                 Label("Optional details", systemImage: "slider.horizontal.3")
                                 .font(AstirTypography.label)
-                                .foregroundStyle(brandMode.accent)
+                                .foregroundStyle(brandMode.accentText)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
                         .buttonStyle(.plain)
@@ -2245,7 +2245,7 @@ struct PlaceImportInboxScreen: View {
                         VStack(spacing: 0) {
                             Text(filter.rawValue)
                                 .font(AstirTypography.label)
-                                .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+                                .foregroundStyle(isSelected ? brandMode.accentText : brandMode.secondaryText)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                             Rectangle()
                                 .fill(isSelected ? brandMode.accent : Color.clear)
@@ -2887,7 +2887,7 @@ private struct PlaceImportReceiptSheet: View {
                     systemImage: "flame.fill"
                 )
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minHeight: 36, alignment: .leading)
                 .overlay(alignment: .bottom) {
                     Rectangle().fill(brandMode.accent).frame(height: 1)
@@ -2948,7 +2948,7 @@ private struct PlaceImportReceiptSheet: View {
                 openAddSearch(for: entry)
             }
             .font(AstirTypography.label)
-            .foregroundStyle(brandMode.accent)
+            .foregroundStyle(brandMode.accentText)
             .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
             .buttonStyle(.plain)
             .accessibilityLabel("Edit \(entry.displayName) in Add search")
@@ -3148,7 +3148,7 @@ private struct PlaceImportUnresolvedRow: View {
 
                     Button("Edit place", systemImage: "magnifyingglass", action: rescueAction)
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 }
@@ -3365,7 +3365,7 @@ private struct PlaceImportStatusSelector: View {
                 .font(AstirTypography.label)
                 .padding(.horizontal, WanderTheme.spacing1)
                 .frame(minHeight: WanderTheme.tapMinimum)
-                .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+                .foregroundStyle(isSelected ? brandMode.accentText : brandMode.secondaryText)
                 .overlay(alignment: .bottom) {
                     Rectangle()
                         .fill(isSelected ? brandMode.accent : brandMode.border.opacity(0.45))
@@ -3695,7 +3695,7 @@ private struct PlaceImportCandidatePicker: View {
                                 ZStack {
                                     Image(systemName: "mappin.circle.fill")
                                         .font(.system(size: 38, weight: .black))
-                                        .foregroundStyle(brandMode.accent)
+                                        .foregroundStyle(brandMode.accentText)
                                         .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
                                     Text("\(index + 1)")
                                         .font(.system(size: 10, weight: .black))
@@ -3760,7 +3760,7 @@ private struct PlaceImportCandidateCard: View {
                             Image(systemName: "sparkles")
                         }
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
 
                         Text(candidate.importLocationSummary)
                             .font(AstirTypography.caption)
@@ -4756,7 +4756,7 @@ private struct PlaceImportRescueScreen: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .accessibilityHidden(true)
                 }
             }

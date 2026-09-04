@@ -592,7 +592,7 @@ struct ProfileScreen: View {
             HStack(alignment: .center, spacing: WanderTheme.spacing4) {
                 Text("\(store.currentUserVisiblePlaces.count)")
                     .font(AstirTypography.screenTitle)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 Text("saved places this month.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
@@ -615,7 +615,7 @@ struct ProfileScreen: View {
                 ForEach(store.unresolvedDrafts) { draft in
                     HStack {
                         Image(systemName: draft.sourceType == .link ? "link" : "photo")
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                         VStack(alignment: .leading) {
                             Text(draft.title)
                                 .font(AstirTypography.cardTitle)
@@ -1955,7 +1955,7 @@ private struct ProfilePlaceCollectionMap: View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Image(systemName: "mappin.and.ellipse")
                 .font(.system(size: 13, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text(mapStatusText)
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
@@ -2901,7 +2901,7 @@ private struct SavedPlacesListScreen: View {
     private func filterOption(_ title: String, isSelected: Bool) -> some View {
         Text(title)
             .font(AstirTypography.label)
-            .foregroundStyle(isSelected ? brandMode.accent : brandMode.secondaryText)
+            .foregroundStyle(isSelected ? brandMode.accentText : brandMode.secondaryText)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(minHeight: WanderTheme.tapMinimum)
             .contentShape(Rectangle())
@@ -3338,7 +3338,7 @@ private struct GraphPersonListRow: View {
 
             Button(actionTitle, action: onFollowAction)
                 .font(AstirTypography.label)
-                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accent)
+                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accentText)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 34)
                 .overlay(alignment: .bottom) {
@@ -3374,7 +3374,7 @@ private struct ConnectionRow: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 40, height: 40)
                     .background(brandMode.accentWash)
                     .clipShape(Circle())
@@ -3575,7 +3575,7 @@ private struct RecommendedScorePill: View {
             Text(PlaceRating.averageDisplay(score))
                 .font(AstirTypography.metadata)
         }
-        .foregroundStyle(brandMode.accent)
+        .foregroundStyle(brandMode.accentText)
         .frame(minHeight: 30)
         .accessibilityLabel("Recommended score \(PlaceRating.averageDisplay(score)) out of 5")
     }

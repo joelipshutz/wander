@@ -97,7 +97,7 @@ struct SettingsScreen: View {
                 HStack(spacing: WanderTheme.spacing3) {
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: 38, height: 38)
                         .background(brandMode.accentWash)
                         .clipShape(Circle())
@@ -215,7 +215,7 @@ struct SettingsScreen: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 Image(systemName: store.isPrivateProfile ? "lock.shield.fill" : "person.crop.circle.badge.questionmark")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 38, height: 38)
                     .background(brandMode.accentWash)
                     .clipShape(Circle())
@@ -269,7 +269,7 @@ struct SettingsScreen: View {
                             }
                         }
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                     }
                 }
             }
@@ -349,7 +349,7 @@ private struct TrustAndPrivacySheet: View {
                         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                             Image(systemName: fact.icon)
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(brandMode.accent)
+                                .foregroundStyle(brandMode.accentText)
                                 .frame(width: 38, height: 38)
                                 .background(brandMode.accentWash)
                                 .clipShape(Circle())
@@ -383,7 +383,7 @@ private struct TrustAndPrivacySheet: View {
                         dismiss()
                     }
                     .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
             }
         }
@@ -502,7 +502,7 @@ struct NotificationSettingsSheet: View {
                         dismiss()
                     }
                     .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
             }
         }
@@ -535,7 +535,7 @@ struct NotificationSettingsSheet: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: "bell.badge")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 38, height: 38)
                     .background(brandMode.accentWash)
                     .clipShape(Circle())
@@ -617,7 +617,7 @@ struct NotificationSettingsSheet: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: systemImage)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 32, height: 32)
                     .background(brandMode.accentWash)
                     .clipShape(Circle())
@@ -881,7 +881,7 @@ private struct SettingsInlineInfo: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 38, height: 38)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())
@@ -929,7 +929,7 @@ private struct SettingsRow: View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 38, height: 38)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())

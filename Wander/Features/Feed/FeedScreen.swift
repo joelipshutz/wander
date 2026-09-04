@@ -89,7 +89,7 @@ struct FeedScreen: View {
                         .opacity(isFloatingHeaderHidden ? 0 : 1)
                         .allowsHitTesting(!isFloatingHeaderHidden)
                         .animation(
-                            FeedFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
+                            AstirFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
                             value: isFloatingHeaderHidden
                         )
                         .zIndex(3)
@@ -253,13 +253,13 @@ struct FeedScreen: View {
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
-        .padding(.bottom, WanderTheme.spacing3)
+        .padding(.bottom, WanderTheme.spacing2)
     }
 
     private var placesSurface: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                FeedScrollOffsetReader(
+                AstirScrollOffsetReader(
                     coordinateSpaceName: FeedScrollCoordinateSpace.places
                 )
 
@@ -271,7 +271,7 @@ struct FeedScreen: View {
                 .padding(.bottom, WanderTheme.spacing16)
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
-            .feedScrollTracking(
+            .astirScrollTracking(
                 coordinateSpaceName: FeedScrollCoordinateSpace.places
             ) { offset in
                 updateFloatingHeaderVisibility(
@@ -303,7 +303,7 @@ struct FeedScreen: View {
     ) {
         guard selectedSurface == surface, !isShowingSearch else { return }
 
-        if scrollOffset <= FeedFloatingHeaderBehavior.topRevealOffset {
+        if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
             lastFeedScrollOffset = scrollOffset
             accumulatedFeedScrollTravel = 0
             setFloatingHeaderHidden(false)
@@ -317,7 +317,7 @@ struct FeedScreen: View {
 
         let delta = scrollOffset - previousOffset
         lastFeedScrollOffset = scrollOffset
-        guard abs(delta) >= FeedFloatingHeaderBehavior.minimumMeaningfulDelta else { return }
+        guard abs(delta) >= AstirFloatingHeaderBehavior.minimumMeaningfulDelta else { return }
 
         if delta > 0 {
             if accumulatedFeedScrollTravel < 0 {
@@ -325,8 +325,8 @@ struct FeedScreen: View {
             }
             accumulatedFeedScrollTravel += delta
 
-            if scrollOffset >= FeedFloatingHeaderBehavior.minimumHideOffset,
-               accumulatedFeedScrollTravel >= FeedFloatingHeaderBehavior.hideTravelThreshold {
+            if scrollOffset >= AstirFloatingHeaderBehavior.minimumHideOffset,
+               accumulatedFeedScrollTravel >= AstirFloatingHeaderBehavior.hideTravelThreshold {
                 accumulatedFeedScrollTravel = 0
                 setFloatingHeaderHidden(true)
             }
@@ -336,7 +336,7 @@ struct FeedScreen: View {
             }
             accumulatedFeedScrollTravel += delta
 
-            if accumulatedFeedScrollTravel <= -FeedFloatingHeaderBehavior.revealTravelThreshold {
+            if accumulatedFeedScrollTravel <= -AstirFloatingHeaderBehavior.revealTravelThreshold {
                 accumulatedFeedScrollTravel = 0
                 setFloatingHeaderHidden(false)
             }
@@ -356,7 +356,7 @@ struct FeedScreen: View {
         if reduceMotion {
             isFloatingHeaderHidden = isHidden
         } else {
-            withAnimation(FeedFloatingHeaderBehavior.animation(reduceMotion: false)) {
+            withAnimation(AstirFloatingHeaderBehavior.animation(reduceMotion: false)) {
                 isFloatingHeaderHidden = isHidden
             }
         }
@@ -810,7 +810,7 @@ private struct FeedPeopleSurface: View {
 
     var body: some View {
         ScrollView {
-            FeedScrollOffsetReader(
+            AstirScrollOffsetReader(
                 coordinateSpaceName: FeedScrollCoordinateSpace.people
             )
 
@@ -834,7 +834,7 @@ private struct FeedPeopleSurface: View {
             .padding(.bottom, WanderTheme.spacing16)
         }
         .coordinateSpace(name: FeedScrollCoordinateSpace.people)
-        .feedScrollTracking(
+        .astirScrollTracking(
             coordinateSpaceName: FeedScrollCoordinateSpace.people,
             onOffsetChange: onScrollOffsetChange
         )
@@ -1136,7 +1136,7 @@ private struct FeedPeopleActionPanel: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 44, height: 44)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())
@@ -1191,7 +1191,7 @@ private struct FeedMemberResultTile: View {
                 Spacer()
                 Text("\(recCount) rec matches")
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .frame(width: 154, height: 142, alignment: .leading)
             .padding(WanderTheme.spacing3)
@@ -1252,82 +1252,9 @@ private enum FeedFloatingHeaderMetrics {
         + WanderTheme.tapMinimum
 }
 
-private enum FeedFloatingHeaderBehavior {
-    static let topRevealOffset: CGFloat = 8
-    static let minimumHideOffset: CGFloat = 28
-    static let minimumMeaningfulDelta: CGFloat = 0.7
-    static let hideTravelThreshold: CGFloat = 24
-    static let revealTravelThreshold: CGFloat = 9
-
-    static func animation(reduceMotion: Bool) -> Animation? {
-        reduceMotion ? nil : .snappy(duration: 0.30, extraBounce: 0)
-    }
-}
-
 private enum FeedScrollCoordinateSpace {
     static let places = "feed.places.scroll-space"
     static let people = "feed.people.scroll-space"
-}
-
-private struct FeedScrollOffsetReader: View {
-    let coordinateSpaceName: String
-
-    var body: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: FeedScrollOffsetPreferenceKey.self,
-                value: max(
-                    0,
-                    -proxy.frame(in: .named(coordinateSpaceName)).minY
-                )
-            )
-        }
-        .frame(height: 1)
-        .padding(.bottom, -1)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct FeedScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct FeedScrollTrackingModifier: ViewModifier {
-    let coordinateSpaceName: String
-    let onOffsetChange: (CGFloat) -> Void
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.onScrollGeometryChange(for: CGFloat.self) { geometry in
-                max(0, geometry.contentOffset.y + geometry.contentInsets.top)
-            } action: { _, offset in
-                onOffsetChange(offset)
-            }
-        } else {
-            content.onPreferenceChange(FeedScrollOffsetPreferenceKey.self) { offset in
-                onOffsetChange(offset)
-            }
-        }
-    }
-}
-
-private extension View {
-    func feedScrollTracking(
-        coordinateSpaceName: String,
-        onOffsetChange: @escaping (CGFloat) -> Void
-    ) -> some View {
-        modifier(
-            FeedScrollTrackingModifier(
-                coordinateSpaceName: coordinateSpaceName,
-                onOffsetChange: onOffsetChange
-            )
-        )
-    }
 }
 
 enum FeedSearchTransitionPolicy {
@@ -1562,7 +1489,7 @@ private struct FeedFeaturedCard: View {
 
                     Text("• \(featured.actor.displayName) • \(featuredActivity)")
                         .font(AstirTypography.caption)
-                        .foregroundStyle(astirBrandMode.accent)
+                        .foregroundStyle(astirBrandMode.accentText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
@@ -2069,7 +1996,7 @@ private struct FeedEmptyState: View {
                             } else {
                                 Text("Follow")
                                     .font(AstirTypography.label)
-                                    .foregroundStyle(brandMode.accent)
+                                    .foregroundStyle(brandMode.accentText)
                                     .frame(minHeight: 44)
                             }
                         }
@@ -2116,7 +2043,7 @@ private struct FeedRetryRow: View {
                 Task { await retry() }
             }
             .font(AstirTypography.label)
-            .foregroundStyle(brandMode.accent)
+            .foregroundStyle(brandMode.accentText)
             .frame(minHeight: 44)
         }
         .padding(WanderTheme.spacing3)

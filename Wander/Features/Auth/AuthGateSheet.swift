@@ -15,7 +15,7 @@ struct AuthGateSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 58, height: 58)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())

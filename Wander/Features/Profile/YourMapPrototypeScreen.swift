@@ -237,8 +237,7 @@ struct YourMapPrototypeScreen: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceBone.color.opacity(0.96), in: Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2, castsShadow: true)
                 }
                 .buttonStyle(.plain)
                 .disabled(isCapturingSnapshot)
@@ -314,8 +313,8 @@ struct YourMapPrototypeScreen: View {
                 .accessibilityHidden(true)
 
             Text("View snapshot list")
-                .font(.system(.subheadline, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
@@ -323,8 +322,8 @@ struct YourMapPrototypeScreen: View {
                 snapshotListID = nil
             } label: {
                 Text("Edit")
-                    .font(.system(.subheadline, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentText)
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
             }
@@ -335,8 +334,8 @@ struct YourMapPrototypeScreen: View {
         .padding(.leading, WanderTheme.spacing4)
         .padding(.trailing, WanderTheme.spacing1)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(brandMode.border))
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
     }
@@ -416,7 +415,7 @@ struct YourMapPrototypeScreen: View {
                 .font(AstirTypography.label)
             Text("\(repeatRatePercentage)%")
                 .font(AstirTypography.screenTitle.monospacedDigit())
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("of checked-in places are somewhere you returned to")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
@@ -490,7 +489,7 @@ struct YourMapPrototypeScreen: View {
                     HStack(spacing: WanderTheme.spacing3) {
                         Text("\(index + 1)")
                             .font(AstirTypography.label.monospacedDigit())
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .frame(width: 24, height: 24)
                             .background(brandMode.accentWash, in: Circle())
                         WanderCategoryEmoji(category: place.category, name: place.name, size: 20)
@@ -505,7 +504,7 @@ struct YourMapPrototypeScreen: View {
                         Spacer(minLength: 0)
                         Text("\(place.visitCount) visits")
                             .font(AstirTypography.metadata.monospacedDigit())
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                     .frame(minHeight: WanderTheme.tapMinimum)
 
@@ -567,7 +566,7 @@ struct YourMapPrototypeScreen: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             Text("No patterns in this slice yet")
                 .font(AstirTypography.cardTitle)
             Text("Try a wider time range or reset one filter.")
@@ -983,17 +982,13 @@ private struct YourMapPrototypeSharePreview: View {
                 VStack(spacing: WanderTheme.spacing3) {
                     shareStoryCard
 
-                    AstirEditorialSegmentedSwitch(
-                        options: YourMapPrototypeShareFormat.allCases.map {
-                            WanderSegmentOption(id: $0.rawValue, title: $0.title)
-                        },
-                        selection: Binding(
-                            get: { format.rawValue },
-                            set: { format = YourMapPrototypeShareFormat(rawValue: $0) ?? .staticSnapshot }
-                        )
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel("Share format")
+                    Picker("Share format", selection: $format) {
+                        ForEach(YourMapPrototypeShareFormat.allCases) { option in
+                            Label(option.title, systemImage: option.systemImage).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(minHeight: WanderTheme.tapMinimum)
                     .accessibilityIdentifier("yourMap.prototype.shareFormat")
                     .onChange(of: format) { _, _ in
                         createdLink = nil
@@ -1018,10 +1013,7 @@ private struct YourMapPrototypeSharePreview: View {
                             .font(AstirTypography.control)
                             .foregroundStyle(brandMode.accentForeground)
                             .frame(maxWidth: .infinity, minHeight: 54)
-                            .background(
-                                brandMode.accent,
-                                in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                            )
+                            .background(brandMode.accent, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("yourMap.prototype.createShare")
@@ -1043,12 +1035,11 @@ private struct YourMapPrototypeSharePreview: View {
         .overlay(alignment: .top) {
             if didCopyLink {
                 Label("Copied", systemImage: "checkmark")
-                    .font(WanderTypography.control)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.primaryText)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.vertical, WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color, in: Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    .astirGlassSurface(cornerRadius: 20, castsShadow: true)
                     .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
                     .padding(.top, WanderTheme.spacing2)
                     .accessibilityIdentifier("yourMap.prototype.copiedToast")
@@ -1111,13 +1102,13 @@ private struct YourMapPrototypeSharePreview: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(AstirTypography.label)
                 Text(detail)
-                    .font(AstirTypography.caption)
+                    .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
             }
             Spacer(minLength: 0)
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 21, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 66)
@@ -1204,6 +1195,7 @@ private struct YourMapPrototypeMiniMap: View {
 }
 
 private struct YourMapPrototypePin: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let place: YourMapPrototypePlace
     let pinOwnership: MapPinSaveOwnership
 
@@ -1214,7 +1206,7 @@ private struct YourMapPrototypePin: View {
             size: MapPinVisualMetrics.emojiDiameter
         )
         .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.raisedBackground)
         .clipShape(Circle())
         .overlay(
             MapPinOutlineStroke(
@@ -1225,7 +1217,7 @@ private struct YourMapPrototypePin: View {
                 lineWidth: MapPinVisualMetrics.outlineWidth
             )
         )
-        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+        .shadow(color: brandMode.primaryText.opacity(0.22), radius: 6, x: 0, y: 2)
         .accessibilityLabel("\(place.name), \(place.status.title), \(place.visitCount) visits")
     }
 }
@@ -1314,7 +1306,7 @@ private struct YourMapPrototypeSavedLensRow: View {
             } label: {
                 HStack(spacing: WanderTheme.spacing3) {
                     Image(systemName: "bookmark.fill")
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(savedLens.title)
                             .font(AstirTypography.label)
@@ -1327,7 +1319,7 @@ private struct YourMapPrototypeSavedLensRow: View {
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -1390,6 +1382,7 @@ private struct YourMapPrototypeCircleButton: View {
 }
 
 struct YourMapGeographyCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let cities: [YourMapPrototypeBreakdownItem]
     let countries: [YourMapPrototypeBreakdownItem]
 
@@ -1406,7 +1399,7 @@ struct YourMapGeographyCard: View {
             }
             .overlay {
                 Rectangle()
-                    .fill(WanderTheme.borderHairline.color.opacity(0.7))
+                    .fill(brandMode.border.opacity(0.7))
                     .frame(width: 1)
                     .accessibilityHidden(true)
             }
@@ -1421,13 +1414,13 @@ struct YourMapGeographyCard: View {
                     } label: {
                         HStack(spacing: 7) {
                             Text(isExpanded ? "See less" : "See more")
-                                .font(WanderTypography.metadata)
+                                .font(AstirTypography.metadata)
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 12, weight: .semibold))
                                 .frame(width: 25, height: 25)
-                                .background(WanderTheme.surfaceSand.color, in: Circle())
+                                .background(brandMode.recessedBackground, in: Circle())
                         }
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                         .contentShape(Rectangle())
                     }
@@ -1443,10 +1436,10 @@ struct YourMapGeographyCard: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing4)
         .padding(.bottom, canExpand ? 6 : WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .strokeBorder(WanderTheme.borderHairline.color)
+                .strokeBorder(brandMode.border)
         }
         .accessibilityIdentifier("yourMap.prototype.citiesCountries")
         .onChange(of: canExpand) { _, canExpand in
@@ -1458,15 +1451,15 @@ struct YourMapGeographyCard: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
-                    Text(title).font(WanderTypography.editorialCardTitle)
+                    Text(title).font(AstirTypography.cardTitle)
                     Spacer(minLength: 0)
-                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text(items.count.formatted()).font(AstirTypography.metadata.monospacedDigit())
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(title).font(WanderTypography.editorialCardTitle)
-                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text(title).font(AstirTypography.cardTitle)
+                    Text(items.count.formatted()).font(AstirTypography.metadata.monospacedDigit())
+                        .foregroundStyle(brandMode.secondaryText)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -1474,8 +1467,8 @@ struct YourMapGeographyCard: View {
 
             if items.isEmpty {
                 Text("No \(title) yet")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 VStack(spacing: 14) {
@@ -1513,7 +1506,7 @@ private struct YourMapPrototypeBarRow: View {
                     .fill(brandMode.recessedBackground)
                     .overlay(alignment: .leading) {
                         Capsule()
-                            .fill(categoryColor(item.title))
+                            .fill(categoryColor(item.title, brandMode: brandMode))
                             .frame(width: geometry.size.width * max(item.fraction, minimumFraction))
                     }
             }

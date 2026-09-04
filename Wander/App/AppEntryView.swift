@@ -244,7 +244,7 @@ private struct AppEntryRecoveryView: View {
             Spacer()
             Image(systemName: "map.fill")
                 .font(.system(size: 58, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 112, height: 112)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())

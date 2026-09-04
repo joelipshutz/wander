@@ -2105,7 +2105,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     Link(destination: WalkthroughHelpDestination.extensions) {
                         Label("Setup guide", systemImage: "arrow.up.right")
                             .font(AstirTypography.label)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                     }
@@ -2168,7 +2168,7 @@ private struct DeviceFeatureInstruction: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 28, height: 28)
                 .background(brandMode.accentWash, in: Circle())
 
@@ -2729,7 +2729,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 Button(action: onNext) {
                                     Image(systemName: "arrow.right")
                                         .font(.system(size: 14, weight: .black))
-                                        .foregroundStyle(brandMode.accent)
+                                        .foregroundStyle(brandMode.accentText)
                                         .frame(width: 44, height: 44)
                                         .contentShape(Circle())
                                         .wanderGlassCapsule(tone: .accent)
@@ -2828,7 +2828,7 @@ private struct WalkthroughFinaleView: View {
 
                 Image(systemName: "mappin.and.ellipse")
                     .font(.system(size: 58, weight: .bold))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .offset(y: reduceMotion ? 0 : (isCelebrating ? -7 : 4))
 
                 Image(systemName: "sparkles")
@@ -2864,7 +2864,7 @@ private struct WalkthroughFinaleView: View {
 
                 Text("— Anthony Bourdain")
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
 
                 Text("Keep the places that move you. Your map will remember the rest")
                     .font(AstirTypography.body)

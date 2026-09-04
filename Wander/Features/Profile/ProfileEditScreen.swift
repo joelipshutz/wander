@@ -47,7 +47,7 @@ struct ProfileEditScreen: View {
                         } label: {
                             Text("Edit profile photo")
                                 .font(AstirTypography.control)
-                                .foregroundStyle(brandMode.accent)
+                                .foregroundStyle(brandMode.accentText)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
                         .buttonStyle(.plain)
@@ -101,7 +101,7 @@ struct ProfileEditScreen: View {
                         Task { await save() }
                     }
                     .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .disabled(isSaving || !isValid)
                 }
             }

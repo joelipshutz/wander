@@ -60,6 +60,10 @@ struct ListsScreen: View {
         ListsHomeProjectionKey,
         [PlaceListMock]
     >()
+    @State private var floatingHeaderHeight: CGFloat = 64
+    @State private var isFloatingHeaderHidden = false
+    @State private var lastScrollOffset: CGFloat?
+    @State private var accumulatedScrollTravel: CGFloat = 0
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
@@ -389,6 +393,10 @@ struct ListsScreen: View {
 
         return ZStack(alignment: .top) {
             ScrollView {
+                AstirScrollOffsetReader(
+                    coordinateSpaceName: ListsScrollCoordinateSpace.home
+                )
+
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     if renderedLists.isEmpty {
                         emptyState
@@ -397,58 +405,71 @@ struct ListsScreen: View {
                     }
                 }
                 .padding(WanderTheme.spacing4)
-                .padding(.top, 152)
+                .padding(.top, floatingHeaderHeight + WanderTheme.spacing3)
                 .padding(.bottom, WanderTheme.spacing16)
             }
+            .coordinateSpace(name: ListsScrollCoordinateSpace.home)
+            .astirScrollTracking(
+                coordinateSpaceName: ListsScrollCoordinateSpace.home,
+                onOffsetChange: updateFloatingHeaderVisibility
+            )
+            .accessibilityIdentifier("lists.home.scroll")
 
             AstirFloatingHeaderSurface {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    AstirMastheadLockup(isCompact: true)
-                    header
+                HStack(spacing: WanderTheme.spacing2) {
                     scopeSwitch
+
+                    AstirIconActionButton(
+                        systemImage: "plus",
+                        accessibilityLabel: "New list",
+                        accessibilityIdentifier: "lists.headerAdd",
+                        action: {
+                            walkthroughs.perform(.listsCreate)
+                            walkthroughs.activate(.listEditor)
+                            editorPresentation = .create
+                        }
+                    )
+                    .walkthroughTarget(.listsCreate)
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
                 .padding(.bottom, WanderTheme.spacing3)
             }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ListsFloatingHeaderHeightPreferenceKey.self,
+                        value: proxy.size.height
+                    )
+                }
+            }
+            .offset(
+                y: isFloatingHeaderHidden
+                    ? -(floatingHeaderHeight + WanderTheme.spacing4)
+                    : 0
+            )
+            .opacity(isFloatingHeaderHidden ? 0 : 1)
+            .allowsHitTesting(!isFloatingHeaderHidden)
+            .animation(
+                AstirFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
+                value: isFloatingHeaderHidden
+            )
+            .zIndex(3)
         }
         .background(astirBrandMode.background)
         .foregroundStyle(astirBrandMode.primaryText)
+        .onPreferenceChange(ListsFloatingHeaderHeightPreferenceKey.self) { height in
+            guard height > 0 else { return }
+            floatingHeaderHeight = height
+        }
+        .onChange(of: selectedScopeID) { _, _ in
+            resetFloatingHeaderScrollTracking(revealHeader: true)
+        }
         .task {
             await syncAndRefreshLists()
         }
         .task(id: walkthroughs.currentStep?.id) {
             await runListsWalkthroughAnimationIfNeeded()
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                Text("lists")
-                    .font(AstirTypography.screenTitle)
-                    .foregroundStyle(astirBrandMode.primaryText)
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                AstirIconActionButton(
-                    systemImage: "plus",
-                    accessibilityLabel: "New list",
-                    accessibilityIdentifier: "lists.headerAdd",
-                    action: {
-                    walkthroughs.perform(.listsCreate)
-                    walkthroughs.activate(.listEditor)
-                    editorPresentation = .create
-                    }
-                )
-                .walkthroughTarget(.listsCreate)
-            }
-
-            Text("save places into a plan you can actually use")
-                .font(AstirTypography.label)
-                .foregroundStyle(astirBrandMode.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
         }
     }
 
@@ -467,6 +488,66 @@ struct ListsScreen: View {
         )
         .accessibilityLabel("List type")
         .walkthroughTarget(.listsScope)
+    }
+
+    private func updateFloatingHeaderVisibility(scrollOffset: CGFloat) {
+        if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
+            lastScrollOffset = scrollOffset
+            accumulatedScrollTravel = 0
+            setFloatingHeaderHidden(false)
+            return
+        }
+
+        guard let previousOffset = lastScrollOffset else {
+            lastScrollOffset = scrollOffset
+            return
+        }
+
+        let delta = scrollOffset - previousOffset
+        lastScrollOffset = scrollOffset
+        guard abs(delta) >= AstirFloatingHeaderBehavior.minimumMeaningfulDelta else { return }
+
+        if delta > 0 {
+            if accumulatedScrollTravel < 0 {
+                accumulatedScrollTravel = 0
+            }
+            accumulatedScrollTravel += delta
+
+            if scrollOffset >= AstirFloatingHeaderBehavior.minimumHideOffset,
+               accumulatedScrollTravel >= AstirFloatingHeaderBehavior.hideTravelThreshold {
+                accumulatedScrollTravel = 0
+                setFloatingHeaderHidden(true)
+            }
+        } else {
+            if accumulatedScrollTravel > 0 {
+                accumulatedScrollTravel = 0
+            }
+            accumulatedScrollTravel += delta
+
+            if accumulatedScrollTravel <= -AstirFloatingHeaderBehavior.revealTravelThreshold {
+                accumulatedScrollTravel = 0
+                setFloatingHeaderHidden(false)
+            }
+        }
+    }
+
+    private func resetFloatingHeaderScrollTracking(revealHeader: Bool) {
+        lastScrollOffset = nil
+        accumulatedScrollTravel = 0
+        if revealHeader {
+            setFloatingHeaderHidden(false)
+        }
+    }
+
+    private func setFloatingHeaderHidden(_ isHidden: Bool) {
+        guard isFloatingHeaderHidden != isHidden else { return }
+        if reduceMotion {
+            isFloatingHeaderHidden = isHidden
+        } else {
+            withAnimation(AstirFloatingHeaderBehavior.animation(reduceMotion: false)) {
+                isFloatingHeaderHidden = isHidden
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -553,7 +634,7 @@ struct ListsScreen: View {
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 44, height: 44)
                 .background(astirBrandMode.accentWash)
-                .foregroundStyle(astirBrandMode.accent)
+                .foregroundStyle(astirBrandMode.accentText)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("coming next")
@@ -712,6 +793,18 @@ enum ListsScope: String, CaseIterable {
     }
 }
 
+private enum ListsScrollCoordinateSpace {
+    static let home = "lists.home.scroll-space"
+}
+
+private struct ListsFloatingHeaderHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 enum ListsScreenScenario: String {
     case live
     case populated
@@ -829,7 +922,7 @@ private struct ListTile: View {
                     if list.isCollaborative {
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(astirBrandMode.accent)
+                            .foregroundStyle(astirBrandMode.accentText)
                             .accessibilityLabel("Collaborative list")
                     }
                 }
@@ -1281,7 +1374,7 @@ private struct ListDetailScreen: View {
                             .font(.system(size: 12, weight: .black))
                             .frame(width: 28, height: 28)
                             .background(brandMode.accentWash)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -1296,7 +1389,7 @@ private struct ListDetailScreen: View {
                 Spacer()
                 Text("\(renderedList.itemCount) places")
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .padding(.top, WanderTheme.spacing1)
         }
@@ -1718,7 +1811,7 @@ private struct ListAddPlacesScreen: View {
                     dismiss()
                 }
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
             }
         }
         .task(id: list.id) {
@@ -2166,7 +2259,7 @@ private struct ListSaveToast: View {
 
             Button(presentation.actionTitle, action: onEdit)
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .underline()
                 .padding(.horizontal, 10)
                 .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
@@ -2268,7 +2361,7 @@ private struct ListVisiblePlaceAddRow: View {
                     } else {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 28, weight: .black))
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                 }
                 .frame(width: 44, height: 44)
@@ -2336,7 +2429,7 @@ private struct ListPlaceCandidateAddRow: View {
                     } else {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 28, weight: .black))
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                 }
                 .frame(width: 44, height: 44)
@@ -2425,7 +2518,7 @@ private struct ListMapPreview: View {
                     VStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: list.mapAvailability == .loading ? "arrow.triangle.2.circlepath" : "map")
                             .font(.system(size: 22, weight: .black))
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                         Text(previewStateTitle)
                             .font(AstirTypography.cardTitle)
                             .foregroundStyle(brandMode.primaryText)
@@ -2684,7 +2777,7 @@ private struct PlaceListInviteSheet: View {
                     .font(.system(size: 24, weight: .black))
                     .frame(width: 52, height: 52)
                     .background(brandMode.accentWash)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -2751,7 +2844,7 @@ private struct PlaceListInviteSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("not now") { dismiss() }
                         .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
             }
             .alert("Couldn’t join list", isPresented: acceptanceErrorBinding) {
@@ -2835,7 +2928,7 @@ private struct CollaboratorInviteSheet: View {
                         dismiss()
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
             }
             .sheet(item: $sharePresentation) { presentation in
@@ -2875,7 +2968,7 @@ private struct CollaboratorInviteSheet: View {
                         .font(.system(size: 17, weight: .black))
                         .frame(width: 42, height: 42)
                         .background(brandMode.accentWash)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(isCreatingInviteLink ? "creating link..." : "share collaborator invite")
@@ -2890,7 +2983,7 @@ private struct CollaboratorInviteSheet: View {
                         ProgressView()
                     } else {
                         Image(systemName: "square.and.arrow.up")
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                 }
                 .padding(WanderTheme.spacing3)
@@ -2997,7 +3090,7 @@ private struct FriendCollaboratorSearchSheet: View {
                         dismiss()
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
             }
         }
@@ -3180,7 +3273,7 @@ private struct FriendCollaboratorSearchContent: View {
 
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .padding(WanderTheme.spacing3)
             .background(brandMode.raisedBackground)
@@ -3275,7 +3368,7 @@ private struct PrivateProfileCollaborationUnavailable: View {
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 42, height: 42)
                 .background(brandMode.accentWash)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
@@ -3927,7 +4020,7 @@ private struct ListMapPlaceTile: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     Text(place.contextLine)
                         .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -4119,7 +4212,7 @@ private struct ListMapStatePanel: View {
                 } else {
                     Image(systemName: stateIcon)
                         .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
             }
             .frame(width: 36, height: 36)
@@ -4382,7 +4475,7 @@ private struct ListEditorSheet: View {
                         saveAndDismiss()
                     }
                     .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .disabled(trimmedTitle.isEmpty)
                 }
             }
@@ -4674,7 +4767,7 @@ private struct ListEditorSheet: View {
                             .font(.system(size: 18, weight: .black))
                             .frame(width: 44, height: 44)
                             .background(brandMode.accentWash)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)

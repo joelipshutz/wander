@@ -40,7 +40,7 @@ struct SharedVisitInviteSection: View {
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -69,7 +69,7 @@ struct SharedVisitInviteSection: View {
                     if let onRetry {
                         Button("Retry", action: onRetry)
                             .font(AstirTypography.label)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -190,7 +190,7 @@ struct SharedVisitFriendPicker: View {
                                     Spacer()
                                     Image(systemName: selectedUserIDs.contains(friend.id) ? "checkmark.circle.fill" : "circle")
                                         .font(.system(size: 22, weight: .bold))
-                                        .foregroundStyle(selectedUserIDs.contains(friend.id) ? brandMode.accent : brandMode.border)
+                                        .foregroundStyle(selectedUserIDs.contains(friend.id) ? brandMode.accentText : brandMode.border)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -207,7 +207,7 @@ struct SharedVisitFriendPicker: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                         .font(AstirTypography.control)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
             }
             .sheet(isPresented: $isPresentingContactInvites) {
@@ -371,7 +371,7 @@ struct SharedVisitNotificationBanner: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .padding(WanderTheme.spacing3)
             .background(brandMode.raisedBackground)
@@ -551,7 +551,7 @@ struct SharedVisitInvitationInboxScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Retry") { Task { await refresh() } }
                 .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
         }
         .padding(WanderTheme.spacing3)
         .background(brandMode.raisedBackground)

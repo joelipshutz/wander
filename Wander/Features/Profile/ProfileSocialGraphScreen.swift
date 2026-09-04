@@ -74,7 +74,7 @@ struct ProfileSocialGraphScreen: View {
                                     .font(.system(size: 17, weight: .black))
                                     .frame(width: 36, height: 36)
                                     .background(brandMode.accentWash)
-                                    .foregroundStyle(brandMode.accent)
+                                    .foregroundStyle(brandMode.accentText)
                                     .clipShape(Circle())
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Find friends")
@@ -138,7 +138,7 @@ struct ProfileSocialGraphScreen: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("done") { dismiss() }
                         .font(AstirTypography.control)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
             }
             .task { await refresh() }
@@ -321,7 +321,7 @@ private struct ProfileGraphEmptyState: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "person.2.slash")
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 62, height: 62)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())

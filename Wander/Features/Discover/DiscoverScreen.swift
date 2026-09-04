@@ -783,7 +783,7 @@ struct DiscoverScreen: View {
                             Text(mode.title)
                                 .font(AstirTypography.control)
                         }
-                        .foregroundStyle(selectedMode == mode ? brandMode.accent : brandMode.secondaryText)
+                        .foregroundStyle(selectedMode == mode ? brandMode.accentText : brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: 42)
 
                         Rectangle()
@@ -832,7 +832,7 @@ struct DiscoverScreen: View {
                 Button(action: handlePlaceSearchBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .accessibilityLabel(walkthroughSearchBackLabel)
@@ -1248,7 +1248,7 @@ struct DiscoverScreen: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: "person.2.fill")
                 .font(.system(size: 15, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 28, height: 28)
 
             Text("Follow people whose taste you trust. Places they choose to share can appear in Activity and on your map.")
@@ -1846,7 +1846,7 @@ private struct DiscoverActionPanel: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .black))
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 48, height: 48)
                 .background(brandMode.accentWash)
                 .clipShape(Circle())
@@ -1967,7 +1967,7 @@ private struct PeopleRecommendationCard: View {
 
             Text(recommendation.reason.displayText(for: profile))
                 .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.accent)
+                .foregroundStyle(brandMode.accentText)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(minHeight: 28, alignment: .top)
@@ -2208,7 +2208,7 @@ private struct DiscoverPlaceResultCard: View {
 
                         Text(recMeRating)
                             .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.accent)
+                            .foregroundStyle(brandMode.accentText)
 
                         if let noteLine {
                             Text(noteLine)
@@ -2413,7 +2413,7 @@ private struct LatestActivityRow: View {
 
                 Text(visiblePlace.userPlace.status.displayTitle)
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                 }
             }
             .buttonStyle(.plain)
@@ -2536,7 +2536,7 @@ private struct MemberResultTile: View {
                 Spacer()
                 Text("\(recCount) rec matches")
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
             }
             .frame(width: 148, height: 142, alignment: .leading)
             .padding(WanderTheme.spacing3)
@@ -2634,14 +2634,14 @@ private struct DiscoverCommunityPlaceCard: View {
                         .lineLimit(2)
                     Text("Saved on rec.me")
                         .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.accent)
+                        .foregroundStyle(brandMode.accentText)
                 }
 
                 Spacer(minLength: WanderTheme.spacing2)
 
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(brandMode.accent)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 44, height: 44)
             }
             .padding(WanderTheme.spacing3)

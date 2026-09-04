@@ -185,7 +185,7 @@ struct PlaceProfileRatingsRail: View {
                         ? AstirTypography.metricDisplay
                         : WanderTypography.editorialRatingDisplay
                 )
-                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accent : WanderTheme.textInk.color)
+                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.textInk.color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.76)
 
