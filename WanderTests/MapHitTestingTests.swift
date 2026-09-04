@@ -1686,6 +1686,28 @@ final class MapSelectionMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testActivePinRetentionRebuildsMissingGroupForAuthorizedRoute() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let authorizedPlaces = store.visiblePlaces()
+        let activePlace = try XCTUnwrap(
+            authorizedPlaces.first { $0.place.canonicalName == "Griffith Observatory Trail" }
+        )
+
+        let rebuiltGroup = MapActivePinRetention.authorizedGroup(
+            nil,
+            requiring: activePlace,
+            within: authorizedPlaces,
+            currentUserID: store.currentUser.id
+        )
+
+        XCTAssertTrue(
+            try XCTUnwrap(rebuiltGroup).places.contains {
+                $0.userPlace.id == activePlace.userPlace.id
+            }
+        )
+    }
+
+    @MainActor
     func testSubmittedRetentionRebuildsGroupsFromCurrentAuthorizedRows() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
         let currentUserID = store.currentUser.id

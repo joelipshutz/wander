@@ -9972,7 +9972,14 @@ enum MapActivePinRetention {
         within authorizedPlaces: [VisiblePlace],
         currentUserID: String
     ) -> VisiblePlaceGroup? {
-        guard let retainedGroup, let activePlace else { return nil }
+        guard let activePlace else { return nil }
+        guard let retainedGroup else {
+            return VisiblePlaceGrouping.matchingGroup(
+                for: activePlace,
+                in: authorizedPlaces,
+                currentUserID: currentUserID
+            )
+        }
         return authorizedGroups(
             [retainedGroup],
             within: authorizedPlaces,
