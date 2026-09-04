@@ -68,6 +68,9 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
+| `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
+| `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number` |
+| `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
 | `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
 | `place_import_matching_completed` | Every item in that pasted import finishes local matching | aggregate `batch_count`, `matched_count`, `needs_review_count` |
@@ -79,7 +82,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
 | `place_list_created` | A list is created | `visibility`, `collaborator_count` |
-| `place_list_item_added` | A place is successfully added to a list from an instrumented surface | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
+| `place_list_item_added` | A place is successfully added to a list from an instrumented surface (including `map_snapshot` capture) | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
@@ -88,6 +91,11 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
+
+The shared add-to-lists picker attributes successful additions to its entry
+surface: `map` for Map and place-profile actions, `discover` for Discover search
+results. Both existing-list selection and new-list creation emit
+`place_list_item_added` and the matching `list_place_added` engagement action.
 
 The push worker also emits three server-side operational events. They use
 `platform=server`, `source=push_notification_worker`, and a constant
@@ -106,6 +114,14 @@ snapshot RPC performs the per-recipient calculation inside Supabase and returns
 only aggregates to the Edge Function/PostHog.
 
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
+
+Discover place search keeps query text out of analytics. `trusted_place_search_remote_results`
+may include `surface`, the allowlisted `provider` (`recme` or `mapkit`), aggregate
+result-count and latency buckets, a versioned ranking policy, and rec.me provider
+overlap/status counts. `trusted_place_search_result_selected` may include only
+`surface`, allowlisted `provider` (`trusted`, `recme`, or `mapkit`), result stage,
+and a coarse rank bucket. It must never include the query, place name, provider
+place ID, address, coordinates, or contributor identity.
 
 ## Privacy rules
 

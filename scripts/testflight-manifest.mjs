@@ -530,6 +530,7 @@ export async function createReleaseSnapshot({
   status,
   writeDirectory,
   force = false,
+  approvedTesterCopy = null,
 }) {
   const synced = await syncManifestRange({ client, cwd, headRef: queueHeadRef, createIssue: true });
   const state = synced.state;
@@ -575,6 +576,7 @@ export async function createReleaseSnapshot({
     buildNumber,
     marketingVersion: resolveMarketingVersion(headRef, cwd),
     status,
+    approvedTesterCopy,
   });
   const directory = resolve(writeDirectory);
   const manifestPath = resolve(directory, `testflight-build-${buildNumber}-manifest.json`);
@@ -689,7 +691,7 @@ function usage() {
     "  node scripts/testflight-manifest.mjs record --commit <sha> --entry-file <payload.json> --head origin/main",
     "",
     "Cut and reconcile a release from the same manifest:",
-    "  node scripts/testflight-manifest.mjs snapshot --base testflight/build-124 --head <candidate> --build 125 --write-dir <dir>",
+    "  node scripts/testflight-manifest.mjs snapshot --base testflight/build-124 --head <candidate> --build 125 --write-dir <dir> [--tester-copy-file <approved-copy.md>]",
     "",
     "Advance the manifest after a completed release:",
     "  node scripts/testflight-manifest.mjs finalize --build 125 --candidate <sha> --tag testflight/build-125 --head origin/main",
@@ -754,6 +756,9 @@ async function main() {
       status: options.status,
       writeDirectory: required(options, "writeDir"),
       force: options.force,
+      approvedTesterCopy: options.testerCopyFile
+        ? readFileSync(resolve(options.testerCopyFile), "utf8")
+        : null,
     });
     process.stdout.write(`${JSON.stringify({ ok: true, issue: result.issue.html_url, files: result.files }, null, 2)}\n`);
     return;

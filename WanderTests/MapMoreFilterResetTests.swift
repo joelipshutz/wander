@@ -136,6 +136,70 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertEqual(state.more, MapMoreFilterSelection())
     }
 
+    func testSelectingPeopleFromAnySourceSwitchesToFriendsAndPreservesRefinements() {
+        for source in MapSource.allCases {
+            var state = MapFilterState(source: source)
+            let selection = MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                people: ["user_maya", "user_demo"],
+                status: .checkIns
+            )
+
+            state.setMoreSelection(selection)
+
+            XCTAssertEqual(state.source, .friends, "Starting source: \(source)")
+            XCTAssertEqual(state.more, selection)
+        }
+    }
+
+    func testChangingOtherRefinementsWithoutPeopleKeepsTheCurrentSource() {
+        for source in MapSource.allCases {
+            var state = MapFilterState(source: source)
+            let selection = MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                status: .wanna
+            )
+
+            state.setMoreSelection(selection)
+
+            XCTAssertEqual(state.source, source)
+            XCTAssertEqual(state.more, selection)
+        }
+    }
+
+    func testDeselectingTheLastPersonKeepsFriendsAndOtherRefinements() {
+        var state = MapFilterState(source: .you)
+        var selection = MapMoreFilterSelection(
+            categories: [WanderPlaceCategory.coffeeTeaSweets],
+            people: ["user_maya"],
+            status: .wanna
+        )
+        state.setMoreSelection(selection)
+
+        selection.togglePerson("user_maya")
+        state.setMoreSelection(selection)
+
+        XCTAssertEqual(state.source, .friends)
+        XCTAssertTrue(state.more.people.isEmpty)
+        XCTAssertEqual(state.more.categories, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(state.more.status, .wanna)
+    }
+
+    func testAllPeopleAndResetKeepTheAutomaticallySelectedFriendsSource() {
+        var state = MapFilterState(source: .featured)
+        var selection = MapMoreFilterSelection(people: ["user_maya", "user_demo"])
+        state.setMoreSelection(selection)
+
+        selection.selectAllPeople()
+        state.setMoreSelection(selection)
+        XCTAssertEqual(state.source, .friends)
+        XCTAssertTrue(state.more.people.isEmpty)
+
+        state.setMoreSelection(MapMoreFilterSelection())
+        XCTAssertEqual(state.source, .friends)
+        XCTAssertEqual(state.more, MapMoreFilterSelection())
+    }
+
     @MainActor
     func testUITestResetIntervalOverrideIsValidated() {
         XCTAssertEqual(

@@ -82,6 +82,87 @@ test("build 122 fixture reconciles every commit and keeps c555 in tester copy", 
   assert.doesNotMatch(artifacts.slack, /Docs\/process-only/);
 });
 
+test("approved compact tester copy preserves a complete machine reconciliation", () => {
+  const history = fixture.build122;
+  const report = reportFor(history, [
+    ship(history.commits[0].slice(0, 40), 327, "REC-225", "Map and Feed share trusted-place search."),
+    {
+      commit: history.commits[1].slice(0, 40),
+      pr: 325,
+      issue: null,
+      disposition: "exclude",
+      reason: "Docs/process-only design approval.",
+    },
+    ship(history.commits[2].slice(0, 40), 329, "REC-229", "Tab icons react on touch down."),
+    ship(history.commits[3].slice(0, 40), 323, "REC-224", "Contact invites are available from contextual entry points."),
+    {
+      commit: history.commits[4].slice(0, 40),
+      pr: 331,
+      issue: null,
+      disposition: "release-operation",
+      reason: "Build-number metadata only.",
+      releaseOperations: "Build number 122.",
+    },
+  ]);
+  const approvedTesterCopy = [
+    "What changed",
+    "- Search and navigation are more reliable.",
+    "",
+    "What to test",
+    "- Search, switch tabs, and open Contacts.",
+    "",
+    "Known limitations",
+    "- No new known limitations.",
+  ].join("\n");
+
+  const artifacts = buildReleaseArtifacts({
+    report,
+    buildNumber: 122,
+    marketingVersion: "1.0",
+    status: "candidate",
+    approvedTesterCopy,
+  });
+
+  assert.equal(artifacts.whatToTest, approvedTesterCopy);
+  assert.match(artifacts.slack, /Search and navigation are more reliable/);
+  assert.match(artifacts.releaseRecord, /Map and Feed share trusted-place search/);
+  assert.match(artifacts.releaseRecord, /Tab icons react on touch down/);
+});
+
+test("approved tester copy must retain the required release-note sections", () => {
+  const history = fixture.build122;
+  const report = reportFor(history, [
+    ship(history.commits[0].slice(0, 40), 327, "REC-225", "Map and Feed share trusted-place search."),
+    {
+      commit: history.commits[1].slice(0, 40),
+      pr: 325,
+      issue: null,
+      disposition: "exclude",
+      reason: "Docs/process-only design approval.",
+    },
+    ship(history.commits[2].slice(0, 40), 329, "REC-229", "Tab icons react on touch down."),
+    ship(history.commits[3].slice(0, 40), 323, "REC-224", "Contact invites are available from contextual entry points."),
+    {
+      commit: history.commits[4].slice(0, 40),
+      pr: 331,
+      issue: null,
+      disposition: "release-operation",
+      reason: "Build-number metadata only.",
+    },
+  ]);
+
+  assert.throws(
+    () => buildReleaseArtifacts({
+      report,
+      buildNumber: 122,
+      marketingVersion: "1.0",
+      status: "candidate",
+      approvedTesterCopy: "What changed\n- Search works.",
+    }),
+    /must include the What to test heading/,
+  );
+});
+
 test("missing c555 fails closed instead of silently dropping search", () => {
   const history = fixture.build122;
   const report = reportFor(history, [

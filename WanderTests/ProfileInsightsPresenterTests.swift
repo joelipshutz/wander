@@ -1,8 +1,53 @@
 import MapKit
+import SwiftUI
 import XCTest
 @testable import Wander
 
 final class ProfileInsightsPresenterTests: XCTestCase {
+    @MainActor
+    func testCalendarNowBadgeDoesNotMoveDateOrActivityMarker() throws {
+        for width: CGFloat in [44, 52] {
+            for day in [3, 13, 30] {
+                let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: day)))
+                for visitCount in [0, 1, 3] {
+                    for typeSize: DynamicTypeSize in [.large, .accessibility3] {
+                        let summary = ProfileCalendarDaySummary(
+                            date: date, visitCount: visitCount, wannaCount: 0,
+                            visitPlaceIDs: [], wannaPlaceIDs: []
+                        )
+                        func render(isToday: Bool) throws -> UIImage {
+                            let renderer = ImageRenderer(content:
+                                ProfileCalendarDayCell(date: date, summary: summary, isToday: isToday)
+                                    .frame(width: width)
+                                    .padding(.top, 8)
+                                    .background(WanderTheme.surfaceBone.color)
+                                    .environment(\.colorScheme, .light)
+                                    .environment(\.dynamicTypeSize, typeSize)
+                            )
+                            renderer.scale = 2
+                            return try XCTUnwrap(renderer.uiImage)
+                        }
+
+                        let ordinary = try render(isToday: false)
+                        let today = try render(isToday: true)
+                        XCTAssertEqual(today.size, ordinary.size, "NOW must not change the calendar row height")
+                        XCTAssertNotEqual(today.pngData(), ordinary.pngData(), "The NOW badge must remain visible")
+
+                        // Exclude only the badge band; the numeral and activity circle must render identically.
+                        let markerRect = CGRect(x: 0, y: 40, width: width * 2, height: 76)
+                        let ordinaryMarker = try XCTUnwrap(ordinary.cgImage?.cropping(to: markerRect))
+                        let todayMarker = try XCTUnwrap(today.cgImage?.cropping(to: markerRect))
+                        XCTAssertEqual(
+                            UIImage(cgImage: todayMarker).pngData(),
+                            UIImage(cgImage: ordinaryMarker).pngData(),
+                            "NOW moved the date/activity marker: day \(day), visits \(visitCount), width \(width), type \(typeSize)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     func testInsightsKeepMapAndCalendarBeenOnly() throws {
         let fixture = makeFixture()
         let insights = ProfileInsightsPresenter.present(

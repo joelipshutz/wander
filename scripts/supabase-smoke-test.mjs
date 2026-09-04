@@ -97,9 +97,10 @@ async function main() {
           smokeUserID,
           strangerUserID,
         );
-        await runCheckInSmokeChecks(client, smokeUserID);
+        await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+        await runListSnapshotCoverSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
         await runSurfaceSnapshotSmokeChecks(
           client,
           smokeUserID,
@@ -1159,6 +1160,9 @@ function runLinkedSmokeChecks(
       "rollback",
     )
     : "";
+  const snapshotCoverSmokeSQL = loadStrictPgTapSQL(
+    new URL("../supabase/tests/list_snapshot_covers.sql", import.meta.url),
+  );
   const cuisineSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/restaurant_cuisine_inference.sql", import.meta.url),
   );
@@ -1179,7 +1183,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}`;
     writeFileSync(filePath, linkedSQL, {
       encoding: "utf8",
       mode: 0o600,
@@ -3258,7 +3262,7 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
   await client.query("reset role");
 }
 
-async function runCheckInSmokeChecks(client, smokeUserID) {
+async function runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID) {
   await expectQuery(
     client,
     "list read RPCs keep their invoker, search_path, and grant posture",
@@ -3363,6 +3367,7 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
   };
   const firstVisitID = "59000000-0000-0000-0000-000000000001";
   const secondVisitID = "59000000-0000-0000-0000-000000000002";
+  const foreignParentVisitID = "59000000-0000-0000-0000-000000000003";
   const firstVisit = {
     id: firstVisitID,
     visited_at: "2026-07-20T18:00:00Z",
@@ -3386,6 +3391,7 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
       && result.rows[0]?.saved?.backfilled_from_user_place === false,
   );
   const userPlaceID = saved.rows[0].saved.user_place_id;
+  const placeID = saved.rows[0].saved.place_id;
 
   await expectQuery(
     client,
@@ -3414,11 +3420,20 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
 
   await expectQuery(
     client,
-    "a second stable UUID creates a second active ticket",
+    "an owned parent UUID preserves a projected save when provider identity is unavailable on-device",
     "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, null) as saved",
     [
-      JSON.stringify(place),
-      JSON.stringify({ ...userPlace, note: "latest check-in", rating_score: 5 }),
+      JSON.stringify({
+        ...place,
+        source_provider: "mapkit",
+        source_provider_place_id: "projected-without-provider-identity",
+      }),
+      JSON.stringify({
+        ...userPlace,
+        id: userPlaceID,
+        note: "latest check-in",
+        rating_score: 5,
+      }),
       JSON.stringify(attributes),
       JSON.stringify({
         id: secondVisitID,
@@ -3428,11 +3443,13 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
         attribute_answers: attributes,
       }),
     ],
-    (result) => result.rows[0]?.saved?.visit_id === secondVisitID,
+    (result) => result.rows[0]?.saved?.visit_id === secondVisitID
+      && result.rows[0]?.saved?.user_place_id === userPlaceID
+      && result.rows[0]?.saved?.place_id === placeID,
   );
   await expectQuery(
     client,
-    "both stable UUIDs remain active tickets",
+    "both stable UUIDs remain active tickets on the original parent",
     `
       select count(*)::integer as ticket_count
       from public.place_visits
@@ -3442,6 +3459,59 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
     `,
     [userPlaceID, [firstVisitID, secondVisitID]],
     (result) => result.rows[0]?.ticket_count === 2,
+  );
+  await expectQuery(
+    client,
+    "the projected repeat check-in does not create a duplicate provider record",
+    `
+      select
+        count(distinct up.id)::integer as user_place_count,
+        count(distinct up.place_id)::integer as place_count
+      from public.user_places up
+      join public.places place on place.id = up.place_id
+      where up.user_id = $1
+        and up.deleted_at is null
+        and (
+          (place.source_provider = $2 and place.source_provider_place_id = $3)
+          or (place.source_provider = 'mapkit' and place.source_provider_place_id = 'projected-without-provider-identity')
+        )
+    `,
+    [smokeUserID, place.source_provider, place.source_provider_place_id],
+    (result) => result.rows[0]?.user_place_count === 1
+      && result.rows[0]?.place_count === 1,
+  );
+
+  await client.query("reset role");
+  const foreignParent = await client.query(
+    `
+      select up.id
+      from public.user_places up
+      where up.user_id = $1
+        and up.deleted_at is null
+      order by up.created_at
+      limit 1
+    `,
+    [collaboratorUserID],
+  );
+  const foreignUserPlaceID = foreignParent.rows[0]?.id;
+  if (!foreignUserPlaceID) {
+    throw new Error("Check-in ownership smoke fixture is missing its collaborator parent");
+  }
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQueryFailure(
+    client,
+    "an authenticated caller cannot select another user's parent UUID",
+    "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, null)",
+    [
+      JSON.stringify(place),
+      JSON.stringify({ ...userPlace, id: foreignUserPlaceID }),
+      JSON.stringify(attributes),
+      JSON.stringify({
+        ...firstVisit,
+        id: foreignParentVisitID,
+      }),
+    ],
+    /invalid_user_place_identity/,
   );
 
   // feed_events is intentionally unavailable to authenticated clients. Check
@@ -4116,6 +4186,60 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
     /permission denied/,
   );
   await client.query("reset role");
+}
+
+async function runListSnapshotCoverSmokeChecks(client, ownerID, collaboratorID, strangerID) {
+  await setAuthenticatedUser(client, ownerID);
+  const listID = await createSmokeList(client, "Codex smoke snapshot cover");
+  const path = `${listID}/snapshot.jpg`;
+  await client.query("reset role");
+  await expectQuery(client, "snapshot bucket is private and bounded",
+    "select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'list-snapshots'", [],
+    (r) => r.rows[0]?.public === false && Number(r.rows[0]?.file_size_limit) === 1048576
+      && r.rows[0]?.allowed_mime_types?.includes("image/jpeg"));
+  await setAuthenticatedUser(client, ownerID);
+  await expectQueryFailure(client, "snapshot cannot attach a missing object",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], /not_found_or_forbidden/);
+  // Metadata-only storage fixture lives solely inside this rolled-back transaction.
+  await expectQuery(client, "owner can insert snapshot object",
+    "insert into storage.objects(bucket_id, name) values ('list-snapshots', $1) returning name", [path],
+    (r) => r.rows[0]?.name === path);
+  await expectQuery(client, "owner attaches snapshot",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], () => true);
+  await expectQuery(client, "detail includes fixed snapshot path",
+    "select public.place_list_detail($1::uuid) as detail", [listID],
+    (r) => r.rows[0]?.detail?.list?.snapshot_cover_path === path);
+  await client.query("select public.set_place_list_collaborators($1::uuid, $2::text[])", [listID, [collaboratorID]]);
+  await setAuthenticatedUser(client, collaboratorID);
+  await expectQuery(client, "collaborator can read snapshot",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 1);
+  await expectQueryFailure(client, "collaborator cannot replace snapshot metadata",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], /not_found_or_forbidden/);
+  await expectQuery(client, "collaborator cannot overwrite owner snapshot",
+    "update storage.objects set metadata = '{}'::jsonb where bucket_id = 'list-snapshots' and name = $1 returning name", [path],
+    (r) => r.rows.length === 0);
+  await setAuthenticatedUser(client, strangerID);
+  await expectQuery(client, "stranger cannot read snapshot",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 0);
+  await expectQueryFailure(client, "stranger cannot write owner snapshot",
+    "insert into storage.objects(bucket_id, name) values ('list-snapshots', $1)", [path], /row-level security/);
+  await setAuthenticatedUser(client, ownerID);
+  await client.query("select public.upsert_place_list($1::jsonb)", [JSON.stringify({id: listID, name: "Snapshot private", visibility: "stealth"})]);
+  await client.query("select public.set_place_list_collaborators($1::uuid, '{}'::text[])", [listID]);
+  await setAuthenticatedUser(client, collaboratorID);
+  await expectQuery(client, "removed collaborator loses snapshot access",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 0);
+  await setAuthenticatedUser(client, ownerID);
+  await expectQuery(client, "snapshot RPC security posture",
+    `select p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('anon', p.oid, 'execute') as anonymous
+     from pg_proc p where p.oid = 'app.set_place_list_snapshot_cover(uuid)'::regprocedure`, [],
+    (r) => r.rows[0]?.prosecdef === true && r.rows[0]?.authenticated === true
+      && r.rows[0]?.anonymous === false && r.rows[0]?.proconfig?.includes("search_path=public, app"));
 }
 
 async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID) {

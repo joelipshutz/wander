@@ -1913,7 +1913,14 @@ protocol PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
+    func resolveSearchEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate]
+}
+
+extension PlaceCandidateResolving {
+    func resolveSearchEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        try await resolveManualEntry(input)
+    }
 }
 
 @MainActor
@@ -2143,6 +2150,8 @@ protocol SocialImportUnderstandingRepository {
 
 @MainActor
 protocol PlaceListRepository {
+    func uploadSnapshotCover(listID: String, jpegData: Data) async throws -> String
+    func snapshotCoverData(path: String) async throws -> Data
     func visibleLists() async throws -> [RemotePlaceListSummary]
     func detail(listID: String) async throws -> RemotePlaceListDetail?
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String
@@ -2158,6 +2167,14 @@ protocol PlaceListRepository {
 }
 
 extension PlaceListRepository {
+    func uploadSnapshotCover(listID: String, jpegData: Data) async throws -> String {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func snapshotCoverData(path: String) async throws -> Data {
+        throw WanderRemoteError.notConfigured
+    }
+
     func leave(listID: String) async throws {
         throw WanderRemoteError.notConfigured
     }

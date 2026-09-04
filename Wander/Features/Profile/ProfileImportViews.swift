@@ -534,17 +534,40 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
+        reviewPresentation
+            .task(id: duplicateSignature) {
+                importStore.reconcileDuplicates(with: existingPlaces)
+            }
+            .onAppear {
+                importStore.resumePendingImports()
+                markDisplayedReceiptsPresented()
+            }
+            .onChange(of: displayedReceipt?.id) { _, _ in
+                markDisplayedReceiptsPresented()
+            }
+            .onChange(of: needsReviewItems.count) { previousCount, nextCount in
+                if showsDetailedReview, previousCount > 0, nextCount == 0 {
+                    showsDetailedReview = false
+                }
+            }
+            .onChange(of: auth.state) { _, _ in
+                guard isSaving else { return }
+                saveTask?.cancel()
+                saveTask = nil
+                isSaving = false
+            }
+            .onDisappear {
+                saveTask?.cancel()
+                saveTask = nil
+                isSaving = false
+            }
+            .interactiveDismissDisabled(isSaving)
+    }
+
+    private var reviewSurface: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                if let receipt = displayedReceipt {
-                    completionContent(receipt)
-                } else if reviewPlan.processingCount > 0 {
-                    resolvingContent
-                } else if showsDetailedReview {
-                    reviewContent
-                } else {
-                    importCompleteContent
-                }
+                reviewBodyContent
             }
             .padding(WanderTheme.spacing4)
             .padding(.bottom, displayedReceipt == nil && bottomActionTitle != nil ? 88 : WanderTheme.spacing6)
@@ -555,112 +578,121 @@ struct PlaceImportAdaptiveReviewScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            if displayedReceipt != nil {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onDone)
-                        .fontWeight(.bold)
-                }
-            } else if showsDetailedReview {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        showsDetailedReview = false
-                    } label: {
-                        Label("Import complete", systemImage: "chevron.left")
-                    }
-                }
-            } else if reviewPlan.processingCount == 0 {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onDone)
-                        .fontWeight(.bold)
-                }
-            }
+            doneToolbarContent
+            reviewBackToolbarContent
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if displayedReceipt == nil,
-               reviewPlan.processingCount == 0,
-               let title = bottomActionTitle {
-                WanderPrimaryButton(
-                    title: isSaving ? "Saving…" : title,
-                    systemImage: isSaving ? nil : bottomActionSystemImage,
-                    isDisabled: isSaving,
-                    tone: .espressoConfirmation,
-                    action: primaryBottomAction
-                )
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing2)
-                .background(WanderTheme.canvasWarm.color.opacity(0.97))
-                .accessibilityHint(
-                    reviewPlan.committableCount > 0
-                        ? "Adds only the checked places that are ready"
-                        : "Closes this import without adding unchecked places"
-                )
+            bottomActionBar
+        }
+    }
+
+    @ViewBuilder
+    private var reviewBodyContent: some View {
+        if let receipt = displayedReceipt {
+            completionContent(receipt)
+        } else if reviewPlan.processingCount > 0 {
+            resolvingContent
+        } else if showsDetailedReview {
+            reviewContent
+        } else {
+            importCompleteContent
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var doneToolbarContent: some ToolbarContent {
+        if showsDoneToolbarButton {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: onDone)
+                    .fontWeight(.bold)
             }
         }
-        .sheet(item: $candidatePickerItem) { item in
-            PlaceImportCandidatePicker(
-                item: item,
-                selectionAction: { candidateID in
-                    importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
-                },
-                quickSaveAction: { candidateID, status in
-                    importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
-                    importStore.setStagedStatus(status, itemID: item.id)
+    }
+
+    @ToolbarContentBuilder
+    private var reviewBackToolbarContent: some ToolbarContent {
+        if showsReviewBackToolbarButton {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    showsDetailedReview = false
+                } label: {
+                    Label("Import complete", systemImage: "chevron.left")
                 }
+            }
+        }
+    }
+
+    private var showsDoneToolbarButton: Bool {
+        displayedReceipt != nil || (!showsDetailedReview && reviewPlan.processingCount == 0)
+    }
+
+    private var showsReviewBackToolbarButton: Bool {
+        displayedReceipt == nil && showsDetailedReview
+    }
+
+    @ViewBuilder
+    private var bottomActionBar: some View {
+        if displayedReceipt == nil,
+           reviewPlan.processingCount == 0,
+           let title = bottomActionTitle {
+            WanderPrimaryButton(
+                title: isSaving ? "Saving…" : title,
+                systemImage: isSaving ? nil : bottomActionSystemImage,
+                isDisabled: isSaving,
+                tone: .espressoConfirmation,
+                action: primaryBottomAction
+            )
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, WanderTheme.spacing2)
+            .background(WanderTheme.canvasWarm.color.opacity(0.97))
+            .accessibilityHint(
+                reviewPlan.committableCount > 0
+                    ? "Adds only the checked places that are ready"
+                    : "Closes this import without adding unchecked places"
             )
         }
-        .sheet(item: $rescueItem) { item in
-            PlaceImportRescueScreen(
-                item: item,
-                searchAction: { name, area in
-                    await importStore.previewManualSearch(itemID: item.id, name: name, area: area)
-                },
-                confirmationAction: { name, area, candidates, selectedCandidateID in
-                    importStore.confirmManualSearch(
-                        itemID: item.id,
-                        name: name,
-                        area: area,
-                        candidates: candidates,
-                        selectedCandidateID: selectedCandidateID
-                    )
+    }
+
+    private var reviewPresentation: some View {
+        reviewSurface
+            .sheet(item: $candidatePickerItem) { item in
+                PlaceImportCandidatePicker(
+                    item: item,
+                    selectionAction: { candidateID in
+                        importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
+                    },
+                    quickSaveAction: { candidateID, status in
+                        importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
+                        importStore.setStagedStatus(status, itemID: item.id)
+                    }
+                )
+            }
+            .sheet(item: $rescueItem) { item in
+                PlaceImportRescueScreen(
+                    item: item,
+                    searchAction: { name, area in
+                        await importStore.previewManualSearch(itemID: item.id, name: name, area: area)
+                    },
+                    confirmationAction: { name, area, candidates, selectedCandidateID in
+                        importStore.confirmManualSearch(
+                            itemID: item.id,
+                            name: name,
+                            area: area,
+                            candidates: candidates,
+                            selectedCandidateID: selectedCandidateID
+                        )
+                    }
+                )
+            }
+            .sheet(item: $saveRoute, onDismiss: {
+                store.saveFlowDidDismiss(.saveSheet)
+            }) { route in
+                MapPlaceSaveFlowSheet(context: route.context) { submission in
+                    await saveOptionalDetails(submission, itemID: route.itemID)
+                } onRemove: { context in
+                    await removeOptionalDetailsSave(context, itemID: route.itemID)
                 }
-            )
-        }
-        .sheet(item: $saveRoute, onDismiss: {
-            store.saveFlowDidDismiss(.saveSheet)
-        }) { route in
-            MapPlaceSaveFlowSheet(context: route.context) { submission in
-                await saveOptionalDetails(submission, itemID: route.itemID)
-            } onRemove: { context in
-                await removeOptionalDetailsSave(context, itemID: route.itemID)
             }
-        }
-        .task(id: duplicateSignature) {
-            importStore.reconcileDuplicates(with: existingPlaces)
-        }
-        .onAppear {
-            importStore.resumePendingImports()
-            markDisplayedReceiptsPresented()
-        }
-        .onChange(of: displayedReceipt?.id) { _, _ in
-            markDisplayedReceiptsPresented()
-        }
-        .onChange(of: needsReviewItems.count) { previousCount, nextCount in
-            if showsDetailedReview, previousCount > 0, nextCount == 0 {
-                showsDetailedReview = false
-            }
-        }
-        .onChange(of: auth.state) { _, _ in
-            guard isSaving else { return }
-            saveTask?.cancel()
-            saveTask = nil
-            isSaving = false
-        }
-        .onDisappear {
-            saveTask?.cancel()
-            saveTask = nil
-            isSaving = false
-        }
-        .interactiveDismissDisabled(isSaving)
     }
 
     private var navigationTitle: String {
@@ -1899,6 +1931,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     sourceType: item.source.addSourceType,
                     ratingScore: status == .been ? item.stagedRatingScore : nil,
                     visitedAt: status == .been ? (item.stagedVisitedAt ?? .now) : .now,
+                    requestsProductUpsell: false,
                     backend: remoteBackend
                 )
                 guard canContinueCommit(expectedUserID: expectedUserID) else { return }
@@ -2681,6 +2714,7 @@ struct PlaceImportInboxScreen: View {
                     visibility: .selfOnly,
                     note: nil,
                     sourceType: item.source.addSourceType,
+                    requestsProductUpsell: false,
                     backend: remoteBackend
                 )
                 await add(userPlaceID: result.userPlaceID, to: destinationList, backend: remoteBackend)
