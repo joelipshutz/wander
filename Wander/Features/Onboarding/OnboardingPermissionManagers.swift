@@ -1,6 +1,7 @@
 import Contacts
 import CoreLocation
 import Foundation
+import UserNotifications
 
 enum OnboardingLocationPermissionAction: Equatable {
     case skip
@@ -26,7 +27,11 @@ enum OnboardingLocationPermissionPolicy {
     }
 
     static func primaryTitle(for status: CLAuthorizationStatus) -> String {
-        switch action(for: status) {
+        primaryTitle(for: action(for: status))
+    }
+
+    static func primaryTitle(for action: OnboardingLocationPermissionAction) -> String {
+        switch action {
         case .skip, .request:
             "Continue"
         case .openSettings:
@@ -34,6 +39,40 @@ enum OnboardingLocationPermissionPolicy {
         case .continueWithoutAccess:
             "Continue without location"
         }
+    }
+}
+
+enum OnboardingNotificationPermissionAction: Equatable {
+    case request
+    case enable
+    case openSettings
+}
+
+enum OnboardingNotificationPermissionPolicy {
+    static func action(for status: UNAuthorizationStatus) -> OnboardingNotificationPermissionAction {
+        switch status {
+        case .notDetermined:
+            .request
+        case .denied:
+            .openSettings
+        case .authorized, .provisional, .ephemeral:
+            .enable
+        @unknown default:
+            .enable
+        }
+    }
+
+    static func primaryTitle(for status: UNAuthorizationStatus) -> String {
+        switch action(for: status) {
+        case .request, .enable:
+            "Continue"
+        case .openSettings:
+            "Open Settings"
+        }
+    }
+
+    static func allowsSecondaryAction(for status: UNAuthorizationStatus) -> Bool {
+        action(for: status) != .request
     }
 }
 

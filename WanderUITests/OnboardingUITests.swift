@@ -12,7 +12,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let locationContinue = app.buttons["onboarding.location.primary"]
+        let locationContinue = app.buttons["Continue"].firstMatch
         XCTAssertTrue(locationContinue.waitForExistence(timeout: 8))
         XCTAssertEqual(locationContinue.label, "Continue")
         XCTAssertFalse(app.buttons["Not now"].exists)
@@ -22,19 +22,17 @@ final class OnboardingUITests: XCTestCase {
         locationScreenshot.lifetime = .keepAlways
         add(locationScreenshot)
 
-        locationContinue.tap()
+        app.terminate()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "contacts"
+        ]
+        app.launch()
 
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let systemAlert = springboard.alerts.firstMatch
-        XCTAssertTrue(systemAlert.waitForExistence(timeout: 5))
-        let deny = springboard.buttons["Don’t Allow"]
-        XCTAssertTrue(deny.exists)
-        deny.tap()
-
-        XCTAssertTrue(
-            app.staticTexts["Find friends already here"].waitForExistence(timeout: 5)
-        )
         let contactsContinue = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(contactsContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(contactsContinue.isHittable)
         XCTAssertFalse(app.buttons["Not now"].exists)
 

@@ -809,6 +809,40 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testNotificationPermissionPolicyRequiresOneNeutralActionBeforeTheSystemPrompt() {
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.action(for: .notDetermined),
+            .request
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.primaryTitle(for: .notDetermined),
+            "Continue"
+        )
+        XCTAssertFalse(
+            OnboardingNotificationPermissionPolicy.allowsSecondaryAction(for: .notDetermined)
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.action(for: .denied),
+            .openSettings
+        )
+        XCTAssertEqual(
+            OnboardingNotificationPermissionPolicy.primaryTitle(for: .denied),
+            "Open Settings"
+        )
+        XCTAssertTrue(
+            OnboardingNotificationPermissionPolicy.allowsSecondaryAction(for: .denied)
+        )
+    }
+
+    func testCalendarPermissionPolicyUsesNeutralRequestAndSettingsRecovery() {
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "continue")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .denied), .openSettings)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "open settings")
+        XCTAssertEqual(CalendarPermissionPolicy.action(for: .fullAccess), .sync)
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "sync now")
+    }
+
     func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {
         let fallback = FirstVisitParkSuggestionPolicy.hotchkissPark
 

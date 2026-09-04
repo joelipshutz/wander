@@ -9258,12 +9258,7 @@ private struct MapLocationEducationPrompt: View {
     }
 
     private var primaryTitle: String {
-        switch permissionAction {
-        case .openSettings:
-            "Open Settings"
-        case .skip, .request, .continueWithoutAccess:
-            "Continue"
-        }
+        OnboardingLocationPermissionPolicy.primaryTitle(for: permissionAction)
     }
 }
 

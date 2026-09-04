@@ -114,6 +114,38 @@ struct CalendarReservationSyncSummary: Equatable, Sendable {
     let cancelledCount: Int
 }
 
+enum CalendarPermissionAction: Equatable {
+    case request
+    case sync
+    case openSettings
+}
+
+enum CalendarPermissionPolicy {
+    static func action(for status: EKAuthorizationStatus) -> CalendarPermissionAction {
+        switch status {
+        case .fullAccess:
+            .sync
+        case .notDetermined, .writeOnly:
+            .request
+        case .denied, .restricted:
+            .openSettings
+        @unknown default:
+            .request
+        }
+    }
+
+    static func primaryTitle(for status: EKAuthorizationStatus) -> String {
+        switch action(for: status) {
+        case .request:
+            "continue"
+        case .sync:
+            "sync now"
+        case .openSettings:
+            "open settings"
+        }
+    }
+}
+
 @MainActor
 final class CalendarReservationManager: ObservableObject {
     @Published private(set) var authorizationStatus: EKAuthorizationStatus

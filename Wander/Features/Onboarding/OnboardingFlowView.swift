@@ -778,6 +778,8 @@ private struct OnboardingNotificationView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     let analytics: AnalyticsClient
     let finish: () async -> Void
     @State private var isWorking = false
@@ -806,10 +808,24 @@ private struct OnboardingNotificationView: View {
         } footer: {
             VStack(spacing: WanderTheme.spacing1) {
                 WanderPrimaryButton(
-                    title: isWorking ? "Turning on notifications…" : "Allow notifications",
+                    title: isWorking ? "Turning on notifications…" : OnboardingNotificationPermissionPolicy.primaryTitle(
+                        for: pushNotifications.authorizationStatus
+                    ),
                     isDisabled: isWorking
                 ) {
                     Task {
+                        if OnboardingNotificationPermissionPolicy.action(
+                            for: pushNotifications.authorizationStatus
+                        ) == .openSettings {
+                            analytics.track(AnalyticsEvent(
+                                name: WanderAnalyticsEvents.onboardingPermissionResult,
+                                properties: ["permission": "notifications", "granted": "settings"]
+                            ))
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                            openURL(url)
+                            return
+                        }
+
                         isWorking = true
                         let enabled = await pushNotifications.enableNotifications(backend: backend, authState: auth.state) != nil
                         analytics.track(AnalyticsEvent(
@@ -819,17 +835,28 @@ private struct OnboardingNotificationView: View {
                         await finish()
                     }
                 }
-                Button("Not now") {
-                    analytics.track(AnalyticsEvent(
-                        name: WanderAnalyticsEvents.onboardingPermissionResult,
-                        properties: ["permission": "notifications", "granted": "skipped"]
-                    ))
-                    Task { await finish() }
+                if OnboardingNotificationPermissionPolicy.allowsSecondaryAction(
+                    for: pushNotifications.authorizationStatus
+                ) {
+                    Button("Not now") {
+                        analytics.track(AnalyticsEvent(
+                            name: WanderAnalyticsEvents.onboardingPermissionResult,
+                            properties: ["permission": "notifications", "granted": "skipped"]
+                        ))
+                        Task { await finish() }
+                    }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
+        }
+        .task {
+            await pushNotifications.refreshAuthorizationStatus()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await pushNotifications.refreshAuthorizationStatus() }
         }
     }
 }
