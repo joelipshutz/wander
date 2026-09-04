@@ -205,7 +205,7 @@ struct PlaceImportHubScreen: View {
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, alignment: .center)
             .fixedSize(horizontal: false, vertical: true)
             .background {
@@ -217,7 +217,11 @@ struct PlaceImportHubScreen: View {
                 }
             }
         }
-        .onPreferenceChange(PlaceImportHubContentHeightKey.self, perform: onContentHeightChange)
+        .onPreferenceChange(PlaceImportHubContentHeightKey.self) { height in
+            // Include the header's badge clearance; the presenter adds the
+            // same 44pt control row it reserved for the previous toolbar.
+            onContentHeightChange(height + 12)
+        }
         .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
         .navigationTitle("")
@@ -228,23 +232,36 @@ struct PlaceImportHubScreen: View {
         } message: {
             Text(errorMessage ?? "Try again.")
         }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    if let cancelAction {
-                        cancelAction()
-                    } else {
-                        dismiss()
-                    }
-                } label: {
-                    Image(systemName: "xmark")
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            importHeader
+        }
+    }
+
+    // A native toolbar clips badges to its content bounds. Keep the same
+    // 44pt glass controls in the sheet so badges can straddle their borders.
+    private var importHeader: some View {
+        HStack {
+            Button {
+                isInputFocused = false
+                if let cancelAction {
+                    cancelAction()
+                } else {
+                    dismiss()
                 }
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .accessibilityLabel("Close import")
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 20, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .wanderGlassCapsule(tone: .neutral)
             }
-            ToolbarItemGroup(placement: .primaryAction) {
+            .foregroundStyle(WanderTheme.textMuted.color)
+            .accessibilityLabel("Close import")
+            Spacer()
+            HStack(spacing: 0) {
                 Button(action: inboxAction) {
-                    historyIcon
+                    Image(systemName: "clock.arrow.circlepath")
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("Import history")
                 .accessibilityValue("\(importStore.recentImportBadgeCount) imports matching or awaiting review")
@@ -254,32 +271,47 @@ struct PlaceImportHubScreen: View {
                     openURL(ImportHelpDestination.url)
                 } label: {
                     Image(systemName: "questionmark")
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("Import Help")
                 .accessibilityHint("Shows where to find links in each supported app")
             }
+            .font(.system(size: 21, weight: .medium))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .wanderGlassCapsule(tone: .neutral)
+            .overlay(alignment: .topLeading) {
+                historyBadge
+                    // The first 44pt button ends here. Center the badge on
+                    // that top-right border, outside the glass background.
+                    .alignmentGuide(.leading) { $0.width / 2 - 44 }
+                    .alignmentGuide(.top) { $0.height / 2 }
+                    .allowsHitTesting(false)
+            }
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, WanderTheme.spacing4)
+        .frame(height: 44)
+        .padding(.top, 12)
     }
 
     private var canStart: Bool {
         !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var historyIcon: some View {
-        Image(systemName: "clock.arrow.circlepath")
-            .frame(width: 44, height: 44)
-            .overlay(alignment: .topTrailing) {
-                if importStore.recentImportBadgeCount > 0 {
-                    Text(importStore.recentImportBadgeCount.formatted())
-                        .font(.system(size: 10, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 17, minHeight: 17)
-                        .background(WanderTheme.terracottaDark.color, in: Capsule())
-                        .accessibilityHidden(true)
-                }
-            }
+    @ViewBuilder
+    private var historyBadge: some View {
+        if importStore.recentImportBadgeCount > 0 {
+            Text(importStore.recentImportBadgeCount.formatted())
+                .font(.system(size: 10, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 20, minHeight: 20)
+                .background(WanderTheme.terracottaDark.color, in: Capsule())
+                .overlay(Capsule().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
     }
 
     private var errorBinding: Binding<Bool> {
@@ -393,6 +425,7 @@ struct PlaceImportCompletionBanner: View {
                 .padding(.leading, WanderTheme.spacing3)
             }
             .accessibilityLabel("\(notice.bannerTitle). \(notice.bannerDetail). Review import")
+            .accessibilityIdentifier("import.notice.review")
             .padding(.trailing, 44)
         }
         .background(WanderTheme.surfaceRaised.color)
@@ -413,13 +446,17 @@ struct PlaceImportCompletionBanner: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(width: 12, height: 12)
-                    .padding(6)
-                    .frame(width: 44, height: 44, alignment: .topTrailing)
-                    .contentShape(Rectangle())
+                    .frame(width: 22, height: 22)
+                    .background(WanderTheme.surfaceRaised.color, in: Circle())
+                    .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 3, y: 1)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
             }
             .accessibilityLabel("Dismiss import notification")
             .accessibilityIdentifier("import.notice.dismiss")
+            .alignmentGuide(.trailing) { $0.width / 2 }
+            .alignmentGuide(.top) { $0.height / 2 }
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .contain)

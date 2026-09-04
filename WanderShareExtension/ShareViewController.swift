@@ -213,11 +213,9 @@ final class ShareViewController: UIViewController {
         linkContainer.layer.borderColor = Palette.border.cgColor
         linkContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
 
-        if #available(iOS 26.0, *) {
-            startButton.configuration = .glass()
-        } else {
-            startButton.configuration = .filled()
-        }
+        // Own the progress layers: a system glass button above the sweep
+        // washes it out. The transparent button holds only its label/icon.
+        startButton.configuration = .plain()
         startButton.configuration?.title = "Start import"
         startButton.configuration?.image = UIImage(systemName: "arrow.down.doc.fill")
         startButton.configuration?.imagePadding = 8
@@ -230,11 +228,12 @@ final class ShareViewController: UIViewController {
         startButton.accessibilityIdentifier = "share-extension-start-import"
         startButton.accessibilityHint = "Starts automatically after five seconds. Cancel import to stop."
 
-        startContainer.backgroundColor = Palette.terracotta.withAlphaComponent(0.65)
+        startContainer.backgroundColor = UIColor(white: 0.06, alpha: 1)
         startContainer.layer.cornerRadius = 27
         startContainer.clipsToBounds = true
-        // A translucent black sweep stays behind the label and keeps the CTA tappable.
-        countdownFill.backgroundColor = UIColor.black.withAlphaComponent(0.22)
+        // Translucent charcoal is visibly lighter than the black base while
+        // still reading as black; pure black over black would be invisible.
+        countdownFill.backgroundColor = UIColor(white: 0.36, alpha: 0.85)
         countdownFill.isUserInteractionEnabled = false
         countdownFill.translatesAutoresizingMaskIntoConstraints = false
         startButton.translatesAutoresizingMaskIntoConstraints = false

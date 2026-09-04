@@ -2125,20 +2125,25 @@ final class NavigationContractTests: XCTestCase {
         let importViews = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
         )
-        let historyIcon = try XCTUnwrap(importViews.components(separatedBy: "private var historyIcon: some View {").last?
+        let header = try XCTUnwrap(importViews.components(separatedBy: "private var importHeader: some View {").last?
             .components(separatedBy: "private var errorBinding").first)
-        XCTAssertTrue(historyIcon.contains(".frame(width: 44, height: 44)"))
-        XCTAssertTrue(historyIcon.contains(".overlay(alignment: .topTrailing)"))
-        XCTAssertTrue(historyIcon.contains("importStore.recentImportBadgeCount"))
-        XCTAssertFalse(historyIcon.contains(".offset("), "The badge should anchor to the button, not an offset icon")
+        XCTAssertTrue(importViews.contains(".toolbar(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(header.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(header.contains(".wanderGlassCapsule(tone: .neutral)"))
+        XCTAssertTrue(header.contains(".alignmentGuide(.leading) { $0.width / 2 - 44 }"))
+        XCTAssertTrue(header.contains(".alignmentGuide(.top) { $0.height / 2 }"))
+        XCTAssertTrue(header.contains("importStore.recentImportBadgeCount"))
+        XCTAssertFalse(header.contains(".clipShape("), "The badge must not be clipped with the glass capsule")
         XCTAssertTrue(importViews.contains("imports matching or awaiting review"))
 
         let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
             .components(separatedBy: "struct ImportContentFittingSheet").first)
         XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
-        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44, alignment: .topTrailing)"))
-        XCTAssertTrue(banner.contains(".frame(width: 12, height: 12)\n                    .padding(6)"))
-        XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(banner.contains(".background(WanderTheme.surfaceRaised.color, in: Circle())"))
+        XCTAssertTrue(banner.contains(".alignmentGuide(.trailing) { $0.width / 2 }"))
+        XCTAssertTrue(banner.contains(".alignmentGuide(.top) { $0.height / 2 }"))
+        XCTAssertTrue(banner.contains(".contentShape(Circle())"))
         XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
         XCTAssertTrue(banner.contains("Button(action: onOpen)"))
     }

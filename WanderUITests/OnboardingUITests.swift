@@ -10,14 +10,15 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let shareService = XCUIApplication(bundleIdentifier: "com.apple.UIKit.activityViewService")
-        let activity = shareService.buttons["rec.me"].firstMatch
+        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "rec.me")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
-            let more = shareService.buttons["More"].firstMatch
+            let more = app.buttons["More"].firstMatch
             if more.exists { more.tap() }
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
+        XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
+        keepScreenshot("Share extension — countdown begins")
         let captured = app.staticTexts["Captured: 1"]
         XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
         XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
@@ -32,13 +33,16 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertTrue(dismiss.waitForExistence(timeout: 15))
         let filters = app.buttons["map.filter.more"]
         XCTAssertTrue(filters.exists)
-        let banner = app.descendants(matching: .any)["import.notice"].firstMatch
+        let review = app.buttons["import.notice.review"]
         let filterRow = app.otherElements["map.filters"]
         // Liquid Glass accessibility bounds differ from SwiftUI's layout
         // anchor by a few points; the rendered gap should remain about 10pt.
-        XCTAssertEqual(banner.frame.minY - filterRow.frame.maxY, 10, accuracy: 3)
-        XCTAssertEqual(dismiss.frame.minY, banner.frame.minY, accuracy: 1)
-        XCTAssertEqual(dismiss.frame.maxX, banner.frame.maxX, accuracy: 1)
+        // The primary button's accessibility frame excludes its 12pt vertical
+        // content padding; the floating X is centered on the actual card edge.
+        let cardTop = review.frame.minY - 12
+        XCTAssertEqual(cardTop - filterRow.frame.maxY, 10, accuracy: 3)
+        XCTAssertEqual(dismiss.frame.midY, cardTop, accuracy: 1)
+        XCTAssertEqual(dismiss.frame.midX, review.frame.maxX + 44, accuracy: 1)
         XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
         XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
         keepScreenshot("Import notice — anchored below filters")
@@ -56,6 +60,30 @@ final class ImportFormRefinementUITests: XCTestCase {
         keepScreenshot("Import review — source retry")
     }
 
+    func testHistoryBadgeOverlapsTheGlassButtonAfterStartingAnImport() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderOpenImportHub", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let input = app.textFields["import.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        let history = app.buttons["import.history"]
+        let originalCount = Int((history.value as? String ?? "0").split(separator: " ").first ?? "0") ?? 0
+        input.tap()
+        input.typeText("REC409 badge layout fixture")
+        app.buttons["import.start"].tap()
+        let add = app.buttons["map.headerAdd"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        let shortcut = app.buttons["Import your places and lists from Google Maps, Instagram, TikTok, and more here"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 5))
+        shortcut.tap()
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        XCTAssertEqual(history.value as? String, "\(originalCount + 1) imports matching or awaiting review")
+        keepScreenshot("Recents — badge overlaps glass border")
+        history.tap()
+        XCTAssertTrue(app.navigationBars["Import history"].waitForExistence(timeout: 5))
+    }
+
     func testImportFormReturnsToCompactHeightAfterKeyboardAndDragging() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -67,6 +95,13 @@ final class ImportFormRefinementUITests: XCTestCase {
         let clipboard = app.buttons["Paste from clipboard"]
         XCTAssertTrue(input.waitForExistence(timeout: 15))
         XCTAssertTrue(clipboard.isHittable)
+        // Wait for the measured detent to replace the initial presentation
+        // height before recording the baseline or testing later openings.
+        let firstPresentationSettles = NSPredicate { _, _ in
+            app.frame.maxY - clipboard.frame.maxY < 65
+        }
+        expectation(for: firstPresentationSettles, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
         let firstTop = app.buttons["Close import"].frame.minY
         XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
         keepScreenshot("Import entry — first open")
@@ -83,6 +118,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         input.typeText("https://www.instagram.com/p/very-long-single-line-import-link-that-must-never-wrap/")
         XCTAssertEqual(input.frame.height, inputHeight, accuracy: 1)
         app.buttons["Close import"].tap()
+        XCTAssertTrue(input.waitForNonExistence(timeout: 5))
 
         for opening in 2...3 {
             XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
@@ -103,6 +139,7 @@ final class ImportFormRefinementUITests: XCTestCase {
                 .withOffset(CGVector(dx: app.frame.midX, dy: firstTop - 10))
             handle.press(forDuration: 0.1, thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -220)))
             app.buttons["Close import"].tap()
+            XCTAssertTrue(input.waitForNonExistence(timeout: 5))
         }
     }
 

@@ -497,7 +497,10 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(controller.contains("countdownFill.backgroundColor = UIColor.black.withAlphaComponent(0.22)"))
+        XCTAssertTrue(controller.contains("startButton.configuration = .plain()"))
+        XCTAssertFalse(controller.contains("startButton.configuration = .glass()"))
+        XCTAssertTrue(controller.contains("startContainer.backgroundColor = UIColor(white: 0.06, alpha: 1)"))
+        XCTAssertTrue(controller.contains("countdownFill.backgroundColor = UIColor(white: 0.36, alpha: 0.85)"))
         XCTAssertTrue(controller.contains("countdownFill.leftAnchor.constraint(equalTo: startContainer.leftAnchor)"))
         XCTAssertTrue(controller.contains("countdownFill.topAnchor.constraint(equalTo: startContainer.topAnchor)"))
         XCTAssertTrue(controller.contains("countdownFill.bottomAnchor.constraint(equalTo: startContainer.bottomAnchor)"))
