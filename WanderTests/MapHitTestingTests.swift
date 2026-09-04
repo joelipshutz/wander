@@ -2281,7 +2281,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("map.locationEducation.allow"))
         XCTAssertTrue(map.contains("map.locationEducation.cancel"))
         XCTAssertTrue(map.contains("if permissionAction != .request"))
-        XCTAssertTrue(map.contains("case .skip, .request, .continueWithoutAccess:"))
+        XCTAssertTrue(
+            map.contains("OnboardingLocationPermissionPolicy.primaryTitle(for: permissionAction)")
+        )
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
         XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
