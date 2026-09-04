@@ -332,39 +332,7 @@ struct YourMapPrototypeScreen: View {
 
 
     private var locationFootprintCard: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("cities & countries", systemImage: "globe.americas.fill")
-                    .font(WanderTypography.editorialCardTitle)
-                Spacer()
-                Text("\(insights.cityBreakdown.count) · \(insights.countryBreakdown.count)")
-                    .font(WanderTypography.metadata.monospacedDigit())
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            ForEach(insights.cityBreakdown.prefix(4)) { item in
-                YourMapPrototypeBarRow(item: item)
-            }
-
-            ScrollView(.horizontal) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(insights.countryBreakdown) { item in
-                        Label("\(item.title) · \(item.count)", systemImage: "flag.fill")
-                            .font(WanderTypography.metadata)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(minHeight: 36)
-                            .background(WanderTheme.surfaceRaised.color, in: Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-        }
-        .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
-        .accessibilityIdentifier("yourMap.prototype.citiesCountries")
+        YourMapGeographyCard(cities: insights.cityBreakdown, countries: insights.countryBreakdown)
     }
 
     private var monthlyRhythmCard: some View {
@@ -1282,16 +1250,122 @@ private struct YourMapPrototypeCircleButton: View {
     }
 }
 
+struct YourMapGeographyCard: View {
+    let cities: [YourMapPrototypeBreakdownItem]
+    let countries: [YourMapPrototypeBreakdownItem]
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = false
+
+    private var canExpand: Bool { max(cities.count, countries.count) > 5 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing4) {
+                column("cities", items: cities, identifier: "city")
+                column("countries", items: countries, identifier: "country")
+            }
+            .overlay {
+                Rectangle()
+                    .fill(WanderTheme.borderHairline.color.opacity(0.7))
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
+            }
+
+            if canExpand {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.28)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Text(isExpanded ? "See less" : "See more")
+                                .font(WanderTypography.metadata)
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(width: 25, height: 25)
+                                .background(WanderTheme.surfaceSand.color, in: Circle())
+                        }
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isExpanded ? "Show top five cities and countries" : "Show top ten cities and countries")
+                    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                    .accessibilityHint("Updates this section in place")
+                    .accessibilityIdentifier("yourMap.prototype.geography.expand")
+                }
+                .padding(.top, WanderTheme.spacing1)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing4)
+        .padding(.bottom, canExpand ? 6 : WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .strokeBorder(WanderTheme.borderHairline.color)
+        }
+        .accessibilityIdentifier("yourMap.prototype.citiesCountries")
+        .onChange(of: canExpand) { _, canExpand in
+            if !canExpand { isExpanded = false }
+        }
+    }
+
+    private func column(_ title: String, items: [YourMapPrototypeBreakdownItem], identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
+                    Text(title).font(WanderTypography.editorialCardTitle)
+                    Spacer(minLength: 0)
+                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(title).font(WanderTypography.editorialCardTitle)
+                    Text(items.count.formatted()).font(WanderTypography.metadata.monospacedDigit())
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+
+            if items.isEmpty {
+                Text("No \(title) yet")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 14) {
+                    ForEach(items.prefix(isExpanded ? 10 : 5)) { item in
+                        YourMapPrototypeBarRow(item: item, minimumFraction: 0)
+                            .accessibilityLabel("\(item.title), \(Int((item.fraction * 100).rounded())) percent, \(item.count) places")
+                            .accessibilityIdentifier("yourMap.prototype.\(identifier)Row.\(item.id)")
+                            .transition(.opacity)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
 private struct YourMapPrototypeBarRow: View {
     let item: YourMapPrototypeBreakdownItem
+    var minimumFraction = 0.03
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(item.title)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text("\(Int((item.fraction * 100).rounded()))%")
                     .monospacedDigit()
+                    .fixedSize()
             }
             .font(WanderTypography.metadata)
             GeometryReader { geometry in
@@ -1300,7 +1374,7 @@ private struct YourMapPrototypeBarRow: View {
                     .overlay(alignment: .leading) {
                         Capsule()
                             .fill(categoryColor(item.title))
-                            .frame(width: geometry.size.width * max(item.fraction, 0.03))
+                            .frame(width: geometry.size.width * max(item.fraction, minimumFraction))
                     }
             }
             .frame(height: 6)

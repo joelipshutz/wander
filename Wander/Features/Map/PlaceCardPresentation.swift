@@ -147,21 +147,10 @@ enum PlaceCardPresentation {
 
 enum PlaceProfileVerticalMotionStyle {
     static let duration: TimeInterval = 0.52
-    static let presentationAnimation = Animation.timingCurve(
-        0.22,
-        1,
-        0.36,
-        1,
-        duration: duration
-    )
-    static let dismissalAnimation = Animation.timingCurve(
-        0.4,
-        0,
-        0.6,
-        1,
-        duration: duration
-    )
-    static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
+    static let presentationControlPoint1 = CGPoint(x: 0.22, y: 1)
+    static let presentationControlPoint2 = CGPoint(x: 0.36, y: 1)
+    static let dismissalControlPoint1 = CGPoint(x: 0.4, y: 0)
+    static let dismissalControlPoint2 = CGPoint(x: 0.6, y: 1)
 }
 
 struct PlaceCardPressStyle: ButtonStyle {

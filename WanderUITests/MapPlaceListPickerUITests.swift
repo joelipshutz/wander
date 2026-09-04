@@ -2,6 +2,70 @@ import XCTest
 
 @MainActor
 final class MapPlaceListPickerUITests: XCTestCase {
+    func testDiscoverResultOpensSharedPickerAndPreservesMembershipOnReturn() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab", "discover",
+        ]
+        app.launch()
+
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 8))
+        launcher.tap()
+        let searchField = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        searchField.tap()
+        searchField.typeText("coffee\n")
+
+        let addButton = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "discover.addToList.")
+        ).firstMatch
+        XCTAssertTrue(addButton.waitForExistence(timeout: 8))
+        let resultButtonID = addButton.identifier
+        addButton.tap()
+
+        let picker = app.otherElements["map-list-picker.sheet"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["add to lists"].exists)
+        XCTAssertTrue(app.buttons["map-list-picker.new-list"].exists)
+        capture("REC-414 Discover shared list picker")
+
+        let availableList = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND enabled == true",
+            "map-list-picker.list."
+        )).firstMatch
+        XCTAssertTrue(availableList.waitForExistence(timeout: 5))
+        let listID = availableList.identifier
+        availableList.tap()
+        XCTAssertEqual(app.buttons["map-list-picker.apply"].label, "Add to 1 list")
+        app.buttons["map-list-picker.cancel"].tap()
+
+        XCTAssertTrue(app.buttons[resultButtonID].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts["List updated"].exists)
+        app.buttons[resultButtonID].tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["map-list-picker.apply"].label, "Done")
+        XCTAssertTrue(app.buttons[listID].isEnabled)
+        app.buttons[listID].tap()
+        app.buttons["map-list-picker.apply"].tap()
+
+        let confirmation = app.alerts["List updated"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 8))
+        confirmation.buttons["OK"].tap()
+        app.buttons[resultButtonID].tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[listID].isEnabled)
+        XCTAssertTrue(app.buttons[listID].label.contains("already in list"))
+
+        app.buttons["map-list-picker.new-list"].tap()
+        XCTAssertTrue(app.textFields["LA laptop mornings"].waitForExistence(timeout: 5))
+        capture("REC-414 Discover new list entry")
+    }
+
     func testCollapsedAndFullPlaceCardsOpenTheSameListPicker() {
         let app = XCUIApplication()
         app.launchArguments = [

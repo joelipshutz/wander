@@ -179,6 +179,29 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
+    func testColocatedMarkersCyclePastTheCurrentSelection() {
+        XCTAssertEqual(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-b",
+                candidateIDs: ["place-c", "place-a", "place-b"]
+            ),
+            "place-c"
+        )
+        XCTAssertEqual(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-c",
+                candidateIDs: ["place-c", "place-a", "place-b"]
+            ),
+            "place-a"
+        )
+        XCTAssertNil(
+            MapHitTesting.nextColocatedMarkerID(
+                selectedID: "place-a",
+                candidateIDs: ["place-a"]
+            )
+        )
+    }
+
     func testSearchRankingUsesMapCenterWhileDistanceUsesCachedViewerLocation() {
         let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
@@ -1872,9 +1895,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("NativeMapView("))
         XCTAssertTrue(map.contains("private final class NativeMapAnnotation: NSObject, MKAnnotation"))
         XCTAssertTrue(map.contains("mapView.addAnnotations(addedAnnotations)"))
-        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
         XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
-        XCTAssertTrue(map.contains("zPriority = .max"))
+        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max : .defaultUnselected"))
+        XCTAssertTrue(map.contains("displayPriority = descriptor.isSelected ? .required : .defaultHigh"))
+        XCTAssertFalse(map.contains("selectedReuseIdentifier"))
+        XCTAssertFalse(map.contains("NativeMapClusterAnnotationView"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
     }
@@ -1890,6 +1915,10 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("bounceRevision: candidate.id == selectedSearchCandidateID"))
         XCTAssertTrue(map.contains("if descriptor.bounceRevision != bounceRevision"))
         XCTAssertTrue(map.contains("transform = CGAffineTransform(scaleX: 0.82, y: 0.82)"))
+        XCTAssertTrue(map.contains("animateEntrance("))
+        XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
+        XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
+        XCTAssertTrue(map.contains("paragraphStyle.lineBreakMode = .byTruncatingTail"))
         XCTAssertTrue(map.contains("UIView.animate("))
         XCTAssertTrue(map.contains("self.transform = .identity"))
     }
@@ -1910,6 +1939,8 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("private var renderedViewport: MapViewport?"))
         XCTAssertTrue(map.contains("MapAnnotationViewportPolicy.shouldRefresh("))
         XCTAssertTrue(map.contains("descriptor.isSelected"))
+        XCTAssertFalse(map.contains("replacedAnnotations"))
+        XCTAssertFalse(map.contains("MKClusterAnnotation"))
         XCTAssertFalse(map.contains("@State private var renderedAnnotationViewport"))
         XCTAssertFalse(map.contains("MapAnnotationDensityPolicy"))
     }
@@ -2005,10 +2036,9 @@ final class MapSelectionMotionTests: XCTestCase {
         let map = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        XCTAssertTrue(map.contains("isSelected: highlightsCompactSelection"))
-        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
-        XCTAssertTrue(map.contains("zPriority = .max"))
-        XCTAssertTrue(map.contains("displayPriority = .required"))
+        XCTAssertTrue(map.contains("let isSelected = highlightsCompactSelection"))
+        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max : .defaultUnselected"))
+        XCTAssertTrue(map.contains("displayPriority = descriptor.isSelected ? .required : .defaultHigh"))
         XCTAssertTrue(map.contains("drawTitle("))
         XCTAssertTrue(map.contains("scheduleEmptyMapTapDismissal()"))
     }
@@ -2060,8 +2090,10 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(continuousHandler.contains("registerMapZoom"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("MapSelectionLifetimePolicy.shouldDismiss"))
-        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
         XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
+        XCTAssertTrue(map.contains("mapView.convert(annotation.coordinate, toPointTo: mapView)"))
+        XCTAssertTrue(map.contains("MapHitTesting.nextColocatedMarkerID"))
+        XCTAssertTrue(map.contains("annotation.descriptor.isSelected"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
@@ -2101,8 +2133,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("isSelected ? title : \"\""))
         XCTAssertTrue(map.contains("private static let imageCache = NSCache<NSString, UIImage>()"))
         XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
-        XCTAssertTrue(map.contains("case Self.selectedReuseIdentifier:"))
-        XCTAssertTrue(map.contains("zPriority = .max"))
+        XCTAssertTrue(map.contains("zPriority = descriptor.isSelected ? .max : .defaultUnselected"))
+        XCTAssertFalse(map.contains("selectedReuseIdentifier"))
+        XCTAssertFalse(map.contains("NativeMapClusterAnnotationView"))
         XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
         XCTAssertFalse(map.contains(".position(point)"))
     }
@@ -2169,29 +2202,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(Set(rendered.map(\.key)).count, groups.count)
         XCTAssertEqual(rendered.last?.key, selectedKey)
     }
-    func testClusterZoomKeepsCoLocatedPlacesAtNeighborhoodScale() throws {
-        let coordinate = CLLocationCoordinate2D(
-            latitude: 34.095_315,
-            longitude: -118.228_921
-        )
-        let colocated = Array(repeating: coordinate, count: 7)
-
-        let region = try XCTUnwrap(
-            NativeMapClusterZoomPolicy.region(fitting: colocated)
+    func testMapUsesIndividualPinsInsteadOfCondensedClusters() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
 
-        XCTAssertEqual(
-            region.span.latitudeDelta,
-            NativeMapClusterZoomPolicy.minimumLatitudeDelta,
-            accuracy: 0.000_001
-        )
-        XCTAssertEqual(
-            region.span.longitudeDelta,
-            NativeMapClusterZoomPolicy.minimumLongitudeDelta,
-            accuracy: 0.000_001
-        )
-        XCTAssertEqual(region.center.latitude, coordinate.latitude, accuracy: 0.000_001)
-        XCTAssertEqual(region.center.longitude, coordinate.longitude, accuracy: 0.000_001)
+        XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
+        XCTAssertFalse(map.contains("NativeMapClusterAnnotationView"))
+        XCTAssertFalse(map.contains("MKClusterAnnotation"))
+        XCTAssertFalse(map.contains("recme.map.cluster"))
     }
     func testREC360PhysicalDeviceRegressionFixtureRequiresFrontmostSingleTapSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
@@ -2484,6 +2506,7 @@ final class MapFilterSelectionTests: XCTestCase {
 
     func testPinEntranceStaysInsideTheShortMotionBudget() {
         XCTAssertEqual(MapPinEntranceStyle.duration, 0.40, accuracy: 0.001)
+        XCTAssertEqual(MapPinEntranceStyle.maximumAnimatedPinCount, 12)
         XCTAssertGreaterThanOrEqual(MapPinEntranceStyle.hiddenScale, 0.70)
         XCTAssertLessThan(MapPinEntranceStyle.hiddenScale, 0.80)
         XCTAssertGreaterThan(MapPinEntranceStyle.hiddenVerticalOffset, 0)
@@ -2492,6 +2515,10 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: -1), 0, accuracy: 0.001)
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 1), 0.015, accuracy: 0.001)
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 100), 0.06, accuracy: 0.001)
+        XCTAssertTrue(MapPinEntranceStyle.shouldAnimate(index: 0, totalCount: 120))
+        XCTAssertTrue(MapPinEntranceStyle.shouldAnimate(index: 11, totalCount: 120))
+        XCTAssertFalse(MapPinEntranceStyle.shouldAnimate(index: 12, totalCount: 120))
+        XCTAssertFalse(MapPinEntranceStyle.shouldAnimate(index: -1, totalCount: 120))
     }
 
     func testPinEntrancePresentationTransitionsFromCapturedHiddenState() throws {
@@ -2556,22 +2583,15 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(map.contains("transitionMapPins("))
         XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
         XCTAssertTrue(map.contains("private final class NativeMapPinAnnotationView"))
+        XCTAssertTrue(map.contains("private var presentedAnnotationID: String?"))
+        XCTAssertTrue(map.contains("let shouldAnimateEntrance = presentedAnnotationID != descriptor.id"))
+        XCTAssertTrue(map.contains("animateEntrance("))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
         XCTAssertTrue(map.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
-        let pinModifier = try XCTUnwrap(
-            map.components(separatedBy: "private struct MapPinEntranceModifier: ViewModifier {").last?
-                .components(separatedBy: "enum MapStatusFilter").first
-        )
-        XCTAssertTrue(
-            pinModifier.contains(
-                "@State private var presentation = MapPinEntrancePresentation()"
-            )
-        )
-        XCTAssertTrue(pinModifier.contains(".onAppear"))
-        XCTAssertTrue(pinModifier.contains(".onChange(of: isVisible)"))
-        XCTAssertTrue(pinModifier.contains("presentation.setVisible(visible)"))
-        XCTAssertTrue(pinModifier.contains("withAnimation("))
+        XCTAssertTrue(map.contains("guard !reduceMotion else"))
+        XCTAssertTrue(map.contains("alpha = 0"))
+        XCTAssertTrue(map.contains("withDuration: MapPinEntranceStyle.springDuration"))
         XCTAssertTrue(map.contains("attachGestureObservers(to mapView: MKMapView)"))
         XCTAssertFalse(map.contains("@State private var mapPressLocation"))
         XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
