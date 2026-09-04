@@ -76,6 +76,11 @@ final class OnboardingUITests: XCTestCase {
 
     func testActualFeedContactInvitePrimerUsesSingleNeutralAction() {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .contacts)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .contacts)
+        }
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseEphemeralEmptyFixtures",
