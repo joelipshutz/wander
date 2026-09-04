@@ -406,7 +406,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.monthHeatMap"))
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.citiesCountries"))
         XCTAssertTrue(yourMapScreen.contains("yourMap.prototype.returnMagnets"))
-        XCTAssertTrue(yourMapScreen.contains("Anyone with the link"))
+        XCTAssertFalse(yourMapScreen.contains("Anyone with the link"))
         XCTAssertFalse(yourMapScreen.contains("Share with"))
         XCTAssertFalse(yourMapScreen.contains("private var lensDeck"))
         XCTAssertFalse(yourMapScreen.contains("private var yearComparisonPicker"))
