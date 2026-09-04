@@ -174,6 +174,18 @@ in-memory `APIFY_TOKEN`; that header is never serialized. Profile-handle
 enrichment and Gemini are still live provider calls. Omit `--fixture-dir` only
 when a fresh main acquisition is intentionally wanted.
 
+For paired model experiments, `frozen-inputs.ts` wraps the exported production
+operations. Prepare every fixture, media asset, and requested profile batch
+through `frozen.operations`, then await `frozen.seal()` before calling either
+model. Pass the same sealed operations to each diagnostic run. The helper caches
+inputs in memory, clones bytes for each consumer, and returns SHA-256 hashes of
+normalized acquisitions, media bytes, and aliases. It rejects incomplete media,
+changed acquisitions, unknown inputs after sealing, and more than 256 MiB of
+retained media. It never persists credentials or media. A failed preparation
+must stop the comparison before any model call. Report these runs as warmed-input
+understanding measurements, not end-to-end acquisition latency. Provider spending
+limits and independent ground-truth scoring remain the caller's responsibility.
+
 The output directory must be new or already private to its owner. The runner
 refuses to overwrite an existing manifest or result set. It writes only:
 

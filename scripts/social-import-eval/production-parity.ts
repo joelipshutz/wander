@@ -178,7 +178,7 @@ class DiagnosticError extends Error {
   }
 }
 
-const productionOperations: DiagnosticOperations = {
+export const productionOperations: DiagnosticOperations = {
   parseSocialSource,
   acquireWithApify,
   normalizeApifyDataset,
@@ -572,7 +572,7 @@ async function runCase(
   }
 }
 
-function prioritizedProfileUsernames(
+export function prioritizedProfileUsernames(
   caption: string,
   operations: DiagnosticOperations,
 ): string[] {
@@ -616,7 +616,7 @@ function fallbackGrounding(
   };
 }
 
-function parseCorpus(
+export function parseCorpus(
   text: string,
   operations: DiagnosticOperations,
 ): PreparedCase[] {
@@ -652,7 +652,7 @@ function parseCorpus(
   });
 }
 
-async function loadFixtureEvidence(
+export async function loadFixtureEvidence(
   fixtureDirectory: string,
   testCase: PreparedCase,
   fileSystem: DiagnosticFileSystem,
@@ -878,7 +878,7 @@ async function sha256(value: string): Promise<string> {
     .join("");
 }
 
-function productionRuntime(): RuntimeDependencies {
+export function productionRuntime(): RuntimeDependencies {
   return {
     fetch,
     env: (name) => Deno.env.get(name),
@@ -889,7 +889,7 @@ function productionRuntime(): RuntimeDependencies {
   };
 }
 
-function denoFileSystem(): DiagnosticFileSystem {
+export function denoFileSystem(): DiagnosticFileSystem {
   return {
     readTextFile: (path) => Deno.readTextFile(path),
     readOptionalTextFile: async (path) => {
