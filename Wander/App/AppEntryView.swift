@@ -61,6 +61,7 @@ struct AppEntryView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @ObservedObject var coordinator: AppEntryCoordinator
 
     let analytics: AnalyticsClient
@@ -139,6 +140,20 @@ struct AppEntryView: View {
         .environmentObject(auth)
         .environmentObject(backend)
         .environmentObject(pushNotifications)
+        .environmentObject(productUpsells)
+        .allowsHitTesting(productUpsells.activePresentation == nil)
+        .accessibilityHidden(productUpsells.activePresentation != nil)
+        .overlay {
+            if let presentation = productUpsells.activePresentation {
+                ProductUpsellScreen(
+                    presentation: presentation,
+                    analytics: analytics
+                )
+                .transition(.opacity)
+                .zIndex(1_000)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: productUpsells.activePresentation?.id)
         .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
             auth.nativeAuthDidDismiss()
         }) {
@@ -147,6 +162,8 @@ struct AppEntryView: View {
         }
         .task {
             analyticsLifecycle.recordLaunch()
+            productUpsells.bind(to: auth.state.session?.userID)
+            pushNotifications.bindNotificationPreferences(to: auth.state.session?.userID)
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-WanderForceSignedOut") {
                 try? await auth.signOut()
@@ -156,6 +173,8 @@ struct AppEntryView: View {
             didFinishInitialResolution = true
         }
         .onChange(of: auth.state) { _, state in
+            productUpsells.bind(to: state.session?.userID)
+            pushNotifications.bindNotificationPreferences(to: state.session?.userID)
             guard didFinishInitialResolution else { return }
             coordinator.authStateChanged(state)
         }

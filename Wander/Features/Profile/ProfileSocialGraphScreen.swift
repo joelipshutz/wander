@@ -153,6 +153,9 @@ struct ProfileSocialGraphScreen: View {
             } message: {
                 Text("Their places will stop appearing in your social map.")
             }
+            .blocksProductUpsells(
+                while: selectedProfileID != nil || pendingUnfollow != nil
+            )
         }
     }
 

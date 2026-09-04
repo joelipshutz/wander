@@ -59,7 +59,14 @@ final class ClerkAuthService: AuthSessionProviding {
         self.resolveActiveSessionID = resolveSessionID
         self.sessionCache = sessionCache
         self.nativeAuthSessionFenceStore = nativeAuthSessionFenceStore
-        self.nativeAuthSessionFence = nativeAuthSessionFenceStore.load()
+        switch nativeAuthSessionFenceStore.load() {
+        case .missing:
+            self.nativeAuthSessionFence = nil
+        case .fence(let fence):
+            self.nativeAuthSessionFence = fence
+        case .invalid:
+            self.nativeAuthSessionFence = .blockUncorrelated
+        }
         self.sessionAdoptionRetryDelaysNanoseconds = sessionAdoptionRetryDelaysNanoseconds
         self.sessionAdoptionTimeoutNanoseconds = sessionAdoptionTimeoutNanoseconds
         self.sessionAdoptionSleeper = sessionAdoptionSleeper
@@ -255,7 +262,7 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
 
-        setNativeAuthSessionFence(.blockUncorrelated)
+        try prepareForInteractiveAuth()
         let result: TransferFlowResult
         do {
             switch (provider, mode) {
@@ -343,11 +350,15 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.sessionUnavailable
         }
         pendingNativeAuthSessionID = expectedSessionID
+        defer { pendingNativeAuthSessionID = nil }
         // Keep this fence after a failed or cancelled attempt. A later generic
         // foreground refresh may accept only the session this Clerk result
         // created, never a different active account.
-        setNativeAuthSessionFence(.require(expectedSessionID))
-        defer { pendingNativeAuthSessionID = nil }
+        guard setNativeAuthSessionFence(.require(expectedSessionID)) else {
+            sessionCache.save(nil)
+            state = .signedOut
+            throw AuthSessionError.sessionUnavailable
+        }
 
         let deadline = DispatchTime.now().uptimeNanoseconds
             &+ sessionAdoptionTimeoutNanoseconds
@@ -444,9 +455,21 @@ final class ClerkAuthService: AuthSessionProviding {
         return deadline > now ? deadline - now : 0
     }
 
-    private func setNativeAuthSessionFence(_ fence: NativeAuthSessionFence?) {
-        nativeAuthSessionFence = fence
-        nativeAuthSessionFenceStore.save(fence)
+    func prepareForInteractiveAuth() throws {
+        guard setNativeAuthSessionFence(.blockUncorrelated) else {
+            sessionCache.save(nil)
+            state = .signedOut
+            throw AuthSessionError.sessionUnavailable
+        }
+    }
+
+    @discardableResult
+    private func setNativeAuthSessionFence(_ fence: NativeAuthSessionFence?) -> Bool {
+        let didPersist = nativeAuthSessionFenceStore.save(fence)
+        if didPersist || fence != nil {
+            nativeAuthSessionFence = fence
+        }
+        return didPersist
     }
 
     private struct SessionAdoptionTimeoutError: Error {}
@@ -462,8 +485,8 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
 
+        try prepareForInteractiveAuth()
         do {
-            setNativeAuthSessionFence(.blockUncorrelated)
             switch mode {
             case .signIn:
                 let signIn = try await Clerk.shared.auth.signInWithEmailCode(
@@ -553,8 +576,8 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
 
+        try prepareForInteractiveAuth()
         do {
-            setNativeAuthSessionFence(.blockUncorrelated)
             let signIn = try await Clerk.shared.auth.signInWithPassword(
                 identifier: emailAddress,
                 password: password

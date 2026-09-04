@@ -1780,6 +1780,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     sourceType: item.source.addSourceType,
                     ratingScore: status == .been ? item.stagedRatingScore : nil,
                     visitedAt: status == .been ? (item.stagedVisitedAt ?? .now) : .now,
+                    requestsProductUpsell: false,
                     backend: remoteBackend
                 )
                 guard canContinueCommit(expectedUserID: expectedUserID) else { return }
@@ -2560,6 +2561,7 @@ struct PlaceImportInboxScreen: View {
                     visibility: .selfOnly,
                     note: nil,
                     sourceType: item.source.addSourceType,
+                    requestsProductUpsell: false,
                     backend: remoteBackend
                 )
                 await add(userPlaceID: result.userPlaceID, to: destinationList, backend: remoteBackend)

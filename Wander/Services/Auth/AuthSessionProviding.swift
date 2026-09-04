@@ -137,10 +137,19 @@ struct NativeAuthSessionFence: Codable, Equatable, Sendable {
 
 @MainActor
 struct NativeAuthSessionFenceStore {
-    let load: () -> NativeAuthSessionFence?
-    let save: (NativeAuthSessionFence?) -> Void
+    enum LoadResult: Equatable {
+        case missing
+        case fence(NativeAuthSessionFence)
+        case invalid
+    }
 
-    static let disabled = NativeAuthSessionFenceStore(load: { nil }, save: { _ in })
+    let load: () -> LoadResult
+    let save: (NativeAuthSessionFence?) -> Bool
+
+    static let disabled = NativeAuthSessionFenceStore(
+        load: { .missing },
+        save: { _ in true }
+    )
 
     static let live = file(
         url: FileManager.default
@@ -152,13 +161,32 @@ struct NativeAuthSessionFenceStore {
     static func file(url: URL) -> NativeAuthSessionFenceStore {
         NativeAuthSessionFenceStore(
             load: {
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return try? JSONDecoder().decode(NativeAuthSessionFence.self, from: data)
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    return .missing
+                }
+                guard let data = try? Data(contentsOf: url),
+                      let fence = try? JSONDecoder().decode(NativeAuthSessionFence.self, from: data)
+                else {
+                    return .invalid
+                }
+                return .fence(fence)
             },
             save: { fence in
                 guard let fence else {
-                    try? FileManager.default.removeItem(at: url)
-                    return
+                    guard FileManager.default.fileExists(atPath: url.path) else {
+                        return true
+                    }
+                    do {
+                        try FileManager.default.removeItem(at: url)
+                        return true
+                    } catch {
+                        #if DEBUG
+                        WanderDebugLog.remote.error(
+                            "native auth fence removal failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                        )
+                        #endif
+                        return false
+                    }
                 }
 
                 do {
@@ -172,12 +200,14 @@ struct NativeAuthSessionFenceStore {
                         to: url,
                         options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
                     )
+                    return true
                 } catch {
                     #if DEBUG
                     WanderDebugLog.remote.error(
                         "native auth fence write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
                     )
                     #endif
+                    return false
                 }
             }
         )

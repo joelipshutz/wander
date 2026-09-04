@@ -657,7 +657,7 @@ final class AuthSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             fenceStore.load(),
-            .require("sess_expected")
+            .fence(.require("sess_expected"))
         )
 
         let relaunchedService = ClerkAuthService(
@@ -676,7 +676,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(relaunchedService.state, .signedOut)
         XCTAssertEqual(
             fenceStore.load(),
-            .require("sess_expected")
+            .fence(.require("sess_expected"))
         )
     }
 
@@ -708,7 +708,59 @@ final class AuthSessionTests: XCTestCase {
         await service.refreshSession()
 
         XCTAssertEqual(service.state, .signedOut)
-        XCTAssertEqual(fenceStore.load(), .blockUncorrelated)
+        XCTAssertEqual(fenceStore.load(), .fence(.blockUncorrelated))
+    }
+
+    func testInteractiveAuthRefusesWhenFenceCannotPersist() {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let failingFenceStore = NativeAuthSessionFenceStore(
+            load: { .missing },
+            save: { _ in false }
+        )
+        let service = ClerkAuthService(
+            configuration: configuration,
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: failingFenceStore,
+            configureClerk: { $0 }
+        )
+
+        XCTAssertThrowsError(try service.prepareForInteractiveAuth()) { error in
+            XCTAssertEqual(error as? AuthSessionError, .sessionUnavailable)
+        }
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testMalformedNativeAuthFenceFailsClosedAfterRelaunch() async throws {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let fenceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-auth-malformed-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fenceURL) }
+        try Data("not valid JSON".utf8).write(to: fenceURL)
+        let fenceStore = NativeAuthSessionFenceStore.file(url: fenceURL)
+        XCTAssertEqual(fenceStore.load(), .invalid)
+        let session = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(session, clerkSessionID: "sess_unrelated")
+            },
+            resolveSessionID: { "sess_unrelated" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: fenceStore,
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+
+        XCTAssertEqual(service.state, .signedOut)
     }
 
     func testCompletedNativeAuthRejectsResolvedSessionFromDifferentID() async {
