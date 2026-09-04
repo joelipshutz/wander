@@ -409,6 +409,13 @@ struct DiscoverScreen: View {
             } message: {
                 Text(listMessage ?? "")
             }
+            .blocksProductUpsells(
+                while: selectedProfile != nil
+                    || placeSaveFlow != nil
+                    || savedMessage != nil
+                    || listSelectionPlace != nil
+                    || listMessage != nil
+            )
             .onDisappear(perform: cancelPlaceSearchWork)
     }
 

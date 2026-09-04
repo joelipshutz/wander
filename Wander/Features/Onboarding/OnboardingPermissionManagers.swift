@@ -76,6 +76,37 @@ enum OnboardingNotificationPermissionPolicy {
     }
 }
 
+enum OnboardingNotificationUpsellPreparation: Equatable {
+    case present
+    case skip
+    case wait
+}
+
+enum OnboardingNotificationUpsellPreparationPolicy {
+    static let systemPermissionFallbackDelayMilliseconds = 1_500
+    static let maximumPreferenceWaitMilliseconds = 8_000
+
+    static func resolution(
+        preferences: NotificationPreferences?,
+        authorizationStatus: UNAuthorizationStatus
+    ) -> OnboardingNotificationUpsellPreparation {
+        guard let preferences else {
+            switch authorizationStatus {
+            case .notDetermined, .denied:
+                return .present
+            case .authorized, .provisional, .ephemeral:
+                return .wait
+            @unknown default:
+                return .wait
+            }
+        }
+        return PushNotificationManager.notificationsAreEnabled(
+            pushEnabled: preferences.pushEnabled,
+            authorizationStatus: authorizationStatus
+        ) ? .skip : .present
+    }
+}
+
 @MainActor
 final class OnboardingContactsPermissionManager: ObservableObject {
     @Published private(set) var authorizationStatus: CNAuthorizationStatus

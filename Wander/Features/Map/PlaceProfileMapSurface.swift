@@ -2508,6 +2508,9 @@ private struct PlacePhotoGalleryViewer: View {
             CommunityReportSheet(subject: subject)
                 .environmentObject(backend)
         }
+        .blocksProductUpsells(
+            while: selectedProfileRoute != nil || reportSubject != nil
+        )
     }
 
     private var photoPager: some View {

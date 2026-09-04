@@ -11,6 +11,7 @@ struct OnboardingFlowView: View {
 
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var step: OnboardingStep
     @State private var didTrackStart = false
@@ -70,13 +71,15 @@ struct OnboardingFlowView: View {
                     advance(from: .friends)
                 }
             case .notifications:
-                OnboardingNotificationView(analytics: analytics) {
-                    await finish()
-                }
+                OnboardingNotificationUpsellTrigger(
+                    userID: session.userID,
+                    finish: finish
+                )
             }
         }
         .environmentObject(backend)
         .environmentObject(auth)
+        .environmentObject(productUpsells)
         .environmentObject(pushNotifications)
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.snappy(duration: 0.35), value: step)
@@ -774,98 +777,141 @@ private struct OnboardingEmptySuggestions: View {
     }
 }
 
-private struct OnboardingNotificationView: View {
-    @EnvironmentObject private var backend: WanderBackend
+private struct OnboardingNotificationUpsellTrigger: View {
     @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    @Environment(\.openURL) private var openURL
-    @Environment(\.scenePhase) private var scenePhase
-    let analytics: AnalyticsClient
+    let userID: String
     let finish: () async -> Void
-    @State private var isWorking = false
+    @State private var didBeginPreparation = false
+    @State private var didResolveStep = false
+    @State private var preferenceFallbackTask: Task<Void, Never>?
 
     var body: some View {
-        OnboardingStepScaffold(step: .notifications) {
-            VStack(spacing: WanderTheme.spacing6) {
-                Spacer(minLength: WanderTheme.spacing4)
-                ZStack {
-                    Circle()
-                        .fill(WanderTheme.categorySun.color.opacity(0.18))
-                        .frame(width: 220, height: 220)
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
-                        .font(.system(size: 86, weight: .medium))
-                        .foregroundStyle(WanderTheme.categorySun.color)
-                        .symbolEffect(.bounce, value: isWorking)
+        Group {
+            if let content = ProductUpsellCatalog.production
+                .configuration(for: .onboardingNotifications)?
+                .content(for: .onboardingNotifications) {
+                OnboardingStepScaffold(step: .notifications) {
+                    ProductUpsellContentView(content: content, isWorking: true)
+                } footer: {
+                    WanderPrimaryButton(title: "Continue", isDisabled: true) {}
                 }
-                OnboardingHeadline(
-                    eyebrow: "STAY IN THE LOOP",
-                    title: "Don’t miss a great find",
-                    message: "Get a heads-up when friends connect with you, share places, or add something worth seeing."
-                )
-                Spacer(minLength: 0)
+            } else {
+                ProgressView()
             }
-            .padding(.horizontal, WanderTheme.spacing4)
-        } footer: {
-            VStack(spacing: WanderTheme.spacing1) {
-                WanderPrimaryButton(
-                    title: isWorking ? "Turning on notifications…" : OnboardingNotificationPermissionPolicy.primaryTitle(
-                        for: pushNotifications.authorizationStatus
-                    ),
-                    isDisabled: isWorking
-                ) {
-                    guard !isWorking else { return }
-                    isWorking = true
-                    Task {
-                        await pushNotifications.refreshAuthorizationStatus()
-                        if OnboardingNotificationPermissionPolicy.action(
-                            for: pushNotifications.authorizationStatus
-                        ) == .openSettings {
-                            isWorking = false
-                            analytics.track(AnalyticsEvent(
-                                name: WanderAnalyticsEvents.onboardingPermissionResult,
-                                properties: ["permission": "notifications", "granted": "settings"]
-                            ))
-                            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                            openURL(url)
+        }
+            .task {
+                guard !didBeginPreparation else { return }
+                didBeginPreparation = true
+                pushNotifications.bindNotificationPreferences(to: userID)
+                await pushNotifications.refreshAuthorizationStatus()
+                guard !Task.isCancelled,
+                      auth.state.session?.userID == userID else { return }
+                preferenceFallbackTask = Task { @MainActor in
+                    do {
+                        try await Task.sleep(
+                            for: .milliseconds(
+                                OnboardingNotificationUpsellPreparationPolicy
+                                    .systemPermissionFallbackDelayMilliseconds
+                            )
+                        )
+                    } catch {
+                        return
+                    }
+                    requestCampaignWithoutPreferencesIfSystemPermissionIsOff()
+                    guard !didResolveStep else { return }
+                    do {
+                        try await Task.sleep(
+                            for: .milliseconds(
+                                OnboardingNotificationUpsellPreparationPolicy
+                                    .maximumPreferenceWaitMilliseconds
+                                    - OnboardingNotificationUpsellPreparationPolicy
+                                        .systemPermissionFallbackDelayMilliseconds
+                            )
+                        )
+                    } catch {
+                        return
+                    }
+                    finishWithoutCampaignIfNeeded()
+                }
+                while !Task.isCancelled, !didResolveStep {
+                    do {
+                        let preferences = try await backend.notificationPreferences()
+                        guard !Task.isCancelled,
+                              auth.state.session?.userID == userID else { return }
+                        preferenceFallbackTask?.cancel()
+                        preferenceFallbackTask = nil
+                        requestCampaignIfNeeded(preferences: preferences)
+                    } catch {
+                        guard !Task.isCancelled,
+                              auth.state.session?.userID == userID else { return }
+                        do {
+                            try await Task.sleep(for: .milliseconds(1_500))
+                        } catch {
                             return
                         }
-
-                        let enabled = await pushNotifications.enableNotifications(backend: backend, authState: auth.state) != nil
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingPermissionResult,
-                            properties: ["permission": "notifications", "granted": enabled ? "true" : "false"]
-                        ))
-                        await finish()
                     }
-                }
-                if !isWorking,
-                   OnboardingNotificationPermissionPolicy.allowsSecondaryAction(
-                    for: pushNotifications.authorizationStatus
-                ) {
-                    Button("Not now") {
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingPermissionResult,
-                            properties: ["permission": "notifications", "granted": "skipped"]
-                        ))
-                        Task { await finish() }
-                    }
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
             }
+            .onDisappear {
+                preferenceFallbackTask?.cancel()
+                preferenceFallbackTask = nil
+            }
+    }
+
+    private func requestCampaignIfNeeded(preferences: NotificationPreferences) {
+        guard !didResolveStep,
+              auth.state.session?.userID == userID else { return }
+        pushNotifications.applyNotificationPreferences(preferences, for: userID)
+        guard OnboardingNotificationUpsellPreparationPolicy.resolution(
+            preferences: preferences,
+            authorizationStatus: pushNotifications.authorizationStatus
+        ) == .present else {
+            finishWithoutCampaignIfNeeded()
+            return
         }
-        .task {
-            await pushNotifications.refreshAuthorizationStatus()
+        didResolveStep = true
+        productUpsells.bind(to: userID)
+        productUpsells.request(
+            trigger: .onboardingNotifications,
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            bypassesFrequencyCap: ProductUpsellDebugPolicy.bypassesFrequencyCap()
+        ) {
+            Task { await finish() }
         }
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await pushNotifications.refreshAuthorizationStatus() }
+    }
+
+    private func finishWithoutCampaignIfNeeded() {
+        guard !didResolveStep,
+              auth.state.session?.userID == userID else { return }
+        didResolveStep = true
+        Task { await finish() }
+    }
+
+    private func requestCampaignWithoutPreferencesIfSystemPermissionIsOff() {
+        guard !didResolveStep,
+              auth.state.session?.userID == userID,
+              OnboardingNotificationUpsellPreparationPolicy.resolution(
+                preferences: nil,
+                authorizationStatus: pushNotifications.authorizationStatus
+              ) == .present else { return }
+        didResolveStep = true
+        productUpsells.bind(to: userID)
+        productUpsells.request(
+            trigger: .onboardingNotifications,
+            userID: userID,
+            isEligible: true,
+            bypassesFrequencyCap: ProductUpsellDebugPolicy.bypassesFrequencyCap()
+        ) {
+            Task { await finish() }
         }
     }
 }
 
-private struct OnboardingStepScaffold<Content: View, Footer: View>: View {
+struct OnboardingStepScaffold<Content: View, Footer: View>: View {
     let step: OnboardingStep
     @ViewBuilder let content: Content
     @ViewBuilder let footer: Footer
@@ -910,7 +956,7 @@ private struct OnboardingStepScaffold<Content: View, Footer: View>: View {
     }
 }
 
-private struct OnboardingHeadline: View {
+struct OnboardingHeadline: View {
     let eyebrow: String
     let title: String
     let message: String

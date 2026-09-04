@@ -676,7 +676,8 @@ final class WannaGoReminderTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let manager = PushNotificationManager(userDefaults: defaults)
 
-        manager.applyNotificationPreferences(.allEnabled)
+        manager.bindNotificationPreferences(to: "user_a")
+        manager.applyNotificationPreferences(.allEnabled, for: "user_a")
         manager.configureSaveStreakReminders(for: "user_a")
         XCTAssertTrue(manager.saveStreakRemindersEnabled)
 
@@ -688,9 +689,255 @@ final class WannaGoReminderTests: XCTestCase {
 
         manager.configureSaveStreakReminders(for: "user_a")
         XCTAssertFalse(manager.saveStreakRemindersEnabled)
-        manager.applyNotificationPreferences(.allDisabled)
-        manager.applyNotificationPreferences(.allEnabled)
+        manager.applyNotificationPreferences(.allDisabled, for: "user_a")
+        manager.applyNotificationPreferences(.allEnabled, for: "user_a")
         XCTAssertFalse(manager.saveStreakRemindersEnabled)
+    }
+
+    func testNotificationPreferenceReadinessResetsAndRejectsStaleAccountResults() {
+        let suiteName = "NotificationPreferenceAccountTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let manager = PushNotificationManager(userDefaults: defaults)
+
+        manager.bindNotificationPreferences(to: "user_a")
+        manager.applyNotificationPreferences(.allEnabled, for: "user_a")
+        XCTAssertTrue(manager.pushEnabled)
+        XCTAssertTrue(manager.hasLoadedNotificationPreferences)
+
+        manager.bindNotificationPreferences(to: "user_b")
+        XCTAssertEqual(manager.notificationPreferencesUserID, "user_b")
+        XCTAssertFalse(manager.pushEnabled)
+        XCTAssertFalse(manager.hasLoadedNotificationPreferences)
+
+        manager.applyNotificationPreferences(.allEnabled, for: "user_a")
+        XCTAssertFalse(manager.pushEnabled)
+        XCTAssertFalse(manager.hasLoadedNotificationPreferences)
+
+        manager.applyNotificationPreferences(.allDisabled, for: "user_b")
+        XCTAssertTrue(manager.hasLoadedNotificationPreferences)
+
+        manager.bindNotificationPreferences(to: "user_c")
+        manager.applyNotificationPreferences(.allDisabled, for: "user_b")
+        XCTAssertFalse(manager.hasLoadedNotificationPreferences)
+        manager.applyNotificationPreferences(.allEnabled, for: "user_c")
+        XCTAssertTrue(manager.pushEnabled)
+        XCTAssertTrue(manager.hasLoadedNotificationPreferences)
+    }
+
+    func testNotificationEnrollmentRejectsAReplacedLiveAuthSessionBeforeRemoteWork() async {
+        let suiteName = "NotificationEnrollmentAccountTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountA = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let accountB = AuthSession(userID: "user_b", displayName: "B", handle: "b")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(accountA))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let backend = WanderBackend(notificationRepository: SimulatorNotificationRepository())
+
+        manager.bindNotificationPreferences(to: accountA.userID)
+        auth.setStateSilently(.signedIn(accountB))
+
+        let preferences = await manager.enableNotifications(
+            backend: backend,
+            expectedUserID: accountA.userID,
+            authSession: auth
+        )
+        let didRegister = await manager.registerStoredDeviceTokenIfPossible(
+            backend: backend,
+            authSession: auth
+        )
+
+        XCTAssertNil(preferences)
+        XCTAssertFalse(didRegister)
+        XCTAssertFalse(manager.hasLoadedNotificationPreferences)
+        XCTAssertFalse(manager.pushEnabled)
+    }
+
+    func testReminderReconciliationStopsAfterLiveAccountChangesDuringAwait() async {
+        let suiteName = "NotificationReminderAccountTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountA = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let accountB = AuthSession(userID: "user_b", displayName: "B", handle: "b")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(accountA))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let repository = ReminderRecordingNotificationRepository()
+        let backend = WanderBackend(notificationRepository: repository)
+        manager.bindNotificationPreferences(to: accountA.userID)
+
+        let reconciliation = Task { @MainActor in
+            await manager.reconcileWannaGoReminders(
+                [],
+                backend: backend,
+                userID: accountA.userID,
+                authSession: auth
+            )
+        }
+        await Task.yield()
+        auth.setStateSilently(.signedIn(accountB))
+        manager.bindNotificationPreferences(to: accountB.userID)
+        await reconciliation.value
+
+        XCTAssertEqual(repository.reconciliationCallCount, 0)
+    }
+
+    func testUnregisterWaitsForDelayedRegistrationBeforeDisconnectingToken() async {
+        let suiteName = "NotificationRegistrationOrderingTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(account))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let repository = ReminderRecordingNotificationRepository(delaysRegistration: true)
+        let backend = WanderBackend(notificationRepository: repository)
+        defaults.set(String(repeating: "ab", count: 32), forKey: "wander.apnsDeviceToken")
+        manager.bindNotificationPreferences(to: account.userID)
+
+        let registration = Task { @MainActor in
+            await manager.registerStoredDeviceTokenIfPossible(
+                backend: backend,
+                authSession: auth
+            )
+        }
+        while !repository.didBeginRegistration {
+            await Task.yield()
+        }
+        let unregistration = Task { @MainActor in
+            await manager.unregisterStoredDeviceTokenIfPossible(
+                backend: backend,
+                userID: account.userID,
+                authSession: auth
+            )
+        }
+        await Task.yield()
+        XCTAssertEqual(repository.unregisterCallCount, 0)
+
+        repository.resumeRegistration()
+        let didRegister = await registration.value
+        let didUnregister = await unregistration.value
+
+        XCTAssertFalse(didRegister)
+        XCTAssertTrue(didUnregister)
+        XCTAssertEqual(repository.unregisterCallCount, 1)
+    }
+
+    func testRegistrationCannotBeginWhileUnregistrationIsSuspended() async {
+        let suiteName = "NotificationUnregistrationGateTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(account))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let repository = ReminderRecordingNotificationRepository(delaysUnregistration: true)
+        let backend = WanderBackend(notificationRepository: repository)
+        defaults.set(String(repeating: "ab", count: 32), forKey: "wander.apnsDeviceToken")
+        manager.bindNotificationPreferences(to: account.userID)
+
+        let unregistration = Task { @MainActor in
+            await manager.unregisterStoredDeviceTokenIfPossible(
+                backend: backend,
+                userID: account.userID,
+                authSession: auth
+            )
+        }
+        while !repository.didBeginUnregistration {
+            await Task.yield()
+        }
+        let registration = Task { @MainActor in
+            await manager.registerStoredDeviceTokenIfPossible(
+                backend: backend,
+                authSession: auth
+            )
+        }
+
+        let didRegister = await registration.value
+        XCTAssertFalse(didRegister)
+        XCTAssertEqual(repository.registrationCallCount, 0)
+        repository.resumeUnregistration()
+        let didUnregister = await unregistration.value
+        XCTAssertTrue(didUnregister)
+        XCTAssertEqual(repository.unregisterCallCount, 1)
+    }
+
+    func testUnregistrationRetriesOnceBeforeSucceeding() async {
+        let suiteName = "NotificationUnregistrationRetryTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(account))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let repository = ReminderRecordingNotificationRepository(unregistrationFailuresRemaining: 1)
+        let backend = WanderBackend(notificationRepository: repository)
+        defaults.set(String(repeating: "ab", count: 32), forKey: "wander.apnsDeviceToken")
+        manager.bindNotificationPreferences(to: account.userID)
+
+        let didUnregister = await manager.unregisterStoredDeviceTokenIfPossible(
+            backend: backend,
+            userID: account.userID,
+            authSession: auth
+        )
+
+        XCTAssertTrue(didUnregister)
+        XCTAssertEqual(repository.unregisterCallCount, 2)
+    }
+
+    func testFailedAccountTeardownCanRestoreRegistrationForTheStillActiveAccount() async {
+        let suiteName = "NotificationTeardownRollbackTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        let auth = PreviewAuthSessionProvider(state: .signedIn(account))
+        let manager = PushNotificationManager(userDefaults: defaults)
+        let repository = ReminderRecordingNotificationRepository()
+        let backend = WanderBackend(notificationRepository: repository)
+        defaults.set(String(repeating: "ab", count: 32), forKey: "wander.apnsDeviceToken")
+        manager.bindNotificationPreferences(to: account.userID)
+
+        let didUnregister = await manager.unregisterStoredDeviceTokenIfPossible(
+            backend: backend,
+            userID: account.userID,
+            authSession: auth
+        )
+        XCTAssertTrue(didUnregister)
+        let blockedRegistration = await manager.registerStoredDeviceTokenIfPossible(
+            backend: backend,
+            authSession: auth
+        )
+        await manager.restoreRegistrationAfterFailedAccountTeardown(
+            userID: account.userID,
+            backend: backend,
+            authSession: auth
+        )
+        let restoredRegistration = await manager.registerStoredDeviceTokenIfPossible(
+            backend: backend,
+            authSession: auth
+        )
+
+        XCTAssertFalse(blockedRegistration)
+        XCTAssertTrue(restoredRegistration)
+        XCTAssertEqual(repository.registrationCallCount, 1)
+    }
+
+    func testNotificationProgramRequiresBackendAndSystemAuthorization() {
+        XCTAssertTrue(
+            PushNotificationManager.notificationsAreEnabled(
+                pushEnabled: true,
+                authorizationStatus: .authorized
+            )
+        )
+        XCTAssertFalse(
+            PushNotificationManager.notificationsAreEnabled(
+                pushEnabled: true,
+                authorizationStatus: .denied
+            )
+        )
+        XCTAssertFalse(
+            PushNotificationManager.notificationsAreEnabled(
+                pushEnabled: false,
+                authorizationStatus: .authorized
+            )
+        )
     }
 
     private func testCalendar() -> Calendar {
@@ -709,4 +956,99 @@ private final class ReminderRecordingAnalyticsClient: AnalyticsClient {
 
     func identify(userID: String) {}
     func resetIdentity() {}
+}
+
+@MainActor
+private final class ReminderRecordingNotificationRepository: NotificationRepository {
+    private(set) var reconciliationCallCount = 0
+    private(set) var didBeginRegistration = false
+    private(set) var didBeginUnregistration = false
+    private(set) var registrationCallCount = 0
+    private(set) var unregisterCallCount = 0
+    private let delaysRegistration: Bool
+    private let delaysUnregistration: Bool
+    private var unregistrationFailuresRemaining: Int
+    private var registrationContinuation: CheckedContinuation<Void, Never>?
+    private var unregistrationContinuation: CheckedContinuation<Void, Never>?
+
+    init(
+        delaysRegistration: Bool = false,
+        delaysUnregistration: Bool = false,
+        unregistrationFailuresRemaining: Int = 0
+    ) {
+        self.delaysRegistration = delaysRegistration
+        self.delaysUnregistration = delaysUnregistration
+        self.unregistrationFailuresRemaining = unregistrationFailuresRemaining
+    }
+
+    func preferences() async throws -> NotificationPreferences { .allDisabled }
+
+    func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences {
+        update.pushEnabled == false ? .allDisabled : .allEnabled
+    }
+
+    func registerPushToken(
+        _ token: String,
+        environment: PushTokenEnvironment,
+        appBundleID: String
+    ) async throws -> String {
+        didBeginRegistration = true
+        registrationCallCount += 1
+        if delaysRegistration {
+            await withCheckedContinuation { continuation in
+                registrationContinuation = continuation
+            }
+        }
+        return token
+    }
+
+    func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws {
+        didBeginUnregistration = true
+        unregisterCallCount += 1
+        if delaysUnregistration {
+            await withCheckedContinuation { continuation in
+                unregistrationContinuation = continuation
+            }
+        }
+        if unregistrationFailuresRemaining > 0 {
+            unregistrationFailuresRemaining -= 1
+            throw NSError(domain: "ReminderRecordingNotificationRepository", code: 1)
+        }
+    }
+
+    func resumeRegistration() {
+        registrationContinuation?.resume()
+        registrationContinuation = nil
+    }
+
+    func resumeUnregistration() {
+        unregistrationContinuation?.resume()
+        unregistrationContinuation = nil
+    }
+
+    func reconcileClientNotificationIntents(
+        source: String,
+        intents: [ClientNotificationIntent]
+    ) async throws -> NotificationIntentReconciliationResult {
+        reconciliationCallCount += 1
+        return NotificationIntentReconciliationResult(
+            queuedCount: intents.count,
+            createdCount: intents.count
+        )
+    }
+
+    func syncCalendarReservations(
+        _ reservations: [CalendarReservationSyncItem],
+        windowStart: Date,
+        windowEnd: Date
+    ) async throws -> CalendarReservationSyncResult {
+        CalendarReservationSyncResult(
+            syncedCount: reservations.count,
+            queuedCount: 0,
+            cancelledCount: 0
+        )
+    }
+
+    func calendarReservation(id: String) async throws -> CalendarReservationPrompt? { nil }
+    func completeCalendarReservation(id: String) async throws -> Bool { false }
 }
