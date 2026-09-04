@@ -68,6 +68,7 @@ final class AuthSessionTests: XCTestCase {
         let service = ClerkAuthService(
             configuration: configuration,
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { publishableKey in publishableKey }
         )
         let store = AuthSessionStore(provider: service)
@@ -93,32 +94,41 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(provider.sessionChangesRequestCount, 0)
     }
 
-    func testNativeAuthAttemptSurvivesTransientProviderStatesAndClosesOnSuccess() async throws {
+    func testNativeAuthAttemptIgnoresProviderEventsUntilCorrelatedSuccess() async throws {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let unrelatedSession = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
-            canPresentNativeAuth: true
+            canPresentNativeAuth: true,
+            nativeAuthSession: session,
+            nativeAuthSessionAdoption: .afterCompletionRetry
         )
         let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
 
         store.beginSignIn(mode: .signUp)
         XCTAssertTrue(store.isPresentingNativeAuth)
 
         provider.setState(.loading)
-        await waitForState(.loading, in: store)
+        await Task.yield()
+        XCTAssertEqual(store.state, .signedOut)
         XCTAssertTrue(store.isPresentingNativeAuth)
 
-        provider.setState(.signedOut)
-        await waitForState(.signedOut, in: store)
-        XCTAssertTrue(store.isPresentingNativeAuth)
-
-        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
-        provider.setState(.signedIn(session))
-        await waitForState(.signedIn(session), in: store)
-
-        XCTAssertFalse(store.isPresentingNativeAuth)
+        provider.setState(.signedIn(unrelatedSession))
+        await Task.yield()
+        XCTAssertEqual(store.state, .signedOut)
         XCTAssertFalse(store.isSessionValidated)
+        XCTAssertTrue(store.isPresentingNativeAuth)
 
-        try await store.ensureSessionValidated(for: session.userID)
+        let outcome = await store.authenticate(with: .apple)
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertFalse(store.isPresentingNativeAuth)
         XCTAssertTrue(store.isSessionValidated)
     }
 
@@ -433,6 +443,7 @@ final class AuthSessionTests: XCTestCase {
         let service = ClerkAuthService(
             configuration: configuration,
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { _ in "" }
         )
 
@@ -445,12 +456,13 @@ final class AuthSessionTests: XCTestCase {
             "$(\(key))"
         }
         let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
-        let resolution = AuthSessionResolutionHolder(.success(session))
+        let resolution = AuthSessionResolutionHolder(.success(resolvedSession(session)))
         let cache = AuthSessionCacheHolder()
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: { try resolution.value.get() },
             sessionCache: cache.value,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -478,6 +490,7 @@ final class AuthSessionTests: XCTestCase {
             configuration: configuration,
             resolveSession: { throw AuthSessionError.tokenUnavailable },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -499,18 +512,27 @@ final class AuthSessionTests: XCTestCase {
             displayName: "Apple User",
             handle: "apple"
         )
-        var resolutions: [AuthSession?] = [nil, nil, session]
+        var resolutions: [ClerkAuthService.ResolvedSession?] = [
+            nil,
+            nil,
+            resolvedSession(session, clerkSessionID: "sess_apple")
+        ]
         var sleepRequests: [UInt64] = []
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: { resolutions.removeFirst() },
+            resolveSessionID: { "sess_apple" },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [200, 600, 2_000],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
             sessionAdoptionSleeper: { delay in sleepRequests.append(delay) },
             configureClerk: { $0 }
         )
 
-        let adoption = try await service.adoptCompletedNativeAuthSession()
+        let adoption = try await service.adoptCompletedNativeAuthSession(
+            expectedSessionID: "sess_apple"
+        )
 
         XCTAssertEqual(adoption, .afterCompletionRetry)
         XCTAssertEqual(sleepRequests, [200, 600])
@@ -531,13 +553,17 @@ final class AuthSessionTests: XCTestCase {
                 return nil
             },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [200, 600],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
             sessionAdoptionSleeper: { delay in sleepRequests.append(delay) },
             configureClerk: { $0 }
         )
 
         do {
-            _ = try await service.adoptCompletedNativeAuthSession()
+            _ = try await service.adoptCompletedNativeAuthSession(
+                expectedSessionID: "sess_apple"
+            )
             XCTFail("Expected session adoption to fail closed")
         } catch let error as AuthSessionError {
             XCTAssertEqual(error, .sessionUnavailable)
@@ -550,7 +576,142 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(service.state, .signedOut)
     }
 
-    func testProviderErrorRecoveryAdoptsOnlyAuthoritativeActiveSession() async {
+    func testCompletedNativeAuthFenceRejectsLaterUnrelatedRefreshUntilExpectedSessionAppears() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let session = AuthSession(
+            userID: "user_existing",
+            displayName: "Existing User",
+            handle: "existing"
+        )
+        let resolvedClerkSessionID = ClerkSessionIDHolder("sess_apple")
+        let activeClerkSessionID = ClerkSessionIDHolder("sess_other")
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(session, clerkSessionID: resolvedClerkSessionID.value)
+            },
+            resolveSessionID: { activeClerkSessionID.value },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [200, 600],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
+            sessionAdoptionSleeper: { _ in },
+            configureClerk: { $0 }
+        )
+
+        do {
+            _ = try await service.adoptCompletedNativeAuthSession(
+                expectedSessionID: "sess_apple"
+            )
+            XCTFail("Expected adoption of an unrelated active session to fail closed")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .sessionUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(service.state, .signedOut)
+
+        resolvedClerkSessionID.value = "sess_other"
+        await service.refreshSession()
+        XCTAssertEqual(service.state, .signedOut)
+
+        resolvedClerkSessionID.value = "sess_apple"
+        activeClerkSessionID.value = "sess_apple"
+        await service.refreshSession()
+        XCTAssertEqual(service.state, .signedIn(session))
+    }
+
+    func testNativeAuthFenceSurvivesServiceReinstantiation() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let unrelatedSession = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
+        let fenceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-auth-fence-\(UUID().uuidString).json")
+        let fenceStore = NativeAuthSessionFenceStore.file(url: fenceURL)
+        defer { try? FileManager.default.removeItem(at: fenceURL) }
+
+        let firstService = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(unrelatedSession, clerkSessionID: "sess_other")
+            },
+            resolveSessionID: { "sess_other" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: fenceStore,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
+            sessionAdoptionSleeper: { _ in },
+            configureClerk: { $0 }
+        )
+
+        _ = try? await firstService.adoptCompletedNativeAuthSession(
+            expectedSessionID: "sess_expected"
+        )
+        XCTAssertEqual(
+            fenceStore.load(),
+            .require("sess_expected")
+        )
+
+        let relaunchedService = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(unrelatedSession, clerkSessionID: "sess_other")
+            },
+            resolveSessionID: { "sess_other" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: fenceStore,
+            configureClerk: { $0 }
+        )
+
+        await relaunchedService.refreshSession()
+
+        XCTAssertEqual(relaunchedService.state, .signedOut)
+        XCTAssertEqual(
+            fenceStore.load(),
+            .require("sess_expected")
+        )
+    }
+
+    func testUncorrelatedNativeAuthFenceRejectsSessionAfterRelaunch() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let fenceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("native-auth-block-\(UUID().uuidString).json")
+        let fenceStore = NativeAuthSessionFenceStore.file(url: fenceURL)
+        fenceStore.save(.blockUncorrelated)
+        defer { try? FileManager.default.removeItem(at: fenceURL) }
+        let session = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolvedSession(session, clerkSessionID: "sess_unrelated")
+            },
+            resolveSessionID: { "sess_unrelated" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: fenceStore,
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+
+        XCTAssertEqual(service.state, .signedOut)
+        XCTAssertEqual(fenceStore.load(), .blockUncorrelated)
+    }
+
+    func testCompletedNativeAuthRejectsResolvedSessionFromDifferentID() async {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
@@ -561,19 +722,137 @@ final class AuthSessionTests: XCTestCase {
         )
         let service = ClerkAuthService(
             configuration: configuration,
-            resolveSession: { session },
-            sessionCache: .disabled,
-            sessionAdoptionRetryDelaysNanoseconds: [],
-            sessionAdoptionSleeper: { _ in
-                XCTFail("Provider-error recovery must not wait or retry")
+            resolveSession: {
+                resolvedSession(session, clerkSessionID: "sess_other")
             },
+            resolveSessionID: { "sess_apple" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
+            sessionAdoptionSleeper: { _ in },
             configureClerk: { $0 }
         )
 
-        let didRecover = await service.adoptCurrentSessionAfterProviderError()
+        do {
+            _ = try await service.adoptCompletedNativeAuthSession(
+                expectedSessionID: "sess_apple"
+            )
+            XCTFail("Expected adoption of a mismatched resolved session to fail closed")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .sessionUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
 
-        XCTAssertTrue(didRecover)
-        XCTAssertEqual(service.state, .signedIn(session))
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testCompletedNativeAuthTimesOutWhenAuthoritativeRefreshStalls() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        var resolverContinuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                await withCheckedContinuation { continuation in
+                    resolverContinuation = continuation
+                }
+            },
+            resolveSessionID: { nil },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionTimeoutNanoseconds: 100_000_000,
+            sessionAdoptionSleeper: { _ in },
+            configureClerk: { $0 }
+        )
+
+        let adoptionTask = Task {
+            try await service.adoptCompletedNativeAuthSession(
+                expectedSessionID: "sess_apple"
+            )
+        }
+        while resolverContinuation == nil { await Task.yield() }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        do {
+            _ = try await adoptionTask.value
+            XCTFail("Expected stalled session adoption to time out")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .sessionUnavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+        XCTAssertLessThan(elapsed, 500_000_000)
+        XCTAssertEqual(service.state, .signedOut)
+
+        resolverContinuation?.resume(
+            returning: resolvedSession(
+                AuthSession(userID: "user_late", displayName: "Late", handle: "late"),
+                clerkSessionID: "sess_apple"
+            )
+        )
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testSessionChangesQuarantineUnrelatedSessionDuringNativeAuthAdoption() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let adoptionStarted = expectation(description: "session adoption started")
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                adoptionStarted.fulfill()
+                try await Task<Never, Never>.sleep(nanoseconds: 30_000_000_000)
+                return nil
+            },
+            resolveSessionID: { "sess_other" },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionTimeoutNanoseconds: 1_000_000_000,
+            sessionAdoptionSleeper: { _ in },
+            configureClerk: { $0 }
+        )
+
+        let adoptionTask = Task {
+            try await service.adoptCompletedNativeAuthSession(
+                expectedSessionID: "sess_apple"
+            )
+        }
+        await fulfillment(of: [adoptionStarted], timeout: 1)
+
+        let observedSession = AuthState.signedIn(
+            AuthSession(userID: "user_other", displayName: "Other", handle: "other")
+        )
+        XCTAssertFalse(
+            service.shouldPublishSessionChange(
+                observedState: .signedOut
+            )
+        )
+        XCTAssertFalse(
+            service.shouldPublishSessionChange(
+                observedState: observedSession
+            )
+        )
+
+        adoptionTask.cancel()
+        _ = try? await adoptionTask.value
+        XCTAssertFalse(
+            service.shouldPublishSessionChange(
+                observedState: observedSession
+            )
+        )
+        XCTAssertTrue(
+            service.shouldPublishSessionChange(
+                observedState: .signedOut
+            )
+        )
     }
     #endif
 
@@ -649,8 +928,8 @@ final class AuthSessionTests: XCTestCase {
         let firstStarted = expectation(description: "first refresh started")
         let secondStarted = expectation(description: "second refresh started")
         var requestCount = 0
-        var firstContinuation: CheckedContinuation<AuthSession?, Never>?
-        var secondContinuation: CheckedContinuation<AuthSession?, Never>?
+        var firstContinuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
+        var secondContinuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: {
@@ -667,6 +946,7 @@ final class AuthSessionTests: XCTestCase {
                 }
             },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -676,12 +956,14 @@ final class AuthSessionTests: XCTestCase {
         await fulfillment(of: [secondStarted], timeout: 1)
 
         let newerSession = AuthSession(userID: "user_b", displayName: "B", handle: "b")
-        secondContinuation?.resume(returning: newerSession)
+        secondContinuation?.resume(returning: resolvedSession(newerSession))
         await secondRefresh.value
         XCTAssertEqual(service.state, .signedIn(newerSession))
 
         firstContinuation?.resume(
-            returning: AuthSession(userID: "user_a", displayName: "A", handle: "a")
+            returning: resolvedSession(
+                AuthSession(userID: "user_a", displayName: "A", handle: "a")
+            )
         )
         await firstRefresh.value
         XCTAssertEqual(service.state, .signedIn(newerSession))
@@ -693,7 +975,7 @@ final class AuthSessionTests: XCTestCase {
             "$(\(key))"
         }
         let refreshStarted = expectation(description: "authoritative refresh started")
-        var continuation: CheckedContinuation<AuthSession?, Never>?
+        var continuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: {
@@ -703,6 +985,7 @@ final class AuthSessionTests: XCTestCase {
                 }
             },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -719,7 +1002,7 @@ final class AuthSessionTests: XCTestCase {
             displayName: "Authenticated",
             handle: "authenticated"
         )
-        continuation?.resume(returning: authenticatedSession)
+        continuation?.resume(returning: resolvedSession(authenticatedSession))
         await refresh.value
 
         XCTAssertEqual(service.state, .signedIn(authenticatedSession))
@@ -730,7 +1013,7 @@ final class AuthSessionTests: XCTestCase {
             "$(\(key))"
         }
         let refreshStarted = expectation(description: "authoritative refresh started")
-        var continuation: CheckedContinuation<AuthSession?, Never>?
+        var continuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: {
@@ -740,6 +1023,7 @@ final class AuthSessionTests: XCTestCase {
                 }
             },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -748,10 +1032,12 @@ final class AuthSessionTests: XCTestCase {
 
         service.applyTerminalSignedOutState()
         continuation?.resume(
-            returning: AuthSession(
-                userID: "user_stale",
-                displayName: "Stale",
-                handle: "stale"
+            returning: resolvedSession(
+                AuthSession(
+                    userID: "user_stale",
+                    displayName: "Stale",
+                    handle: "stale"
+                )
             )
         )
         await refresh.value
@@ -771,12 +1057,15 @@ final class AuthSessionTests: XCTestCase {
             configuration: configuration,
             resolveSession: {
                 requestCount += 1
-                if requestCount == 1 { return validatedSession }
+                if requestCount == 1 { return resolvedSession(validatedSession) }
                 cancellationStarted.fulfill()
                 try await Task.sleep(nanoseconds: 30_000_000_000)
-                return AuthSession(userID: "stale", displayName: "Stale", handle: "stale")
+                return resolvedSession(
+                    AuthSession(userID: "stale", displayName: "Stale", handle: "stale")
+                )
             },
             sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
         )
 
@@ -908,6 +1197,43 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.state, .signedIn(secondSession))
         XCTAssertTrue(store.isSessionValidated)
         try await store.ensureSessionValidated(for: secondSession.userID)
+    }
+
+    func testNativeAuthCancelsForegroundRefreshAndBlocksUnrelatedSessionEvents() async {
+        let initialSession = AuthSession(
+            userID: "user_initial",
+            displayName: "Initial",
+            handle: "initial"
+        )
+        let unrelatedSession = AuthSession(
+            userID: "user_unrelated",
+            displayName: "Unrelated",
+            handle: "unrelated"
+        )
+        let provider = ObservedSnapshotDuringRefreshAuthProvider(
+            session: initialSession,
+            canPresentNativeAuth: true
+        )
+        let store = AuthSessionStore(provider: provider)
+        while provider.sessionChangesRequestCount == 0 { await Task.yield() }
+
+        let foregroundRefresh = Task { await store.refreshSession() }
+        while !provider.isRefreshSuspended { await Task.yield() }
+
+        store.beginSignIn()
+        provider.setObservedState(.signedIn(unrelatedSession))
+        for _ in 0..<20 { await Task.yield() }
+
+        let refreshCountBeforeBlockedAttempt = provider.refreshCount
+        await store.refreshSession()
+        XCTAssertEqual(provider.refreshCount, refreshCountBeforeBlockedAttempt)
+
+        provider.finishRefresh()
+        await foregroundRefresh.value
+
+        XCTAssertEqual(store.state, .signedIn(initialSession))
+        XCTAssertFalse(store.isSessionValidated)
+        XCTAssertTrue(store.isPresentingNativeAuth)
     }
 
     func testOriginalRefreshWaiterFollowsAccountSwitchReplacement() async throws {
@@ -1337,12 +1663,33 @@ final class AuthSessionTests: XCTestCase {
 
 @MainActor
 private final class AuthSessionResolutionHolder {
-    var value: Result<AuthSession?, AuthSessionError>
+    var value: Result<ClerkAuthService.ResolvedSession?, AuthSessionError>
 
-    init(_ value: Result<AuthSession?, AuthSessionError>) {
+    init(_ value: Result<ClerkAuthService.ResolvedSession?, AuthSessionError>) {
         self.value = value
     }
 }
+
+@MainActor
+private final class ClerkSessionIDHolder {
+    var value: String
+
+    init(_ value: String) {
+        self.value = value
+    }
+}
+
+#if canImport(ClerkKit)
+private func resolvedSession(
+    _ authSession: AuthSession,
+    clerkSessionID: String = "sess_test"
+) -> ClerkAuthService.ResolvedSession {
+    ClerkAuthService.ResolvedSession(
+        clerkSessionID: clerkSessionID,
+        authSession: authSession
+    )
+}
+#endif
 
 @MainActor
 private final class AuthSessionCacheHolder {
@@ -1371,14 +1718,16 @@ private final class ObservedSnapshotDuringRefreshAuthProvider: AuthSessionProvid
     private let changesContinuation: AsyncStream<AuthState>.Continuation
     private var refreshContinuation: CheckedContinuation<Void, Never>?
     private var signOutContinuation: CheckedContinuation<Void, Never>?
+    private let nativeAuthAvailable: Bool
 
-    init(session: AuthSession) {
+    init(session: AuthSession, canPresentNativeAuth: Bool = false) {
         self.session = session
+        nativeAuthAvailable = canPresentNativeAuth
         state = .signedIn(session)
         (changes, changesContinuation) = AsyncStream<AuthState>.makeStream()
     }
 
-    var canPresentNativeAuth: Bool { false }
+    var canPresentNativeAuth: Bool { nativeAuthAvailable }
 
     func sessionChanges() -> AsyncStream<AuthState> {
         sessionChangesRequestCount += 1

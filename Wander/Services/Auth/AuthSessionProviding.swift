@@ -45,7 +45,7 @@ extension AuthState {
 }
 #endif
 
-struct AuthSession: Codable, Equatable, Identifiable {
+struct AuthSession: Codable, Equatable, Identifiable, Sendable {
     let userID: String
     let displayName: String?
     let handle: String?
@@ -115,6 +115,67 @@ struct AuthSessionCache {
                     #if DEBUG
                     WanderDebugLog.remote.error(
                         "auth session cache write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                    )
+                    #endif
+                }
+            }
+        )
+    }
+}
+
+struct NativeAuthSessionFence: Codable, Equatable, Sendable {
+    /// Nil means no session can be adopted without a new correlated auth
+    /// result. A value permits only that exact Clerk session ID.
+    let requiredSessionID: String?
+
+    static let blockUncorrelated = NativeAuthSessionFence(requiredSessionID: nil)
+
+    static func require(_ sessionID: String) -> NativeAuthSessionFence {
+        NativeAuthSessionFence(requiredSessionID: sessionID)
+    }
+}
+
+@MainActor
+struct NativeAuthSessionFenceStore {
+    let load: () -> NativeAuthSessionFence?
+    let save: (NativeAuthSessionFence?) -> Void
+
+    static let disabled = NativeAuthSessionFenceStore(load: { nil }, save: { _ in })
+
+    static let live = file(
+        url: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Wander", isDirectory: true)
+            .appendingPathComponent("native-auth-session-fence-v1.json")
+    )
+
+    static func file(url: URL) -> NativeAuthSessionFenceStore {
+        NativeAuthSessionFenceStore(
+            load: {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(NativeAuthSessionFence.self, from: data)
+            },
+            save: { fence in
+                guard let fence else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+                    )
+                    let data = try JSONEncoder().encode(fence)
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
+                } catch {
+                    #if DEBUG
+                    WanderDebugLog.remote.error(
+                        "native auth fence write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
                     )
                     #endif
                 }
@@ -251,7 +312,6 @@ enum NativeAuthSessionAdoption: String, Equatable {
     case notRequired = "not_required"
     case immediate
     case afterCompletionRetry = "after_completion_retry"
-    case afterProviderErrorRefresh = "after_provider_error_refresh"
 }
 
 struct NativeSocialAuthResult: Equatable {
@@ -368,6 +428,11 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 // read current provider state so a buffered stale payload cannot
                 // overwrite a newer authoritative result.
                 guard let self else { return }
+                // Interactive auth is synchronized explicitly only after its
+                // provider has validated the exact completed session. This
+                // must precede in-flight handling so a foreground refresh
+                // cannot publish an unrelated account mid-attempt.
+                guard !self.isNativeAuthAttemptActive else { continue }
                 if let inFlight = self.inFlightSessionRefresh {
                     let observedState = provider.state
                     if let startingUserID = inFlight.startingUserID,
@@ -445,7 +510,9 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     @discardableResult
     private func startSessionRefreshIfNeeded() -> InFlightSessionRefresh? {
-        guard !isTerminalAuthMutationInProgress else { return nil }
+        guard !isTerminalAuthMutationInProgress,
+              !isNativeAuthAttemptActive
+        else { return nil }
         if let inFlightSessionRefresh {
             return inFlightSessionRefresh
         }
@@ -468,6 +535,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                   let self,
                   generation == self.refreshGeneration,
                   !self.isTerminalAuthMutationInProgress,
+                  !self.isNativeAuthAttemptActive,
                   self.inFlightSessionRefresh?.id == refreshID
             else { return }
             // Remove the slot before publishing the authoritative state. There
@@ -540,7 +608,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         resetNativeAuthForm()
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
-            isNativeAuthAttemptActive = true
+            beginNativeAuthAttempt()
             isPresentingNativeAuth = true
         } else {
             nativeAuthDidDismiss()
@@ -570,7 +638,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         activeSocialAuthProvider = socialProvider
         defer { activeSocialAuthProvider = nil }
 
@@ -647,7 +715,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         isSendingEmailCode = true
         defer { isSendingEmailCode = false }
 
@@ -734,7 +802,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
 
         nativeAuthError = nil
-        isNativeAuthAttemptActive = true
+        beginNativeAuthAttempt()
         isSigningInWithPassword = true
         defer { isSigningInWithPassword = false }
 
@@ -855,6 +923,15 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         inFlightSessionRefresh = nil
         beginSessionValidation()
         return mutationID
+    }
+
+    private func beginNativeAuthAttempt() {
+        guard !isNativeAuthAttemptActive else { return }
+        isNativeAuthAttemptActive = true
+        refreshGeneration &+= 1
+        inFlightSessionRefresh?.task.cancel()
+        inFlightSessionRefresh = nil
+        beginSessionValidation()
     }
 
     private func finishTerminalAuthMutation(_ mutationID: UUID) {

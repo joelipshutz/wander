@@ -141,10 +141,6 @@ struct AppEntryView: View {
         .environmentObject(pushNotifications)
         .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
             auth.nativeAuthDidDismiss()
-            Task {
-                await auth.refreshSession()
-                coordinator.authStateChanged(auth.state)
-            }
         }) {
             ClerkNativeAuthView(mode: auth.activeNativeAuthMode)
                 .environmentObject(auth)

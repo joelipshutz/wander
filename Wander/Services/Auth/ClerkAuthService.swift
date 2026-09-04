@@ -14,11 +14,22 @@ final class ClerkAuthService: AuthSessionProviding {
     private static let canonicalUserIDMetadataKey = "canonical_user_id"
 
     #if canImport(ClerkKit)
-    typealias SessionResolver = @MainActor () async throws -> AuthSession?
+    struct ResolvedSession: Sendable {
+        let clerkSessionID: String
+        let authSession: AuthSession
+    }
+
+    typealias SessionResolver = @MainActor () async throws -> ResolvedSession?
+    typealias SessionIDResolver = @MainActor () -> String?
     typealias SessionAdoptionSleeper = @MainActor (UInt64) async throws -> Void
     private let resolveAuthoritativeSession: SessionResolver
+    private let resolveActiveSessionID: SessionIDResolver
+    private let nativeAuthSessionFenceStore: NativeAuthSessionFenceStore
     private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
+    private let sessionAdoptionTimeoutNanoseconds: UInt64
     private let sessionAdoptionSleeper: SessionAdoptionSleeper
+    private var pendingNativeAuthSessionID: String?
+    private var nativeAuthSessionFence: NativeAuthSessionFence?
     private var refreshGeneration = 0
     private enum PendingEmailVerification {
         case signIn(SignIn)
@@ -29,12 +40,15 @@ final class ClerkAuthService: AuthSessionProviding {
     init(
         configuration: WanderBackendConfiguration,
         resolveSession: @escaping SessionResolver = ClerkAuthService.resolveCurrentSession,
+        resolveSessionID: @escaping SessionIDResolver = { Clerk.shared.session?.id },
         sessionCache: AuthSessionCache = .live,
+        nativeAuthSessionFenceStore: NativeAuthSessionFenceStore = .live,
         sessionAdoptionRetryDelaysNanoseconds: [UInt64] = [
             200_000_000,
             600_000_000,
             2_000_000_000
         ],
+        sessionAdoptionTimeoutNanoseconds: UInt64 = 6_000_000_000,
         sessionAdoptionSleeper: @escaping SessionAdoptionSleeper = { delay in
             try await Task<Never, Never>.sleep(nanoseconds: delay)
         },
@@ -42,8 +56,12 @@ final class ClerkAuthService: AuthSessionProviding {
     ) {
         self.configuration = configuration
         self.resolveAuthoritativeSession = resolveSession
+        self.resolveActiveSessionID = resolveSessionID
         self.sessionCache = sessionCache
+        self.nativeAuthSessionFenceStore = nativeAuthSessionFenceStore
+        self.nativeAuthSessionFence = nativeAuthSessionFenceStore.load()
         self.sessionAdoptionRetryDelaysNanoseconds = sessionAdoptionRetryDelaysNanoseconds
+        self.sessionAdoptionTimeoutNanoseconds = sessionAdoptionTimeoutNanoseconds
         self.sessionAdoptionSleeper = sessionAdoptionSleeper
 
         if let publishableKey = configuration.clerkPublishableKey {
@@ -104,6 +122,9 @@ final class ClerkAuthService: AuthSessionProviding {
                     case .sessionChanged:
                         guard let self else { return }
                         let state = Self.currentClientState()
+                        guard self.shouldPublishSessionChange(observedState: state) else {
+                            continue
+                        }
                         self.applyObservedClientState(state)
                         continuation.yield(state)
                     case .tokenRefreshed:
@@ -125,6 +146,20 @@ final class ClerkAuthService: AuthSessionProviding {
 
     func refreshSession() async {
         #if canImport(ClerkKit)
+        await refreshSession(expectedSessionID: nil)
+        #else
+        state = .unavailable("ClerkKit is not linked.")
+        #if DEBUG
+        WanderDebugLog.remote.error("clerk refresh unavailable reason=clerkkit_not_linked")
+        #endif
+        #endif
+    }
+
+    #if canImport(ClerkKit)
+    private func refreshSession(
+        expectedSessionID: String?,
+        deadline: UInt64? = nil
+    ) async {
         refreshGeneration &+= 1
         let generation = refreshGeneration
         guard configuration.isClerkConfigured else {
@@ -136,7 +171,18 @@ final class ClerkAuthService: AuthSessionProviding {
         }
 
         do {
-            let resolvedSession = try await resolveAuthoritativeSession()
+            let resolvedSession: ResolvedSession?
+            if let deadline {
+                let remaining = remainingNanoseconds(until: deadline)
+                guard remaining > 0 else {
+                    sessionCache.save(nil)
+                    state = .signedOut
+                    return
+                }
+                resolvedSession = try await resolveAuthoritativeSession(within: remaining)
+            } else {
+                resolvedSession = try await resolveAuthoritativeSession()
+            }
             guard !Task.isCancelled, generation == refreshGeneration else { return }
             guard let session = resolvedSession else {
                 sessionCache.save(nil)
@@ -146,15 +192,47 @@ final class ClerkAuthService: AuthSessionProviding {
                 #endif
                 return
             }
-            sessionCache.save(session)
-            state = .signedIn(session)
+            let requiredSessionID: String?
+            if let expectedSessionID {
+                requiredSessionID = expectedSessionID
+            } else if let nativeAuthSessionFence {
+                guard let fencedSessionID = nativeAuthSessionFence.requiredSessionID else {
+                    sessionCache.save(nil)
+                    state = .signedOut
+                    return
+                }
+                requiredSessionID = fencedSessionID
+            } else {
+                requiredSessionID = nil
+            }
+            if let requiredSessionID,
+               (session.clerkSessionID != requiredSessionID
+                   || resolveActiveSessionID() != requiredSessionID) {
+                sessionCache.save(nil)
+                state = .signedOut
+                #if DEBUG
+                WanderDebugLog.remote.error("clerk refresh rejected reason=session_mismatch")
+                #endif
+                return
+            }
+            if expectedSessionID != nil
+                || nativeAuthSessionFence?.requiredSessionID == session.clerkSessionID {
+                setNativeAuthSessionFence(nil)
+            }
+            sessionCache.save(session.authSession)
+            state = .signedIn(session.authSession)
             #if DEBUG
-            WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public)")
+            WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.authSession.userID), privacy: .public)")
             #endif
         } catch is CancellationError {
             return
         } catch {
             guard generation == refreshGeneration else { return }
+            if expectedSessionID != nil || nativeAuthSessionFence != nil {
+                sessionCache.save(nil)
+                state = .signedOut
+                return
+            }
             let message = "Could not verify your session. Your saved map is available offline."
             if let session = sessionCache.load() {
                 state = .offline(session, message: message)
@@ -165,13 +243,8 @@ final class ClerkAuthService: AuthSessionProviding {
             WanderDebugLog.remote.error("clerk refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
         }
-        #else
-        state = .unavailable("ClerkKit is not linked.")
-        #if DEBUG
-        WanderDebugLog.remote.error("clerk refresh unavailable reason=clerkkit_not_linked")
-        #endif
-        #endif
     }
+    #endif
 
     func authenticate(
         with provider: NativeSocialAuthProvider,
@@ -182,7 +255,7 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
 
-        let startedWithSignedInSession = state.isSignedIn
+        setNativeAuthSessionFence(.blockUncorrelated)
         let result: TransferFlowResult
         do {
             switch (provider, mode) {
@@ -210,41 +283,45 @@ final class ClerkAuthService: AuthSessionProviding {
         } catch is CancellationError {
             throw AuthSessionError.cancelled
         } catch {
-            let mappedError = Self.authError(from: error)
-            if !startedWithSignedInSession,
-               await adoptCurrentSessionAfterProviderError() {
-                return NativeSocialAuthResult(
-                    outcome: .completed,
-                    sessionAdoption: .afterProviderErrorRefresh
-                )
-            }
-            throw mappedError
+            throw Self.authError(from: error)
         }
 
         let outcome: NativeAuthOutcome
+        let completedSessionID: String?
         switch result {
         case .signIn(let signIn):
             if signIn.status == .complete {
                 outcome = .completed
+                completedSessionID = signIn.createdSessionId
             } else if mode == .signIn {
                 outcome = .requiresExistingAccountVerification
+                completedSessionID = nil
             } else {
                 outcome = .requiresAdditionalVerification
+                completedSessionID = nil
             }
         case .signUp(let signUp):
             if signUp.status == .complete {
                 outcome = .completed
+                completedSessionID = signUp.createdSessionId
             } else if mode == .signIn {
                 outcome = .requiresExistingAccountVerification
+                completedSessionID = nil
             } else {
                 outcome = .requiresAdditionalVerification
+                completedSessionID = nil
             }
         }
 
         guard outcome == .completed else {
             return NativeSocialAuthResult(outcome: outcome)
         }
-        let adoption = try await adoptCompletedNativeAuthSession()
+        guard let completedSessionID else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        let adoption = try await adoptCompletedNativeAuthSession(
+            expectedSessionID: completedSessionID
+        )
         return NativeSocialAuthResult(
             outcome: .completed,
             sessionAdoption: adoption
@@ -256,24 +333,52 @@ final class ClerkAuthService: AuthSessionProviding {
 
     #if canImport(ClerkKit)
     /// A completed Clerk auth response can precede the active client session
-    /// becoming observable. Retry only this post-completion adoption boundary;
+    /// becoming observable. Retry only this post-completion adoption boundary,
+    /// require the exact session Clerk created, and cap the entire operation;
     /// ordinary foreground refreshes remain single-shot.
-    func adoptCompletedNativeAuthSession() async throws -> NativeAuthSessionAdoption {
-        await refreshSession()
+    func adoptCompletedNativeAuthSession(
+        expectedSessionID: String
+    ) async throws -> NativeAuthSessionAdoption {
+        guard pendingNativeAuthSessionID == nil else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        pendingNativeAuthSessionID = expectedSessionID
+        // Keep this fence after a failed or cancelled attempt. A later generic
+        // foreground refresh may accept only the session this Clerk result
+        // created, never a different active account.
+        setNativeAuthSessionFence(.require(expectedSessionID))
+        defer { pendingNativeAuthSessionID = nil }
+
+        let deadline = DispatchTime.now().uptimeNanoseconds
+            &+ sessionAdoptionTimeoutNanoseconds
+        await refreshSession(
+            expectedSessionID: expectedSessionID,
+            deadline: deadline
+        )
         try Task.checkCancellation()
-        if case .signedIn = state {
+        if case .signedIn = state,
+           resolveActiveSessionID() == expectedSessionID {
             return .immediate
         }
 
         for delay in sessionAdoptionRetryDelaysNanoseconds {
-            try await sessionAdoptionSleeper(delay)
+            let remainingBeforeSleep = remainingNanoseconds(until: deadline)
+            guard remainingBeforeSleep > 0 else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            try await sessionAdoptionSleeper(min(delay, remainingBeforeSleep))
             try Task.checkCancellation()
-            if case .signedIn = state {
+            if case .signedIn = state,
+               resolveActiveSessionID() == expectedSessionID {
                 return .afterCompletionRetry
             }
-            await refreshSession()
+            await refreshSession(
+                expectedSessionID: expectedSessionID,
+                deadline: deadline
+            )
             try Task.checkCancellation()
-            if case .signedIn = state {
+            if case .signedIn = state,
+               resolveActiveSessionID() == expectedSessionID {
                 return .afterCompletionRetry
             }
         }
@@ -281,12 +386,73 @@ final class ClerkAuthService: AuthSessionProviding {
         throw AuthSessionError.sessionUnavailable
     }
 
-    func adoptCurrentSessionAfterProviderError() async -> Bool {
-        await refreshSession()
-        guard !Task.isCancelled, case .signedIn = state else {
+    func shouldPublishSessionChange(observedState: AuthState) -> Bool {
+        if pendingNativeAuthSessionID != nil {
+            return false
+        }
+        if nativeAuthSessionFence != nil, observedState.isSignedIn {
+            return false
+        }
+        if observedState.isSignedIn, !state.isSignedIn {
+            // Session events are notifications, never proof sufficient to
+            // elevate a signed-out client. Interactive and foreground paths
+            // publish only after their authoritative refresh is validated.
             return false
         }
         return true
+    }
+
+    private func resolveAuthoritativeSession(within timeoutNanoseconds: UInt64) async throws -> ResolvedSession? {
+        let (stream, continuation) = AsyncThrowingStream<TimedSessionResolution, Error>.makeStream()
+        let sessionResolver = resolveAuthoritativeSession
+        let resolverTask = Task { @MainActor in
+            do {
+                let session = try await sessionResolver()
+                continuation.yield(.resolved(session))
+                continuation.finish()
+            } catch is CancellationError {
+                continuation.finish(throwing: CancellationError())
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+        let timeoutTask = Task {
+            do {
+                try await Task<Never, Never>.sleep(nanoseconds: timeoutNanoseconds)
+                continuation.finish(throwing: SessionAdoptionTimeoutError())
+            } catch {
+                // The resolver or caller won the race.
+            }
+        }
+        defer {
+            resolverTask.cancel()
+            timeoutTask.cancel()
+        }
+
+        var iterator = stream.makeAsyncIterator()
+        guard let resolution = try await iterator.next() else {
+            throw CancellationError()
+        }
+        switch resolution {
+        case .resolved(let session):
+            return session
+        }
+    }
+
+    private func remainingNanoseconds(until deadline: UInt64) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        return deadline > now ? deadline - now : 0
+    }
+
+    private func setNativeAuthSessionFence(_ fence: NativeAuthSessionFence?) {
+        nativeAuthSessionFence = fence
+        nativeAuthSessionFenceStore.save(fence)
+    }
+
+    private struct SessionAdoptionTimeoutError: Error {}
+
+    private enum TimedSessionResolution: Sendable {
+        case resolved(ResolvedSession?)
     }
     #endif
 
@@ -297,6 +463,7 @@ final class ClerkAuthService: AuthSessionProviding {
         }
 
         do {
+            setNativeAuthSessionFence(.blockUncorrelated)
             switch mode {
             case .signIn:
                 let signIn = try await Clerk.shared.auth.signInWithEmailCode(
@@ -342,6 +509,7 @@ final class ClerkAuthService: AuthSessionProviding {
 
         do {
             let outcome: NativeAuthOutcome
+            let completedSessionID: String?
             switch pendingEmailVerification {
             case .signIn(let signIn):
                 let updatedSignIn = try await signIn.verifyCode(code)
@@ -349,20 +517,24 @@ final class ClerkAuthService: AuthSessionProviding {
                 outcome = updatedSignIn.status == .complete
                     ? .completed
                     : .requiresAdditionalVerification
+                completedSessionID = updatedSignIn.createdSessionId
             case .signUp(let signUp):
                 let updatedSignUp = try await signUp.verifyEmailCode(code)
                 self.pendingEmailVerification = .signUp(updatedSignUp)
                 outcome = updatedSignUp.status == .complete
                     ? .completed
                     : .requiresAdditionalVerification
+                completedSessionID = updatedSignUp.createdSessionId
             }
 
             guard outcome == .completed else { return outcome }
             self.pendingEmailVerification = nil
-            await refreshSession()
-            guard case .signedIn = state else {
+            guard let completedSessionID else {
                 throw AuthSessionError.sessionUnavailable
             }
+            _ = try await adoptCompletedNativeAuthSession(
+                expectedSessionID: completedSessionID
+            )
             return .completed
         } catch {
             throw Self.authError(from: error)
@@ -382,6 +554,7 @@ final class ClerkAuthService: AuthSessionProviding {
         }
 
         do {
+            setNativeAuthSessionFence(.blockUncorrelated)
             let signIn = try await Clerk.shared.auth.signInWithPassword(
                 identifier: emailAddress,
                 password: password
@@ -389,11 +562,12 @@ final class ClerkAuthService: AuthSessionProviding {
             guard signIn.status == .complete else {
                 return .requiresAdditionalVerification
             }
-
-            await refreshSession()
-            guard case .signedIn = state else {
+            guard let completedSessionID = signIn.createdSessionId else {
                 throw AuthSessionError.sessionUnavailable
             }
+            _ = try await adoptCompletedNativeAuthSession(
+                expectedSessionID: completedSessionID
+            )
             return .completed
         } catch let error as ClerkAPIError where Self.invalidCredentialCodes.contains(error.code) {
             throw AuthSessionError.invalidCredentials
@@ -417,6 +591,7 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
         try await Clerk.shared.auth.signOut()
+        setNativeAuthSessionFence(nil)
         sessionCache.save(nil)
         state = .signedOut
         #else
@@ -429,6 +604,7 @@ final class ClerkAuthService: AuthSessionProviding {
         guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
         guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
         _ = try await user.delete()
+        setNativeAuthSessionFence(nil)
         sessionCache.save(nil)
         state = .signedOut
         #else
@@ -513,6 +689,7 @@ final class ClerkAuthService: AuthSessionProviding {
     /// must prevent an older in-flight refresh from restoring a removed session.
     func applyTerminalSignedOutState() {
         refreshGeneration &+= 1
+        setNativeAuthSessionFence(nil)
         applyObservedClientState(.signedOut)
     }
     #endif
@@ -556,13 +733,16 @@ final class ClerkAuthService: AuthSessionProviding {
         return error
     }
 
-    private static func resolveCurrentSession() async throws -> AuthSession? {
+    private static func resolveCurrentSession() async throws -> ResolvedSession? {
         _ = try await Clerk.shared.refreshClient()
         guard let session = Clerk.shared.session,
               isActiveSessionStatus(session.status),
               let user = session.user
         else { return nil }
-        return authSession(from: user)
+        return ResolvedSession(
+            clerkSessionID: session.id,
+            authSession: authSession(from: user)
+        )
     }
 
     private static func currentClientState() -> AuthState {
