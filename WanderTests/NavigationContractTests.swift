@@ -410,6 +410,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(astir.contains("struct AstirFloatingHeaderSurface<Content: View>"))
         XCTAssertTrue(astir.contains("struct AstirIconActionButton: View"))
         XCTAssertTrue(astir.contains("struct AstirEditorialSegmentedSwitch: View"))
+        XCTAssertTrue(astir.contains("if dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(astir.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        XCTAssertTrue(astir.contains("optionsRow(usesAccessibilityWidths: true)"))
+        XCTAssertTrue(astir.contains("HStack(spacing: usesAccessibilityWidths ? 6 : 0)"))
+        XCTAssertTrue(astir.contains("minWidth: usesAccessibilityWidths ? 148 : nil"))
         XCTAssertTrue(astir.contains(".astirGlassSurface(cornerRadius: 17, castsShadow: true)"))
 
         XCTAssertTrue(root.contains("onAdd: presentAddSheet"))

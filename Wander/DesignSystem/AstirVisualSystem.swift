@@ -487,12 +487,28 @@ struct AstirIconActionButton: View {
 /// Segmented behavior without chip styling. Selection is carried by type and a
 /// fine illuminated rule rather than a hard filled rectangle.
 struct AstirEditorialSegmentedSwitch: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.astirBrandMode) private var brandMode
     let options: [WanderSegmentOption]
     @Binding var selection: String
 
     var body: some View {
-        HStack(spacing: 0) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    optionsRow(usesAccessibilityWidths: true)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            } else {
+                optionsRow(usesAccessibilityWidths: false)
+            }
+        }
+        .padding(4)
+        .astirGlassSurface(cornerRadius: 17, castsShadow: true)
+    }
+
+    private func optionsRow(usesAccessibilityWidths: Bool) -> some View {
+        HStack(spacing: usesAccessibilityWidths ? 6 : 0) {
             ForEach(options) { option in
                 let isSelected = selection == option.id
                 Button {
@@ -501,9 +517,14 @@ struct AstirEditorialSegmentedSwitch: View {
                     VStack(spacing: 0) {
                         Text(option.title)
                             .font(AstirTypography.label)
-                            .lineLimit(1)
+                            .lineLimit(usesAccessibilityWidths ? 2 : 1)
                             .minimumScaleFactor(0.82)
-                            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                            .multilineTextAlignment(.center)
+                            .frame(
+                                minWidth: usesAccessibilityWidths ? 148 : nil,
+                                maxWidth: .infinity,
+                                minHeight: usesAccessibilityWidths ? 60 : WanderTheme.tapMinimum
+                            )
                             .foregroundStyle(
                                 isSelected
                                     ? brandMode.accentText
@@ -522,8 +543,6 @@ struct AstirEditorialSegmentedSwitch: View {
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(4)
-        .astirGlassSurface(cornerRadius: 17, castsShadow: true)
     }
 }
 
