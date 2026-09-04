@@ -710,7 +710,9 @@ final class ActivityEngagementTests: XCTestCase {
                 fetchedAt: Date(timeIntervalSince1970: 300)
             )
         )
-        let activityRepository = ActivityEngagementRepositoryStub(activityResult: exactActivity)
+        let activityRepository = ActivityEngagementRepositoryStub(
+            activityResponses: [.success(exactActivity), .success(exactActivity)]
+        )
         let backend = WanderBackend(
             feedRepository: feedRepository,
             activityEngagementRepository: activityRepository
@@ -830,6 +832,159 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(activityRepository.activityRequestCount, 1)
     }
 
+    func testFeedRejectsOtherUsersStealthSaveAndFeaturedAttribution() async {
+        let store = WanderStore(fixtures: .empty())
+        let stealth = privacyActivity(ownerID: "friend", visibility: .selfOnly)
+        let own = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let shared = privacyActivity(ownerID: "friend", visibility: .followers)
+        let repository = SuspendedActivityFeedRepository(page: FollowedFeedPage(
+            activity: [stealth, own, shared],
+            featuredPlaces: [FeedFeaturedPlace(visiblePlace: stealth.place!, actor: stealth.actor, reason: "Private attribution")],
+            nextCursor: "next", fetchedAt: .now
+        ))
+        repository.finish()
+        let refreshed = await store.refreshFollowedFeed(backend: WanderBackend(feedRepository: repository))
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [own.id, shared.id])
+        XCTAssertTrue(store.followedFeedPage?.featuredPlaces.isEmpty == true)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "next")
+    }
+
+    func testExactStealthActivityIsVisibleOnlyToOwner() async {
+        let store = WanderStore(fixtures: .empty())
+        let own = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let other = privacyActivity(ownerID: "friend", visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [.success(own), .success(other)])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let ownResult = await store.activity(id: own.id, backend: backend)
+        XCTAssertEqual(ownResult?.id, own.id)
+        let otherResult = await store.activity(id: other.id, backend: backend)
+        XCTAssertNil(otherResult)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [own.id])
+    }
+
+    func testExactActivityFailureEvictsPreviouslyVisibleTicketAndAllowsRetry() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [
+            .success(activity), .failure(WanderRemoteError.invalidResponse("activity_not_visible")), .success(activity)
+        ])
+        let feedRepository = SuspendedActivityFeedRepository(page: FollowedFeedPage(
+            activity: [activity],
+            featuredPlaces: [FeedFeaturedPlace(visiblePlace: activity.place!, actor: activity.actor, reason: "Shared save")],
+            nextCursor: nil, fetchedAt: .now
+        ))
+        feedRepository.finish()
+        let backend = WanderBackend(feedRepository: feedRepository, activityEngagementRepository: repository)
+        let refreshed = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(refreshed)
+        let first = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNotNil(first)
+        let denied = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNil(denied)
+        XCTAssertTrue(store.followedFeedPage?.activity.isEmpty == true)
+        XCTAssertTrue(store.followedFeedPage?.featuredPlaces.isEmpty == true)
+        XCTAssertNil(store.activityEngagementByID[activity.id])
+        let retry = await store.activity(id: activity.id, backend: backend)
+        XCTAssertEqual(retry?.id, activity.id)
+    }
+
+    func testFeedRefreshDoesNotResurrectPinnedActivityAfterStealthRevocation() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let activityRepository = ActivityEngagementRepositoryStub(activityResponses: [
+            .success(activity), .failure(WanderRemoteError.invalidResponse("activity_not_visible"))
+        ])
+        let feedRepository = SuspendedActivityFeedRepository(page: FollowedFeedPage(
+            activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now
+        ))
+        feedRepository.finish()
+        let backend = WanderBackend(feedRepository: feedRepository, activityEngagementRepository: activityRepository)
+        let initial = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNotNil(initial)
+        let refreshed = await store.refreshFollowedFeed(backend: backend, preservingActivityID: activity.id)
+        XCTAssertTrue(refreshed)
+        XCTAssertTrue(store.followedFeedPage?.activity.isEmpty == true)
+        XCTAssertEqual(activityRepository.activityRequestCount, 2)
+    }
+
+    func testExactActivityResponseCannotCrossAccountBoundary() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResult: activity, suspendActivity: true)
+        let task = Task { @MainActor in
+            let resolved = await store.activity(id: activity.id, backend: WanderBackend(activityEngagementRepository: repository))
+            return resolved?.id
+        }
+        for _ in 0..<100 where repository.activityRequestCount == 0 { await Task.yield() }
+        XCTAssertEqual(repository.activityRequestCount, 1)
+        store.apply(authState: .signedOut)
+        store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
+        repository.finishActivity()
+        let result = await task.value
+        XCTAssertNil(result)
+        XCTAssertNil(store.followedFeedPage)
+    }
+
+    func testExactActivityEngagementCannotCrossAccountBoundary() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResult: activity, suspendSummaries: true)
+        let task = Task { @MainActor in
+            let resolved = await store.activity(id: activity.id, backend: WanderBackend(activityEngagementRepository: repository))
+            return resolved?.id
+        }
+        for _ in 0..<100 where repository.summariesRequestCount == 0 { await Task.yield() }
+        XCTAssertEqual(repository.summariesRequestCount, 1)
+        store.apply(authState: .signedOut)
+        store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
+        repository.finishSummaries()
+        let result = await task.value
+        XCTAssertNil(result)
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertNil(store.activityEngagementByID[activity.id])
+    }
+
+    func testDeniedRemoteCommentsResolutionClearsCachedPreviewAndCanRetry() throws {
+        let coordinator = ActivityNavigationCoordinator()
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        coordinator.openComments(context: try XCTUnwrap(activity.activityEngagementContext), visiblePlace: activity.place)
+        let requestID = try XCTUnwrap(coordinator.commentsRoute?.id)
+
+        coordinator.resolve(requestID: requestID, activity: nil)
+        XCTAssertEqual(coordinator.commentsRoute?.id, requestID)
+        XCTAssertNil(coordinator.commentsRoute?.context)
+        XCTAssertNil(coordinator.commentsRoute?.visiblePlace)
+
+        coordinator.resolve(requestID: requestID, activity: activity)
+        XCTAssertEqual(coordinator.commentsRoute?.context?.activityID, activity.id)
+        XCTAssertEqual(coordinator.commentsRoute?.visiblePlace?.id, activity.place?.id)
+    }
+
+    func testLocalCommentsResolutionKeepsPreviewAndIgnoresStaleRequests() throws {
+        let coordinator = ActivityNavigationCoordinator()
+        let activity = privacyActivity(ownerID: "owner", visibility: .selfOnly)
+        coordinator.openComments(context: try XCTUnwrap(activity.activityEngagementContext), visiblePlace: activity.place)
+        let requestID = try XCTUnwrap(coordinator.commentsRoute?.id)
+        coordinator.resolve(requestID: requestID, activity: nil, allowsCachedContext: true)
+        XCTAssertEqual(coordinator.commentsRoute?.context?.activityID, activity.id)
+        coordinator.resolve(requestID: UUID(), activity: nil)
+        XCTAssertEqual(coordinator.commentsRoute?.context?.activityID, activity.id)
+    }
+
+    private func privacyActivity(ownerID: String, visibility: PlaceVisibility) -> FeedActivity {
+        let id = UUID().uuidString.lowercased()
+        let owner = LocalProfile(localID: ownerID, handle: ownerID, displayName: "Owner")
+        let place = LocalPlace(localID: "place_\(id)", canonicalName: "Test Place", category: "coffee", latitude: 34, longitude: -118)
+        let userPlace = LocalUserPlace(localID: "save_\(id)", userID: ownerID, placeID: place.id, status: .been, visibility: visibility, sourceType: "manual")
+        return FeedActivity(
+            id: id, kind: .placeBeen,
+            actor: ProfileShell(id: ownerID, handle: ownerID, displayName: "Owner", avatarURL: nil, bio: nil, relationship: .follower),
+            place: VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner, attributes: []),
+            occurredAt: .now, note: "Private note"
+        )
+    }
+
     private func activityComment(
         id: String,
         activityID: String,
@@ -866,8 +1021,11 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     let deleteResult: ActivityEngagementSummary?
     let deleteError: Error?
     private(set) var activityRequestCount = 0
+    private(set) var summariesRequestCount = 0
     private(set) var deletedCommentIDs: [String] = []
     private var activityResponses: [Result<FeedActivity, Error>]
+    private var isActivitySuspended: Bool
+    private var areSummariesSuspended: Bool
 
     init(
         placeMatches: [PlaceActivityEngagementMatch] = [],
@@ -877,7 +1035,9 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
         deleteResult: ActivityEngagementSummary? = nil,
         deleteError: Error? = nil,
         activityResult: FeedActivity? = nil,
-        activityResponses: [Result<FeedActivity, Error>]? = nil
+        activityResponses: [Result<FeedActivity, Error>]? = nil,
+        suspendActivity: Bool = false,
+        suspendSummaries: Bool = false
     ) {
         self.placeMatches = placeMatches
         self.summariesResult = summariesResult
@@ -885,6 +1045,8 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
         self.commentsPage = commentsPage
         self.deleteResult = deleteResult
         self.deleteError = deleteError
+        self.isActivitySuspended = suspendActivity
+        self.areSummariesSuspended = suspendSummaries
         self.activityResponses = activityResponses
             ?? activityResult.map { [.success($0)] }
             ?? []
@@ -892,6 +1054,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
 
     func activity(id: String) async throws -> FeedActivity {
         activityRequestCount += 1
+        while isActivitySuspended { await Task.yield() }
         guard !activityResponses.isEmpty else {
             throw ActivityEngagementTestError.expected
         }
@@ -900,8 +1063,18 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
         return activityResult
     }
 
+    func finishActivity() {
+        isActivitySuspended = false
+    }
+
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
-        summariesResult ?? activityIDs.map(ActivityEngagementSummary.empty(activityID:))
+        summariesRequestCount += 1
+        while areSummariesSuspended { await Task.yield() }
+        return summariesResult ?? activityIDs.map(ActivityEngagementSummary.empty(activityID:))
+    }
+
+    func finishSummaries() {
+        areSummariesSuspended = false
     }
 
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {

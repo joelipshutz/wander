@@ -1613,10 +1613,12 @@ final class WanderStore: ObservableObject {
             do {
                 let page = try await loadFollowedFeed(from: repository)
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
-                let resolvedPage = mergingPinnedActivity(
-                    into: page,
-                    activityID: preservingActivityID
+                let resolvedPage = await mergingPinnedActivity(
+                    into: displayableFeedPage(page),
+                    activityID: preservingActivityID,
+                    backend: backend
                 )
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
                 followedFeedPage = resolvedPage
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
@@ -1636,10 +1638,13 @@ final class WanderStore: ObservableObject {
 
         guard currentUser.id == requestUserID else { return false }
         let page = fixtureFollowedFeedPage(relativeTo: .now)
-        followedFeedPage = mergingPinnedActivity(
+        let resolvedPage = await mergingPinnedActivity(
             into: page,
-            activityID: preservingActivityID
+            activityID: preservingActivityID,
+            backend: nil
         )
+        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        followedFeedPage = resolvedPage
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
         seedFixtureActivityEngagement(for: page.activity)
@@ -1648,15 +1653,38 @@ final class WanderStore: ObservableObject {
 
     private func mergingPinnedActivity(
         into refreshedPage: FollowedFeedPage,
-        activityID: String?
-    ) -> FollowedFeedPage {
+        activityID: String?,
+        backend: WanderBackend?
+    ) async -> FollowedFeedPage {
         guard let activityID,
               !refreshedPage.activity.contains(where: { $0.id == activityID }),
               let pinnedActivity = followedFeedPage?.activity.first(where: { $0.id == activityID })
         else { return refreshedPage }
 
+        let validatedActivity: FeedActivity
+        if UUID(uuidString: activityID) != nil {
+            // Absence can mean pagination OR revoked visibility. Re-authorize
+            // an exact remote ticket instead of resurrecting its cached copy.
+            guard let repository = backend?.activityEngagementRepository else { return refreshedPage }
+            let requestUserID = currentUser.id
+            do {
+                validatedActivity = try await repository.activity(id: activityID)
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return refreshedPage }
+            } catch {
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return refreshedPage }
+                discardCachedActivity(activityID)
+                return refreshedPage
+            }
+        } else {
+            validatedActivity = pinnedActivity
+        }
+        guard validatedActivity.id == activityID, canDisplayActivity(validatedActivity) else {
+            discardCachedActivity(activityID)
+            return refreshedPage
+        }
+
         return FollowedFeedPage(
-            activity: FeedPresentation.newestFirst(refreshedPage.activity + [pinnedActivity]),
+            activity: FeedPresentation.newestFirst(refreshedPage.activity + [validatedActivity]),
             featuredPlaces: refreshedPage.featuredPlaces,
             nextCursor: refreshedPage.nextCursor,
             fetchedAt: refreshedPage.fetchedAt
@@ -1669,7 +1697,10 @@ final class WanderStore: ObservableObject {
 
     @MainActor
     func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
-        let existing = followedFeedPage?.activity.first(where: { $0.id == activityID })
+        let requestUserID = currentUser.id
+        let existing = followedFeedPage?.activity.first(where: {
+            $0.id == activityID && canDisplayActivity($0)
+        })
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
@@ -1677,6 +1708,12 @@ final class WanderStore: ObservableObject {
 
         do {
             let activity = try await repository.activity(id: activityID)
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard activity.id == activityID, canDisplayActivity(activity) else {
+                discardCachedActivity(activityID)
+                activityEngagementErrorByID[activityID] = "This activity is no longer available."
+                return nil
+            }
             let currentPage = followedFeedPage
             let mergedActivity = FeedPresentation.newestFirst(
                 [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
@@ -1688,11 +1725,62 @@ final class WanderStore: ObservableObject {
                 fetchedAt: currentPage?.fetchedAt ?? .now
             )
             await refreshActivityEngagement(activityIDs: [activityID], backend: backend)
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             return activity
         } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            // Never turn an authorization failure into a successful cached
+            // read. Transient failures can be retried through the same route.
+            discardCachedActivity(activityID)
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
-            return existing
+            return nil
         }
+    }
+
+    private func canDisplayActivity(_ activity: FeedActivity) -> Bool {
+        guard !isBlockedBetweenCurrentUser(and: activity.actor.id) else { return false }
+        guard activity.actor.id == currentUser.id
+            || (activity.actor.isPrivateProfile != true && !isProfilePrivate(activity.actor.id))
+        else { return false }
+        return activity.place.map(canDisplayRemotePlace) ?? true
+    }
+
+    private func displayableFeedPage(_ page: FollowedFeedPage) -> FollowedFeedPage {
+        FollowedFeedPage(
+            activity: page.activity.filter(canDisplayActivity),
+            featuredPlaces: page.featuredPlaces.filter { canDisplayRemotePlace($0.visiblePlace) },
+            nextCursor: page.nextCursor,
+            fetchedAt: page.fetchedAt
+        )
+    }
+
+    private func discardCachedActivity(_ activityID: String) {
+        var discardedIDs: Set<String> = [activityID]
+        if let page = followedFeedPage {
+            let source = page.activity.first { $0.id == activityID }?.place
+            let revokedSocialSaveID = source?.userPlace.userID != currentUser.id
+                ? source?.userPlace.id : nil
+            if let revokedSocialSaveID {
+                remoteVisiblePlaceCache.removeAll { $0.userPlace.id == revokedSocialSaveID }
+                discardedIDs.formUnion(page.activity.filter {
+                    $0.place?.userPlace.id == revokedSocialSaveID
+                }.map(\.id))
+            }
+            followedFeedPage = FollowedFeedPage(
+                activity: page.activity.filter { !discardedIDs.contains($0.id) },
+                featuredPlaces: page.featuredPlaces.filter {
+                    $0.visiblePlace.userPlace.id != revokedSocialSaveID
+                },
+                nextCursor: page.nextCursor,
+                fetchedAt: page.fetchedAt
+            )
+        }
+        for discardedID in discardedIDs {
+            activityEngagementByID[discardedID] = nil
+            activityCommentsByID[discardedID] = nil
+            activityEngagementErrorByID[discardedID] = nil
+        }
+        placeActivityEngagementMatches.removeAll { discardedIDs.contains($0.activityID) }
     }
 
     func activityComments(for activityID: String) -> [ActivityComment] {
@@ -1714,6 +1802,7 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
+        let requestUserID = currentUser.id
         let remoteIDs = Array(Set(activityIDs.filter { UUID(uuidString: $0) != nil })).sorted()
         guard !remoteIDs.isEmpty,
               let repository = backend?.activityEngagementRepository
@@ -1721,6 +1810,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let summaries = try await repository.summaries(activityIDs: remoteIDs)
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
             for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
@@ -1734,6 +1824,7 @@ final class WanderStore: ObservableObject {
                 activityEngagementErrorByID = refreshedErrors
             }
         } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
             let message = remoteErrorMessage(error)
             var refreshedErrors = activityEngagementErrorByID
             for activityID in remoteIDs {
@@ -4245,7 +4336,7 @@ final class WanderStore: ObservableObject {
         remoteVisiblePlaceCache
             .map(visiblePlaceWithLatestOwner)
             .filter { visiblePlace in
-                guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
+                guard canDisplayRemotePlace(visiblePlace) else { return false }
                 guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
                 let normalizedCategories = filters.normalizedCategories
                 guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
@@ -4261,6 +4352,16 @@ final class WanderStore: ObservableObject {
                     || (filters.ownerScopes.contains("following") && !isMine)
                     || (filters.ownerScopes.contains("social") && !isMine)
             }
+    }
+
+    private func canDisplayRemotePlace(_ visiblePlace: VisiblePlace) -> Bool {
+        visiblePlace.userPlace.deletedAt == nil
+            && visibilityPolicy.canDisplayServerAuthorizedPlace(
+                viewerID: currentUser.id,
+                ownerID: visiblePlace.userPlace.userID,
+                visibility: visiblePlace.userPlace.visibility,
+                isBlocked: isBlockedBetweenCurrentUser(and: visiblePlace.owner.id)
+            )
     }
 
     private func visiblePlaceWithLatestOwner(_ visiblePlace: VisiblePlace) -> VisiblePlace {
