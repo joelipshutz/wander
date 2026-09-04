@@ -834,6 +834,41 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testNotificationUpsellPreparationSkipsUnknownOrAlreadyEnabledPreferences() {
+        XCTAssertGreaterThan(
+            OnboardingNotificationUpsellPreparationPolicy.maximumPreferenceWaitMilliseconds,
+            OnboardingNotificationUpsellPreparationPolicy.systemPermissionFallbackDelayMilliseconds
+        )
+        XCTAssertEqual(
+            OnboardingNotificationUpsellPreparationPolicy.resolution(
+                preferences: nil,
+                authorizationStatus: .authorized
+            ),
+            .wait
+        )
+        XCTAssertEqual(
+            OnboardingNotificationUpsellPreparationPolicy.resolution(
+                preferences: nil,
+                authorizationStatus: .notDetermined
+            ),
+            .present
+        )
+        XCTAssertEqual(
+            OnboardingNotificationUpsellPreparationPolicy.resolution(
+                preferences: .allEnabled,
+                authorizationStatus: .authorized
+            ),
+            .skip
+        )
+        XCTAssertEqual(
+            OnboardingNotificationUpsellPreparationPolicy.resolution(
+                preferences: .allDisabled,
+                authorizationStatus: .notDetermined
+            ),
+            .present
+        )
+    }
+
     func testCalendarPermissionPolicyUsesNeutralRequestAndSettingsRecovery() {
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
         XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "continue")

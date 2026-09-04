@@ -5248,7 +5248,14 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             return result
         case .sharedVisit(let invitation):
             return await acceptSharedVisit(invitation, submission: submission)
@@ -5276,7 +5283,14 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             return result
         }
     }
@@ -5442,7 +5456,14 @@ struct MapScreen: View {
             guard removal != nil else {
                 return false
             }
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             placeSaveDraftStore.clear()
 
             clearNativeMapFeatureSelection()
@@ -17096,6 +17117,11 @@ private struct PlaceActivityCard: View {
                     .environmentObject(backend)
             }
         }
+        .blocksProductUpsells(
+            while: selectedProfileID != nil
+                || isShowingCamera
+                || isShowingPhotoPicker
+        )
     }
 
     private var header: some View {

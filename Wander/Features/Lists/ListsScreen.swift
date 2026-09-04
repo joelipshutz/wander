@@ -171,6 +171,14 @@ struct ListsScreen: View {
         } message: {
             Text(listInviteErrorMessage ?? "This invitation is no longer available.")
         }
+        .blocksProductUpsells(
+            while: editorPresentation != nil
+                || collaboratorList != nil
+                || pendingListInvite != nil
+                || mapList != nil
+                || selectedProfileID != nil
+                || listInviteErrorMessage != nil
+        )
         .environment(
             \.listPhotoAuthorizationScopeKey,
             store.listPhotoAuthorizationScopeKey()

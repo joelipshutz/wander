@@ -302,6 +302,18 @@ struct NotificationNavigationRequest: Identifiable, Equatable {
 
 @MainActor
 final class PushNotificationManager: ObservableObject {
+    private struct InFlightEnrollment {
+        let id: UUID
+        let userID: String
+        let task: Task<NotificationPreferences?, Never>
+    }
+
+    private struct InFlightTokenRegistration {
+        let id: UUID
+        let userID: String
+        let task: Task<Bool, Never>
+    }
+
     @Published private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var isRequestingAuthorization = false
     @Published private(set) var isRegisteringToken = false
@@ -309,6 +321,9 @@ final class PushNotificationManager: ObservableObject {
     @Published private(set) var navigationRequest: NotificationNavigationRequest?
     @Published private(set) var wannaGoRemindersEnabled: Bool
     @Published private(set) var saveStreakRemindersEnabled = false
+    @Published private(set) var pushEnabled = false
+    @Published private(set) var hasLoadedNotificationPreferences = false
+    @Published private(set) var notificationPreferencesUserID: String?
 
     private let userDefaults: UserDefaults
     private let analytics: AnalyticsClient
@@ -316,9 +331,12 @@ final class PushNotificationManager: ObservableObject {
     private let tokenKey = "wander.apnsDeviceToken"
     private static let wannaGoRemindersKey = "wander.wannaGoRemindersEnabled"
     private static let saveStreakRemindersKeyPrefix = "wander.saveStreakRemindersEnabled."
-    private var pushEnabled = false
     private var saveStreakReminderUserID: String?
     private var handledEventIDs: [String] = []
+    private var inFlightEnrollment: InFlightEnrollment?
+    private var inFlightTokenRegistration: InFlightTokenRegistration?
+    private var tokenRegistrationBlockedUserIDs: Set<String> = []
+    private var tokenTeardownDepthByUserID: [String: Int] = [:]
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -361,6 +379,29 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
+    var notificationsAreEnabled: Bool {
+        Self.notificationsAreEnabled(
+            pushEnabled: pushEnabled,
+            authorizationStatus: authorizationStatus
+        )
+    }
+
+    nonisolated static func notificationsAreEnabled(
+        pushEnabled: Bool,
+        authorizationStatus: UNAuthorizationStatus
+    ) -> Bool {
+        let authorizationAllowsNotifications: Bool
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            authorizationAllowsNotifications = true
+        case .denied, .notDetermined:
+            authorizationAllowsNotifications = false
+        @unknown default:
+            authorizationAllowsNotifications = false
+        }
+        return pushEnabled && authorizationAllowsNotifications
+    }
+
     static func shouldRefreshRemoteRegistration(
         isSignedIn: Bool,
         backendCanRegister: Bool,
@@ -385,21 +426,31 @@ final class PushNotificationManager: ObservableObject {
 
     func refreshRemoteRegistrationIfNeeded(
         backend: WanderBackend,
-        authState: AuthState
+        authSession: any AuthSessionProviding
     ) async {
+        guard case .signedIn(let session) = authSession.state,
+              isCurrentNotificationAccount(session.userID, authSession: authSession) else { return }
         await refreshAuthorizationStatus()
+        guard isTokenRegistrationAllowed(session.userID, authSession: authSession) else { return }
         guard Self.shouldRefreshRemoteRegistration(
-            isSignedIn: authState.isSignedIn,
+            isSignedIn: authSession.state.isSignedIn,
             backendCanRegister: backend.canRegisterPushNotifications,
             pushEnabled: pushEnabled,
             authorizationStatus: authorizationStatus
         ) else { return }
 
+        guard isTokenRegistrationAllowed(session.userID, authSession: authSession) else { return }
         UIApplication.shared.registerForRemoteNotifications()
-        await registerStoredDeviceTokenIfPossible(backend: backend, authState: authState)
+        await registerStoredDeviceTokenIfPossible(backend: backend, authSession: authSession)
     }
 
     func refreshAuthorizationStatus() async {
+        #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderNotificationAuthorizationNotDeterminedFixture") {
+            authorizationStatus = .notDetermined
+            return
+        }
+        #endif
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus
     }
@@ -414,23 +465,47 @@ final class PushNotificationManager: ObservableObject {
         }
         navigationRequest = nil
         handledEventIDs.removeAll()
-        applyNotificationPreferences(.allDisabled)
+        bindNotificationPreferences(to: nil)
         saveStreakReminderUserID = nil
         saveStreakRemindersEnabled = false
         WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        UIApplication.shared.unregisterForRemoteNotifications()
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
 
+    func bindNotificationPreferences(to userID: String?) {
+        guard notificationPreferencesUserID != userID else { return }
+        let previousUserID = notificationPreferencesUserID
+        inFlightEnrollment?.task.cancel()
+        inFlightTokenRegistration?.task.cancel()
+        notificationPreferencesUserID = userID
+        if let previousUserID {
+            tokenRegistrationBlockedUserIDs.remove(previousUserID)
+            tokenTeardownDepthByUserID.removeValue(forKey: previousUserID)
+        }
+        pushEnabled = false
+        hasLoadedNotificationPreferences = false
+        wannaGoRemindersEnabled = false
+        saveStreakReminderUserID = nil
+        saveStreakRemindersEnabled = false
+    }
+
     @discardableResult
-    func requestAuthorizationAndRegister() async -> Bool {
+    func requestAuthorizationAndRegister(
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async -> Bool {
+        guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return false }
         isRequestingAuthorization = true
         lastErrorMessage = nil
         defer { isRequestingAuthorization = false }
 
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+            guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return false }
             await refreshAuthorizationStatus()
+            guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return false }
             if granted {
                 UIApplication.shared.registerForRemoteNotifications()
             }
@@ -443,47 +518,131 @@ final class PushNotificationManager: ObservableObject {
 
     func enableNotifications(
         backend: WanderBackend,
-        authState: AuthState
+        expectedUserID: String,
+        authSession: any AuthSessionProviding
     ) async -> NotificationPreferences? {
-        guard case .signedIn = authState, backend.canRegisterPushNotifications else {
+        guard tokenTeardownDepthByUserID[expectedUserID, default: 0] == 0 else {
+            return nil
+        }
+        // Only an explicit enable action may reopen registration after a disable
+        // teardown. Passive APNs callbacks remain blocked until then.
+        tokenRegistrationBlockedUserIDs.remove(expectedUserID)
+        if let inFlightEnrollment {
+            if inFlightEnrollment.userID == expectedUserID {
+                return await inFlightEnrollment.task.value
+            }
+            inFlightEnrollment.task.cancel()
+            _ = await inFlightEnrollment.task.value
+            if self.inFlightEnrollment?.id == inFlightEnrollment.id {
+                self.inFlightEnrollment = nil
+            }
+        }
+
+        let enrollmentID = UUID()
+        let enrollmentTask = Task<NotificationPreferences?, Never> { @MainActor [weak self] in
+            guard let self else { return nil }
+            return await self.performNotificationEnrollment(
+                backend: backend,
+                expectedUserID: expectedUserID,
+                authSession: authSession
+            )
+        }
+        inFlightEnrollment = InFlightEnrollment(
+            id: enrollmentID,
+            userID: expectedUserID,
+            task: enrollmentTask
+        )
+        let result = await enrollmentTask.value
+        if inFlightEnrollment?.id == enrollmentID {
+            inFlightEnrollment = nil
+        }
+        return result
+    }
+
+    private func performNotificationEnrollment(
+        backend: WanderBackend,
+        expectedUserID: String,
+        authSession: any AuthSessionProviding
+    ) async -> NotificationPreferences? {
+        guard case .signedIn(let session) = authSession.state,
+              session.userID == expectedUserID,
+              backend.canRegisterPushNotifications else {
             lastErrorMessage = "Sign in to turn on notifications."
             return nil
         }
+        let userID = expectedUserID
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
 
         lastErrorMessage = nil
         await refreshAuthorizationStatus()
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
         if authorizationStatus == .denied {
             lastErrorMessage = "Enable alerts in iOS Settings, then try again."
             return nil
         }
 
         if authorizationStatus == .notDetermined {
-            guard await requestAuthorizationAndRegister() else { return nil }
+            guard await requestAuthorizationAndRegister(
+                userID: userID,
+                authSession: authSession
+            ) else { return nil }
         } else {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             UIApplication.shared.registerForRemoteNotifications()
         }
 
-        guard let token = await storedDeviceTokenWaitingForRegistration() else {
+        guard let token = await storedDeviceTokenWaitingForRegistration(
+            userID: userID,
+            authSession: authSession
+        ) else {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             lastErrorMessage = "This device did not finish registering with Apple. Try again."
-            await disablePreferencesAfterFailedEnrollment(backend: backend)
+            await disablePreferencesAfterFailedEnrollment(
+                backend: backend,
+                userID: userID,
+                authSession: authSession
+            )
             return nil
         }
 
         isRegisteringToken = true
         defer { isRegisteringToken = false }
 
-        do {
-            _ = try await backend.registerPushToken(
-                token,
-                environment: Self.environment,
-                appBundleID: Bundle.main.bundleIdentifier ?? "com.grayline.wander"
+        guard await registerPushTokenSerialized(
+            token,
+            backend: backend,
+            userID: userID,
+            authSession: authSession
+        ) else {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            await disablePreferencesAfterFailedEnrollment(
+                backend: backend,
+                userID: userID,
+                authSession: authSession
             )
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            lastErrorMessage = "rec.me could not finish notification setup. Try again."
+            return nil
+        }
+
+        do {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             let preferences = try await backend.updateNotificationPreferences(.allEnabled)
-            applyNotificationPreferences(preferences)
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            guard applyNotificationPreferences(preferences, for: userID) else {
+                return nil
+            }
             return preferences
         } catch {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             try? await backend.unregisterPushToken(token, environment: Self.environment)
-            await disablePreferencesAfterFailedEnrollment(backend: backend)
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            await disablePreferencesAfterFailedEnrollment(
+                backend: backend,
+                userID: userID,
+                authSession: authSession
+            )
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             lastErrorMessage = "rec.me could not finish notification setup. Try again."
             #if DEBUG
             WanderDebugLog.remote.error("transactional push enrollment failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
@@ -492,16 +651,33 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
-    func disableNotifications(backend: WanderBackend) async -> NotificationPreferences? {
-        guard backend.canRegisterPushNotifications else { return nil }
+    func disableNotifications(
+        backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async -> NotificationPreferences? {
+        beginTokenTeardown(for: userID)
+        defer { endTokenTeardown(for: userID) }
+        await cancelAndAwaitRegistration(for: userID)
+        guard backend.canRegisterPushNotifications,
+              isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
         lastErrorMessage = nil
 
         do {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             let preferences = try await backend.updateNotificationPreferences(.allDisabled)
-            applyNotificationPreferences(preferences)
-            await cancelAllWannaGoReminders()
-            await cancelAllSaveStreakReminders()
-            _ = await unregisterStoredDeviceTokenIfPossible(backend: backend)
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            guard applyNotificationPreferences(preferences, for: userID) else { return nil }
+            await cancelAllWannaGoReminders(userID: userID, authSession: authSession)
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            await cancelAllSaveStreakReminders(userID: userID, authSession: authSession)
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
+            _ = await unregisterStoredDeviceTokenIfPossible(
+                backend: backend,
+                userID: userID,
+                authSession: authSession
+            )
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             return preferences
         } catch {
             lastErrorMessage = "Could not disable notifications. Try again."
@@ -509,10 +685,14 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
-    func handleRegisteredDeviceToken(_ data: Data, backend: WanderBackend, authState: AuthState) async {
+    func handleRegisteredDeviceToken(
+        _ data: Data,
+        backend: WanderBackend,
+        authSession: any AuthSessionProviding
+    ) async {
         let token = Self.hexString(from: data)
         userDefaults.set(token, forKey: tokenKey)
-        await registerStoredDeviceTokenIfPossible(backend: backend, authState: authState)
+        await registerStoredDeviceTokenIfPossible(backend: backend, authSession: authSession)
     }
 
     func handleRegistrationFailure(_ error: Error) {
@@ -523,8 +703,12 @@ final class PushNotificationManager: ObservableObject {
     }
 
     @discardableResult
-    func registerStoredDeviceTokenIfPossible(backend: WanderBackend, authState: AuthState) async -> Bool {
-        guard case .signedIn = authState,
+    func registerStoredDeviceTokenIfPossible(
+        backend: WanderBackend,
+        authSession: any AuthSessionProviding
+    ) async -> Bool {
+        guard case .signedIn(let session) = authSession.state,
+              isTokenRegistrationAllowed(session.userID, authSession: authSession),
               backend.canRegisterPushNotifications,
               let token = userDefaults.string(forKey: tokenKey),
               !token.isEmpty
@@ -536,40 +720,134 @@ final class PushNotificationManager: ObservableObject {
         lastErrorMessage = nil
         defer { isRegisteringToken = false }
 
-        do {
-            _ = try await backend.registerPushToken(
-                token,
-                environment: Self.environment,
-                appBundleID: Bundle.main.bundleIdentifier ?? "com.grayline.wander"
-            )
-            return true
-        } catch {
-            lastErrorMessage = "Could not sync notification settings."
-            #if DEBUG
-            WanderDebugLog.remote.error("push token sync failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
-            #endif
-            return false
-        }
+        return await registerPushTokenSerialized(
+            token,
+            backend: backend,
+            userID: session.userID,
+            authSession: authSession
+        )
     }
 
     @discardableResult
-    func unregisterStoredDeviceTokenIfPossible(backend: WanderBackend) async -> Bool {
+    func unregisterStoredDeviceTokenIfPossible(
+        backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async -> Bool {
+        beginTokenTeardown(for: userID)
+        defer { endTokenTeardown(for: userID) }
+        await cancelAndAwaitRegistration(for: userID)
         guard backend.canRegisterPushNotifications,
+              isCurrentNotificationAccount(userID, authSession: authSession),
               let token = userDefaults.string(forKey: tokenKey),
               !token.isEmpty
         else {
             return true
         }
 
-        do {
-            try await backend.unregisterPushToken(token, environment: Self.environment)
-            return true
-        } catch {
-            lastErrorMessage = "Notifications are off, but this device could not be fully disconnected."
-            #if DEBUG
-            WanderDebugLog.remote.error("push token unregister failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
-            #endif
-            return false
+        for attempt in 0..<2 {
+            do {
+                guard isCurrentNotificationAccount(userID, authSession: authSession) else { return false }
+                try await backend.unregisterPushToken(token, environment: Self.environment)
+                return isCurrentNotificationAccount(userID, authSession: authSession)
+            } catch {
+                guard attempt == 0,
+                      isCurrentNotificationAccount(userID, authSession: authSession) else {
+                    lastErrorMessage = "Notifications are off, but this device could not be fully disconnected."
+                    #if DEBUG
+                    WanderDebugLog.remote.error("push token unregister failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+                    #endif
+                    return false
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        return false
+    }
+
+    func restoreRegistrationAfterFailedAccountTeardown(
+        userID: String,
+        backend: WanderBackend,
+        authSession: any AuthSessionProviding
+    ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
+        tokenRegistrationBlockedUserIDs.remove(userID)
+        await refreshRemoteRegistrationIfNeeded(backend: backend, authSession: authSession)
+    }
+
+    private func registerPushTokenSerialized(
+        _ token: String,
+        backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async -> Bool {
+        guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return false }
+        if let registration = inFlightTokenRegistration {
+            if registration.userID == userID {
+                return await registration.task.value
+            }
+            registration.task.cancel()
+            _ = await registration.task.value
+            if inFlightTokenRegistration?.id == registration.id {
+                inFlightTokenRegistration = nil
+            }
+        }
+
+        let registrationID = UUID()
+        let registrationTask = Task { @MainActor [weak self] in
+            guard let self,
+                  self.isTokenRegistrationAllowed(userID, authSession: authSession) else {
+                return false
+            }
+            do {
+                _ = try await backend.registerPushToken(
+                    token,
+                    environment: Self.environment,
+                    appBundleID: Bundle.main.bundleIdentifier ?? "com.grayline.wander"
+                )
+                return self.isTokenRegistrationAllowed(userID, authSession: authSession)
+            } catch {
+                if self.isTokenRegistrationAllowed(userID, authSession: authSession) {
+                    self.lastErrorMessage = "Could not sync notification settings."
+                }
+                #if DEBUG
+                WanderDebugLog.remote.error("push token sync failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+                #endif
+                return false
+            }
+        }
+        inFlightTokenRegistration = InFlightTokenRegistration(
+            id: registrationID,
+            userID: userID,
+            task: registrationTask
+        )
+        let result = await registrationTask.value
+        if inFlightTokenRegistration?.id == registrationID {
+            inFlightTokenRegistration = nil
+        }
+        return result
+    }
+
+    private func cancelAndAwaitRegistration(for userID: String) async {
+        let registration = inFlightTokenRegistration?.userID == userID
+            ? inFlightTokenRegistration
+            : nil
+        let enrollment = inFlightEnrollment?.userID == userID
+            ? inFlightEnrollment
+            : nil
+        registration?.task.cancel()
+        enrollment?.task.cancel()
+        if let registration {
+            _ = await registration.task.value
+            if inFlightTokenRegistration?.id == registration.id {
+                inFlightTokenRegistration = nil
+            }
+        }
+        if let enrollment {
+            _ = await enrollment.task.value
+            if inFlightEnrollment?.id == enrollment.id {
+                inFlightEnrollment = nil
+            }
         }
     }
 
@@ -811,11 +1089,18 @@ final class PushNotificationManager: ObservableObject {
         data.map { String(format: "%02x", $0) }.joined()
     }
 
-    func applyNotificationPreferences(_ preferences: NotificationPreferences) {
+    @discardableResult
+    func applyNotificationPreferences(
+        _ preferences: NotificationPreferences,
+        for userID: String
+    ) -> Bool {
+        guard notificationPreferencesUserID == userID else { return false }
         pushEnabled = preferences.pushEnabled
+        hasLoadedNotificationPreferences = true
         wannaGoRemindersEnabled = preferences.pushEnabled && preferences.wannaGoRemindersEnabled
         userDefaults.set(wannaGoRemindersEnabled, forKey: Self.wannaGoRemindersKey)
         refreshSaveStreakReminderPreference()
+        return true
     }
 
     func configureSaveStreakReminders(for userID: String) {
@@ -832,18 +1117,24 @@ final class PushNotificationManager: ObservableObject {
     func reconcileWannaGoReminders(
         _ items: [WannaGoReminderItem],
         backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding,
         now: Date = .now
     ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         await refreshAuthorizationStatus()
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         let center = UNUserNotificationCenter.current()
         let existingIdentifiers = await center.pendingNotificationRequests()
             .map(\.identifier)
             .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
 
         let plans = WannaGoReminderPlanner.plans(for: items, now: now)
         if !existingIdentifiers.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: existingIdentifiers)
         }
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
 
         let intents: [ClientNotificationIntent] = if wannaGoRemindersEnabled,
                                                      canRegisterForRemoteNotifications {
@@ -874,23 +1165,31 @@ final class PushNotificationManager: ObservableObject {
         }
 
         do {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
             _ = try await backend.reconcileClientNotificationIntents(
                 source: WannaGoReminderPlanner.notificationType,
                 intents: intents
             )
         } catch {
-            lastErrorMessage = "Could not sync Wanna go reminders."
+            if isCurrentNotificationAccount(userID, authSession: authSession) {
+                lastErrorMessage = "Could not sync Wanna go reminders."
+            }
             #if DEBUG
             WanderDebugLog.remote.error("wanna reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
         }
     }
 
-    func cancelAllWannaGoReminders() async {
+    func cancelAllWannaGoReminders(
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         let center = UNUserNotificationCenter.current()
         let identifiers = await center.pendingNotificationRequests()
             .map(\.identifier)
             .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         guard !identifiers.isEmpty else { return }
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
@@ -998,12 +1297,17 @@ final class PushNotificationManager: ObservableObject {
     func reconcileSaveStreakReminder(
         _ summary: SaveStreakSummary,
         backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding,
         now: Date = .now,
         cancelledBySaveStatus: PlaceStatus? = nil
     ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         await refreshAuthorizationStatus()
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         let center = UNUserNotificationCenter.current()
         let pendingRequests = await center.pendingNotificationRequests()
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         let productionRequests = pendingRequests.filter {
             SaveStreakReminderPlanner.productionReminderIdentifiers(in: [$0.identifier]).isEmpty == false
         }
@@ -1025,13 +1329,16 @@ final class PushNotificationManager: ObservableObject {
             if !identifiers.isEmpty {
                 center.removePendingNotificationRequests(withIdentifiers: identifiers)
             }
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
             do {
                 _ = try await backend.reconcileClientNotificationIntents(
                     source: SaveStreakReminderPlanner.notificationType,
                     intents: []
                 )
             } catch {
-                lastErrorMessage = "Could not sync save streak reminders."
+                if isCurrentNotificationAccount(userID, authSession: authSession) {
+                    lastErrorMessage = "Could not sync save streak reminders."
+                }
             }
             return
         }
@@ -1050,6 +1357,7 @@ final class PushNotificationManager: ObservableObject {
         if !staleRequests.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: staleRequests.map(\.identifier))
         }
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
 
         let intents = plans.map { plan in
             let copy = plan.copyVariant.copy(streakCount: plan.streakCount)
@@ -1072,15 +1380,19 @@ final class PushNotificationManager: ObservableObject {
             )
         }
         do {
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
             let result = try await backend.reconcileClientNotificationIntents(
                 source: SaveStreakReminderPlanner.notificationType,
                 intents: intents
             )
+            guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
             for plan in plans.prefix(result.createdCount) {
                 saveStreakReminderAnalytics.recordScheduled(plan)
             }
         } catch {
-            lastErrorMessage = "Could not sync save streak reminders."
+            if isCurrentNotificationAccount(userID, authSession: authSession) {
+                lastErrorMessage = "Could not sync save streak reminders."
+            }
             #if DEBUG
             WanderDebugLog.remote.error("save streak reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
@@ -1102,12 +1414,33 @@ final class PushNotificationManager: ObservableObject {
         )
     }
 
-    func cancelAllSaveStreakReminders() async {
+    func cancelAllSaveStreakReminders(
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         let center = UNUserNotificationCenter.current()
         let identifiers = await center.pendingNotificationRequests()
             .map(\.identifier)
             .filter { $0.hasPrefix(SaveStreakReminderPlanner.notificationIdentifierPrefix) }
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
         guard !identifiers.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    func cancelAllRemindersAfterSignOut(authSession: any AuthSessionProviding) async {
+        guard notificationPreferencesUserID == nil,
+              authSession.state.session == nil else { return }
+        let center = UNUserNotificationCenter.current()
+        let identifiers = await center.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter {
+                $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix)
+                    || $0.hasPrefix(SaveStreakReminderPlanner.notificationIdentifierPrefix)
+            }
+        guard notificationPreferencesUserID == nil,
+              authSession.state.session == nil,
+              !identifiers.isEmpty else { return }
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
@@ -1132,13 +1465,18 @@ final class PushNotificationManager: ObservableObject {
     }
     #endif
 
-    private func storedDeviceTokenWaitingForRegistration() async -> String? {
+    private func storedDeviceTokenWaitingForRegistration(
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async -> String? {
+        guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return nil }
         if let token = userDefaults.string(forKey: tokenKey), !token.isEmpty {
             return token
         }
 
         UIApplication.shared.registerForRemoteNotifications()
         for _ in 0..<80 {
+            guard isTokenRegistrationAllowed(userID, authSession: authSession) else { return nil }
             if let token = userDefaults.string(forKey: tokenKey), !token.isEmpty {
                 return token
             }
@@ -1147,14 +1485,56 @@ final class PushNotificationManager: ObservableObject {
         return nil
     }
 
-    private func disablePreferencesAfterFailedEnrollment(backend: WanderBackend) async {
+    private func disablePreferencesAfterFailedEnrollment(
+        backend: WanderBackend,
+        userID: String,
+        authSession: any AuthSessionProviding
+    ) async {
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
+        let didApplyPreferences: Bool
         if let preferences = try? await backend.updateNotificationPreferences(.allDisabled) {
-            applyNotificationPreferences(preferences)
+            didApplyPreferences = applyNotificationPreferences(preferences, for: userID)
         } else {
-            applyNotificationPreferences(.allDisabled)
+            didApplyPreferences = applyNotificationPreferences(.allDisabled, for: userID)
         }
-        await cancelAllWannaGoReminders()
-        await cancelAllSaveStreakReminders()
+        guard didApplyPreferences,
+              isCurrentNotificationAccount(userID, authSession: authSession) else { return }
+        await cancelAllWannaGoReminders(userID: userID, authSession: authSession)
+        guard isCurrentNotificationAccount(userID, authSession: authSession) else { return }
+        await cancelAllSaveStreakReminders(userID: userID, authSession: authSession)
+    }
+
+    private func isCurrentNotificationAccount(
+        _ userID: String,
+        authSession: any AuthSessionProviding
+    ) -> Bool {
+        !Task.isCancelled
+            && notificationPreferencesUserID == userID
+            && authSession.state.session?.userID == userID
+    }
+
+    private func isTokenRegistrationAllowed(
+        _ userID: String,
+        authSession: any AuthSessionProviding
+    ) -> Bool {
+        isCurrentNotificationAccount(userID, authSession: authSession)
+            && !tokenRegistrationBlockedUserIDs.contains(userID)
+            && tokenTeardownDepthByUserID[userID, default: 0] == 0
+    }
+
+    private func beginTokenTeardown(for userID: String) {
+        tokenRegistrationBlockedUserIDs.insert(userID)
+        tokenTeardownDepthByUserID[userID, default: 0] += 1
+        UIApplication.shared.unregisterForRemoteNotifications()
+    }
+
+    private func endTokenTeardown(for userID: String) {
+        let remainingDepth = tokenTeardownDepthByUserID[userID, default: 0] - 1
+        if remainingDepth > 0 {
+            tokenTeardownDepthByUserID[userID] = remainingDepth
+        } else {
+            tokenTeardownDepthByUserID.removeValue(forKey: userID)
+        }
     }
 
     private func refreshSaveStreakReminderPreference() {
