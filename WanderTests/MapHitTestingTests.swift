@@ -1869,11 +1869,28 @@ final class MapSelectionMotionTests: XCTestCase {
             span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.05)
         )
         let tracker = MapCameraRegionTracker(region: start)
+        let intermediate = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 37.38, longitude: -96.13),
+            span: destination.span
+        )
 
         tracker.synchronize(with: destination)
+        tracker.recordCameraChange(intermediate)
+        tracker.recordCameraChange(destination)
 
+        XCTAssertTrue(tracker.isInteractionActive)
+        XCTAssertEqual(
+            tracker.finishCameraChange(destination, isUserInitiated: false),
+            .stationary
+        )
         XCTAssertFalse(tracker.isInteractionActive)
-        XCTAssertEqual(tracker.finishCameraChange(destination), .stationary)
+
+        let userPan = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 40.72, longitude: -73.99),
+            span: destination.span
+        )
+        tracker.recordCameraChange(userPan)
+        XCTAssertEqual(tracker.finishCameraChange(userPan), .pan)
     }
 
     func testSelectionLifetimeIgnoresMapKitBindingClear() {
@@ -2080,10 +2097,17 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapViewDidChangeVisibleRegion"))
         XCTAssertTrue(map.contains("regionDidChangeAnimated"))
         XCTAssertTrue(map.contains("parent.onCameraChange(mapView.region)"))
-        XCTAssertTrue(map.contains("parent.onCameraInteractionEnd(mapView.region)"))
+        XCTAssertTrue(
+            map.contains("parent.onCameraInteractionEnd(mapView.region, isUserInitiated)")
+        )
         XCTAssertTrue(map.contains("@State private var cameraRegionTracker"))
         XCTAssertTrue(map.contains("cameraRegionTracker.recordCameraChange(region)"))
-        XCTAssertTrue(map.contains("cameraRegionTracker.finishCameraChange(region)"))
+        XCTAssertTrue(map.contains("isUserInitiated: isUserInitiated"))
+        XCTAssertTrue(
+            map.contains(
+                "isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify("
+            )
+        )
         XCTAssertFalse(continuousHandler.contains("Task"))
         XCTAssertFalse(continuousHandler.contains("withAnimation"))
         XCTAssertFalse(continuousHandler.contains("store."))

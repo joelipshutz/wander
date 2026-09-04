@@ -442,10 +442,30 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 3))
         XCTAssertTrue(card.label.contains("Bar Nido"))
 
+        let unexpectedRecenterDismissal = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: card
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [unexpectedRecenterDismissal], timeout: 1.2),
+            .timedOut,
+            "A programmatic pin recenter must not dismiss the selected place card."
+        )
+        XCTAssertTrue(card.exists)
+
         card.tap()
         XCTAssertTrue(
             app.staticTexts["Ratings"].waitForExistence(timeout: 3),
             "The first collapsed-card tap should open the place profile."
+        )
+        let unexpectedProfileDismissal = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.staticTexts["Ratings"]
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [unexpectedProfileDismissal], timeout: 1),
+            .timedOut,
+            "The place profile should remain presented after the recenter animation finishes."
         )
     }
 
