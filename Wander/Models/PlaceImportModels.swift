@@ -26,10 +26,11 @@ enum PlaceImportHistoryPresentation {
     }
 
     static func needsReview(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
-        batch.reviewOpenedAt == nil && batch.receipt == nil
-            && ![.queued, .processing, .cancelled].contains(batch.state)
-            && !items.contains { [.queued, .resolving].contains($0.state) }
-            && items.contains { !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state) }
+        // Attention tracks whether the report was opened, not whether it has
+        // actionable places. Failed scans and empty/saved reports count too.
+        batch.reviewOpenedAt == nil
+            && batch.state != .cancelled
+            && !isMatching(batch: batch, items: items)
     }
 
     static func statusLabel(

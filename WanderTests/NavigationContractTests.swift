@@ -2121,6 +2121,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
 
+    func testBothImportReviewDestinationsAcknowledgeOpeningButHistoryGridDoesNot() throws {
+        let views = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
+        )
+        let review = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportCanonicalReviewScreen: View {")
+            .last?.components(separatedBy: "private var reviewHeader").first)
+        XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
+        let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
+            .last?.components(separatedBy: "private func sourceLinkCard").first)
+        XCTAssertTrue(report.contains(".task(id: batchID)"))
+        XCTAssertTrue(report.contains("importStore.markReviewOpened(batchIDs: [batchID])"))
+        let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
+            .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
+        XCTAssertFalse(history.contains("markReviewOpened"))
+    }
+
     func testImportHistoryBadgeAndNoticeDismissAnchorToTopRight() throws {
         let importViews = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")

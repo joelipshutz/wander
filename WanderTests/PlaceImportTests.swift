@@ -153,13 +153,60 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
         XCTAssertEqual(store.recentImportBadgeCount, 0)
     }
 
-    func testCancelledAndSourceRetryOnlyImportsDoNotGetReadyBadges() {
+    func testFailedSourceScanCountsUntilOpenedWhileCancelledImportStaysExcluded() {
         var snapshot = snapshot()
         snapshot.batches[0].state = .cancelled
         snapshot.items[1].kind = .sourceRetry
+        snapshot.items[1].state = .failed
         let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(snapshot: snapshot))
+        XCTAssertEqual(store.unreviewedImportCount, 1)
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        store.markReviewOpened(batchIDs: ["first", "second"])
         XCTAssertEqual(store.unreviewedImportCount, 0)
         XCTAssertEqual(store.recentImportBadgeCount, 0)
+        XCTAssertNil(store.batches.first { $0.id == "first" }?.reviewOpenedAt)
+        XCTAssertNotNil(store.batches.first { $0.id == "second" }?.reviewOpenedAt)
+    }
+
+    func testEveryFinishedOutcomeCountsOnceUntilItsReportIsOpened() {
+        let outcomes: [PlaceImportItemState] = [
+            .ready, .ambiguous, .needsHelp, .duplicate, .saved, .failed, .dismissed
+        ]
+        for outcome in outcomes {
+            var snapshot = snapshot(state: outcome)
+            // More rows do not increase an import's badge contribution.
+            snapshot.items.append(PlaceImportItem(
+                batchID: "first", source: .textNotes,
+                seed: snapshot.items[0].seed, state: outcome
+            ))
+            let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+            let store = PlaceImportStore(persistence: persistence)
+            XCTAssertEqual(store.recentImportBadgeCount, 2, "Outcome: \(outcome)")
+            store.markReviewOpened(batchIDs: ["first"])
+            XCTAssertEqual(store.recentImportBadgeCount, 1, "Outcome: \(outcome)")
+            let restored = PlaceImportStore(persistence: persistence)
+            XCTAssertEqual(restored.recentImportBadgeCount, 1, "Outcome: \(outcome)")
+            restored.markReviewOpened(batchIDs: ["second"])
+            XCTAssertEqual(restored.recentImportBadgeCount, 0, "Outcome: \(outcome)")
+        }
+    }
+
+    func testEmptyAndReceiptBackedImportsCountUntilTheirReportsAreOpened() {
+        var snapshot = snapshot(state: .saved)
+        snapshot.items.removeAll { $0.batchID == "first" }
+        snapshot.batches[1].receipt = PlaceImportReceipt(
+            batchID: "second", sourceName: nil, entries: [], destinationListID: nil
+        )
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence)
+        XCTAssertEqual(store.unreviewedImportCount, 2)
+        XCTAssertEqual(store.recentImportBadgeCount, 2)
+        store.markReviewOpened(batchIDs: ["first"])
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        store.markReviewOpened(batchIDs: ["second"])
+        XCTAssertEqual(store.recentImportBadgeCount, 0)
+        let restored = PlaceImportStore(persistence: persistence)
+        XCTAssertEqual(restored.recentImportBadgeCount, 0)
     }
 
     func testRecentsBadgeIncrementsOnEnqueueAndStaysStableThroughMatching() async throws {

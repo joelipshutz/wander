@@ -1119,6 +1119,9 @@ struct PlaceImportReportScreen: View {
         }
         .navigationTitle("Import report")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: batchID) {
+            importStore.markReviewOpened(batchIDs: [batchID])
+        }
     }
 
     private func sourceLinkCard(batch: PlaceImportBatch) -> some View {
