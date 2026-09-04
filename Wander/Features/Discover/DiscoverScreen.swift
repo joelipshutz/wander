@@ -19,13 +19,18 @@ struct DiscoverScreen: View {
     @State private var placeSearchResultStage = "immediate"
     @State private var placeSearchTask: Task<Void, Never>?
     @State private var communityPlaceSearchTask: Task<Void, Never>?
+    @State private var externalPlaceSearchTask: Task<Void, Never>?
     @State private var activePlaceSearchSubmissionID: UUID?
+    @State private var activeExternalSearchRequestID: UUID?
     @State private var didTrackPlaceSearchOpen = false
     @State private var memberQuery = ""
     @State private var placeResults = DiscoverResults(places: [], profiles: [])
     @State private var communityPlaceCandidates: [PlaceCandidate] = []
+    @State private var externalPlaceCandidates: [PlaceCandidate] = []
     @State private var isCommunityPlaceSearchLoading = false
+    @State private var isExternalPlaceSearchLoading = false
     @State private var communityPlaceSearchFailed = false
+    @State private var externalPlaceSearchFailed = false
     @State private var memberResults: [ProfileShell] = []
     @State private var selectedProfile: SelectedProfile?
     @State private var selectedPlace: SelectedDiscoverPlace?
@@ -90,10 +95,13 @@ struct DiscoverScreen: View {
         VisiblePlaceGrouping.groups(from: filteredPlaceResults, currentUserID: store.currentUser.id)
     }
 
-    private var filteredCommunityPlaceCandidates: [PlaceCandidate] {
-        deduplicatedCommunityCandidates(
-            communityPlaceCandidates,
-            excluding: placeResults.places
+    private var rankedPlaceCandidates: [DiscoverPlaceSearchCandidate] {
+        DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: submittedPlacesQuery ?? placesQuery,
+            filters: placeResults.filters,
+            trusted: placeGroups,
+            recme: communityPlaceCandidates,
+            external: externalPlaceCandidates
         )
     }
 
@@ -157,7 +165,44 @@ struct DiscoverScreen: View {
            !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "\(count) \(count == 1 ? "place" : "places") filtered from \(owner.capitalized)"
         }
-        return "\(count) \(count == 1 ? "place" : "places") from your network and rec.me"
+        if isCommunityPlaceSearchLoading || isExternalPlaceSearchLoading {
+            return "\(count) relevant \(count == 1 ? "place" : "places") so far"
+        }
+        return "\(count) relevant \(count == 1 ? "place" : "places") after checking \(successfulSearchSourceSummary)"
+    }
+
+    private var successfulSearchSourceSummary: String {
+        var sources = ["your people"]
+        if canSearchRecmeCorpus, !communityPlaceSearchFailed {
+            sources.append("rec.me")
+        }
+        if canSearchExternalCorpus, !externalPlaceSearchFailed {
+            sources.append("Apple Maps")
+        }
+        return formattedSearchSources(sources)
+    }
+
+    private var canSearchRecmeCorpus: Bool {
+        auth.isSignedIn
+            && placeResults.filters.ownerQuery?
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            && placeResults.filters.relationship != .nonFollower
+    }
+
+    private var canSearchExternalCorpus: Bool {
+        DiscoverExternalPlaceSearchPlanner.input(
+            query: submittedPlacesQuery ?? placesQuery,
+            filters: placeResults.filters
+        ) != nil
+    }
+
+    private func formattedSearchSources(_ sources: [String]) -> String {
+        switch sources.count {
+        case 0: "available sources"
+        case 1: sources[0]
+        case 2: sources.joined(separator: " and ")
+        default: "\(sources.dropLast().joined(separator: ", ")), and \(sources.last ?? "")"
+        }
     }
 
     private func matchEvidence(for group: VisiblePlaceGroup) -> DiscoverMatchEvidence {
@@ -329,6 +374,10 @@ struct DiscoverScreen: View {
                 self.submittedPlacesQuery = nil
                 selectedOwnerCandidateID = nil
                 placeResults = DiscoverResults(places: [], profiles: [])
+                communityPlaceCandidates = []
+                externalPlaceCandidates = []
+                communityPlaceSearchFailed = false
+                externalPlaceSearchFailed = false
             }
             .onChange(of: requestedSection) { _, _ in
                 applyRequestedSection()
@@ -477,7 +526,9 @@ struct DiscoverScreen: View {
         placesQuery = ""
         placeResults = DiscoverResults(places: [], profiles: [])
         communityPlaceCandidates = []
+        externalPlaceCandidates = []
         communityPlaceSearchFailed = false
+        externalPlaceSearchFailed = false
         searchFieldFocused = false
     }
 
@@ -488,7 +539,9 @@ struct DiscoverScreen: View {
         selectedOwnerCandidateID = nil
         placeResults = DiscoverResults(places: [], profiles: [])
         communityPlaceCandidates = []
+        externalPlaceCandidates = []
         communityPlaceSearchFailed = false
+        externalPlaceSearchFailed = false
         isPlaceSearchLoading = false
         isPlaceSearchRefining = false
         searchFieldFocused = focusField
@@ -524,7 +577,9 @@ struct DiscoverScreen: View {
         submittedPlacesQuery = query
         selectedOwnerCandidateID = nil
         communityPlaceCandidates = []
+        externalPlaceCandidates = []
         communityPlaceSearchFailed = false
+        externalPlaceSearchFailed = false
         searchFieldFocused = false
         store.trackDiscoverSearchEvent(
             WanderAnalyticsEvents.discoverSearchSubmitted,
@@ -538,6 +593,10 @@ struct DiscoverScreen: View {
         let localClock = ContinuousClock()
         let localStart = localClock.now
         let localResults = store.searchTrustedPlaces(query: query, scope: .everyone)
+        let initialExternalInput = DiscoverExternalPlaceSearchPlanner.input(
+            query: query,
+            filters: localResults.filters
+        )
         let localLatency = localStart.duration(to: localClock.now)
         placeResults = localResults
         placeSearchResultStage = "immediate"
@@ -554,6 +613,11 @@ struct DiscoverScreen: View {
         )
 
         startCommunityPlaceSearch(query: query, submissionID: submissionID)
+        startExternalPlaceSearch(
+            query: query,
+            filters: localResults.filters,
+            submissionID: submissionID
+        )
 
         placeSearchTask = Task { @MainActor in
             let refinementClock = ContinuousClock()
@@ -575,6 +639,18 @@ struct DiscoverScreen: View {
             isPlaceSearchLoading = false
             isPlaceSearchRefining = false
             placeSearchTask = nil
+            let refinedExternalInput = DiscoverExternalPlaceSearchPlanner.input(
+                query: query,
+                filters: results.filters
+            )
+            if refinedExternalInput != initialExternalInput {
+                externalPlaceCandidates = []
+                startExternalPlaceSearch(
+                    query: query,
+                    filters: results.filters,
+                    submissionID: submissionID
+                )
+            }
             store.trackDiscoverSearchEvent(
                 WanderAnalyticsEvents.trustedPlaceSearchRefinedResults,
                 properties: [
@@ -652,6 +728,7 @@ struct DiscoverScreen: View {
                     WanderAnalyticsEvents.trustedPlaceSearchRemoteResults,
                     properties: [
                         "surface": "discover",
+                        "provider": "recme",
                         "result_count": discoverResultCountBucket(outcome.candidates.count),
                         "lexical_count": discoverResultCountBucket(outcome.lexicalCount),
                         "semantic_count": discoverResultCountBucket(outcome.semanticCount),
@@ -671,6 +748,92 @@ struct DiscoverScreen: View {
                 isCommunityPlaceSearchLoading = false
                 communityPlaceSearchTask = nil
                 if !placeResults.places.isEmpty {
+                    isPlaceSearchLoading = false
+                }
+            }
+        }
+    }
+
+    private func startExternalPlaceSearch(
+        query: String,
+        filters: DiscoverFilters,
+        submissionID: UUID
+    ) {
+        externalPlaceSearchTask?.cancel()
+        guard let input = DiscoverExternalPlaceSearchPlanner.input(
+            query: query,
+            filters: filters
+        ) else {
+            activeExternalSearchRequestID = nil
+            externalPlaceCandidates = []
+            externalPlaceSearchFailed = false
+            isExternalPlaceSearchLoading = false
+            externalPlaceSearchTask = nil
+            return
+        }
+
+        let requestID = UUID()
+        activeExternalSearchRequestID = requestID
+        isExternalPlaceSearchLoading = true
+        externalPlaceSearchTask = Task { @MainActor in
+            do {
+                let remoteClock = ContinuousClock()
+                let remoteStart = remoteClock.now
+                let candidates = try await store.externalSearchCandidates(
+                    name: input.name,
+                    areaHint: input.areaHint,
+                    category: input.category
+                )
+                guard !Task.isCancelled,
+                      isPlaceSearchPresented,
+                      activeExternalSearchRequestID == requestID,
+                      activePlaceSearchSubmissionID == submissionID,
+                      submittedPlacesQuery == query,
+                      normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+                else { return }
+                externalPlaceCandidates = candidates
+                externalPlaceSearchFailed = false
+                isPlaceSearchLoading = false
+                isExternalPlaceSearchLoading = false
+                externalPlaceSearchTask = nil
+                activeExternalSearchRequestID = nil
+                store.trackDiscoverSearchEvent(
+                    WanderAnalyticsEvents.trustedPlaceSearchRemoteResults,
+                    properties: [
+                        "surface": "discover",
+                        "provider": "mapkit",
+                        "result_count": discoverResultCountBucket(candidates.count),
+                        "ranking_policy": DiscoverPlaceSearchRankingPolicy.version,
+                        "latency": trustedSearchLatencyBucket(remoteStart.duration(to: remoteClock.now))
+                    ]
+                )
+            } catch is CancellationError {
+                guard activeExternalSearchRequestID == requestID else { return }
+                isExternalPlaceSearchLoading = false
+                externalPlaceSearchTask = nil
+                activeExternalSearchRequestID = nil
+                return
+            } catch PlaceResolutionError.noCandidates {
+                guard !Task.isCancelled,
+                      activeExternalSearchRequestID == requestID,
+                      activePlaceSearchSubmissionID == submissionID
+                else { return }
+                externalPlaceCandidates = []
+                externalPlaceSearchFailed = false
+                isPlaceSearchLoading = false
+                isExternalPlaceSearchLoading = false
+                externalPlaceSearchTask = nil
+                activeExternalSearchRequestID = nil
+            } catch {
+                guard !Task.isCancelled,
+                      activeExternalSearchRequestID == requestID,
+                      activePlaceSearchSubmissionID == submissionID
+                else { return }
+                externalPlaceSearchFailed = true
+                isExternalPlaceSearchLoading = false
+                externalPlaceSearchTask = nil
+                activeExternalSearchRequestID = nil
+                if !placeResults.places.isEmpty || !communityPlaceCandidates.isEmpty {
                     isPlaceSearchLoading = false
                 }
             }
@@ -714,10 +877,14 @@ struct DiscoverScreen: View {
         placeSearchTask = nil
         communityPlaceSearchTask?.cancel()
         communityPlaceSearchTask = nil
+        externalPlaceSearchTask?.cancel()
+        externalPlaceSearchTask = nil
+        activeExternalSearchRequestID = nil
         activePlaceSearchSubmissionID = nil
         isPlaceSearchLoading = false
         isPlaceSearchRefining = false
         isCommunityPlaceSearchLoading = false
+        isExternalPlaceSearchLoading = false
     }
 
     private func normalizedSearchQuery(_ query: String) -> String {
@@ -848,9 +1015,9 @@ struct DiscoverScreen: View {
 
             DiscoverSearchField(
                 text: $placesQuery,
-                placeholders: ["Search trusted places"],
+                placeholders: ["Search places or vibes"],
                 isTicker: false,
-                accessibilityLabel: "Search trusted places",
+                accessibilityLabel: "Search places or vibes",
                 accessibilityIdentifier: "discover.placesSearchField",
                 onFocus: {},
                 onSubmit: submitPlaceSearch,
@@ -890,8 +1057,7 @@ struct DiscoverScreen: View {
     @ViewBuilder
     private var activePlaceSearchContent: some View {
         if isPlaceSearchLoading,
-           placeGroups.isEmpty,
-           filteredCommunityPlaceCandidates.isEmpty {
+           rankedPlaceCandidates.isEmpty {
             DiscoverLoadingPanel(label: "Understanding your search")
         } else if submittedPlacesQuery != nil {
             if isPlaceSearchRefining {
@@ -979,7 +1145,7 @@ struct DiscoverScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 SectionTitle("Try a search")
-                Text("A few useful ways to explore places your people recommend.")
+                Text("A few useful ways to find a place that fits.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -1035,9 +1201,8 @@ struct DiscoverScreen: View {
     }
 
     private var placeResultsSection: some View {
-        let groups = placeGroups
-        let communityCandidates = filteredCommunityPlaceCandidates
-        let totalCount = groups.count + communityCandidates.count
+        let candidates = rankedPlaceCandidates
+        let totalCount = candidates.count
         let selectedOwner = selectedOwnerCandidate
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
@@ -1050,124 +1215,172 @@ struct DiscoverScreen: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            if groups.isEmpty, communityCandidates.isEmpty, !isCommunityPlaceSearchLoading {
+            if candidates.isEmpty,
+               !isCommunityPlaceSearchLoading,
+               !isExternalPlaceSearchLoading {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    EmptyPanel(
-                        title: "No exact matches yet",
-                        action: "Nothing was broadened automatically. Remove one detail or try the explicit option below."
-                    )
-
-                    if let relaxedQuery = favoriteRelaxationQuery {
+                    if communityPlaceSearchFailed || externalPlaceSearchFailed {
+                        EmptyPanel(
+                            title: "Search hit a snag",
+                            action: "We couldn't finish checking \(failedSearchSourceSummary). Try again; your trusted results are still safe."
+                        )
                         WanderPrimaryButton(
-                            title: "Search visited instead",
-                            systemImage: "arrow.right"
+                            title: "Try again",
+                            systemImage: "arrow.clockwise"
                         ) {
-                            placesQuery = relaxedQuery
-                            submitPlaceSearch(source: "relaxation")
+                            submitPlaceSearch(source: "retry")
                         }
-                        .accessibilityHint("Submits \(relaxedQuery)")
-                    }
-                }
-            } else if !groups.isEmpty {
-                ForEach(groups) { group in
-                    let primary = group.primary
-                    DiscoverPlaceResultCard(
-                        group: group,
-                        currentUserStatus: currentUserSave(matching: primary)?.userPlace.status,
-                        evidence: matchEvidence(for: group),
-                    ) {
-                        trackTrustedPlaceSelection(primary, in: groups)
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
-                    } addToWanna: {
-                        addDiscoverPlaceToWanna(primary)
-                    } addToList: {
-                        listSelectionPlace = primary
-                    }
-                }
-            }
+                    } else {
+                        EmptyPanel(
+                            title: "No exact matches yet",
+                            action: "We checked \(successfulSearchSourceSummary). Remove one detail or try the option below."
+                        )
 
-            if !communityCandidates.isEmpty {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text(groups.isEmpty ? "Saved on rec.me" : "More saved on rec.me")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-
-                    ForEach(communityCandidates) { candidate in
-                        DiscoverCommunityPlaceCard(candidate: candidate) {
-                            presentPlaceSaveFlow(
-                                MapPlaceSaveContext.addCandidate(
-                                    candidate,
-                                    sourceType: .socialSave,
-                                    defaultVisibility: store.currentUser.defaultVisibility
-                                )
-                            )
+                        if let relaxedQuery = favoriteRelaxationQuery {
+                            WanderPrimaryButton(
+                                title: "Search visited instead",
+                                systemImage: "arrow.right"
+                            ) {
+                                placesQuery = relaxedQuery
+                                submitPlaceSearch(source: "relaxation")
+                            }
+                            .accessibilityHint("Submits \(relaxedQuery)")
                         }
                     }
                 }
+            } else if !candidates.isEmpty {
+                ForEach(candidates) { result in
+                    placeSearchResultRow(result, in: candidates)
+                }
             }
 
-            if isCommunityPlaceSearchLoading {
+            if isCommunityPlaceSearchLoading || isExternalPlaceSearchLoading {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Searching all rec.me saves…")
+                    Text(searchLoadingMessage)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 .accessibilityElement(children: .combine)
-            } else if communityPlaceSearchFailed {
-                Text("Couldn’t load more rec.me places. Your network results are still here.")
+            }
+
+            if !candidates.isEmpty,
+               communityPlaceSearchFailed || externalPlaceSearchFailed {
+                Text(searchFailureMessage)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
     }
 
-    private func deduplicatedCommunityCandidates(
-        _ candidates: [PlaceCandidate],
-        excluding visiblePlaces: [VisiblePlace]
-    ) -> [PlaceCandidate] {
-        var seen = Set(visiblePlaces.map(visiblePlaceIdentity))
-        var result: [PlaceCandidate] = []
-        for candidate in candidates {
-            guard seen.insert(placeCandidateIdentity(candidate)).inserted else { continue }
-            result.append(candidate)
+    @ViewBuilder
+    private func placeSearchResultRow(
+        _ result: DiscoverPlaceSearchCandidate,
+        in candidates: [DiscoverPlaceSearchCandidate]
+    ) -> some View {
+        switch result {
+        case .trusted(let group):
+            let primary = group.primary
+            DiscoverPlaceResultCard(
+                group: group,
+                currentUserStatus: currentUserSave(matching: primary)?.userPlace.status,
+                evidence: matchEvidence(for: group),
+            ) {
+                trackPlaceSearchSelection(result, in: candidates)
+                selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
+            } addToWanna: {
+                addDiscoverPlaceToWanna(primary)
+            } addToList: {
+                listSelectionPlace = primary
+            }
+        case .recme(let candidate):
+            DiscoverCommunityPlaceCard(
+                candidate: candidate,
+                source: .recme,
+                sourceLabel: "Saved on rec.me"
+            ) {
+                trackPlaceSearchSelection(result, in: candidates)
+                presentCandidateSaveFlow(candidate, sourceType: .socialSave)
+            }
+        case .external(let candidate):
+            DiscoverCommunityPlaceCard(
+                candidate: candidate,
+                source: .appleMaps,
+                sourceLabel: externalMatchLabel(for: candidate)
+            ) {
+                trackPlaceSearchSelection(result, in: candidates)
+                presentCandidateSaveFlow(candidate, sourceType: .manual)
+            }
         }
-        return result
     }
 
-    private func visiblePlaceIdentity(_ visiblePlace: VisiblePlace) -> String {
-        if let providerID = visiblePlace.place.sourceProviderPlaceID,
-           !providerID.isEmpty {
-            return "provider|\(visiblePlace.place.sourceProvider.lowercased())|\(providerID.lowercased())"
+    private func externalMatchLabel(for candidate: PlaceCandidate) -> String {
+        let filters = placeResults.filters
+        let query = submittedPlacesQuery ?? placesQuery
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        let nameQuery = queryPlan.requiredTokens.joined(separator: " ")
+        var matchedDimensions: [String] = []
+        if MapSearchQueryPolicy.lexicalScore(forName: candidate.name, query: nameQuery) > 0 {
+            matchedDimensions.append("name")
         }
-        return physicalPlaceIdentity(
-            name: visiblePlace.place.canonicalName,
-            latitude: visiblePlace.place.latitude,
-            longitude: visiblePlace.place.longitude
+
+        let requestedCategories = Set(
+            filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        )
+        if !requestedCategories.isEmpty,
+           requestedCategories.contains(
+               WanderPlaceCategory.normalizedPrimaryCategory(candidate.primaryCategory)
+           ) {
+            matchedDimensions.append("category")
+        }
+
+        guard !matchedDimensions.isEmpty else { return "From Apple Maps" }
+        let hasUnverifiedRecmeFacet = !filters.tags.isEmpty
+            || filters.opinion != nil
+            || !filters.statuses.isEmpty
+        let suffix = hasUnverifiedRecmeFacet ? " match only" : " match"
+        return "Apple Maps · \(matchedDimensions.joined(separator: " + "))\(suffix)"
+    }
+
+    private func presentCandidateSaveFlow(
+        _ candidate: PlaceCandidate,
+        sourceType: AddSourceType
+    ) {
+        presentPlaceSaveFlow(
+            MapPlaceSaveContext.addCandidate(
+                candidate,
+                sourceType: sourceType,
+                defaultVisibility: store.currentUser.defaultVisibility
+            )
         )
     }
 
-    private func placeCandidateIdentity(_ candidate: PlaceCandidate) -> String {
-        if let providerID = candidate.sourceProviderPlaceID,
-           !providerID.isEmpty {
-            return "provider|\(candidate.sourceProvider.lowercased())|\(providerID.lowercased())"
+    private var searchLoadingMessage: String {
+        if isCommunityPlaceSearchLoading, isExternalPlaceSearchLoading {
+            return "Searching rec.me and Apple Maps…"
         }
-        return physicalPlaceIdentity(
-            name: candidate.name,
-            latitude: candidate.latitude,
-            longitude: candidate.longitude
-        )
+        return isCommunityPlaceSearchLoading
+            ? "Searching all rec.me saves…"
+            : "Searching beyond rec.me on Apple Maps…"
     }
 
-    private func physicalPlaceIdentity(name: String, latitude: Double?, longitude: Double?) -> String {
-        let normalizedName = name
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
-            .filter(\.isLetter)
-        let latitudeBucket = latitude.map { String(format: "%.4f", $0) } ?? ""
-        let longitudeBucket = longitude.map { String(format: "%.4f", $0) } ?? ""
-        return "physical|\(normalizedName)|\(latitudeBucket)|\(longitudeBucket)"
+    private var searchFailureMessage: String {
+        "Some results may be missing because \(failedSearchSourceSummary) couldn't be reached."
+    }
+
+    private var failedSearchSourceSummary: String {
+        var sources: [String] = []
+        if communityPlaceSearchFailed {
+            sources.append("rec.me")
+        }
+        if externalPlaceSearchFailed {
+            sources.append("Apple Maps")
+        }
+        return formattedSearchSources(sources)
     }
 
     private var favoriteRelaxationQuery: String? {
@@ -1591,11 +1804,11 @@ struct DiscoverScreen: View {
         isPlaceSearchRefining = false
     }
 
-    private func trackTrustedPlaceSelection(
-        _ visiblePlace: VisiblePlace,
-        in groups: [VisiblePlaceGroup]
+    private func trackPlaceSearchSelection(
+        _ result: DiscoverPlaceSearchCandidate,
+        in candidates: [DiscoverPlaceSearchCandidate]
     ) {
-        let index = groups.firstIndex { $0.key == VisiblePlaceGrouping.key(for: visiblePlace) } ?? 0
+        let index = candidates.firstIndex { $0.id == result.id } ?? 0
         let rankBucket: String
         switch index {
         case 0: rankBucket = "1"
@@ -1606,7 +1819,7 @@ struct DiscoverScreen: View {
             WanderAnalyticsEvents.trustedPlaceSearchResultSelected,
             properties: [
                 "surface": "discover",
-                "provider": "trusted",
+                "provider": result.analyticsProvider,
                 "stage": placeSearchResultStage,
                 "rank": rankBucket
             ]
@@ -2564,40 +2777,75 @@ private struct DiscoverCategoryThumb: View {
     }
 }
 
+private enum DiscoverCommunityPlaceSource {
+    case recme
+    case appleMaps
+
+    var title: String {
+        switch self {
+        case .recme: "Saved on rec.me"
+        case .appleMaps: "From Apple Maps"
+        }
+    }
+
+    var accessibilitySource: String {
+        switch self {
+        case .recme: "rec.me"
+        case .appleMaps: "Apple Maps"
+        }
+    }
+}
+
+private extension DiscoverPlaceSearchCandidate {
+    var analyticsProvider: String {
+        switch self {
+        case .trusted: "trusted"
+        case .recme: "recme"
+        case .external: "mapkit"
+        }
+    }
+}
+
 private struct DiscoverCommunityPlaceCard: View {
     let candidate: PlaceCandidate
+    let source: DiscoverCommunityPlaceSource
+    let sourceLabel: String
     let openSaveFlow: () -> Void
+
+    private var subtitle: String {
+        candidate.previewSubtitle(includeCategory: false, fallback: source.title)
+    }
 
     var body: some View {
         Button(action: openSaveFlow) {
-            HStack(spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .fill(WanderTheme.terracottaTint.color)
-                    WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 20)
-                }
-                .frame(width: 48, height: 48)
+            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                DiscoverCategoryThumb(emoji: candidate.categoryEmoji, size: 62, iconSize: 24)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(candidate.name)
-                        .font(WanderTypography.editorialSmallNamedContent)
+                        .font(WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(1)
-                    Text(candidate.previewSubtitle(includeCategory: false, fallback: "Saved on rec.me"))
-                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(2)
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
-                    Text("Saved on rec.me")
-                        .font(.system(size: 11, weight: .black))
+                    Text(sourceLabel)
+                        .font(.system(size: 12, weight: .black))
                         .foregroundStyle(WanderTheme.terracotta.color)
+                        .lineLimit(2)
                 }
 
                 Spacer(minLength: WanderTheme.spacing2)
 
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(width: 44, height: 44)
+                VStack(spacing: 2) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 28, weight: .black))
+                    Text("Save")
+                        .font(.system(size: 12, weight: .black))
+                }
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(minWidth: 44, minHeight: 44)
             }
             .padding(WanderTheme.spacing3)
             .background(WanderTheme.surfaceBone.color)
@@ -2609,6 +2857,9 @@ private struct DiscoverCommunityPlaceCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("discover.communityPlace.\(candidate.id)")
-        .accessibilityLabel("Save \(candidate.name), found through rec.me")
+        .accessibilityLabel(
+            "Save \(candidate.name), \(subtitle), found through \(source.accessibilitySource)"
+        )
+        .accessibilityHint("Opens save confirmation")
     }
 }

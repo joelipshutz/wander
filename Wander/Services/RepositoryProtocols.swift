@@ -1913,7 +1913,14 @@ protocol PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
+    func resolveSearchEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate]
+}
+
+extension PlaceCandidateResolving {
+    func resolveSearchEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        try await resolveManualEntry(input)
+    }
 }
 
 @MainActor

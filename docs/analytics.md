@@ -115,6 +115,14 @@ only aggregates to the Edge Function/PostHog.
 
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
 
+Discover place search keeps query text out of analytics. `trusted_place_search_remote_results`
+may include `surface`, the allowlisted `provider` (`recme` or `mapkit`), aggregate
+result-count and latency buckets, a versioned ranking policy, and rec.me provider
+overlap/status counts. `trusted_place_search_result_selected` may include only
+`surface`, allowlisted `provider` (`trusted`, `recme`, or `mapkit`), result stage,
+and a coarse rank bucket. It must never include the query, place name, provider
+place ID, address, coordinates, or contributor identity.
+
 ## Privacy rules
 
 Analytics must never receive:

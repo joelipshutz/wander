@@ -4014,6 +4014,16 @@ final class NavigationContractTests: XCTestCase {
         let feedSource = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
+        let externalRow = try sourceSection(
+            source,
+            after: "case .external(let candidate):",
+            before: "private func externalMatchLabel(for candidate: PlaceCandidate)"
+        )
+        let externalSearch = try sourceSection(
+            source,
+            after: "private func startExternalPlaceSearch(",
+            before: "private func discoverQueryLengthBucket"
+        )
 
         XCTAssertTrue(source.contains("activePlaceSearchHeader"))
         XCTAssertTrue(source.contains("Back to Discover"))
@@ -4021,20 +4031,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("private func clearPlaceSearch(focusField: Bool = true)"))
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("communityPlaceSearchTask?.cancel()"))
+        XCTAssertTrue(source.contains("externalPlaceSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("startCommunityPlaceSearch(query: query, submissionID: submissionID)"))
+        XCTAssertTrue(source.contains("startExternalPlaceSearch("))
         XCTAssertTrue(source.contains("backend.searchRecmePlaces("))
+        XCTAssertTrue(source.contains("store.externalSearchCandidates("))
         XCTAssertTrue(source.contains("includesSemanticProvider: semanticEnabled"))
         XCTAssertTrue(source.contains("backend.featureFlag(.semanticPlaceSearchV1"))
         XCTAssertTrue(source.contains("SemanticPlaceSearchAccessPolicy.isEnabled("))
         XCTAssertTrue(source.contains("Saved on rec.me"))
+        XCTAssertTrue(source.contains("From Apple Maps"))
+        XCTAssertTrue(source.contains("sourceType: .manual"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
+        XCTAssertTrue(externalRow.contains("source: .appleMaps"))
+        XCTAssertTrue(externalRow.contains("sourceType: .manual"))
+        XCTAssertTrue(externalSearch.contains("activeExternalSearchRequestID == requestID"))
+        XCTAssertTrue(externalSearch.contains("activeExternalSearchRequestID = nil"))
+        XCTAssertTrue(source.contains("refinedExternalInput != initialExternalInput"))
         XCTAssertTrue(source.contains("Try a search"))
         XCTAssertTrue(source.contains("coffee worth crossing town for"))
         XCTAssertTrue(source.contains("quiet cafes with wifi"))
         XCTAssertTrue(source.contains("Understood as"))
         XCTAssertTrue(source.contains("evidence.summary"))
         XCTAssertTrue(source.contains("Search visited instead"))
-        XCTAssertTrue(source.contains("Nothing was broadened automatically"))
+        XCTAssertTrue(source.contains(#"We checked \(successfulSearchSourceSummary)"#))
+        XCTAssertTrue(source.contains("Search hit a snag"))
+        XCTAssertTrue(source.contains("Search places or vibes"))
         XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
         XCTAssertTrue(feedSource.contains("onClose: closeDiscoverSearch"))
     }
