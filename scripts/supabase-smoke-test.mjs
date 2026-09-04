@@ -100,6 +100,7 @@ async function main() {
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+        await runListSnapshotCoverSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
         await runSurfaceSnapshotSmokeChecks(
           client,
           smokeUserID,
@@ -1159,6 +1160,9 @@ function runLinkedSmokeChecks(
       "rollback",
     )
     : "";
+  const snapshotCoverSmokeSQL = loadStrictPgTapSQL(
+    new URL("../supabase/tests/list_snapshot_covers.sql", import.meta.url),
+  );
   const cuisineSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/restaurant_cuisine_inference.sql", import.meta.url),
   );
@@ -1179,7 +1183,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}`;
     writeFileSync(filePath, linkedSQL, {
       encoding: "utf8",
       mode: 0o600,
@@ -4116,6 +4120,60 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
     /permission denied/,
   );
   await client.query("reset role");
+}
+
+async function runListSnapshotCoverSmokeChecks(client, ownerID, collaboratorID, strangerID) {
+  await setAuthenticatedUser(client, ownerID);
+  const listID = await createSmokeList(client, "Codex smoke snapshot cover");
+  const path = `${listID}/snapshot.jpg`;
+  await client.query("reset role");
+  await expectQuery(client, "snapshot bucket is private and bounded",
+    "select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'list-snapshots'", [],
+    (r) => r.rows[0]?.public === false && Number(r.rows[0]?.file_size_limit) === 1048576
+      && r.rows[0]?.allowed_mime_types?.includes("image/jpeg"));
+  await setAuthenticatedUser(client, ownerID);
+  await expectQueryFailure(client, "snapshot cannot attach a missing object",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], /not_found_or_forbidden/);
+  // Metadata-only storage fixture lives solely inside this rolled-back transaction.
+  await expectQuery(client, "owner can insert snapshot object",
+    "insert into storage.objects(bucket_id, name) values ('list-snapshots', $1) returning name", [path],
+    (r) => r.rows[0]?.name === path);
+  await expectQuery(client, "owner attaches snapshot",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], () => true);
+  await expectQuery(client, "detail includes fixed snapshot path",
+    "select public.place_list_detail($1::uuid) as detail", [listID],
+    (r) => r.rows[0]?.detail?.list?.snapshot_cover_path === path);
+  await client.query("select public.set_place_list_collaborators($1::uuid, $2::text[])", [listID, [collaboratorID]]);
+  await setAuthenticatedUser(client, collaboratorID);
+  await expectQuery(client, "collaborator can read snapshot",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 1);
+  await expectQueryFailure(client, "collaborator cannot replace snapshot metadata",
+    "select public.set_place_list_snapshot_cover($1::uuid)", [listID], /not_found_or_forbidden/);
+  await expectQuery(client, "collaborator cannot overwrite owner snapshot",
+    "update storage.objects set metadata = '{}'::jsonb where bucket_id = 'list-snapshots' and name = $1 returning name", [path],
+    (r) => r.rows.length === 0);
+  await setAuthenticatedUser(client, strangerID);
+  await expectQuery(client, "stranger cannot read snapshot",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 0);
+  await expectQueryFailure(client, "stranger cannot write owner snapshot",
+    "insert into storage.objects(bucket_id, name) values ('list-snapshots', $1)", [path], /row-level security/);
+  await setAuthenticatedUser(client, ownerID);
+  await client.query("select public.upsert_place_list($1::jsonb)", [JSON.stringify({id: listID, name: "Snapshot private", visibility: "stealth"})]);
+  await client.query("select public.set_place_list_collaborators($1::uuid, '{}'::text[])", [listID]);
+  await setAuthenticatedUser(client, collaboratorID);
+  await expectQuery(client, "removed collaborator loses snapshot access",
+    "select name from storage.objects where bucket_id = 'list-snapshots' and name = $1", [path],
+    (r) => r.rows.length === 0);
+  await setAuthenticatedUser(client, ownerID);
+  await expectQuery(client, "snapshot RPC security posture",
+    `select p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('anon', p.oid, 'execute') as anonymous
+     from pg_proc p where p.oid = 'app.set_place_list_snapshot_cover(uuid)'::regprocedure`, [],
+    (r) => r.rows[0]?.prosecdef === true && r.rows[0]?.authenticated === true
+      && r.rows[0]?.anonymous === false && r.rows[0]?.proconfig?.includes("search_path=public, app"));
 }
 
 async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID) {

@@ -769,6 +769,7 @@ struct RemotePlaceListRowDTO: Codable, Equatable {
     let createdAt: Date
     let updatedAt: Date
     let deletedAt: Date?
+    var snapshotCoverPath: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -782,6 +783,7 @@ struct RemotePlaceListRowDTO: Codable, Equatable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case deletedAt = "deleted_at"
+        case snapshotCoverPath = "snapshot_cover_path"
     }
 
     func localList(itemCount: Int? = nil) -> LocalPlaceList {
@@ -794,6 +796,7 @@ struct RemotePlaceListRowDTO: Codable, Equatable {
             visibility: PlaceListVisibility(rawValue: visibility) ?? .followers,
             syncState: .synced,
             cachedItemCount: itemCount,
+            snapshotCoverPath: snapshotCoverPath,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt

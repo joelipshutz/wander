@@ -1786,9 +1786,31 @@ struct SupabaseExtractionRepository: ExtractionRepository {
 
 struct SupabasePlaceListRepository: PlaceListRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: RemoteStorageCalling?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: RemoteStorageCalling? = nil) {
         self.rpc = rpc
+        self.storage = storage
+    }
+
+    func uploadSnapshotCover(listID: String, jpegData: Data) async throws -> String {
+        guard let storage, UUID(uuidString: listID) != nil,
+              !jpegData.isEmpty, jpegData.count <= LocalPlaceList.maximumSnapshotCoverBytes
+        else { throw WanderRemoteError.notConfigured }
+        let path = "\(listID.lowercased())/snapshot.jpg"
+        try await storage.uploadObject(
+            bucket: "list-snapshots", path: path, data: jpegData,
+            contentType: "image/jpeg", upsert: true
+        )
+        let _: EmptyRPCResponse = try await rpc.call(
+            "set_place_list_snapshot_cover", params: PlaceListIDParams(inputListID: listID)
+        )
+        return path
+    }
+
+    func snapshotCoverData(path: String) async throws -> Data {
+        guard let storage else { throw WanderRemoteError.notConfigured }
+        return try await storage.downloadObject(bucket: "list-snapshots", path: path)
     }
 
     func visibleLists() async throws -> [RemotePlaceListSummary] {

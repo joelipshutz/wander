@@ -150,6 +150,56 @@ final class YourMapPrototypeUITests: XCTestCase {
         )
     }
 
+    func testSnapshotCreatesListAndOpensEditablePlaces() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderResetWalkthroughs", "-WanderInitialTab", "profile"]
+        app.launch()
+        let preview = app.buttons["profile.yourMap.preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        // The combined preview can exist below the tab bar. Bring its actual
+        // tap target into view before opening Explore on every phone size.
+        for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
+            app.swipeUp()
+        }
+        preview.tap()
+        let snapshot = app.buttons["yourMap.snapshot"]
+        XCTAssertTrue(snapshot.waitForExistence(timeout: 10))
+        let pin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin.")).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 10))
+        capture("REC-413 Explore snapshot control")
+        snapshot.tap()
+        let toast = app.buttons["yourMap.viewSnapshotList"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 10))
+        XCTAssertEqual(toast.label, "Edit")
+        XCTAssertTrue(app.staticTexts["View snapshot list"].exists)
+        capture("REC-413 Snapshot saved toast")
+        toast.tap()
+        XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        let title = app.textFields.firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        let existing = title.value as? String ?? ""
+        title.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count) + "Snapshot test\n")
+        let cover = app.images["Saved map snapshot"]
+        for _ in 0..<6 {
+            if cover.exists && cover.frame.minY > 100 && cover.frame.maxY < app.frame.maxY - 180 { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).press(
+                forDuration: 0.1,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            )
+        }
+        XCTAssertTrue(cover.isHittable)
+        capture("REC-413 Static snapshot cover")
+        let addPlaces = app.buttons["listEditor.addPlaces"]
+        for _ in 0..<3 where !addPlaces.isHittable || addPlaces.frame.maxY > app.frame.maxY - 140 {
+            app.swipeUp()
+        }
+        XCTAssertTrue(addPlaces.isHittable)
+        capture("REC-413 Snapshot list editor")
+        addPlaces.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

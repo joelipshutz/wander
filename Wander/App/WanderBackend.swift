@@ -257,7 +257,7 @@ final class WanderBackend: ObservableObject {
             self.visitRepository = SupabaseVisitRepository(table: client, storage: client)
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.socialImportUnderstandingRepository = SupabaseSocialImportUnderstandingRepository(functions: client)
-            self.placeListRepository = SupabasePlaceListRepository(rpc: client)
+            self.placeListRepository = SupabasePlaceListRepository(rpc: client, storage: client)
             self.surfaceSnapshotRepository = SupabaseSurfaceSnapshotRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
@@ -1207,6 +1207,16 @@ final class WanderBackend: ObservableObject {
             throw WanderRemoteError.notConfigured
         }
         return try await surfaceSnapshotRepository.socialSurfaceSnapshot(in: viewport)
+    }
+
+    func uploadListSnapshotCover(listID: String, jpegData: Data) async throws -> String {
+        guard let placeListRepository else { throw WanderRemoteError.notConfigured }
+        return try await placeListRepository.uploadSnapshotCover(listID: listID, jpegData: jpegData)
+    }
+
+    func listSnapshotCoverData(path: String) async throws -> Data {
+        guard let placeListRepository else { throw WanderRemoteError.notConfigured }
+        return try await placeListRepository.snapshotCoverData(path: path)
     }
 
     func upsertPlaceList(_ draft: PlaceListUpsertDraft) async throws -> String {
