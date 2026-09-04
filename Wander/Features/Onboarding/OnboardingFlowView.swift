@@ -814,9 +814,12 @@ private struct OnboardingNotificationView: View {
                     isDisabled: isWorking
                 ) {
                     Task {
+                        isWorking = true
+                        await pushNotifications.refreshAuthorizationStatus()
                         if OnboardingNotificationPermissionPolicy.action(
                             for: pushNotifications.authorizationStatus
                         ) == .openSettings {
+                            isWorking = false
                             analytics.track(AnalyticsEvent(
                                 name: WanderAnalyticsEvents.onboardingPermissionResult,
                                 properties: ["permission": "notifications", "granted": "settings"]
@@ -826,7 +829,6 @@ private struct OnboardingNotificationView: View {
                             return
                         }
 
-                        isWorking = true
                         let enabled = await pushNotifications.enableNotifications(backend: backend, authState: auth.state) != nil
                         analytics.track(AnalyticsEvent(
                             name: WanderAnalyticsEvents.onboardingPermissionResult,
