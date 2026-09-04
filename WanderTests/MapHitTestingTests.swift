@@ -2483,14 +2483,11 @@ final class MapFilterSelectionTests: XCTestCase {
         )
     }
 
-    func testMoreSectionsMatchTheActiveSource() {
-        XCTAssertFalse(MapMoreFilterPolicy.showsPeople(for: .featured))
+    func testMoreStatusAndCategoriesMatchTheActiveSource() {
         XCTAssertFalse(MapMoreFilterPolicy.showsStatus(for: .featured))
 
-        XCTAssertTrue(MapMoreFilterPolicy.showsPeople(for: .friends))
         XCTAssertTrue(MapMoreFilterPolicy.showsStatus(for: .friends))
 
-        XCTAssertFalse(MapMoreFilterPolicy.showsPeople(for: .you))
         XCTAssertTrue(MapMoreFilterPolicy.showsStatus(for: .you))
         XCTAssertEqual(MapMoreFilterPolicy.collapsedCategoryCount, 6)
         XCTAssertEqual(MapMoreFilterPolicy.categories(showingAll: false).count, 6)

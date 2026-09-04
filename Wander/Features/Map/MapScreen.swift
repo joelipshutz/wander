@@ -1906,7 +1906,6 @@ struct MapScreen: View {
                                     peopleOptions: socialOwnerOptions,
                                     dismiss: dismissMoreFilters
                                 )
-                                .id(mapFilterState.source)
                                 .padding(.trailing, WanderTheme.spacing3)
                                 .offset(y: 52)
                                 .transition(
@@ -2565,7 +2564,11 @@ struct MapScreen: View {
 
     private func setMoreFilterSelection(_ selection: MapMoreFilterSelection) {
         guard mapFilterState.more != selection else { return }
-        mapFilterState.more = selection
+        let previousSource = mapFilterState.source
+        mapFilterState.setMoreSelection(selection)
+        if mapFilterState.source != previousSource {
+            handleFeaturedCameraChange(currentSearchRegion)
+        }
     }
 
     private func handleMapSearchRefinementChange() {
@@ -7779,13 +7782,6 @@ enum MapHitTesting {
 enum MapMoreFilterPolicy {
     static let collapsedCategoryCount = 6
 
-    static func showsPeople(for source: MapSource) -> Bool {
-        switch source {
-        case .friends: true
-        case .featured, .you: false
-        }
-    }
-
     static func showsStatus(for source: MapSource) -> Bool {
         switch source {
         case .featured: false
@@ -8160,6 +8156,14 @@ struct MapFilterState: Equatable {
     mutating func selectSource(_ source: MapSource) {
         self.source = source
         more = MapMoreFilterSelection()
+    }
+
+    mutating func setMoreSelection(_ selection: MapMoreFilterSelection) {
+        more = selection
+        if !selection.people.isEmpty {
+            // Selecting a person changes source without resetting the refinements.
+            source = .friends
+        }
     }
 }
 
@@ -9445,37 +9449,36 @@ private struct MapMoreFiltersPopover: View {
                     }
                 }
 
-                if MapMoreFilterPolicy.showsPeople(for: source) {
-                    filterSection(
-                        title: "People",
-                        detail: "Choose one or more"
-                    ) {
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                filterSection(
+                    title: "People",
+                    detail: "Choose one or more"
+                ) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        MapMoreOptionChip(
+                            title: "All",
+                            systemImage: "person.2",
+                            isSelected: selection.people.isEmpty
+                        ) {
+                            selection.selectAllPeople()
+                        }
+                        .accessibilityIdentifier("map.more.people.all")
+
+                        ForEach(peopleOptions) { person in
                             MapMoreOptionChip(
-                                title: "All",
-                                systemImage: "person.2",
-                                isSelected: selection.people.isEmpty
+                                title: person.displayName,
+                                systemImage: "person.fill",
+                                isSelected: selection.people.contains(person.id)
                             ) {
-                                selection.selectAllPeople()
+                                selection.togglePerson(person.id)
                             }
-
-                            ForEach(peopleOptions) { person in
-                                MapMoreOptionChip(
-                                    title: person.displayName,
-                                    systemImage: "person.fill",
-                                    isSelected: selection.people.contains(person.id)
-                                ) {
-                                    selection.togglePerson(person.id)
-                                }
-                                .accessibilityIdentifier("map.more.person.\(person.id)")
-                            }
+                            .accessibilityIdentifier("map.more.person.\(person.id)")
                         }
+                    }
 
-                        if peopleOptions.isEmpty {
-                            Text("People you follow will appear here.")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(appearance.secondaryText)
-                        }
+                    if peopleOptions.isEmpty {
+                        Text("People you follow will appear here.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(appearance.secondaryText)
                     }
                 }
 
@@ -9505,7 +9508,7 @@ private struct MapMoreFiltersPopover: View {
             }
             .padding(WanderTheme.spacing4)
         }
-        .frame(width: 330, height: source == .featured ? 360 : 470)
+        .frame(width: 330, height: 470)
         .wanderGlassPanel(
             cornerRadius: WanderTheme.radiusLarge,
             tone: appearance.neutralGlassTone
