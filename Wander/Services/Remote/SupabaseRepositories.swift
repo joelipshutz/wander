@@ -2178,7 +2178,8 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
         }
 
         let providerPath = Self.providerPath(response.providerPath)
-        let serverReasoningIsAuthoritative = providerPath == "apify_gemini"
+        let serverReasoningIsAuthoritative = Self.authoritativeProviderPaths
+            .contains(providerPath)
         var seen = Set<String>()
         let hints = response.hints.prefix(Self.maximumHints).compactMap { hint -> SocialPlaceSearchHint? in
             guard ["destination", "itinerary"].contains(hint.classification),
@@ -2241,12 +2242,20 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
 
     private static func providerPath(_ value: String?) -> String {
         switch value {
-        case "apify_gemini", "apify_deterministic":
+        case "apify_gemini", "apify_deterministic",
+             "brightdata_gemini", "brightdata_deterministic",
+             "brightdata_apify_gemini", "brightdata_apify_deterministic":
             value ?? "unknown"
         default:
             "unknown"
         }
     }
+
+    private static let authoritativeProviderPaths: Set<String> = [
+        "apify_gemini",
+        "brightdata_gemini",
+        "brightdata_apify_gemini"
+    ]
 
     private static func resolvedCandidates(
         from values: [SocialImportUnderstandingFunctionResponse.Hint.ResolvedPlace]?

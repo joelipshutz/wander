@@ -304,6 +304,59 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
   assertSafeResponse(payload, caption);
 });
 
+Deno.test("handler can use Bright Data without Apify and reports an authoritative path", async () => {
+  const caption = "Visit Carbon Beach Club in Malibu.";
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("api.brightdata.com/datasets/v3/scrape")) {
+      assertEquals(headers.get("authorization"), "Bearer bright-secret");
+      assertEquals(JSON.parse(String(init?.body)), {
+        input: [{ url: instagramURL }],
+      });
+      return Response.json([{
+        url: instagramURL,
+        description: caption,
+        post_content: [{ index: 0, type: "Photo", url: mediaURL }],
+      }]);
+    }
+    if (url === mediaURL) {
+      assertEquals(headers.has("authorization"), false);
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      return geminiResponse([candidate({
+        name: "Carbon Beach Club",
+        area: "Malibu",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      })]);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }, {
+    environment: {
+      WANDER_APIFY_TOKEN: undefined,
+      WANDER_BRIGHTDATA_API_TOKEN: "bright-secret",
+    },
+  });
+
+  const response = await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  );
+  const payload = await response.json();
+
+  assertEquals(payload.outcome, "ok");
+  assertEquals(payload.provider_path, "brightdata_gemini");
+  assertEquals(payload.hints.map((hint: { name: string }) => hint.name), [
+    "Carbon Beach Club",
+  ]);
+  assertSafeResponse(payload, caption);
+});
+
 Deno.test("handler inventories every caption handle and safely synthesizes a venue", async () => {
   const caption =
     "An Ojai lunch at @hvojai. Photo by @creator. Thanks to local guide @travelpal.";
@@ -4569,6 +4622,7 @@ function assertSafeResponse(payload: unknown, rawCaption: string): void {
   for (
     const forbidden of [
       "apify-secret",
+      "bright-secret",
       "gemini-secret",
       instagramURL,
       mediaURL,

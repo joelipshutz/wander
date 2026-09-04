@@ -32,7 +32,7 @@ type DownloadedMedia = {
 export async function ingestAcquiredMedia(
   media: AcquiredMedia[],
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
@@ -92,7 +92,7 @@ export async function fetchMediaBytes(
   expectedKind: "image" | "video",
   maximumBytes: number,
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
@@ -286,7 +286,7 @@ function mediaHeaders(
   destination: URL,
   expectedKind: "image" | "video",
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
 ): Record<string, string> {
   const sourceURL = new URL(source.url);
   const headers: Record<string, string> = {
@@ -294,7 +294,7 @@ function mediaHeaders(
     referer: `${sourceURL.origin}/`,
     "user-agent": "rec.me social import/1.0",
   };
-  if (mayReceiveApifyAuthorization(destination)) {
+  if (apifyToken && mayReceiveApifyAuthorization(destination)) {
     headers.authorization = `Bearer ${apifyToken}`;
   }
   return headers;

@@ -86,12 +86,13 @@ Data did not. Bright Data's inspected carousel images were capped at a 640-pixel
 side while Apify returned 1,080-4,096-pixel originals; the actual reel media was
 the same from both providers.
 
-This does not support replacing Apify outright. Keep Apify as the primary source
-for image posts and carousels, where original resolution is valuable, and use
-Bright Data as a restricted/no-result fallback plus optional tagged-user
-enrichment. For reels, the bytes were identical, so use the same primary/fallback
-order to avoid an unnecessary production rewrite while gaining Bright Data's
-one observed reliability recovery.
+This does not support choosing one provider for every media type. Use Bright
+Data first for reels and fall back to Apify because their shared reel bytes were
+identical while Bright recovered the only provider-level miss. For `/p/` posts,
+run both acquisitions in parallel and merge Bright caption, slide-scoped tag,
+and accessibility metadata with Apify's higher-resolution image assets. Either
+successful result may carry the import when the other fails. This preserves the
+measured strengths of both providers without paying for a second Gemini pass.
 
 ### Reasoning: Gemini 3.5 versus 3.8
 
@@ -153,8 +154,10 @@ spend was therefore approximately $7.06, below the approved $10 cap.
 1. Advance Gemini 3.8 Flash `MEDIUM/HIGH`; it has reached and exceeded 3.5 on
    the available extraction evidence while costing about 52% less per corpus
    post after retries.
-2. Keep Apify primary and add Bright Data fallback. Acquisition differences are
-   real, but they do not explain the large 3.5-versus-3.8 gap on shared inputs.
+2. Use content-aware acquisition: Bright Data primary with Apify fallback for
+   reels, and parallel Bright-plus-Apify evidence merging for `/p/` posts.
+   Acquisition differences are real, but they do not explain the large
+   3.5-versus-3.8 gap on shared inputs.
 3. Independently label the remaining 16 candidate posts before treating the
    23-post completion rate as place accuracy.
 4. Repeat the finalists three times, then run the same frozen hints through the
@@ -364,8 +367,8 @@ will become extraction training data.
    variants unless 3.8 regresses.
 3. Benchmark Google Places, locality-aware top-three behavior, MapKit, and the
    experimental Resolution API on the same frozen 3.8 hints.
-4. Add Bright Data as a bounded fallback in the production acquisition layer,
-   then compose and repeat the two winning end-to-end stacks.
+4. Add the bounded content-aware Bright Data/Apify router to production, then
+   compose and repeat the two winning end-to-end stacks.
 5. Expand to the independently labeled 50-100-post launch gate. Run Terra, Sol,
    Opus, or Fable only if Gemini 3.8 or the resolver misses the gate in a way a
    challenger can plausibly fix.
