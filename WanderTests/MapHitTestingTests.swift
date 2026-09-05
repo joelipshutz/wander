@@ -2026,7 +2026,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.removeAnnotations(staleAnnotations)"))
         XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
         XCTAssertTrue(map.contains("for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers"))
-        XCTAssertTrue(map.contains("let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID"))
+        XCTAssertTrue(map.contains("let descriptorsChanged = parent.annotations != descriptorSnapshot"))
         XCTAssertTrue(map.contains("private var renderedViewport: MapViewport?"))
         XCTAssertTrue(map.contains("MapAnnotationViewportPolicy.shouldRefresh("))
         XCTAssertTrue(map.contains("descriptor.isSelected"))
