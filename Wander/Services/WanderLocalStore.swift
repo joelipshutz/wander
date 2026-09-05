@@ -278,6 +278,11 @@ final class WanderStore: ObservableObject {
             objectWillChange.send()
         }
     }
+    private var feedRefreshTask: (
+        id: UUID, userID: String, preservingActivityID: String?, revision: UInt64, task: Task<Bool, Never>
+    )?
+    private var feedRefreshCompletedAt: Date?
+    private var feedRefreshCompletedRevision: UInt64?
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
@@ -1169,6 +1174,7 @@ final class WanderStore: ObservableObject {
                 Self.isSyntheticRemoteProfilePhoto($0) && $0.syncState == .synced
             }
             || placeAttributes.contains { $0.localID.hasPrefix("remote_attr_") }
+            || feedRefreshTask != nil
             || followedFeedPage != nil
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
@@ -1193,6 +1199,10 @@ final class WanderStore: ObservableObject {
             placeAttributes.removeAll {
                 $0.localID.hasPrefix("remote_attr_")
             }
+            feedRefreshTask?.task.cancel()
+            feedRefreshTask = nil
+            feedRefreshCompletedAt = nil
+            feedRefreshCompletedRevision = nil
             followedFeedPage = nil
             feedLoadState = .idle
             lastFeedRefreshAt = nil
@@ -1475,6 +1485,10 @@ final class WanderStore: ObservableObject {
         saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsState = .idle
+        feedRefreshTask?.task.cancel()
+        feedRefreshTask = nil
+        feedRefreshCompletedAt = nil
+        feedRefreshCompletedRevision = nil
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
@@ -1603,16 +1617,77 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshFollowedFeed(
         backend: WanderBackend?,
-        preservingActivityID: String? = nil
+        preservingActivityID: String? = nil,
+        force: Bool = true
     ) async -> Bool {
-        let requestUserID = currentUser.id
-        feedLoadState = followedFeedPage == nil ? .loading : .stale
-
         guard !Task.isCancelled else { return false }
+        let requestUserID = currentUser.id
+        let requestRevision = presentationRevision
+        if let pending = feedRefreshTask, pending.userID == requestUserID {
+            let result = await pending.task.value
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+            if pending.preservingActivityID == preservingActivityID,
+               pending.revision == requestRevision { return result }
+            // A different comments route needs its own preservation pass. Retire
+            // the completed task before rechecking so multiple waiting routes
+            // serialize instead of racing to replace each other's task handle.
+            if feedRefreshTask?.id == pending.id {
+                feedRefreshTask = nil
+                if result {
+                    feedRefreshCompletedAt = .now
+                    feedRefreshCompletedRevision = pending.revision
+                }
+            }
+            return await refreshFollowedFeed(
+                backend: backend, preservingActivityID: preservingActivityID, force: true
+            )
+        }
+        if !force, followedFeedPage != nil, feedLoadState == .loaded,
+           feedRefreshCompletedRevision == presentationRevision,
+           FeedRefreshPolicy.isFresh(completedAt: feedRefreshCompletedAt) {
+            return true
+        }
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            return await self.performFollowedFeedRefresh(
+                backend: backend, preservingActivityID: preservingActivityID,
+                requestID: id, requestUserID: requestUserID
+            )
+        }
+        feedRefreshTask = (id, requestUserID, preservingActivityID, requestRevision, task)
+        let result = await task.value
+        if feedRefreshTask?.id == id {
+            feedRefreshTask = nil
+            if result {
+                feedRefreshCompletedAt = .now
+                feedRefreshCompletedRevision = requestRevision
+            }
+        }
+        return result && !Task.isCancelled && currentUser.id == requestUserID
+    }
+
+    private func performFollowedFeedRefresh(
+        backend: WanderBackend?, preservingActivityID: String?,
+        requestID: UUID, requestUserID: String
+    ) async -> Bool {
+        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        // A warm refresh keeps usable content visible without flashing the
+        // offline/retry treatment while an ordinary request is still running.
+        if followedFeedPage == nil { feedLoadState = .loading }
 
         if let backend, let repository = backend.feedRepository {
             do {
-                let page = try await loadFollowedFeed(from: repository)
+                let page = try await loadFollowedFeed(from: repository) { [weak self] content in
+                    guard let self, !Task.isCancelled,
+                          self.currentUser.id == requestUserID,
+                          self.feedRefreshTask?.id == requestID,
+                          self.followedFeedPage == nil
+                    else { return }
+                    self.followedFeedPage = self.displayableFeedPage(content)
+                    self.feedLoadState = .loaded
+                    self.lastFeedRefreshAt = content.fetchedAt
+                }
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
                 let resolvedPage = await mergingPinnedActivity(
                     into: displayableFeedPage(page),
@@ -2164,13 +2239,16 @@ final class WanderStore: ObservableObject {
     /// Clerk may report a signed-in user slightly before its first usable
     /// Supabase bearer token is available. Retry that narrow startup race once;
     /// ordinary transport and server failures remain visible to the caller.
-    private func loadFollowedFeed(from repository: any FeedRepository) async throws -> FollowedFeedPage {
+    private func loadFollowedFeed(
+        from repository: any FeedRepository,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
         do {
-            return try await repository.followedFeed(before: nil, limit: 25)
+            return try await repository.followedFeed(before: nil, limit: 25, onContent: onContent)
         } catch {
             guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
             try await Task.sleep(for: .milliseconds(300))
-            return try await repository.followedFeed(before: nil, limit: 25)
+            return try await repository.followedFeed(before: nil, limit: 25, onContent: onContent)
         }
     }
 

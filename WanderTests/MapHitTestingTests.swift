@@ -5,6 +5,376 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    @MainActor
+    func testInitialFeaturedPinsPublishBeforeSocialRefreshCompletes() async {
+        var socialContinuation: CheckedContinuation<Bool, Never>?
+        var featuredContinuation: CheckedContinuation<[VisiblePlace]?, Never>?
+        var published = false
+        var completed = false
+        let task = Task { @MainActor in
+            let loaded = await MapInitialSourceLoader.load(
+                fetchFeatured: { await withCheckedContinuation { featuredContinuation = $0 } },
+                refreshSocial: { await withCheckedContinuation { socialContinuation = $0 } },
+                onFeatured: { _ in published = true }
+            )
+            completed = true
+            return loaded
+        }
+        await waitForMapLoad { featuredContinuation != nil && socialContinuation != nil }
+        featuredContinuation?.resume(returning: [])
+        await waitForMapLoad { published }
+        XCTAssertFalse(completed, "Featured should already be visible while social data is pending")
+        socialContinuation?.resume(returning: false)
+        let loaded = await task.value
+        XCTAssertTrue(loaded, "A social failure must not discard successful Featured content")
+    }
+
+    @MainActor
+    func testCancelledInitialMapLoadDoesNotPublishLateFeaturedContent() async {
+        var continuation: CheckedContinuation<[VisiblePlace]?, Never>?
+        var published = false
+        let task = Task { @MainActor in
+            await MapInitialSourceLoader.load(
+                fetchFeatured: { await withCheckedContinuation { continuation = $0 } },
+                refreshSocial: { true },
+                onFeatured: { _ in published = true }
+            )
+        }
+        await waitForMapLoad { continuation != nil }
+        task.cancel()
+        continuation?.resume(returning: [])
+        let loaded = await task.value
+        XCTAssertFalse(loaded)
+        XCTAssertFalse(published)
+    }
+
+    @MainActor
+    func testFailedInitialFeaturedLoadPreservesSocialFallback() async {
+        var refreshedSocial = false
+        let loaded = await MapInitialSourceLoader.load(
+            fetchFeatured: { nil },
+            refreshSocial: { refreshedSocial = true; return true },
+            onFeatured: { _ in XCTFail("A failed request must not publish a successful empty page") }
+        )
+        XCTAssertFalse(loaded)
+        XCTAssertTrue(refreshedSocial)
+    }
+
+    @MainActor
+    func testPerformanceInitialFeaturedVisibilityWithSlowSocialRefresh() async {
+        let start = ProcessInfo.processInfo.systemUptime
+        var firstContentMS: Double = 0
+        let loaded = await MapInitialSourceLoader.load(
+            fetchFeatured: {
+                try? await Task.sleep(for: .milliseconds(100))
+                return []
+            },
+            refreshSocial: {
+                try? await Task.sleep(for: .milliseconds(500))
+                return true
+            },
+            onFeatured: { _ in
+                firstContentMS = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+            }
+        )
+        let previousVisibilityMS = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+        XCTAssertTrue(loaded)
+        recordMapMeasurement("initial_featured previous_ms=\(previousVisibilityMS) current_ms=\(firstContentMS)")
+    }
+
+    @MainActor
+    func testNearbyPansReuseOnePendingFeaturedRequest() async {
+        let loader = MapFeaturedViewportLoader()
+        var calls = 0
+        var continuation: CheckedContinuation<[VisiblePlace]?, Never>?
+        var deliveries = 0
+        for step in 0..<5 {
+            loader.load(
+                visibleRegion: mapLoadRegion(latitude: 34 + Double(step) * 0.005),
+                accountID: "viewer", debounce: .zero,
+                fetch: { _ in
+                    calls += 1
+                    return await withCheckedContinuation { continuation = $0 }
+                },
+                onLoad: { _, _ in deliveries += 1 }
+            )
+            await waitForMapLoad { calls > 0 }
+        }
+        XCTAssertEqual(calls, 1)
+        continuation?.resume(returning: [])
+        await waitForMapLoad { deliveries == 1 }
+        recordMapMeasurement("nearby_pans=5 pending_featured_requests=\(calls) deliveries=\(deliveries)")
+    }
+
+    @MainActor
+    func testFeaturedPanOutsidePendingAreaRetiresOldRequestWithoutClearingReplacement() async {
+        let loader = MapFeaturedViewportLoader()
+        var continuations: [CheckedContinuation<[VisiblePlace]?, Never>] = []
+        var deliveredViewports: [MapViewport] = []
+        func load(_ latitude: Double) {
+            loader.load(
+                visibleRegion: mapLoadRegion(latitude: latitude),
+                accountID: "viewer", debounce: .zero,
+                fetch: { _ in await withCheckedContinuation { continuations.append($0) } },
+                onLoad: { _, viewport in deliveredViewports.append(viewport) }
+            )
+        }
+        load(34)
+        await waitForMapLoad { continuations.count == 1 }
+        load(35)
+        await waitForMapLoad { continuations.count == 2 }
+        continuations[0].resume(returning: [])
+        // Allow the old task's defer to run before attempting to reuse its replacement.
+        try? await Task.sleep(for: .milliseconds(10))
+        load(35.01)
+        continuations[1].resume(returning: [])
+        await waitForMapLoad { deliveredViewports.count == 1 }
+        XCTAssertEqual(continuations.count, 2)
+        XCTAssertEqual(deliveredViewports.first, MapViewportRefreshPolicy.prefetchedViewport(for: mapLoadRegion(latitude: 35)))
+    }
+
+    @MainActor
+    func testFeaturedRequestIsolationAcrossAccountReturnAndCancellation() async {
+        let loader = MapFeaturedViewportLoader()
+        var continuations: [CheckedContinuation<[VisiblePlace]?, Never>] = []
+        var deliveries: [Int] = []
+        for (index, account) in ["a", "b", "a"].enumerated() {
+            loader.load(
+                visibleRegion: mapLoadRegion(), accountID: account, debounce: .zero,
+                fetch: { _ in await withCheckedContinuation { continuations.append($0) } },
+                onLoad: { _, _ in deliveries.append(index) }
+            )
+            await waitForMapLoad { continuations.count == index + 1 }
+        }
+        continuations[0].resume(returning: [])
+        continuations[1].resume(returning: [])
+        continuations[2].resume(returning: [])
+        await waitForMapLoad { !deliveries.isEmpty }
+        XCTAssertEqual(deliveries, [2])
+
+        loader.load(
+            visibleRegion: mapLoadRegion(), accountID: "a", debounce: .zero,
+            fetch: { _ in await withCheckedContinuation { continuations.append($0) } },
+            onLoad: { _, _ in XCTFail("Cancelled result must not publish") }
+        )
+        await waitForMapLoad { continuations.count == 4 }
+        loader.cancel()
+        continuations[3].resume(returning: [])
+    }
+
+    @MainActor
+    func testFailedFeaturedRequestCanRetryTheSameArea() async {
+        let loader = MapFeaturedViewportLoader()
+        var calls = 0
+        var delivered = false
+        loader.load(
+            visibleRegion: mapLoadRegion(), accountID: "viewer", debounce: .zero,
+            fetch: { _ in calls += 1; return nil },
+            onLoad: { _, _ in XCTFail("Failure must not publish") }
+        )
+        await waitForMapLoad { calls == 1 }
+        loader.load(
+            visibleRegion: mapLoadRegion(), accountID: "viewer", debounce: .zero,
+            fetch: { _ in calls += 1; return [] },
+            onLoad: { _, _ in delivered = true }
+        )
+        await waitForMapLoad { delivered }
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testAnnotationIndexMatchesLinearSelectionForEveryViewportAndKeepsOriginalOrder() {
+        let descriptors = mapIndexDescriptors(count: 1_500)
+        var index = MapAnnotationViewportIndex()
+        index.update(descriptors)
+        for step in 0..<100 {
+            let viewport = MapViewportRefreshPolicy.prefetchedViewport(for: mapLoadRegion(
+                latitude: 33.8 + Double(step) * 0.01,
+                span: step.isMultiple(of: 9) ? 10 : 0.05
+            ))
+            let expected = descriptors.indices.filter {
+                descriptors[$0].isSelected
+                    || MapViewportRefreshPolicy.contains(descriptors[$0].coordinate, in: viewport)
+            }
+            XCTAssertEqual(index.indices(in: viewport), expected)
+        }
+    }
+
+    func testAnnotationIndexUpdatesSelectionCoordinatesRemovalAndEmptyCatalog() {
+        var descriptors = mapIndexDescriptors(count: 200)
+        let viewport = MapViewport(minLatitude: 34, minLongitude: -118, maxLatitude: 34.04, maxLongitude: -117.96)
+        var index = MapAnnotationViewportIndex()
+        func verify() {
+            index.update(descriptors)
+            XCTAssertEqual(index.indices(in: viewport), descriptors.indices.filter {
+                descriptors[$0].isSelected || MapViewportRefreshPolicy.contains(descriptors[$0].coordinate, in: viewport)
+            })
+        }
+        verify()
+        descriptors[100] = mapIndexDescriptor(id: 100, latitude: 36, longitude: -118, selected: true)
+        verify()
+        descriptors[100] = mapIndexDescriptor(id: 100, latitude: 36, longitude: -118, selected: false)
+        verify()
+        descriptors[5] = mapIndexDescriptor(id: 5, latitude: 34, longitude: -118)
+        verify()
+        descriptors.removeFirst(50)
+        verify()
+        descriptors = []
+        verify()
+    }
+
+    func testAnnotationIndexHandlesBoundaryCoordinatesAndInvalidLocations() {
+        let descriptors = [
+            mapIndexDescriptor(id: 0, latitude: 90, longitude: 180),
+            mapIndexDescriptor(id: 1, latitude: -90, longitude: -180),
+            mapIndexDescriptor(id: 2, latitude: .nan, longitude: 0),
+            mapIndexDescriptor(id: 3, latitude: .nan, longitude: .infinity, selected: true)
+        ]
+        var index = MapAnnotationViewportIndex()
+        index.update(descriptors)
+        XCTAssertEqual(index.indices(in: MapViewport(minLatitude: -90, minLongitude: -180, maxLatitude: 90, maxLongitude: 180)), [0, 1, 3])
+        XCTAssertEqual(index.indices(in: MapViewport(minLatitude: 90, minLongitude: 180, maxLatitude: 90, maxLongitude: 180)), [0, 3])
+    }
+
+    func testPerformanceAnnotationViewportSelection() {
+        let descriptors = mapIndexDescriptors(count: 1_500)
+        var index = MapAnnotationViewportIndex()
+        let buildStart = ProcessInfo.processInfo.systemUptime
+        index.update(descriptors)
+        let buildMS = (ProcessInfo.processInfo.systemUptime - buildStart) * 1_000
+        let viewports = (0..<200).map {
+            MapViewportRefreshPolicy.prefetchedViewport(for: mapLoadRegion(latitude: 34 + Double($0 % 50) * 0.02, span: 0.05))
+        }
+        let previousStart = ProcessInfo.processInfo.systemUptime
+        var previousCount = 0
+        for viewport in viewports {
+            previousCount += descriptors.filter {
+                $0.isSelected || MapViewportRefreshPolicy.contains($0.coordinate, in: viewport)
+            }.count
+        }
+        let previousMS = (ProcessInfo.processInfo.systemUptime - previousStart) * 1_000
+        let currentStart = ProcessInfo.processInfo.systemUptime
+        var currentCount = 0
+        for viewport in viewports {
+            currentCount += index.indices(in: viewport).map { descriptors[$0] }.count
+        }
+        let currentMS = (ProcessInfo.processInfo.systemUptime - currentStart) * 1_000
+        XCTAssertEqual(currentCount, previousCount)
+        recordMapMeasurement("viewport_selection pins=1500 queries=200 previous_ms=\(previousMS) current_ms=\(currentMS) initial_index_ms=\(buildMS) selected_total=\(currentCount)")
+    }
+
+    @MainActor
+    private func waitForMapLoad(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<2_000 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTFail("Map request did not reach the expected state", file: file, line: line)
+    }
+
+    private func mapLoadRegion(latitude: Double = 34, span: Double = 0.1) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: latitude, longitude: -118),
+            span: MKCoordinateSpan(latitudeDelta: span, longitudeDelta: span)
+        )
+    }
+
+    private func mapIndexDescriptors(count: Int) -> [NativeMapAnnotationDescriptor] {
+        (0..<count).map {
+            mapIndexDescriptor(id: $0, latitude: 34 + Double($0 % 75) * 0.02, longitude: -118.1 + Double($0 / 75) * 0.01, selected: $0 == count - 1)
+        }
+    }
+
+    private func mapIndexDescriptor(id: Int, latitude: Double, longitude: Double, selected: Bool = false) -> NativeMapAnnotationDescriptor {
+        NativeMapAnnotationDescriptor(
+            id: "pin-\(id)", kind: .saved("group-\(id)"), title: "Fixture \(id)", emoji: "☕️",
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+            outlines: [], isSearchResult: false, isSelected: selected, opacity: 1,
+            animatesEntrance: false, entranceDelay: 0, accessibilityLabel: "Pin \(id)", bounceRevision: 0
+        )
+    }
+
+    private func recordMapMeasurement(_ measurement: String) {
+        let text = "REC441_MAP_FOLLOWUP \(measurement)"
+        print(text)
+        let attachment = XCTAttachment(string: text)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testPerformanceStableMapProjectionReads() {
+        let cache = MapRenderProjectionCache<String, Int>()
+        _ = cache.value(for: "stable", partition: "friends") { 7 }
+        var legacyEntries = ["friends": [(key: "stable", value: 7)]]
+        let iterations = 100_000
+        let legacyStart = CFAbsoluteTimeGetCurrent()
+        var legacySum = 0
+        for _ in 0..<iterations {
+            var entries = legacyEntries["friends"] ?? []
+            let index = entries.firstIndex { $0.key == "stable" }!
+            let entry = entries.remove(at: index)
+            entries.append(entry)
+            legacyEntries["friends"] = entries
+            legacySum += entry.value
+        }
+        let legacyMS = (CFAbsoluteTimeGetCurrent() - legacyStart) * 1_000
+        let currentStart = CFAbsoluteTimeGetCurrent()
+        var currentSum = 0
+        for _ in 0..<iterations {
+            currentSum += cache.value(for: "stable", partition: "friends") { -1 }
+        }
+        let currentMS = (CFAbsoluteTimeGetCurrent() - currentStart) * 1_000
+        XCTAssertEqual(currentSum, legacySum)
+        XCTAssertEqual(cache.buildCount, 1)
+        // Timing is evidence, not a hardware-dependent pass/fail threshold.
+        let measurement = "REC441_PERF map_projection_reads=\(iterations) legacy_ms=\(legacyMS) current_ms=\(currentMS)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(cache.value(for: "stable", partition: "you") { 9 }, 9)
+        XCTAssertEqual(cache.value(for: "stable", partition: "friends") { -1 }, 7)
+    }
+
+    func testPerformanceStableNativeAnnotationComparison() {
+        func descriptors() -> [NativeMapAnnotationDescriptor] {
+            (0..<1_500).map { index in
+                NativeMapAnnotationDescriptor(
+                    id: "pin-\(index)", kind: .saved("group-\(index)"),
+                    title: "Fixture \(index)", emoji: "☕️",
+                    coordinate: CLLocationCoordinate2D(latitude: 34 + Double(index) / 100_000, longitude: -118),
+                    outlines: [], isSearchResult: false, isSelected: false,
+                    opacity: 1, animatesEntrance: false, entranceDelay: 0,
+                    accessibilityLabel: "Fixture pin \(index)", bounceRevision: 0
+                )
+            }
+        }
+        let previous = descriptors()
+        let next = descriptors()
+        let previousByID = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0) })
+        let iterations = 100
+        var legacyMatches = 0
+        let legacyStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<iterations {
+            let nextByID = Dictionary(uniqueKeysWithValues: next.map { ($0.id, $0) })
+            if nextByID == previousByID { legacyMatches += 1 }
+        }
+        let legacyMS = (CFAbsoluteTimeGetCurrent() - legacyStart) * 1_000 / Double(iterations)
+        var currentMatches = 0
+        let currentStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<iterations {
+            if next == previous { currentMatches += 1 }
+        }
+        let currentMS = (CFAbsoluteTimeGetCurrent() - currentStart) * 1_000 / Double(iterations)
+        XCTAssertEqual(currentMatches, legacyMatches)
+        XCTAssertEqual(currentMatches, iterations)
+        let measurement = "REC441_PERF map_annotation_count=1500 legacy_comparison_ms=\(legacyMS) current_comparison_ms=\(currentMS)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
         XCTAssertEqual(
             MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),
@@ -1952,7 +2322,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.removeAnnotations(staleAnnotations)"))
         XCTAssertTrue(map.contains("dequeueReusableAnnotationView("))
         XCTAssertTrue(map.contains("for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers"))
-        XCTAssertTrue(map.contains("let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID"))
+        XCTAssertTrue(map.contains("let descriptorsChanged = parent.annotations != descriptorSnapshot"))
         XCTAssertTrue(map.contains("private var renderedViewport: MapViewport?"))
         XCTAssertTrue(map.contains("MapAnnotationViewportPolicy.shouldRefresh("))
         XCTAssertTrue(map.contains("descriptor.isSelected"))

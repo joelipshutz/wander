@@ -1192,6 +1192,78 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testPerformanceFeedFirstContentPrecedesSlowMedia() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        let activityID = "40000000-0000-0000-0000-000000000386"
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [{
+            "id": "\(activityID)",
+            "event_type": "place_been",
+            "occurred_at": "2026-08-30T20:00:00Z",
+            "actor": {
+              "id": "user_ryan",
+              "handle": "ryan",
+              "display_name": "Ryan",
+              "avatar_url": null,
+              "relationship": "follower"
+            },
+            "place": null,
+            "list": null,
+            "note": "Dudley Market",
+            "rating": null,
+            "media": []
+          }],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-08-30T20:01:00Z"
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [{
+          "activity_id": "\(activityID)",
+          "media": [{
+            "id": "55000000-0000-0000-0000-000000000386",
+            "url": null,
+            "storage_bucket": "visit-photos",
+            "storage_path": "user_ryan/visit_dudley/photo.jpg",
+            "accessibility_label": "Activity photo"
+          }]
+        }]
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc, storage: storage)
+
+        rpc.delays = ["followed_feed": .milliseconds(100), "activity_media": .milliseconds(400)]
+        let start = ContinuousClock.now
+        var firstContentMilliseconds: Double?
+        let page = try await repository.followedFeed(before: nil, limit: 25) { content in
+            let elapsed = start.duration(to: .now).components
+            firstContentMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
+            XCTAssertEqual(content.activity.map(\.id), [activityID])
+            XCTAssertTrue(content.activity[0].media.isEmpty)
+            XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
+            XCTAssertTrue(storage.signedURLs.isEmpty)
+        }
+        let elapsed = start.duration(to: .now).components
+        let completeMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
+        let contentMilliseconds = try XCTUnwrap(firstContentMilliseconds)
+        XCTAssertGreaterThan(completeMilliseconds - contentMilliseconds, 350)
+        let measurement = "REC441_PERF feed_first_content_ms=\(contentMilliseconds) legacy_media_gated_content_ms=\(completeMilliseconds)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
+        )
+    }
+
     func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -4980,6 +5052,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
     }
 
     var responses: [String: Data] = [:]
+    var delays: [String: Duration] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
 
@@ -4991,6 +5064,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         let body = try encodedObject(params)
         rawBodies.append(body)
         calls.append(Call(name: name, body: anyHashableBody(body)))
+        if let delay = delays[name] { try await Task.sleep(for: delay) }
 
         if Value.self == EmptyRPCResponse.self {
             return EmptyRPCResponse() as! Value
