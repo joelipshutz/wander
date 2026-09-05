@@ -1955,6 +1955,22 @@ extension PlaceRepository {
 @MainActor
 protocol FeedRepository {
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage
+    /// Delivers authorized text/cards before optional media network requests.
+    func followedFeed(
+        before: String?,
+        limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage
+}
+
+extension FeedRepository {
+    func followedFeed(
+        before: String?,
+        limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        try await followedFeed(before: before, limit: limit)
+    }
 }
 
 @MainActor

@@ -2700,6 +2700,12 @@ struct WanderRootView: View {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
             }
             #endif
+            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state)
+            else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
             if backend.notificationRepository != nil,
                let preferences = try? await backend.notificationPreferences() {
                 guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
@@ -2736,10 +2742,7 @@ struct WanderRootView: View {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
-            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
-            guard didHydrateCurrentProfile,
-                  shouldContinueSignedInMaintenance(runID: runID, state: state)
-            else {
+            guard didHydrateCurrentProfile else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }

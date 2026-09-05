@@ -5,6 +5,80 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    @MainActor
+    func testPerformanceStableMapProjectionReads() {
+        let cache = MapRenderProjectionCache<String, Int>()
+        _ = cache.value(for: "stable", partition: "friends") { 7 }
+        var legacyEntries = ["friends": [(key: "stable", value: 7)]]
+        let iterations = 100_000
+        let legacyStart = CFAbsoluteTimeGetCurrent()
+        var legacySum = 0
+        for _ in 0..<iterations {
+            var entries = legacyEntries["friends"] ?? []
+            let index = entries.firstIndex { $0.key == "stable" }!
+            let entry = entries.remove(at: index)
+            entries.append(entry)
+            legacyEntries["friends"] = entries
+            legacySum += entry.value
+        }
+        let legacyMS = (CFAbsoluteTimeGetCurrent() - legacyStart) * 1_000
+        let currentStart = CFAbsoluteTimeGetCurrent()
+        var currentSum = 0
+        for _ in 0..<iterations {
+            currentSum += cache.value(for: "stable", partition: "friends") { -1 }
+        }
+        let currentMS = (CFAbsoluteTimeGetCurrent() - currentStart) * 1_000
+        XCTAssertEqual(currentSum, legacySum)
+        XCTAssertEqual(cache.buildCount, 1)
+        // Timing is evidence, not a hardware-dependent pass/fail threshold.
+        let measurement = "REC441_PERF map_projection_reads=\(iterations) legacy_ms=\(legacyMS) current_ms=\(currentMS)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(cache.value(for: "stable", partition: "you") { 9 }, 9)
+        XCTAssertEqual(cache.value(for: "stable", partition: "friends") { -1 }, 7)
+    }
+
+    func testPerformanceStableNativeAnnotationComparison() {
+        func descriptors() -> [NativeMapAnnotationDescriptor] {
+            (0..<1_500).map { index in
+                NativeMapAnnotationDescriptor(
+                    id: "pin-\(index)", kind: .saved("group-\(index)"),
+                    title: "Fixture \(index)", emoji: "☕️",
+                    coordinate: CLLocationCoordinate2D(latitude: 34 + Double(index) / 100_000, longitude: -118),
+                    outlines: [], isSearchResult: false, isSelected: false,
+                    opacity: 1, animatesEntrance: false, entranceDelay: 0,
+                    accessibilityLabel: "Fixture pin \(index)", bounceRevision: 0
+                )
+            }
+        }
+        let previous = descriptors()
+        let next = descriptors()
+        let previousByID = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0) })
+        let iterations = 100
+        var legacyMatches = 0
+        let legacyStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<iterations {
+            let nextByID = Dictionary(uniqueKeysWithValues: next.map { ($0.id, $0) })
+            if nextByID == previousByID { legacyMatches += 1 }
+        }
+        let legacyMS = (CFAbsoluteTimeGetCurrent() - legacyStart) * 1_000 / Double(iterations)
+        var currentMatches = 0
+        let currentStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<iterations {
+            if next == previous { currentMatches += 1 }
+        }
+        let currentMS = (CFAbsoluteTimeGetCurrent() - currentStart) * 1_000 / Double(iterations)
+        XCTAssertEqual(currentMatches, legacyMatches)
+        XCTAssertEqual(currentMatches, iterations)
+        let measurement = "REC441_PERF map_annotation_count=1500 legacy_comparison_ms=\(legacyMS) current_comparison_ms=\(currentMS)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
         XCTAssertEqual(
             MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),

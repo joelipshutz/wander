@@ -40,6 +40,7 @@ struct MapSaveFlowSelectionCoordinator {
 final class MapRenderProjectionCache<Key: Equatable, Value> {
     private let capacityPerPartition: Int
     private var entriesByPartition: [String: [(key: Key, value: Value)]] = [:]
+    private var mostRecentEntry: (partition: String, key: Key, value: Value)?
 
     #if DEBUG
     private(set) var buildCount = 0
@@ -54,11 +55,17 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
         partition: String = "default",
         build: () -> Value
     ) -> Value {
+        // Pin rendering repeatedly reads the same projection. A stable hit
+        // must not copy the LRU array or mutate its dictionary for every pin.
+        if let recent = mostRecentEntry, recent.partition == partition, recent.key == key {
+            return recent.value
+        }
         var entries = entriesByPartition[partition] ?? []
         if let index = entries.firstIndex(where: { $0.key == key }) {
             let entry = entries.remove(at: index)
             entries.append(entry)
             entriesByPartition[partition] = entries
+            mostRecentEntry = (partition, key, entry.value)
             return entry.value
         }
 
@@ -68,6 +75,7 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
             entries.removeFirst(entries.count - capacityPerPartition)
         }
         entriesByPartition[partition] = entries
+        mostRecentEntry = (partition, key, value)
         #if DEBUG
         buildCount += 1
         #endif
@@ -1703,8 +1711,9 @@ struct MapScreen: View {
             }
             return nil
         }()
+        let pinCatalog = renderProjection.pinRenderCatalog
         let nativeSavedAnnotations: [NativeMapAnnotationDescriptor] = annotationGroups.enumerated().map { index, group in
-            let outlines = pinOutlines(for: group)
+            let outlines = pinOutlines(for: group, catalog: pinCatalog)
             let coordinate = CLLocationCoordinate2D(
                 latitude: group.primary.place.latitude,
                 longitude: group.primary.place.longitude
@@ -3284,11 +3293,16 @@ struct MapScreen: View {
     }
 
     private func pinOutlines(for group: VisiblePlaceGroup) -> [MapPinOutline] {
-        let projectedSaveIDs = renderProjection.pinRenderCatalog
-            .saveIDsByGroupKey[group.key]
+        pinOutlines(for: group, catalog: renderProjection.pinRenderCatalog)
+    }
+
+    private func pinOutlines(
+        for group: VisiblePlaceGroup, catalog: MapPinRenderCatalog
+    ) -> [MapPinOutline] {
+        let projectedSaveIDs = catalog.saveIDsByGroupKey[group.key]
         let renderedSaveIDs = Set(group.places.map(\.userPlace.id))
         if projectedSaveIDs == renderedSaveIDs,
-           let outlines = renderProjection.pinRenderCatalog.outlinesByGroupKey[group.key] {
+           let outlines = catalog.outlinesByGroupKey[group.key] {
             return outlines
         }
 
@@ -6334,7 +6348,7 @@ private struct NativeMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         private var parent: NativeMapView
         private var annotationsByID: [String: NativeMapAnnotation] = [:]
-        private var descriptorSnapshotByID: [String: NativeMapAnnotationDescriptor] = [:]
+        private var descriptorSnapshot: [NativeMapAnnotationDescriptor] = []
         private var pinViewReferencesByID: [String: WeakNativeMapPinAnnotationView] = [:]
         private var renderedViewport: MapViewport?
         private var annotationAccessibilityRefreshScheduled = false
@@ -6469,10 +6483,9 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         private func synchronizeAnnotations(in mapView: MKMapView) {
-            let nextDescriptorSnapshot = Dictionary(
-                uniqueKeysWithValues: parent.annotations.map { ($0.id, $0) }
-            )
-            let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID
+            // Descriptors already have stable ordering. Comparing the array
+            // avoids allocating and hashing every pin on unrelated UI updates.
+            let descriptorsChanged = parent.annotations != descriptorSnapshot
             let shouldRefreshViewport: Bool
             if let renderedViewport {
                 shouldRefreshViewport = MapAnnotationViewportPolicy.shouldRefresh(
@@ -6484,7 +6497,7 @@ private struct NativeMapView: UIViewRepresentable {
             }
             guard descriptorsChanged || shouldRefreshViewport else { return }
 
-            descriptorSnapshotByID = nextDescriptorSnapshot
+            descriptorSnapshot = parent.annotations
             let nextRenderedViewport = MapViewportRefreshPolicy.prefetchedViewport(
                 for: mapView.region
             )

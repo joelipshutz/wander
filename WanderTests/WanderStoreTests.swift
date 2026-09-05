@@ -6587,6 +6587,128 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testPerformanceFeedCoalescesConcurrentRefreshesAndReusesWarmContent() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let repository = FakeFeedRepository(responses: [.success(page), .success(page)], isSuspended: true)
+        let backend = WanderBackend(feedRepository: repository)
+        let requests = (0..<5).map { _ in
+            Task { @MainActor in await store.refreshFollowedFeed(backend: backend) }
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertEqual(repository.requestCount, 1)
+        repository.finish()
+        for request in requests {
+            let result = await request.value
+            XCTAssertTrue(result)
+        }
+        let warmStart = ContinuousClock.now
+        let warmResult = await store.refreshFollowedFeed(backend: backend, force: false)
+        let elapsed = warmStart.duration(to: .now).components
+        let warmMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
+        XCTAssertTrue(warmResult)
+        XCTAssertEqual(repository.requestCount, 1)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        let measurement = "REC441_PERF concurrent_refresh_requests=\(repository.requestCount) warm_refresh_requests=0 warm_refresh_ms=\(warmMilliseconds)"
+        print(measurement)
+        let attachment = XCTAttachment(string: measurement)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let forcedResult = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(forcedResult)
+        XCTAssertEqual(repository.requestCount, 2, "Pull to refresh bypasses the freshness window")
+    }
+
+    func testConcurrentFeedRefreshesForDifferentCommentRoutesStaySerialized() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let repository = FakeFeedRepository(
+            responses: [.success(page), .success(page), .success(page)],
+            isSuspended: true, requestDelay: .milliseconds(20)
+        )
+        let backend = WanderBackend(feedRepository: repository)
+        let initial = Task { @MainActor in await store.refreshFollowedFeed(backend: backend) }
+        for _ in 0..<100 where repository.requestCount == 0 { await Task.yield() }
+        let routes = ["activity-a", "activity-b"].map { activityID in
+            Task { @MainActor in
+                await store.refreshFollowedFeed(backend: backend, preservingActivityID: activityID)
+            }
+        }
+        for _ in 0..<100 { await Task.yield() }
+        repository.finish()
+        let initialResult = await initial.value
+        XCTAssertTrue(initialResult)
+        for route in routes {
+            let result = await route.value
+            XCTAssertTrue(result)
+        }
+        XCTAssertEqual(repository.requestCount, 3)
+        XCTAssertEqual(repository.maximumConcurrentRequests, 1)
+    }
+
+    func testFollowChangeInvalidatesWarmFeedAndDoesNotJoinAnOlderRefresh() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let repository = FakeFeedRepository(responses: [.success(page), .success(page), .success(page)], isSuspended: true)
+        let backend = WanderBackend(feedRepository: repository)
+        let initial = Task { @MainActor in await store.refreshFollowedFeed(backend: backend) }
+        for _ in 0..<100 where repository.requestCount == 0 { await Task.yield() }
+        store.follow(userID: "new-feed-follow")
+        let afterFollow = Task { @MainActor in await store.refreshFollowedFeed(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        repository.finish()
+        _ = await initial.value
+        let result = await afterFollow.value
+        XCTAssertTrue(result)
+        XCTAssertEqual(repository.requestCount, 2, "A pre-mutation request cannot satisfy the mutation refresh")
+        store.follow(userID: "another-feed-follow")
+        _ = await store.refreshFollowedFeed(backend: backend, force: false)
+        XCTAssertEqual(repository.requestCount, 3, "Following someone invalidates a warm automatic read")
+    }
+
+    func testFailedWarmFeedRefreshRetainsContentAndCanRetryImmediately() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let repository = FakeFeedRepository(responses: [
+            .success(page), .failure(WanderRemoteError.invalidResponse("offline")), .success(page)
+        ])
+        let backend = WanderBackend(feedRepository: repository)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        let failed = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertNotNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .stale)
+        let retried = await store.refreshFollowedFeed(backend: backend, force: false)
+        XCTAssertTrue(retried)
+        XCTAssertEqual(repository.requestCount, 3)
+    }
+
+    func testRetiredFeedRequestCannotRestoreContentAfterReturningToSameAccount() async {
+        let store = WanderStore(fixtures: .empty())
+        let session = AuthSession(userID: "feed_user_a", displayName: "Feed A", handle: "feed_a")
+        store.apply(authState: .signedIn(session))
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let oldRepository = FakeFeedRepository(responses: [.success(page)], isSuspended: true)
+        let oldRefresh = Task { @MainActor in
+            await store.refreshFollowedFeed(backend: WanderBackend(feedRepository: oldRepository))
+        }
+        for _ in 0..<100 where oldRepository.requestCount == 0 { await Task.yield() }
+        XCTAssertEqual(oldRepository.requestCount, 1)
+        store.apply(authState: .signedOut)
+        store.apply(authState: .signedIn(session))
+        oldRepository.finish()
+        let oldResult = await oldRefresh.value
+        XCTAssertFalse(oldResult)
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .idle)
+        let newRepository = FakeFeedRepository(responses: [.success(page)])
+        let newResult = await store.refreshFollowedFeed(
+            backend: WanderBackend(feedRepository: newRepository), force: false
+        )
+        XCTAssertTrue(newResult)
+        XCTAssertEqual(newRepository.requestCount, 1)
+    }
+
     func testFollowedFeedRetriesOneTransientAuthReadinessFailure() async {
         let store = makeStore()
         let expectedPage = FollowedFeedPage(
@@ -11473,17 +11595,26 @@ private final class FakeFeedRepository: FeedRepository {
     private var responses: [Result<FollowedFeedPage, Error>]
     private var isSuspended: Bool
     private(set) var requestCount = 0
+    private var activeRequests = 0
+    private(set) var maximumConcurrentRequests = 0
+    private let requestDelay: Duration?
 
     init(
         responses: [Result<FollowedFeedPage, Error>],
-        isSuspended: Bool = false
+        isSuspended: Bool = false,
+        requestDelay: Duration? = nil
     ) {
         self.responses = responses
         self.isSuspended = isSuspended
+        self.requestDelay = requestDelay
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
         requestCount += 1
+        activeRequests += 1
+        maximumConcurrentRequests = max(maximumConcurrentRequests, activeRequests)
+        defer { activeRequests -= 1 }
+        if let requestDelay { try await Task.sleep(for: requestDelay) }
         while isSuspended {
             await Task.yield()
         }
