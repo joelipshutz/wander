@@ -2056,6 +2056,28 @@ final class MapSelectionMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testActivePinRetentionRebuildsMissingGroupForAuthorizedRoute() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let authorizedPlaces = store.visiblePlaces()
+        let activePlace = try XCTUnwrap(
+            authorizedPlaces.first { $0.place.canonicalName == "Griffith Observatory Trail" }
+        )
+
+        let rebuiltGroup = MapActivePinRetention.authorizedGroup(
+            nil,
+            requiring: activePlace,
+            within: authorizedPlaces,
+            currentUserID: store.currentUser.id
+        )
+
+        XCTAssertTrue(
+            try XCTUnwrap(rebuiltGroup).places.contains {
+                $0.userPlace.id == activePlace.userPlace.id
+            }
+        )
+    }
+
+    @MainActor
     func testSubmittedRetentionRebuildsGroupsFromCurrentAuthorizedRows() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
         let currentUserID = store.currentUser.id
@@ -2487,7 +2509,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("clusteringIdentifier = nil"))
         XCTAssertTrue(map.contains("mapView.convert(annotation.coordinate, toPointTo: mapView)"))
         XCTAssertTrue(map.contains("MapHitTesting.nextColocatedMarkerID"))
-        XCTAssertTrue(map.contains("annotation.descriptor.isSelected"))
+        XCTAssertTrue(map.contains("$0.0.descriptor.isSelected"))
+        XCTAssertTrue(map.contains("if view.annotation is MKUserLocation"))
+        XCTAssertTrue(map.contains("view.isEnabled = false"))
+        XCTAssertTrue(map.contains("if annotation is MKUserLocation"))
+        XCTAssertTrue(map.contains("mapView.view(for: mapView.userLocation)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
@@ -2842,7 +2868,7 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
         XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity, alignment: .center)"))
-        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 48)"))
+        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 44)"))
     }
 
     func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
@@ -2980,7 +3006,8 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(map.contains("MapRenderProjectionCache<"))
         XCTAssertTrue(map.contains("private final class NativeMapPinAnnotationView"))
         XCTAssertTrue(map.contains("private var presentedAnnotationID: String?"))
-        XCTAssertTrue(map.contains("let shouldAnimateEntrance = presentedAnnotationID != descriptor.id"))
+        XCTAssertTrue(map.contains("let isNewAnnotation = presentedAnnotationID != descriptor.id"))
+        XCTAssertTrue(map.contains("let shouldAnimateEntrance = isNewAnnotation"))
         XCTAssertTrue(map.contains("animateEntrance("))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
@@ -2996,7 +3023,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(theme.contains("isElevated"))
     }
 
-    func testMapSearchCapsuleUsesLiquidGlassOnIOS26WithFlatFallback() throws {
+    func testMapSearchAndFilterChipsUseAdaptiveAstirGlassSurfaces() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -3023,13 +3050,23 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(searchBarSource.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
         XCTAssertTrue(searchBarSource.contains("@State private var draftQuery"))
         XCTAssertTrue(searchBarSource.contains("Task.sleep(for: .milliseconds(80))"))
+        XCTAssertTrue(
+            searchSurfaceSource.contains(
+                "let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)"
+            )
+        )
         XCTAssertTrue(searchSurfaceSource.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(searchSurfaceSource.contains(".glassEffect("))
-        XCTAssertTrue(searchSurfaceSource.contains(".tint(appearance.isDark ? Color.black.opacity(0.50) : nil)"))
+        XCTAssertTrue(searchSurfaceSource.contains(".tint(astirBrandMode.background.opacity(0.74))"))
         XCTAssertTrue(searchSurfaceSource.contains(".interactive(true)"))
-        XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
+        XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: shape)"))
         XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
-        XCTAssertTrue(filterChipSource.contains(".wanderGlassCapsule("))
+        XCTAssertFalse(filterChipSource.contains(".wanderGlassCapsule("))
+        XCTAssertTrue(
+            filterChipSource.contains(
+                ".astirGlassSurface(cornerRadius: 18, selected: isSelected, castsShadow: true)"
+            )
+        )
     }
 
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {

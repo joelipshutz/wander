@@ -157,7 +157,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let streakMockupPage = SaveStreakMockupPage.resolved() {
+            if let astirBrandShellPage = AstirBrandShellPage.resolved() {
+                AstirBrandShellRoot(page: astirBrandShellPage)
+            } else if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
@@ -166,8 +168,10 @@ struct WanderApp: App {
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
                 ClerkNativeAuthView(mode: .signIn)
                     .environmentObject(auth)
+                    .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
+                    .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
             } else if let inCommonMockupPage = InCommonDesignMockupPage.resolved() {

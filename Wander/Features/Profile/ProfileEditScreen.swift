@@ -4,6 +4,7 @@ import UIKit
 
 struct ProfileEditScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -35,9 +36,9 @@ struct ProfileEditScreen: View {
                             )
                             if isPhotoSaving {
                                 Circle()
-                                    .fill(WanderTheme.textInk.color.opacity(0.42))
+                                    .fill(AstirTheme.ink.color.opacity(0.42))
                                     .frame(width: 124, height: 124)
-                                ProgressView().tint(WanderTheme.textOnAction.color)
+                                ProgressView().tint(AstirTheme.paper.color)
                             }
                         }
 
@@ -45,8 +46,8 @@ struct ProfileEditScreen: View {
                             showsPhotoMenu = true
                         } label: {
                             Text("Edit profile photo")
-                                .font(.system(size: 16, weight: .black))
-                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .font(AstirTypography.control)
+                                .foregroundStyle(brandMode.accentText)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
                         .buttonStyle(.plain)
@@ -56,7 +57,7 @@ struct ProfileEditScreen: View {
 
                     VStack(spacing: 0) {
                         ProfileEditFieldRow(title: "Name", prompt: "Your name", text: $name, capitalization: .words)
-                        Divider().overlay(WanderTheme.borderHairline.color)
+                        Divider().overlay(brandMode.border)
                         ProfileEditFieldRow(
                             title: "Username",
                             prompt: "username",
@@ -64,18 +65,21 @@ struct ProfileEditScreen: View {
                             capitalization: .never,
                             disablesAutocorrection: true
                         )
-                        Divider().overlay(WanderTheme.borderHairline.color)
+                        Divider().overlay(brandMode.border)
                         ProfileEditFieldRow(title: "Home city", prompt: "Add a home city", text: $homeArea, capitalization: .words)
-                        Divider().overlay(WanderTheme.borderHairline.color)
+                        Divider().overlay(brandMode.border)
                         ProfileEditFieldRow(title: "Bio", prompt: "Add a bio", text: $bio, capitalization: .sentences, axis: .vertical)
                     }
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                    .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+                    .background(brandMode.raisedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                            .stroke(brandMode.border)
+                    )
 
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AstirTypography.bodySmall)
                             .foregroundStyle(WanderTheme.stateError.color)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -83,20 +87,21 @@ struct ProfileEditScreen: View {
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
             }
-            .wanderScreen()
+            .astirScreen()
             .navigationTitle("edit profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("cancel") { dismiss() }
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(isSaving ? "saving..." : "save") {
                         Task { await save() }
                     }
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentText)
                     .disabled(isSaving || !isValid)
                 }
             }
@@ -319,7 +324,7 @@ struct ProfilePhotoFullScreenViewer: View {
                             Image(systemName: "photo")
                                 .font(.system(size: 28, weight: .semibold))
                             Text("Could not load profile photo")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(AstirTypography.control)
                         }
                         .foregroundStyle(.white.opacity(0.82))
                     } else {
@@ -359,6 +364,7 @@ struct ProfilePhotoFullScreenViewer: View {
 }
 
 private struct ProfileEditFieldRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let prompt: String
     @Binding var text: String
@@ -369,11 +375,13 @@ private struct ProfileEditFieldRow: View {
     var body: some View {
         HStack(alignment: axis == .vertical ? .top : .firstTextBaseline, spacing: WanderTheme.spacing3) {
             Text(title)
-                .font(.system(size: 15, weight: .black))
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(width: 84, alignment: .leading)
 
             TextField(prompt, text: $text, axis: axis)
-                .font(.system(size: 15, weight: .medium))
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.primaryText)
                 .textInputAutocapitalization(capitalization)
                 .autocorrectionDisabled(disablesAutocorrection)
                 .multilineTextAlignment(.trailing)

@@ -14,6 +14,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var expandedMatchItemIDs: Set<String> = []
     @State private var expandedDetailItemIDs: Set<String> = []
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
@@ -61,10 +62,10 @@ struct PlaceImportCanonicalReviewScreen: View {
                             ForEach(recoveryItems) { item in
                                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                                     Text(item.isSourceRetry ? "Source scan incomplete" : (item.seed.nameHint ?? "Import needs a retry"))
-                                        .font(WanderTypography.label)
+                                        .font(AstirTypography.label)
                                     Text(item.helpMessage ?? "We couldn’t finish matching this source. Your link is safe.")
-                                        .font(WanderTypography.metadata)
-                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                        .font(AstirTypography.metadata)
+                                        .foregroundStyle(brandMode.secondaryText)
                                     HStack {
                                         Button("Retry", systemImage: "arrow.clockwise") {
                                             importStore.retry(itemID: item.id)
@@ -78,11 +79,11 @@ struct PlaceImportCanonicalReviewScreen: View {
                                             .frame(minHeight: 44)
                                         }
                                     }
-                                    .tint(WanderTheme.terracottaDark.color)
+                                    .tint(brandMode.accentText)
                                 }
                                 .padding(WanderTheme.spacing3)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(WanderTheme.surfaceRaised.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                             }
                         }
                     }
@@ -93,7 +94,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             .padding(.bottom, 94)
         }
         .scrollDismissesKeyboard(.interactively)
-        .wanderScreen()
+        .astirScreen()
         .navigationTitle("Review places")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
@@ -145,21 +146,21 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private var reviewHeader: some View {
         Text("\(displayItems.count) places matched and ready")
-            .font(WanderTypography.editorialMajorSectionTitle)
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.sheetTitle)
+            .foregroundStyle(brandMode.primaryText)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var processingContent: some View {
         VStack(spacing: WanderTheme.spacing4) {
             Text("Matching your places")
-                .font(WanderTypography.editorialMajorSectionTitle)
+                .font(AstirTypography.sheetTitle)
             ImportMatchingProgressBar(progress: matchingProgress, reduceMotion: reduceMotion)
                 .frame(height: 6)
                 .accessibilityHidden(true)
             Text(matchingProgress.label)
-                .font(WanderTypography.body)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.secondaryText)
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
         }
@@ -178,8 +179,8 @@ struct PlaceImportCanonicalReviewScreen: View {
             Spacer(minLength: 0)
             VStack(spacing: WanderTheme.spacing1) {
                 Text("Apply to all")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .center)
 
                 HStack(spacing: WanderTheme.spacing2) {
@@ -215,8 +216,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
             }
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -229,8 +230,8 @@ struct PlaceImportCanonicalReviewScreen: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialSectionTitle)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
             VStack(spacing: WanderTheme.spacing3) {
                 content()
@@ -245,13 +246,13 @@ struct PlaceImportCanonicalReviewScreen: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(2)
                     if let area = item.displayArea {
                         Text(area)
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -268,8 +269,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                     Image(systemName: "chevron.down")
                         .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
                 }
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
@@ -284,11 +285,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 
@@ -297,11 +298,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.seed.nameHint ?? item.displayName)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("Select every place you want")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 rowStatusControls(item)
@@ -319,17 +320,17 @@ struct PlaceImportCanonicalReviewScreen: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
                         .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accentText)
                     Text("Possible matches")
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                     Spacer(minLength: 0)
                     Text("\(min(item.candidates.count, 5))")
-                        .font(WanderTypography.metadata.weight(.bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata.weight(.bold))
+                        .foregroundStyle(brandMode.secondaryText)
                     Image(systemName: expandedMatchItemIDs.contains(item.id) ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText.opacity(0.72))
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
@@ -343,12 +344,12 @@ struct PlaceImportCanonicalReviewScreen: View {
                         candidateRow(candidate, item: item, isBestMatch: index == 0)
                         if candidate.id != item.candidates.prefix(5).last?.id {
                             Divider()
-                                .overlay(WanderTheme.borderHairline.color)
+                                .overlay(brandMode.border)
                                 .padding(.leading, 52)
                         }
                     }
                 }
-                .background(WanderTheme.surfaceSand.color.opacity(0.55))
+                .background(brandMode.recessedBackground.opacity(0.55))
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -361,8 +362,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                     Image(systemName: "chevron.down")
                         .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
                 }
-                .font(WanderTypography.label)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
@@ -377,11 +378,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 
@@ -399,19 +400,19 @@ struct PlaceImportCanonicalReviewScreen: View {
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+                    .foregroundStyle(isSelected ? brandMode.accent : brandMode.border)
                     .frame(width: 36, height: WanderTheme.tapMinimum)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: WanderTheme.spacing1) {
                         Text(candidate.name)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1)
                         if isBestMatch {
                             Text("Best match")
-                                .font(.system(size: 9, weight: .black))
-                                .foregroundStyle(WanderTheme.terracottaDark.color)
+                                .font(AstirTypography.metadata)
+                                .foregroundStyle(brandMode.accentText)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
                                 .background(WanderTheme.terracottaTint.color)
@@ -419,8 +420,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                         }
                     }
                     Text(candidateArea(candidate))
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -801,11 +802,12 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private func statusColor(_ status: PlaceStatus) -> Color {
-        status == .been ? WanderTheme.stateSuccess.color : WanderTheme.terracotta.color
+        status == .been ? WanderTheme.stateSuccess.color : brandMode.accent
     }
 }
 
 private struct ImportMatchingProgressBar: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let progress: PlaceImportMatchingProgress
     let reduceMotion: Bool
     @State private var animates = false
@@ -813,10 +815,10 @@ private struct ImportMatchingProgressBar: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(WanderTheme.borderHairline.color)
+                Capsule().fill(brandMode.border)
                 if progress.isDiscovering {
                     Capsule()
-                        .fill(WanderTheme.terracotta.color)
+                        .fill(brandMode.accent)
                         .frame(width: proxy.size.width * 0.3)
                         .offset(x: animates && !reduceMotion ? proxy.size.width * 0.7 : 0)
                         .animation(
@@ -826,7 +828,7 @@ private struct ImportMatchingProgressBar: View {
                         .onAppear { animates = true }
                 } else {
                     Capsule()
-                        .fill(WanderTheme.terracotta.color)
+                        .fill(brandMode.accent)
                         .frame(width: proxy.size.width * progress.fraction)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress.fraction)
                 }
@@ -856,7 +858,7 @@ extension PlaceImportSource {
         switch self {
         case .googleMaps: WanderTheme.skyTint.color
         case .instagram: WanderTheme.terracottaTint.color
-        case .tiktok: WanderTheme.surfaceSand.color
+        case .tiktok: AstirTheme.inkRaised.color
         case .snapchat: Color.white
         case .textNotes: WanderTheme.categorySage.color.opacity(0.24)
         }
@@ -883,7 +885,7 @@ struct PlaceImportHistoryScreen: View {
                     systemImage: "clock.arrow.circlepath",
                     description: Text("Links you import will appear here with their full report.")
                 )
-                .wanderScreen()
+                .astirScreen()
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: WanderTheme.spacing4) {
@@ -904,7 +906,7 @@ struct PlaceImportHistoryScreen: View {
                     }
                     .padding(WanderTheme.spacing4)
                 }
-                .wanderScreen()
+                .astirScreen()
             }
         }
         .navigationTitle("Import history")
@@ -944,6 +946,7 @@ struct PlaceImportHistoryDestination: View {
 }
 
 private struct PlaceImportHistoryTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let batch: PlaceImportBatch
     let items: [PlaceImportItem]
 
@@ -955,19 +958,19 @@ private struct PlaceImportHistoryTile: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(brandMode.border, lineWidth: 1)
                 }
 
             HStack(spacing: WanderTheme.spacing2) {
                 CanonicalImportSourceMark(source: batch.source, color: .black, size: 13)
                 Text(batch.createdAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Text("\(placeCount)")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.primaryText)
             }
         }
         .accessibilityElement(children: .combine)
@@ -1007,7 +1010,7 @@ private struct PlaceImportHistoryArtwork: View {
                     Spacer()
                     HStack(alignment: .bottom) {
                         Text(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))
-                            .font(.system(size: 16, weight: .black))
+                            .font(AstirTypography.control)
                             .foregroundStyle(.white)
                         Spacer()
                     }
@@ -1118,6 +1121,7 @@ struct PlaceImportReportScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var expandedDetailEntryIDs: Set<String> = []
     @State private var copiedLink = false
 
@@ -1135,7 +1139,7 @@ struct PlaceImportReportScreen: View {
 
                         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                             Text("Places")
-                                .font(WanderTypography.editorialSectionTitle)
+                                .font(AstirTypography.sectionTitle)
                             ForEach(receipt.entries) { entry in
                                 reportRow(entry)
                             }
@@ -1144,14 +1148,14 @@ struct PlaceImportReportScreen: View {
                     .padding(WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing6)
                 }
-                .wanderScreen()
+                .astirScreen()
             } else {
                 ContentUnavailableView(
                     "Report unavailable",
                     systemImage: "doc.text.magnifyingglass",
                     description: Text("This import has not been completed yet.")
                 )
-                .wanderScreen()
+                .astirScreen()
             }
         }
         .navigationTitle("Import report")
@@ -1172,10 +1176,10 @@ struct PlaceImportReportScreen: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(batch.source.canonicalName)
-                    .font(WanderTypography.editorialNamedContent)
+                    .font(AstirTypography.cardTitle)
                 Text(batch.createdAt.formatted(date: .long, time: .shortened))
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1187,7 +1191,7 @@ struct PlaceImportReportScreen: View {
                     Image(systemName: copiedLink ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 15, weight: .black))
                         .frame(width: 44, height: 44)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accentText)
                         .wanderGlassCapsule(tone: copiedLink ? .selected : .neutral)
                 }
                 .buttonStyle(.plain)
@@ -1195,7 +1199,7 @@ struct PlaceImportReportScreen: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
@@ -1207,12 +1211,12 @@ struct PlaceImportReportScreen: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(visible?.place.canonicalName ?? entry.displayName)
-                        .font(WanderTypography.editorialNamedContent)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(2)
                     Text(entry.displayArea ?? "Saved place")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1230,8 +1234,8 @@ struct PlaceImportReportScreen: View {
                 HStack(spacing: WanderTheme.spacing3) {
                     if let listName = destinationListName {
                         Label(listName, systemImage: "list.bullet")
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -1249,8 +1253,8 @@ struct PlaceImportReportScreen: View {
                             Image(systemName: "chevron.down")
                                 .rotationEffect(.degrees(expandedDetailEntryIDs.contains(entry.id) ? 180 : 0))
                         }
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
@@ -1263,11 +1267,11 @@ struct PlaceImportReportScreen: View {
             }
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 
@@ -1277,11 +1281,11 @@ struct PlaceImportReportScreen: View {
             PlaceImportPhotoThumb(item: photoItem(item, for: entry), loadsRemotePhoto: true, size: 54)
         } else {
             RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .fill(batch?.source.canonicalTint ?? WanderTheme.surfaceSand.color)
+                .fill(batch?.source.canonicalTint ?? brandMode.recessedBackground)
                 .overlay {
                     Image(systemName: "photo.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color.opacity(0.55))
+                        .foregroundStyle(brandMode.secondaryText.opacity(0.55))
                 }
                 .frame(width: 54, height: 54)
         }
@@ -1416,7 +1420,7 @@ struct PlaceImportReportScreen: View {
     }
 
     private func reportStatusColor(_ status: PlaceStatus) -> Color {
-        status == .been ? WanderTheme.stateSuccess.color : WanderTheme.terracotta.color
+        status == .been ? WanderTheme.stateSuccess.color : brandMode.accent
     }
 }
 
@@ -1453,6 +1457,7 @@ private extension PlaceImportSource {
 }
 
 struct PlaceImportSaveSyncBanner: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let notice: PlaceImportSaveSyncNotice
     let isOffline: Bool
     let retryAction: () -> Void
@@ -1462,36 +1467,36 @@ struct PlaceImportSaveSyncBanner: View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: notice.kind == .failed ? "exclamationmark.arrow.triangle.2.circlepath" : "iphone.and.arrow.forward")
                 .font(.system(size: 18, weight: .black))
-                .foregroundStyle(notice.kind == .failed ? WanderTheme.stateError.color : WanderTheme.terracottaDark.color)
+                .foregroundStyle(notice.kind == .failed ? WanderTheme.stateError.color : brandMode.accentText)
                 .frame(width: 40, height: 40)
                 .background(
-                    (notice.kind == .failed ? WanderTheme.stateError.color : WanderTheme.terracotta.color)
+                    (notice.kind == .failed ? WanderTheme.stateError.color : brandMode.accent)
                         .opacity(0.12)
                 )
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(detail)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if notice.kind == .failed {
                 Button("Retry", action: retryAction)
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(minHeight: WanderTheme.tapMinimum)
             }
 
             Button(action: dismissAction) {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)

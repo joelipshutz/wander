@@ -11,25 +11,36 @@ private struct CheckInTicketSurfaceModifier: ViewModifier {
     let notchEdges: CheckInTicketNotchEdges
     let castsShadow: Bool
     let borderWidth: CGFloat
+    @Environment(\.placeProfileVisualStyle) private var placeProfileVisualStyle
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        let ticketShape = CheckInTicketShape(notchEdges: notchEdges)
+        if placeProfileVisualStyle == .astir {
+            content
+                .astirGlassSurface(cornerRadius: 18, castsShadow: castsShadow)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(accent.opacity(0.42), lineWidth: borderWidth)
+                }
+        } else {
+            let ticketShape = CheckInTicketShape(notchEdges: notchEdges)
 
-        content
-            .clipShape(ticketShape)
-            .background {
-                ticketShape
-                    .fill(surface)
-                    .shadow(
-                        color: castsShadow ? WanderTheme.textInk.color.opacity(0.14) : .clear,
-                        radius: castsShadow ? 14 : 0,
-                        x: 0,
-                        y: castsShadow ? 7 : 0
-                    )
-            }
-            .overlay {
-                ticketShape
-                    .strokeBorder(accent.opacity(0.72), lineWidth: borderWidth)
+            content
+                .clipShape(ticketShape)
+                .background {
+                    ticketShape
+                        .fill(surface)
+                        .shadow(
+                            color: castsShadow ? WanderTheme.textInk.color.opacity(0.14) : .clear,
+                            radius: castsShadow ? 14 : 0,
+                            x: 0,
+                            y: castsShadow ? 7 : 0
+                        )
+                }
+                .overlay {
+                    ticketShape
+                        .strokeBorder(accent.opacity(0.72), lineWidth: borderWidth)
+                }
             }
     }
 }

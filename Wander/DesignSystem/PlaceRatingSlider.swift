@@ -104,6 +104,7 @@ struct PlaceRatingSlider: View {
     var isCompact = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
 
     @State private var interactionScore: Double?
     @State private var selectionFeedbackTrigger = 0
@@ -121,43 +122,26 @@ struct PlaceRatingSlider: View {
             HStack(spacing: WanderTheme.spacing1) {
                 HStack(spacing: WanderTheme.spacing1) {
                     Text("rating")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
 
                     Text("5 is best")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
-                }
-                .padding(.horizontal, WanderTheme.spacing2)
-                .padding(.vertical, 5)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.84))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(liquidState.color.opacity(0.18), lineWidth: 1)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText.opacity(0.72))
                 }
 
                 Spacer(minLength: WanderTheme.spacing1)
 
                 HStack(spacing: WanderTheme.spacing1) {
                     Text("\(PlaceRating.display(reaction.score))/5")
-                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .font(AstirTypography.cardTitle)
                         .monospacedDigit()
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(brandMode.primaryText)
                         .contentTransition(.numericText(value: reaction.score))
 
                     Text(reaction.label)
-                        .font(.system(size: reaction.isExtreme ? 17 : 15, weight: .black, design: .rounded))
+                        .font(reaction.isExtreme ? AstirTypography.cardTitle : AstirTypography.control)
                         .foregroundStyle(liquidState.color)
-                }
-                .padding(.leading, WanderTheme.spacing2)
-                .padding(.trailing, WanderTheme.spacing2)
-                .padding(.vertical, 5)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.88))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(liquidState.color.opacity(0.24), lineWidth: 1)
                 }
                 .layoutPriority(1)
             }
@@ -172,20 +156,27 @@ struct PlaceRatingSlider: View {
                         .fontWeight(abs(Double(value) - reaction.score) < 0.001 ? .black : .bold)
                 }
             }
-            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .font(AstirTypography.caption)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, isCompact ? WanderTheme.spacing2 : WanderTheme.spacing3)
         .background {
             ZStack {
-                WanderTheme.surfaceRaised.color
+                brandMode.raisedBackground
                 BoilingRatingLiquid(state: liquidState, reduceMotion: reduceMotion)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(liquidState.color.opacity(0.34), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [brandMode.border, liquidState.color.opacity(0.34)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
         }
         .animation(
             reduceMotion || interactionScore != nil ? nil : .easeInOut(duration: 0.3),
@@ -208,11 +199,11 @@ struct PlaceRatingSlider: View {
 
             ZStack {
                 Capsule()
-                    .fill(WanderTheme.surfaceRaised.color.opacity(0.76))
+                    .fill(brandMode.recessedBackground.opacity(0.92))
                     .frame(width: trackWidth, height: 7)
                     .overlay {
                         Capsule()
-                            .stroke(WanderTheme.borderStrong.color.opacity(0.52), lineWidth: 1)
+                            .stroke(brandMode.border.opacity(0.72), lineWidth: 1)
                     }
 
                 Capsule()
@@ -228,8 +219,8 @@ struct PlaceRatingSlider: View {
                     Circle()
                         .fill(
                             value <= reaction.score
-                                ? WanderTheme.surfaceRaised.color.opacity(0.9)
-                                : WanderTheme.surfaceRaised.color.opacity(0.72)
+                                ? brandMode.raisedBackground.opacity(0.96)
+                                : brandMode.recessedBackground.opacity(0.84)
                         )
                         .overlay {
                             Circle()
@@ -246,7 +237,7 @@ struct PlaceRatingSlider: View {
                 }
 
                 Circle()
-                    .fill(WanderTheme.surfaceRaised.color.opacity(0.92))
+                    .fill(brandMode.raisedBackground.opacity(0.96))
                     .overlay {
                         Circle()
                             .stroke(liquidState.color, lineWidth: 5)
@@ -257,7 +248,7 @@ struct PlaceRatingSlider: View {
                             .frame(width: 8, height: 8)
                     }
                     .frame(width: 32, height: 32)
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 4, y: 2)
+                    .shadow(color: Color.black.opacity(0.18), radius: 4, y: 2)
                     .position(x: thumbX, y: geometry.size.height / 2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -310,7 +301,7 @@ struct PlaceRatingSlider: View {
         if liquidState.progress >= 0.7 {
             return Color.white.opacity(isSelected ? 1 : 0.92)
         }
-        return isSelected ? liquidState.color : WanderTheme.textMuted.color
+        return isSelected ? liquidState.color : brandMode.secondaryText
     }
 
     private func setScore(_ candidate: Double) {

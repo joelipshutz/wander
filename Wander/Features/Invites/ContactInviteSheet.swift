@@ -48,6 +48,7 @@ struct ContactInvitePrimaryActionState: Equatable {
 }
 
 struct InviteEntryPointButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let surface: InviteSurface
     let action: () -> Void
 
@@ -56,20 +57,20 @@ struct InviteEntryPointButton: View {
             HStack(spacing: WanderTheme.spacing3) {
                 ZStack {
                     Circle()
-                        .fill(WanderTheme.terracottaTint.color)
+                        .fill(brandMode.accentWash)
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .foregroundStyle(brandMode.accentText)
                 }
                 .frame(width: 42, height: 42)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(surface.entryTitle)
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(surface.entrySubtitle)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(2)
                 }
 
@@ -77,16 +78,16 @@ struct InviteEntryPointButton: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accentText)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.vertical, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 62)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -96,6 +97,7 @@ struct InviteEntryPointButton: View {
 }
 
 struct ContactInviteSheet: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -203,7 +205,7 @@ struct ContactInviteSheet: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            WanderTheme.canvasWarm.color
+            brandMode.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -224,11 +226,12 @@ struct ContactInviteSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30))
             .padding(.top, WanderTheme.spacing2)
         }
-        .preferredColorScheme(.light)
+        .foregroundStyle(brandMode.primaryText)
+        .tint(brandMode.accent)
         .interactiveDismissDisabled(accessState == .primer)
         .task {
             analytics.track(
@@ -284,12 +287,12 @@ struct ContactInviteSheet: View {
         ZStack {
             VStack(spacing: 1) {
                 Text(surface.sheetTitle)
-                    .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 if presentationState == .choosing && accessState == .authorized {
                     Text("\(selection.count)/\(walkthroughSelectionGoal ?? InviteSelection.maximumCount)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .monospacedDigit()
                 }
             }
@@ -302,11 +305,15 @@ struct ContactInviteSheet: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .foregroundStyle(brandMode.primaryText)
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            .background(WanderTheme.surfaceRaised.color)
+                            .background(brandMode.recessedBackground)
                             .clipShape(Circle())
-                            .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
+                            .overlay {
+                                Circle()
+                                    .stroke(brandMode.border, lineWidth: 1)
+                            }
+                            .shadow(color: Color.black.opacity(0.10), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(
@@ -330,24 +337,32 @@ struct ContactInviteSheet: View {
                         }
                     } label: {
                         Text(primaryActionState.title)
-                            .font(.system(size: 14, weight: .black))
+                            .font(AstirTypography.control)
                             .foregroundStyle(
                                 primaryActionState.isSubdued
-                                    ? WanderTheme.textMuted.color
-                                    : WanderTheme.textOnAction.color
+                                    ? brandMode.secondaryText
+                                    : brandMode.accentForeground
                             )
                             .padding(.horizontal, WanderTheme.spacing3)
                             .frame(minWidth: 64, minHeight: WanderTheme.tapMinimum)
                             .background(
                                 primaryActionState.isSubdued
-                                    ? WanderTheme.surfaceSand.color
-                                    : WanderTheme.terracotta.color
+                                    ? brandMode.recessedBackground
+                                    : brandMode.accent
                             )
-                            .clipShape(Capsule())
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: WanderTheme.radiusMedium,
+                                    style: .continuous
+                                )
+                            )
                             .overlay {
                                 if primaryActionState.isSubdued {
-                                    Capsule()
-                                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                                    RoundedRectangle(
+                                        cornerRadius: WanderTheme.radiusMedium,
+                                        style: .continuous
+                                    )
+                                    .stroke(brandMode.border, lineWidth: 1)
                                 }
                             }
                     }
@@ -401,11 +416,11 @@ struct ContactInviteSheet: View {
                                         contactGroup(section.contacts)
                                     } header: {
                                         Text(section.title)
-                                            .font(.system(size: 13, weight: .black))
-                                            .foregroundStyle(WanderTheme.textMuted.color)
+                                            .font(AstirTypography.label)
+                                            .foregroundStyle(brandMode.secondaryText)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                             .padding(.vertical, WanderTheme.spacing1)
-                                            .background(WanderTheme.surfaceBone.color)
+                                            .background(brandMode.raisedBackground)
                                             .id(section.id)
                                     }
                                 }
@@ -435,11 +450,11 @@ struct ContactInviteSheet: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             TextField("Name, number, or @username", text: $query)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.primaryText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
@@ -449,7 +464,7 @@ struct ContactInviteSheet: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText.opacity(0.75))
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -458,10 +473,19 @@ struct ContactInviteSheet: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 48)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
+        .background(brandMode.recessedBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: WanderTheme.radiusMedium,
+                style: .continuous
+            )
+        )
         .overlay {
-            Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(
+                cornerRadius: WanderTheme.radiusMedium,
+                style: .continuous
+            )
+            .stroke(brandMode.border, lineWidth: 1)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.bottom, WanderTheme.spacing3)
@@ -473,17 +497,17 @@ struct ContactInviteSheet: View {
                 contactRow(contact)
                 if index < contacts.count - 1 {
                     Divider()
-                        .overlay(WanderTheme.borderHairline.color.opacity(0.72))
+                        .overlay(brandMode.border.opacity(0.72))
                         .padding(.leading, 58)
                 }
             }
         }
         .padding(.horizontal, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border.opacity(0.75), lineWidth: 1)
         }
     }
 
@@ -509,16 +533,16 @@ struct ContactInviteSheet: View {
 
                 ZStack {
                     Circle()
-                        .fill(selection.contains(contact.id) ? WanderTheme.terracotta.color : Color.clear)
+                        .fill(selection.contains(contact.id) ? brandMode.accent : Color.clear)
                     Circle()
                         .stroke(
-                            selection.contains(contact.id) ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color,
+                            selection.contains(contact.id) ? brandMode.accent : brandMode.border,
                             lineWidth: 2
                         )
                     if selection.contains(contact.id) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .black))
-                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .foregroundStyle(brandMode.accentForeground)
                     }
                 }
                 .frame(width: 25, height: 25)
@@ -551,13 +575,13 @@ struct ContactInviteSheet: View {
                 beginWalkthroughInviteDelivery(for: contact)
             } label: {
                 Text(isSent ? "Sent" : "Add")
-                    .font(.system(size: 12, weight: .black))
+                    .font(AstirTypography.label)
                     .foregroundStyle(
                         isSent
                             ? WanderTheme.stateSuccess.color
                             : (canInvite
-                                ? WanderTheme.textOnAction.color
-                                : WanderTheme.textMuted.color)
+                                ? brandMode.accentForeground
+                                : brandMode.secondaryText)
                     )
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minWidth: 62, minHeight: WanderTheme.tapMinimum)
@@ -565,15 +589,26 @@ struct ContactInviteSheet: View {
                         isSent
                             ? WanderTheme.stateSuccess.color.opacity(0.12)
                             : (canInvite
-                                ? WanderTheme.terracotta.color
-                                : WanderTheme.surfaceSand.color)
+                                ? brandMode.accent
+                                : brandMode.recessedBackground)
                     )
-                    .clipShape(Capsule())
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
                     .overlay {
-                        if isSent {
-                            Capsule()
-                                .stroke(WanderTheme.stateSuccess.color.opacity(0.5), lineWidth: 1)
-                        }
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                        .stroke(
+                            isSent
+                                ? WanderTheme.stateSuccess.color.opacity(0.5)
+                                : (canInvite ? Color.clear : brandMode.border),
+                            lineWidth: 1
+                        )
                     }
             }
             .buttonStyle(.plain)
@@ -589,7 +624,7 @@ struct ContactInviteSheet: View {
     private func contactIdentity(_ contact: InviteContact) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
             Text(contact.initials)
-                .font(.system(size: 13, weight: .black))
+                .font(AstirTypography.label)
                 .foregroundStyle(avatarForeground(for: contact))
                 .frame(width: 40, height: 40)
                 .background(avatarBackground(for: contact))
@@ -598,25 +633,26 @@ struct ContactInviteSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: WanderTheme.spacing1) {
                     Text(contact.displayName)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
 
                     if contact.relationship.isOnRecme {
                         Text("on rec.me")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(WanderTheme.stateInfo.color)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.accentText)
+                            .scaleEffect(0.82)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(WanderTheme.skyTint.color)
+                            .background(brandMode.accentWash)
                             .clipShape(Capsule())
                     }
                 }
 
                 if let detail = rowDetail(for: contact) {
                     Text(detail)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
             }
@@ -644,20 +680,20 @@ struct ContactInviteSheet: View {
 
             ZStack {
                 Circle()
-                    .fill(WanderTheme.terracottaTint.color)
+                    .fill(brandMode.accentWash)
                     .frame(width: 104, height: 104)
                 Image(systemName: "person.2.crop.square.stack.fill")
                     .font(.system(size: 42, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .foregroundStyle(brandMode.accentText)
             }
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text("find your people")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.screenTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(surface.permissionMessage)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -668,8 +704,12 @@ struct ContactInviteSheet: View {
                 permissionPromise(icon: "lock.fill", text: "Contact details stay out of analytics")
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceSand.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.recessedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
 
             Button {
                 Task { await requestContactsAccess() }
@@ -677,16 +717,21 @@ struct ContactInviteSheet: View {
                 Group {
                     if isLoadingContacts {
                         ProgressView()
-                            .tint(WanderTheme.textOnAction.color)
+                            .tint(brandMode.accentForeground)
                     } else {
                         Text("Continue")
                     }
                 }
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: WanderTheme.radiusMedium,
+                        style: .continuous
+                    )
+                )
             }
             .buttonStyle(.plain)
             .disabled(isLoadingContacts)
@@ -704,8 +749,8 @@ struct ContactInviteSheet: View {
                 .foregroundStyle(WanderTheme.stateSuccess.color)
                 .frame(width: 22)
             Text(text)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.primaryText)
             Spacer()
         }
     }
@@ -716,15 +761,15 @@ struct ContactInviteSheet: View {
 
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.system(size: 56, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accentText)
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text("contacts are off")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.screenTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("Turn on Contacts in Settings to browse your address book, or share a rec.me link instead.")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -733,22 +778,39 @@ struct ContactInviteSheet: View {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(url)
             }
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: WanderTheme.radiusMedium,
+                        style: .continuous
+                    )
+                )
 
             Button {
                 trackInviteDeliveryStarted(mode: "share_sheet", recipientCount: 0)
                 sharePresentation = InviteSharePresentation(content: inviteShareContent)
             } label: {
                 Label("share an invite link", systemImage: "square.and.arrow.up")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.primaryText)
                     .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(WanderTheme.surfaceSand.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.recessedBackground)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
+                    .overlay {
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                        .stroke(brandMode.border, lineWidth: 1)
+                    }
             }
             .buttonStyle(.plain)
 
@@ -762,12 +824,13 @@ struct ContactInviteSheet: View {
             Spacer()
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 34, weight: .black))
-                .foregroundStyle(WanderTheme.textFaint.color)
+                .foregroundStyle(brandMode.secondaryText.opacity(0.72))
             Text("no contacts found")
-                .font(.system(size: 20, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text("Try another name, number, or username.")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -777,9 +840,10 @@ struct ContactInviteSheet: View {
         VStack(spacing: WanderTheme.spacing3) {
             Spacer()
             ProgressView()
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             Text("loading contacts")
-                .font(.system(size: 17, weight: .black, design: .rounded))
+                .font(AstirTypography.cardTitle)
+                .foregroundStyle(brandMode.primaryText)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -790,18 +854,24 @@ struct ContactInviteSheet: View {
             Spacer()
             Image(systemName: "arrow.clockwise.circle.fill")
                 .font(.system(size: 42, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accentText)
             Text("contacts couldn’t load")
-                .font(.system(size: 20, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
             Button("try again") {
                 Task { await loadContacts() }
             }
-            .font(.system(size: 14, weight: .black))
-            .foregroundStyle(WanderTheme.textOnAction.color)
+            .font(AstirTypography.control)
+            .foregroundStyle(brandMode.accentForeground)
             .padding(.horizontal, WanderTheme.spacing4)
             .frame(minHeight: WanderTheme.tapMinimum)
-            .background(WanderTheme.terracotta.color)
-            .clipShape(Capsule())
+            .background(brandMode.accent)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: WanderTheme.radiusMedium,
+                    style: .continuous
+                )
+            )
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -813,42 +883,51 @@ struct ContactInviteSheet: View {
 
             ZStack {
                 Circle()
-                    .fill(WanderTheme.terracottaTint.color)
+                    .fill(brandMode.accentWash)
                     .frame(width: 108, height: 108)
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 43, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .foregroundStyle(brandMode.accentText)
                     .offset(x: -3, y: 2)
             }
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(completionHeadline ?? surface.completionTitle)
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.screenTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(completionDetail ?? "The TestFlight invitation was shared.")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Text("If they follow you, tap their follow notification to open their profile and follow back.")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.skyTint.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .background(brandMode.accentWash)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .stroke(brandMode.accent.opacity(0.32), lineWidth: 1)
+                }
 
             Button {
                 if canDismiss { dismiss() }
             } label: {
                 Text("done")
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
             }
             .buttonStyle(.plain)
 
@@ -865,11 +944,11 @@ struct ContactInviteSheet: View {
     }
 
     private func avatarBackground(for contact: InviteContact) -> Color {
-        if contact.relationship.isOnRecme { return WanderTheme.skyTint.color }
+        if contact.relationship.isOnRecme { return brandMode.accentWash }
         let palette = [
-            WanderTheme.terracottaTint.color,
+            brandMode.accentWash,
             WanderTheme.sunTint.color,
-            WanderTheme.surfaceSand.color,
+            brandMode.recessedBackground,
             WanderTheme.avatarSofia.color.opacity(0.24)
         ]
         let value = contact.id.unicodeScalars.reduce(0) { $0 + Int($1.value) }
@@ -877,7 +956,7 @@ struct ContactInviteSheet: View {
     }
 
     private func avatarForeground(for contact: InviteContact) -> Color {
-        contact.relationship.isOnRecme ? WanderTheme.stateInfo.color : WanderTheme.terracottaDark.color
+        contact.relationship.isOnRecme ? brandMode.accent : brandMode.primaryText
     }
 
     private var inviteShareContent: WanderShareContent {
@@ -1201,6 +1280,7 @@ struct ContactInviteSheet: View {
 
 private struct ContactInviteWalkthroughGoalBanner: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var isCelebrating = false
 
     let selectedCount: Int
@@ -1219,15 +1299,15 @@ private struct ContactInviteWalkthroughGoalBanner: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isComplete ? "Your circle is ready" : "Start with five people")
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(
                         isComplete
                             ? "Nice. Their saves can make every search more useful."
                             : "Pick up to five people whose taste you already trust. Fewer is fine too."
                     )
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -1248,19 +1328,19 @@ private struct ContactInviteWalkthroughGoalBanner: View {
                             .fill(
                                 index < completedCount
                                     ? WanderTheme.stateSuccess.color
-                                    : WanderTheme.surfaceRaised.color
+                                    : brandMode.raisedBackground
                             )
                         Circle()
                             .stroke(
                                 index < completedCount
                                     ? WanderTheme.stateSuccess.color
-                                    : WanderTheme.borderStrong.color,
+                                    : brandMode.border,
                                 lineWidth: 2
                             )
                         if index < completedCount {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 14, weight: .black))
-                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .foregroundStyle(brandMode.accentForeground)
                         }
                     }
                     .frame(width: 34, height: 34)
@@ -1273,15 +1353,15 @@ private struct ContactInviteWalkthroughGoalBanner: View {
         .background(
             isComplete
                 ? WanderTheme.stateSuccess.color.opacity(0.12)
-                : WanderTheme.terracottaTint.color.opacity(0.72)
+                : brandMode.accentWash
         )
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
                 .stroke(
                     isComplete
                         ? WanderTheme.stateSuccess.color.opacity(0.55)
-                        : WanderTheme.terracotta.color.opacity(0.3),
+                        : brandMode.accent.opacity(0.3),
                     lineWidth: 1
                 )
         }
@@ -1340,6 +1420,7 @@ private struct ContactInviteMessageComposer: UIViewControllerRepresentable {
 }
 
 private struct AlphabetScrubber: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let letters: [String]
     let onSelect: (String) -> Void
 
@@ -1355,7 +1436,7 @@ private struct AlphabetScrubber: View {
 
                     Text(letters[index])
                         .font(.system(size: 8, weight: .black, design: .rounded))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accentText)
                         .scaleEffect(scale)
                         .offset(x: isScrubbing ? horizontalOffset(for: distance) : 0)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1364,9 +1445,9 @@ private struct AlphabetScrubber: View {
             .padding(.vertical, 2)
             .background(
                 Capsule()
-                    .fill(WanderTheme.surfaceRaised.color.opacity(isScrubbing ? 0.96 : 0.58))
+                    .fill(brandMode.raisedBackground.opacity(isScrubbing ? 0.96 : 0.58))
                     .shadow(
-                        color: WanderTheme.textInk.color.opacity(isScrubbing ? 0.10 : 0),
+                        color: Color.black.opacity(isScrubbing ? 0.10 : 0),
                         radius: 6,
                         x: -2,
                         y: 2

@@ -156,6 +156,7 @@ enum AddSuggestedPlaces {
 struct AddScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -277,9 +278,7 @@ struct AddScreen: View {
     }
 
     private var activeSheetBackground: Color {
-        addSaveFlow == nil
-            ? WanderTheme.surfaceBone.color
-            : WanderTheme.canvasWarm.color
+        brandMode.background
     }
 
     var body: some View {
@@ -329,7 +328,7 @@ struct AddScreen: View {
                     floatingCandidateAction
                 }
             }
-            .wanderScreen()
+            .astirScreen()
             .onAppear {
                 if ProcessInfo.processInfo.arguments.contains(
                     "-WanderShowWalkthroughCandidateResults"
@@ -511,7 +510,7 @@ struct AddScreen: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing2)
             .padding(.bottom, WanderTheme.spacing3)
-            .background(WanderTheme.canvasWarm.color)
+            .background(brandMode.background)
             .walkthroughTarget(.addImport)
         }
     }
@@ -578,7 +577,7 @@ struct AddScreen: View {
                 Button(action: goBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
@@ -587,11 +586,11 @@ struct AddScreen: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(isShowingHereNowResults ? "I'm here now" : "add a place")
-                    .font(.system(size: 22, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             Spacer()
@@ -602,10 +601,9 @@ struct AddScreen: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(width: 30, height: 30)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
+                        .astirGlassSurface(cornerRadius: 15)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                         .contentShape(Rectangle())
                 }
@@ -624,8 +622,8 @@ struct AddScreen: View {
                     clearInlineCandidateResults()
                 } label: {
                     Label("back to add options", systemImage: "chevron.left")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accentText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back to add options")
@@ -679,8 +677,8 @@ struct AddScreen: View {
     private var suggestedPlacesCore: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("Suggested")
-                .font(.system(size: 17, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
 
             searchField
@@ -688,10 +686,10 @@ struct AddScreen: View {
             if isLoadingSuggestions {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
-                        .tint(WanderTheme.terracotta.color)
+                        .tint(brandMode.accent)
                     Text("Finding places near you…")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
                 .frame(minHeight: 82)
             } else if !suggestedCandidates.isEmpty {
@@ -711,8 +709,8 @@ struct AddScreen: View {
                         suggestionMessage ?? "Use your location to suggest nearby places",
                         systemImage: "location.fill"
                     )
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
                 }
                 .buttonStyle(.plain)
@@ -736,11 +734,15 @@ struct AddScreen: View {
                 }
             } label: {
                 Label("See more", systemImage: "arrow.up.right")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
-                    .background(WanderTheme.surfaceSand.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .background(brandMode.recessedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(brandMode.border, lineWidth: 1)
+                    }
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
@@ -790,23 +792,22 @@ struct AddScreen: View {
             .background(
                 LinearGradient(
                     colors: [
-                        WanderTheme.canvasWarm.color.opacity(0),
-                        WanderTheme.canvasWarm.color.opacity(0.96)
+                        brandMode.background.opacity(0),
+                        brandMode.background.opacity(0.96)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .ignoresSafeArea(edges: .bottom)
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 8, y: 4)
+            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 4)
             .walkthroughTarget(.addPlace)
     }
 
     private var candidateSaveAction: some View {
-        WanderPrimaryButton(
+        AstirAddPrimaryButton(
             title: "Save",
-            systemImage: "arrow.right",
-            tone: .espressoConfirmation
+            systemImage: "arrow.right"
         ) {
             openSharedSaveFlow()
         }
@@ -1007,23 +1008,28 @@ struct AddScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             Image(systemName: "tray.and.arrow.down.fill")
                 .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accentText)
 
             Text(draft?.title ?? "Draft saved.")
-                .font(.system(size: 22, weight: .bold))
+                .font(AstirTypography.sheetTitle)
+                .foregroundStyle(brandMode.primaryText)
             Text(draft?.message ?? "You can finish this manually.")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
 
-            WanderPrimaryButton(title: "try another search", systemImage: "magnifyingglass") {
+            AstirAddPrimaryButton(title: "try another search", systemImage: "magnifyingglass") {
                 step = .source
                 expandSheet()
                 isQuickAddFocused = true
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
     }
 
     private func reset() {
@@ -1832,7 +1838,30 @@ private enum AddStep {
     }
 }
 
+private struct AstirAddPrimaryButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(AstirTypography.control)
+            .foregroundStyle(brandMode.accentForeground)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(brandMode.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct AddSearchField: View {
+    @Environment(\.astirBrandMode) private var brandMode
     @Binding var query: String
     let isLoading: Bool
     let isFocused: FocusState<Bool>.Binding
@@ -1844,17 +1873,17 @@ private struct AddSearchField: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: isLoading ? "hourglass" : "magnifyingglass")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             TextField(
                 "",
                 text: $query,
                 prompt: Text("Search for a place")
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText.opacity(0.72))
             )
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .tint(WanderTheme.terracotta.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.primaryText)
+                .tint(brandMode.accent)
                 .focused(isFocused)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
@@ -1867,7 +1896,7 @@ private struct AddSearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(brandMode.secondaryText.opacity(0.72))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear add search")
@@ -1888,7 +1917,7 @@ private struct AddSearchField: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .black))
                 }
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(brandMode.accentText)
                 .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
             }
@@ -1897,13 +1926,13 @@ private struct AddSearchField: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 48)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
+        .background(brandMode.recessedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            Capsule().stroke(
+            RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(
                 isFocused.wrappedValue
-                    ? WanderTheme.terracotta.color.opacity(0.7)
-                    : WanderTheme.borderHairline.color,
+                    ? brandMode.accent.opacity(0.78)
+                    : brandMode.border,
                 lineWidth: isFocused.wrappedValue ? 1.5 : 1
             )
         )
@@ -1916,6 +1945,7 @@ private struct AddSearchField: View {
 }
 
 private struct SuggestedPlaceCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let candidate: PlaceCandidate
     let action: () -> Void
 
@@ -1926,12 +1956,12 @@ private struct SuggestedPlaceCard: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(candidate.name)
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                     Text(candidate.subtitle)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(2)
                 }
 
@@ -1939,9 +1969,9 @@ private struct SuggestedPlaceCard: View {
 
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(width: 28, height: 28)
-                    .background(WanderTheme.terracotta.color)
+                    .background(brandMode.accent)
                     .clipShape(Circle())
             }
             .padding(WanderTheme.spacing2)
@@ -1950,11 +1980,11 @@ private struct SuggestedPlaceCard: View {
                 minHeight: AddSuggestedPlaces.rowHeight,
                 alignment: .leading
             )
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1964,6 +1994,7 @@ private struct SuggestedPlaceCard: View {
 }
 
 private struct CandidateRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let candidate: PlaceCandidate
     let isSelected: Bool
     let isInteractive: Bool
@@ -1992,24 +2023,24 @@ private struct CandidateRow: View {
             CategoryIcon(category: candidate.category)
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(candidate.name)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(candidate.subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(2)
             }
             Spacer()
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+                .foregroundStyle(isSelected ? brandMode.accentText : brandMode.border)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(isSelected ? brandMode.accentWash : brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
-                    isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                    isSelected ? brandMode.accent : brandMode.border,
                     lineWidth: isSelected ? 2 : 1
                 )
         )
@@ -2023,20 +2054,26 @@ private extension PlaceCandidate {
 }
 
 private struct InlineMessage: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let text: String
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(WanderTheme.terracottaDark.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accentText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .background(brandMode.accentWash)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(brandMode.accent.opacity(0.32), lineWidth: 1)
+            }
     }
 }
 
 private struct LabeledField: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let label: String
     let placeholder: String
     @Binding var text: String
@@ -2044,26 +2081,32 @@ private struct LabeledField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(label)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .foregroundStyle(WanderTheme.textInk.color)
-                .tint(WanderTheme.terracotta.color)
+                .font(AstirTypography.body)
+                .foregroundStyle(brandMode.primaryText)
+                .tint(brandMode.accent)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .background(brandMode.recessedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(brandMode.border, lineWidth: 1)
+                }
         }
     }
 }
 
 private struct CategoryIcon: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let category: String
 
     var body: some View {
         WanderCategoryEmoji(category: category, size: 18)
             .frame(width: 40, height: 40)
-            .background(WanderTheme.terracottaTint.color)
+            .background(brandMode.accentWash)
             .clipShape(Circle())
     }
 }
@@ -2202,13 +2245,14 @@ private enum AddCameraRecoveryState: Equatable {
 
 private struct AddCameraRecoveryScreen: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.astirBrandMode) private var brandMode
     let state: AddCameraRecoveryState
     let onGallery: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
         ZStack {
-            WanderTheme.surfaceBone.color.ignoresSafeArea()
+            brandMode.background.ignoresSafeArea()
 
             VStack(spacing: WanderTheme.spacing4) {
                 HStack {
@@ -2216,10 +2260,9 @@ private struct AddCameraRecoveryScreen: View {
                     Button(action: onCancel) {
                         Image(systemName: "xmark")
                             .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .foregroundStyle(brandMode.primaryText)
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            .background(WanderTheme.surfaceSand.color)
-                            .clipShape(Circle())
+                            .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close camera")
@@ -2229,27 +2272,27 @@ private struct AddCameraRecoveryScreen: View {
 
                 Image(systemName: "camera.fill")
                     .font(.system(size: 40, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accentText)
                     .frame(width: 88, height: 88)
-                    .background(WanderTheme.terracottaTint.color)
+                    .background(brandMode.accentWash)
                     .clipShape(Circle())
 
                 VStack(spacing: WanderTheme.spacing2) {
                     Text(state.title)
-                        .font(.title.bold())
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .multilineTextAlignment(.center)
 
                     Text(state.message)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.secondaryText)
                         .multilineTextAlignment(.center)
                 }
 
                 Spacer()
 
                 VStack(spacing: WanderTheme.spacing2) {
-                    WanderPrimaryButton(
+                    AstirAddPrimaryButton(
                         title: "Choose from Photos",
                         systemImage: "photo.on.rectangle",
                         action: onGallery
@@ -2263,11 +2306,15 @@ private struct AddCameraRecoveryScreen: View {
                             openURL(url)
                         } label: {
                             Label("Open Settings", systemImage: "gear")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(WanderTheme.textInk.color)
+                                .font(AstirTypography.control)
+                                .foregroundStyle(brandMode.primaryText)
                                 .frame(maxWidth: .infinity, minHeight: 52)
-                                .background(WanderTheme.surfaceSand.color)
-                                .clipShape(Capsule())
+                                .background(brandMode.raisedBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(brandMode.border, lineWidth: 1)
+                                }
                         }
                         .buttonStyle(.plain)
                     }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -19,6 +20,9 @@ struct FeedScreen: View {
     @State private var hasMountedPeopleSurface: Bool
     @State private var peopleQuery = ""
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
+    @State private var isFloatingHeaderHidden = false
+    @State private var lastFeedScrollOffset: CGFloat?
+    @State private var accumulatedFeedScrollTravel: CGFloat = 0
     @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
@@ -54,6 +58,12 @@ struct FeedScreen: View {
                             memberQuery: $peopleQuery,
                             contentTopInset: feedContentTopInset,
                             dismissSearchFocus: { peopleSearchFieldFocused = false },
+                            onScrollOffsetChange: { offset in
+                                updateFloatingHeaderVisibility(
+                                    scrollOffset: offset,
+                                    surface: .people
+                                )
+                            },
                             openProfile: openProfile
                         )
                         .opacity(selectedSurface == .people ? 1 : 0)
@@ -71,7 +81,18 @@ struct FeedScreen: View {
                                 )
                             }
                         }
-                        .zIndex(1)
+                        .offset(
+                            y: isFloatingHeaderHidden
+                                ? -(floatingHeaderHeight + WanderTheme.spacing4)
+                                : 0
+                        )
+                        .opacity(isFloatingHeaderHidden ? 0 : 1)
+                        .allowsHitTesting(!isFloatingHeaderHidden)
+                        .animation(
+                            AstirFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
+                            value: isFloatingHeaderHidden
+                        )
+                        .zIndex(3)
                 }
                 .opacity(isShowingSearch ? 0 : 1)
                 .allowsHitTesting(!isShowingSearch)
@@ -92,7 +113,8 @@ struct FeedScreen: View {
                     .zIndex(2)
                 }
             }
-            .wanderScreen()
+            .background(astirBrandMode.background.ignoresSafeArea())
+            .foregroundStyle(astirBrandMode.primaryText)
             .onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self) { height in
                 guard height > 0 else { return }
                 floatingHeaderHeight = height
@@ -125,6 +147,7 @@ struct FeedScreen: View {
                 .environmentObject(auth)
                 .environmentObject(backend)
                 .environmentObject(activityNavigation)
+                .environment(\.activityPostcardVisualStyle, .astir)
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -154,6 +177,7 @@ struct FeedScreen: View {
                     peopleQuery = ""
                 }
                 walkthroughs.perform(.feedSurfaceSwitch)
+                resetFloatingHeaderScrollTracking(revealHeader: true)
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .feedDiscoverSearch || target == .feedActivity {
@@ -167,6 +191,7 @@ struct FeedScreen: View {
             }
             .onChange(of: peopleSearchFieldFocused) { _, isFocused in
                 if isFocused {
+                    setFloatingHeaderHidden(false)
                     walkthroughs.perform(.feedPeopleSearch)
                 }
             }
@@ -187,56 +212,80 @@ struct FeedScreen: View {
     }
 
     private var floatingHeader: some View {
-        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+        AstirFloatingHeaderSurface {
             floatingHeaderContent
         }
     }
 
     private var floatingHeaderContent: some View {
         VStack(spacing: WanderTheme.spacing2) {
-            switch selectedSurface {
-            case .places:
-                FeedSearchLauncher(
-                    placeholders: tickerSuggestions,
-                    isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
-                    action: openDiscoverSearch
-                )
-                .feedSearchMatchedGeometry(
-                    in: searchTransitionNamespace,
-                    isSource: !isShowingSearch
-                )
-                .walkthroughTarget(.feedDiscoverSearch)
-            case .people:
-                FeedPeopleSearchField(text: $peopleQuery)
-                    .focused($peopleSearchFieldFocused)
-                    .walkthroughTarget(.feedPeopleSearch)
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                AstirMastheadLockup(presentation: .localizedBlur)
+
+                Group {
+                    switch selectedSurface {
+                    case .places:
+                        FeedSearchLauncher(
+                            placeholders: tickerSuggestions,
+                            isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                            action: openDiscoverSearch
+                        )
+                        .feedSearchMatchedGeometry(
+                            in: searchTransitionNamespace,
+                            isSource: !isShowingSearch
+                        )
+                        .walkthroughTarget(.feedDiscoverSearch)
+                    case .people:
+                        FeedPeopleSearchField(text: $peopleQuery)
+                            .focused($peopleSearchFieldFocused)
+                            .walkthroughTarget(.feedPeopleSearch)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
 
             HStack(spacing: WanderTheme.spacing2) {
                 FeedSurfaceTabs(selectedSurface: $selectedSurface)
                     .walkthroughTarget(.feedSurfaceSwitch)
 
-                WanderGlassActionButton(
+                AstirIconActionButton(
                     systemImage: "plus",
                     accessibilityLabel: "Add a place",
                     accessibilityIdentifier: "feed.headerAdd",
-                    action: onAdd
+                    action: {
+                        peopleSearchFieldFocused = false
+                        onAdd()
+                    }
                 )
             }
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
+        .padding(.bottom, WanderTheme.spacing2)
     }
 
     private var placesSurface: some View {
         ScrollViewReader { proxy in
             ScrollView {
+                AstirScrollOffsetReader(
+                    coordinateSpaceName: FeedScrollCoordinateSpace.places
+                )
+
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     content
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
+            }
+            .coordinateSpace(name: FeedScrollCoordinateSpace.places)
+            .astirScrollTracking(
+                coordinateSpaceName: FeedScrollCoordinateSpace.places
+            ) { offset in
+                updateFloatingHeaderVisibility(
+                    scrollOffset: offset,
+                    surface: .places
+                )
             }
             .accessibilityIdentifier("feed.places.scroll")
             .scrollDismissesKeyboard(.interactively)
@@ -254,6 +303,71 @@ struct FeedScreen: View {
 
     private var feedContentTopInset: CGFloat {
         floatingHeaderHeight + WanderTheme.spacing3
+    }
+
+    private func updateFloatingHeaderVisibility(
+        scrollOffset: CGFloat,
+        surface: FeedSurface
+    ) {
+        guard selectedSurface == surface, !isShowingSearch else { return }
+
+        if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
+            lastFeedScrollOffset = scrollOffset
+            accumulatedFeedScrollTravel = 0
+            setFloatingHeaderHidden(false)
+            return
+        }
+
+        guard let previousOffset = lastFeedScrollOffset else {
+            lastFeedScrollOffset = scrollOffset
+            return
+        }
+
+        let delta = scrollOffset - previousOffset
+        lastFeedScrollOffset = scrollOffset
+        guard abs(delta) >= AstirFloatingHeaderBehavior.minimumMeaningfulDelta else { return }
+
+        if delta > 0 {
+            if accumulatedFeedScrollTravel < 0 {
+                accumulatedFeedScrollTravel = 0
+            }
+            accumulatedFeedScrollTravel += delta
+
+            if scrollOffset >= AstirFloatingHeaderBehavior.minimumHideOffset,
+               accumulatedFeedScrollTravel >= AstirFloatingHeaderBehavior.hideTravelThreshold {
+                accumulatedFeedScrollTravel = 0
+                setFloatingHeaderHidden(true)
+            }
+        } else {
+            if accumulatedFeedScrollTravel > 0 {
+                accumulatedFeedScrollTravel = 0
+            }
+            accumulatedFeedScrollTravel += delta
+
+            if accumulatedFeedScrollTravel <= -AstirFloatingHeaderBehavior.revealTravelThreshold {
+                accumulatedFeedScrollTravel = 0
+                setFloatingHeaderHidden(false)
+            }
+        }
+    }
+
+    private func resetFloatingHeaderScrollTracking(revealHeader: Bool) {
+        lastFeedScrollOffset = nil
+        accumulatedFeedScrollTravel = 0
+        if revealHeader {
+            setFloatingHeaderHidden(false)
+        }
+    }
+
+    private func setFloatingHeaderHidden(_ isHidden: Bool) {
+        guard isFloatingHeaderHidden != isHidden else { return }
+        if reduceMotion {
+            isFloatingHeaderHidden = isHidden
+        } else {
+            withAnimation(AstirFloatingHeaderBehavior.animation(reduceMotion: false)) {
+                isFloatingHeaderHidden = isHidden
+            }
+        }
     }
 
     private func openDiscoverSearch() {
@@ -667,7 +781,7 @@ private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        WanderGlassSegmentedSwitch(
+        AstirEditorialSegmentedSwitch(
             options: FeedSurface.allCases.map {
                 WanderSegmentOption(id: $0.rawValue, title: $0.title)
             },
@@ -690,6 +804,7 @@ private struct FeedPeopleSurface: View {
     @Binding var memberQuery: String
     let contentTopInset: CGFloat
     let dismissSearchFocus: () -> Void
+    let onScrollOffsetChange: (CGFloat) -> Void
     let openProfile: (ProfileShell) -> Void
 
     @State private var memberResults: [ProfileShell] = []
@@ -708,6 +823,10 @@ private struct FeedPeopleSurface: View {
 
     var body: some View {
         ScrollView {
+            AstirScrollOffsetReader(
+                coordinateSpaceName: FeedScrollCoordinateSpace.people
+            )
+
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 InviteEntryPointButton(surface: .feedPeople) {
                     dismissSearchFocus()
@@ -727,6 +846,11 @@ private struct FeedPeopleSurface: View {
             .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
         }
+        .coordinateSpace(name: FeedScrollCoordinateSpace.people)
+        .astirScrollTracking(
+            coordinateSpaceName: FeedScrollCoordinateSpace.people,
+            onOffsetChange: onScrollOffsetChange
+        )
         .scrollDismissesKeyboard(.interactively)
         .refreshable {
             await refreshRecommendations()
@@ -928,20 +1052,21 @@ private struct FeedPeopleSurface: View {
 }
 
 private struct FeedPeopleSearchField: View {
+    @Environment(\.astirBrandMode) private var astirBrandMode
     @Binding var text: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
 
             TextField("Search name or @handle", text: $text)
-                .font(.system(size: 15, weight: .bold))
+                .font(AstirTypography.bodySmall)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(astirBrandMode.primaryText)
 
             if !text.isEmpty {
                 Button {
@@ -949,7 +1074,7 @@ private struct FeedPeopleSearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .accessibilityLabel("Clear people search")
@@ -958,55 +1083,62 @@ private struct FeedPeopleSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .contentShape(Capsule())
-        .wanderGlassCapsule()
+        .contentShape(Rectangle())
+        .astirOutlinedSurface(castsShadow: true)
         .accessibilityLabel("Search people")
     }
 }
 
 private struct FeedPeopleLoadingPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let label: String
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             ProgressView()
-                .tint(WanderTheme.terracotta.color)
+                .tint(brandMode.accent)
             Text(label)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
             Spacer()
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
         .accessibilityElement(children: .combine)
     }
 }
 
 private struct FeedPeopleEmptyPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let message: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             Text(title)
-                .font(.system(size: 16, weight: .black))
+                .font(AstirTypography.cardTitle)
             Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedPeopleActionPanel: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let icon: String
     let title: String
     let message: String
@@ -1017,36 +1149,37 @@ private struct FeedPeopleActionPanel: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 44, height: 44)
-                .background(WanderTheme.skyTint.color)
+                .background(brandMode.accentWash)
                 .clipShape(Circle())
 
             Text(title)
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
             Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
             Button(actionTitle, action: action)
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedMemberResultTile: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -1061,28 +1194,29 @@ private struct FeedMemberResultTile: View {
                     color: WanderTheme.pinSocial.color
                 )
                 Text(profile.displayName)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(1)
                 Text("@\(profile.handle)")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 Spacer()
                 Text("\(recCount) rec matches")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.accentText)
             }
             .frame(width: 154, height: 142, alignment: .leading)
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 }
 
 private struct FeedFollowedPersonRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
     let recCount: Int
     let open: () -> Void
@@ -1099,22 +1233,22 @@ private struct FeedFollowedPersonRow: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("@\(profile.handle)")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Spacer()
 
                 Text("\(recCount) recs")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             .padding(.vertical, WanderTheme.spacing2)
             .frame(minHeight: WanderTheme.tapMinimum)
@@ -1129,6 +1263,11 @@ private enum FeedFloatingHeaderMetrics {
         + WanderTheme.tapMinimum
         + WanderTheme.spacing2
         + WanderTheme.tapMinimum
+}
+
+private enum FeedScrollCoordinateSpace {
+    static let places = "feed.places.scroll-space"
+    static let people = "feed.people.scroll-space"
 }
 
 enum FeedSearchTransitionPolicy {
@@ -1187,6 +1326,7 @@ private struct FeedProfileRoute: Identifiable {
 
 private struct FeedSearchLauncher: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let placeholders: [String]
     let isWalkthroughTarget: Bool
     let action: () -> Void
@@ -1203,12 +1343,12 @@ private struct FeedSearchLauncher: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(astirBrandMode.secondaryText)
 
                 Text(placeholder)
                     .id(placeholder)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(astirBrandMode.secondaryText)
                     .lineLimit(1)
                     .transition(.push(from: .bottom).combined(with: .opacity))
 
@@ -1216,16 +1356,16 @@ private struct FeedSearchLauncher: View {
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
-            .contentShape(Capsule())
-            .wanderGlassCapsule()
+            .contentShape(Rectangle())
+            .astirOutlinedSurface(castsShadow: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search trusted places")
         .accessibilityIdentifier("feed.searchLauncher")
         .overlay {
             if isWalkthroughTarget {
-                Capsule()
-                    .stroke(WanderTheme.terracotta.color, lineWidth: 2)
+                Rectangle()
+                    .stroke(astirBrandMode.accent, lineWidth: 2)
                     .padding(-2)
             }
         }
@@ -1234,7 +1374,7 @@ private struct FeedSearchLauncher: View {
         )
         .shadow(
             color: isWalkthroughTarget
-                ? WanderTheme.terracotta.color.opacity(isPulsing ? 0.55 : 0.2)
+                ? astirBrandMode.accent.opacity(isPulsing ? 0.55 : 0.2)
                 : .clear,
             radius: isWalkthroughTarget && isPulsing ? 12 : 3
         )
@@ -1266,19 +1406,20 @@ private struct FeedSearchLauncher: View {
 }
 
 private struct FeedSectionHeading: View {
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let title: String
     var detail: String? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialSectionTitle)
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(astirBrandMode.primaryText)
 
             if let detail {
                 Text(detail)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(astirBrandMode.secondaryText)
             }
         }
     }
@@ -1313,6 +1454,7 @@ private struct FeedFeaturedRail: View {
 }
 
 private struct FeedFeaturedCard: View {
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let featured: FeedFeaturedPlace
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
@@ -1331,13 +1473,13 @@ private struct FeedFeaturedCard: View {
                     .padding(.top, -FeedFeaturedLayout.cardContentInset)
 
                     Text(featured.visiblePlace.place.canonicalName)
-                        .font(WanderTypography.editorialCompactTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(astirBrandMode.primaryText)
                         .lineLimit(2)
 
                     Text(placeDetail(for: featured.visiblePlace))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                 }
                 .contentShape(Rectangle())
@@ -1359,8 +1501,8 @@ private struct FeedFeaturedCard: View {
                     )
 
                     Text("• \(featured.actor.displayName) • \(featuredActivity)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WanderTheme.stateInfo.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(astirBrandMode.accentText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
@@ -1372,12 +1514,13 @@ private struct FeedFeaturedCard: View {
         }
         .padding(FeedFeaturedLayout.cardContentInset)
         .frame(width: FeedFeaturedLayout.cardWidth, alignment: .topLeading)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(astirBrandMode.raisedBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(astirBrandMode.border.opacity(0.72), lineWidth: 0.8)
         }
+        .shadow(color: Color.black.opacity(0.16), radius: 14, y: 7)
     }
 
     private var featuredActivity: String {
@@ -1444,6 +1587,7 @@ private struct FeedActivityModule: View {
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil
         )
+        .environment(\.activityPostcardVisualStyle, .astir)
     }
 
     private func openActivityDestination() {
@@ -1578,19 +1722,20 @@ private extension FeedMediaPreview {
 }
 
 private struct FeedPlaceArtwork: View {
+    @Environment(\.astirBrandMode) private var astirBrandMode
     let place: VisiblePlace
     let height: CGFloat
 
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
+                colors: [astirBrandMode.raisedBackground, astirBrandMode.background],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: categorySymbol(for: place.effectiveCategory))
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
+
+            AstirPlacePhotoAsset(stableKey: place.place.id)
+                .accessibilityHidden(true)
 
             FeedResolvedPlacePhoto(place: place)
         }
@@ -1801,6 +1946,7 @@ private struct FeedRecoveryActivityList: View {
 }
 
 private struct FeedEmptyState: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let recommendations: [DiscoverPeopleRecommendation]
     let followingProfileIDs: Set<String>
     let openSearch: () -> Void
@@ -1811,21 +1957,21 @@ private struct FeedEmptyState: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("Your Feed fills up from people you follow.")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text("Find people whose place memory you’d actually use, then come back here to catch up.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             if recommendations.isEmpty {
                 Button("Find people", action: openSearch)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(minHeight: 44)
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                     .accessibilityLabel("Find people to follow")
             } else {
                 ForEach(recommendations) { recommendation in
@@ -1837,17 +1983,17 @@ private struct FeedEmptyState: View {
                                 initials: initials(for: recommendation.profile.displayName),
                                 avatarURL: recommendation.profile.avatarURL,
                                 size: 44,
-                                color: WanderTheme.skyTint.color
+                                color: brandMode.accent
                             )
                         }
                         .buttonStyle(.plain)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(recommendation.profile.displayName)
-                                .font(.system(size: 15, weight: .black))
+                                .font(AstirTypography.cardTitle)
                             Text(recommendation.reason.displayText(for: recommendation.profile))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brandMode.secondaryText)
                                 .lineLimit(1)
                         }
 
@@ -1858,12 +2004,12 @@ private struct FeedEmptyState: View {
                         } label: {
                             if followingProfileIDs.contains(recommendation.profile.id) {
                                 ProgressView()
-                                    .tint(WanderTheme.terracotta.color)
+                                    .tint(brandMode.accent)
                                     .frame(width: 44, height: 44)
                             } else {
                                 Text("Follow")
-                                    .font(.system(size: 13, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .font(AstirTypography.label)
+                                    .foregroundStyle(brandMode.accentText)
                                     .frame(minHeight: 44)
                             }
                         }
@@ -1874,16 +2020,17 @@ private struct FeedEmptyState: View {
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                .stroke(brandMode.border, lineWidth: 1)
         }
     }
 }
 
 private struct FeedRetryRow: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let subtitle: String
     let actionTitle: String
@@ -1893,14 +2040,14 @@ private struct FeedRetryRow: View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .black))
+                    .font(AstirTypography.label)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
             }
 
             Spacer(minLength: 0)
@@ -1908,13 +2055,13 @@ private struct FeedRetryRow: View {
             Button(actionTitle) {
                 Task { await retry() }
             }
-            .font(.system(size: 13, weight: .black))
-            .foregroundStyle(WanderTheme.terracotta.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accentText)
             .frame(minHeight: 44)
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
     }
 }
 

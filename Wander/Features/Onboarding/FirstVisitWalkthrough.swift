@@ -1938,6 +1938,7 @@ enum ImportWalkthroughContent {
 
 private struct ImportWalkthroughOverlay: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.astirBrandMode) private var brandMode
 
     let onDismiss: () -> Void
     let onOpenImport: () -> Void
@@ -1951,9 +1952,9 @@ private struct ImportWalkthroughOverlay: View {
                 HStack(alignment: .center) {
                     Image(systemName: "square.and.arrow.down.fill")
                         .font(.system(size: 23, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .foregroundStyle(brandMode.accentForeground)
                         .frame(width: 52, height: 52)
-                        .background(WanderTheme.terracotta.color, in: Circle())
+                        .background(brandMode.accent, in: Circle())
 
                     Spacer()
 
@@ -1962,9 +1963,9 @@ private struct ImportWalkthroughOverlay: View {
                     } label: {
                         Image(systemName: "questionmark")
                             .font(.system(size: 17, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .foregroundStyle(brandMode.primaryText)
                             .frame(width: 44, height: 44)
-                            .background(WanderTheme.surfaceSand.color, in: Circle())
+                            .background(brandMode.recessedBackground, in: Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Import help")
@@ -1974,31 +1975,31 @@ private struct ImportWalkthroughOverlay: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(ImportWalkthroughContent.title)
-                        .font(.system(.title2, design: .rounded, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(ImportWalkthroughContent.message)
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Button(ImportWalkthroughContent.actionTitle, action: onOpenImport)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.control)
+                    .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                    .background(brandMode.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .buttonStyle(.plain)
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: 360)
             .background(
-                WanderTheme.surfaceBone.color,
+                brandMode.raisedBackground,
                 in: RoundedRectangle(cornerRadius: 28, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
             .padding(.horizontal, WanderTheme.spacing4)
@@ -2011,6 +2012,7 @@ private struct ImportWalkthroughOverlay: View {
 
 private struct DeviceFeaturesWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var isActionButtonPulsing = false
     let onDismiss: () -> Void
     let onComplete: () -> Void
@@ -2024,7 +2026,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     ZStack {
                         Circle()
-                            .fill(WanderTheme.terracotta.color.opacity(0.18))
+                            .fill(brandMode.accent.opacity(0.18))
                             .frame(width: 42, height: 42)
                             .scaleEffect(
                                 reduceMotion ? 1 : (isActionButtonPulsing ? 1.12 : 0.88)
@@ -2040,23 +2042,23 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                             )
 
                         Circle()
-                            .fill(WanderTheme.terracotta.color)
+                            .fill(brandMode.accent)
                             .frame(width: 36, height: 36)
 
                         Image(systemName: "hand.tap.fill")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .foregroundStyle(brandMode.accentForeground)
                     }
                     .frame(width: 44, height: 44)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("rec.me, one press away")
-                            .font(WanderTypography.editorialCardTitle)
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .font(AstirTypography.sectionTitle)
+                            .foregroundStyle(brandMode.primaryText)
 
                         Text("Set these up once for faster saves")
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -2066,7 +2068,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                 .padding(.bottom, WanderTheme.spacing3)
 
                 Divider()
-                    .overlay(WanderTheme.borderHairline.color)
+                    .overlay(brandMode.border)
 
                 VStack(spacing: 0) {
                     DeviceFeatureInstruction(
@@ -2078,7 +2080,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     Divider()
                         .padding(.leading, 40)
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(brandMode.border)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.grid.2x2.fill",
@@ -2089,7 +2091,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     Divider()
                         .padding(.leading, 40)
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(brandMode.border)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.and.arrow.up.fill",
@@ -2102,8 +2104,8 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Link(destination: WalkthroughHelpDestination.extensions) {
                         Label("Setup guide", systemImage: "arrow.up.right")
-                            .font(WanderTypography.label)
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brandMode.accentText)
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                     }
@@ -2118,12 +2120,12 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                             Text("Got it")
                             Image(systemName: "arrow.right")
                         }
-                        .font(WanderTypography.control)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accentForeground)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(minWidth: 104, minHeight: 44)
-                        .contentShape(Capsule())
-                        .wanderGlassCapsule(tone: .accent)
+                        .background(brandMode.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("walkthrough.deviceFeatures.complete")
@@ -2133,12 +2135,12 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: 344)
             .background(
-                WanderTheme.surfaceBone.color,
+                brandMode.raisedBackground,
                 in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
-                    .stroke(WanderTheme.terracotta.color.opacity(0.24), lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
             .padding(.horizontal, WanderTheme.spacing4)
@@ -2156,6 +2158,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 }
 
 private struct DeviceFeatureInstruction: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
     let title: String
     let instruction: String
@@ -2165,17 +2168,17 @@ private struct DeviceFeatureInstruction: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(brandMode.accentText)
                 .frame(width: 28, height: 28)
-                .background(WanderTheme.terracotta.color.opacity(0.12), in: Circle())
+                .background(brandMode.accentWash, in: Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(WanderTypography.editorialCompactTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
                 Text(instruction)
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -2444,6 +2447,7 @@ struct WalkthroughCoachMarkLayout: Equatable {
 
 private struct FirstVisitWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var measuredCardSize = CGSize(width: 280, height: 104)
     @State private var hasNarrowedFeaturedSpotlight = false
     @State private var isFeaturedCoachVisible = false
@@ -2688,8 +2692,8 @@ private struct FirstVisitWalkthroughOverlay: View {
                     }
 
                     Text(step.title)
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 0)
@@ -2697,8 +2701,8 @@ private struct FirstVisitWalkthroughOverlay: View {
 
                 if !step.message.isEmpty {
                     Text(step.message)
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -2711,7 +2715,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 Button(action: onBack) {
                                     Image(systemName: "arrow.left")
                                         .font(.system(size: 13, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
+                                        .foregroundStyle(brandMode.primaryText)
                                         .frame(width: 44, height: 44)
                                         .contentShape(Circle())
                                         .wanderGlassCapsule(tone: .neutral)
@@ -2725,7 +2729,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 Button(action: onNext) {
                                     Image(systemName: "arrow.right")
                                         .font(.system(size: 14, weight: .black))
-                                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                                        .foregroundStyle(brandMode.accentText)
                                         .frame(width: 44, height: 44)
                                         .contentShape(Circle())
                                         .wanderGlassCapsule(tone: .accent)
@@ -2745,11 +2749,11 @@ private struct FirstVisitWalkthroughOverlay: View {
             .frame(width: cardWidth, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                    .fill(WanderTheme.surfaceBone.color)
+                    .fill(brandMode.raisedBackground)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                    .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
             .background {
@@ -2762,7 +2766,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             }
 
             WalkthroughPointer()
-                .fill(WanderTheme.surfaceBone.color)
+                .fill(brandMode.raisedBackground)
                 .frame(width: 24, height: 12)
                 .rotationEffect(.degrees(layout.cardAboveTarget ? 180 : 0))
                 .position(
@@ -2802,6 +2806,7 @@ private struct FirstVisitWalkthroughOverlay: View {
 
 private struct WalkthroughFinaleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @State private var isCelebrating = false
 
     let step: WalkthroughStep
@@ -2823,7 +2828,7 @@ private struct WalkthroughFinaleView: View {
 
                 Image(systemName: "mappin.and.ellipse")
                     .font(.system(size: 58, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .foregroundStyle(brandMode.accentText)
                     .offset(y: reduceMotion ? 0 : (isCelebrating ? -7 : 4))
 
                 Image(systemName: "sparkles")
@@ -2844,26 +2849,26 @@ private struct WalkthroughFinaleView: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(step.title)
-                        .font(WanderTypography.editorialMasthead)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.screenTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text("A thought for the road")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
 
                 Text("“\(step.message)”")
                     .font(.system(.title3, design: .serif, weight: .semibold))
                     .italic()
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("— Anthony Bourdain")
-                    .font(WanderTypography.label)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.accentText)
 
                 Text("Keep the places that move you. Your map will remember the rest")
-                    .font(WanderTypography.body)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack {
@@ -2873,11 +2878,12 @@ private struct WalkthroughFinaleView: View {
                             Text(step.nextButtonTitle)
                             Image(systemName: "arrow.right")
                         }
-                        .font(WanderTypography.control)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accentForeground)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(minHeight: 48)
-                        .wanderGlassCapsule(tone: .accent)
+                        .background(brandMode.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(step.nextButtonTitle)
@@ -2887,14 +2893,14 @@ private struct WalkthroughFinaleView: View {
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: min(356, containerSize.width - 32), alignment: .leading)
             .background(
-                WanderTheme.surfaceBone.color,
+                brandMode.raisedBackground,
                 in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
-                    .stroke(WanderTheme.stateSuccess.color.opacity(0.42), lineWidth: 1)
+                    .stroke(brandMode.border, lineWidth: 1)
             }
-            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 22, y: 10)
+            .shadow(color: .black.opacity(0.22), radius: 22, y: 10)
             .offset(y: 92)
             .walkthroughEntranceBounce()
         }

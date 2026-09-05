@@ -174,6 +174,7 @@ struct ActivitySharePreviewPresentation: Identifiable, Equatable {
 struct ActivitySharePreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.astirBrandMode) private var brandMode
 
     @AppStorage(ActivityShareInstagramPhotoAccessGuidance.acknowledgementKey)
     private var hasAcknowledgedInstagramFullPhotoAccess = false
@@ -238,7 +239,7 @@ struct ActivitySharePreviewScreen: View {
                 action: handleDestination
             )
             .background(alignment: .bottom) {
-                WanderTheme.surfaceBone.color
+                brandMode.raisedBackground
                     .frame(height: WanderTheme.spacing12)
                     .offset(y: WanderTheme.spacing12)
                     .ignoresSafeArea(edges: .bottom)
@@ -294,7 +295,7 @@ struct ActivitySharePreviewScreen: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.hidden)
-            .presentationBackground(WanderTheme.canvasWarm.color)
+            .presentationBackground(brandMode.background)
         }
         .alert("Allow rec.me to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
             Button("Cancel", role: .cancel) {}
@@ -340,7 +341,7 @@ struct ActivitySharePreviewScreen: View {
                 await WanderShareAttachmentStore.removePreparedPNG(at: renderedImageURL)
             }
         }
-        .preferredColorScheme(.light)
+        .foregroundStyle(brandMode.primaryText)
     }
 
     private var topBar: some View {
@@ -355,7 +356,7 @@ struct ActivitySharePreviewScreen: View {
 
             if isPreparingArtwork {
                 ProgressView()
-                    .tint(WanderTheme.textInk.color)
+                    .tint(brandMode.primaryText)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                     .accessibilityLabel("Preparing share image")
             } else {
@@ -373,14 +374,17 @@ struct ActivitySharePreviewScreen: View {
 
     private func confirmationToast(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 13, weight: .black))
-            .foregroundStyle(WanderTheme.textInk.color)
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.primaryText)
             .padding(.horizontal, WanderTheme.spacing4)
             .frame(minHeight: WanderTheme.tapMinimum)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, y: 5)
+            .background(brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(brandMode.border, lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.12), radius: 10, y: 5)
             .accessibilityAddTraits(.isStaticText)
     }
 
@@ -441,7 +445,8 @@ struct ActivitySharePreviewScreen: View {
 
         guard let image = ActivityShareArtworkRenderer.render(
             context: context,
-            avatarImage: avatarImage
+            avatarImage: avatarImage,
+            brandMode: brandMode
         ),
               let pngData = image.pngData(),
               let fileURL = await WanderShareAttachmentStore.preparePNG(pngData)
@@ -699,6 +704,7 @@ struct ActivitySharePreviewScreen: View {
 }
 
 private struct ActivityShareArtwork: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let context: ActivityEngagementContext
     let avatarImage: UIImage?
 
@@ -716,8 +722,8 @@ private struct ActivityShareArtwork: View {
                     )
 
                     Text("a place worth remembering")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color.opacity(0.78))
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.accentForeground.opacity(0.78))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, WanderTheme.spacing6)
@@ -733,12 +739,15 @@ private struct ActivityShareArtwork: View {
 }
 
 private struct ActivityShareBackdrop: View {
+    @Environment(\.astirBrandMode) private var brandMode
+
     var body: some View {
-        WanderTheme.terracotta.color
+        brandMode.accent
     }
 }
 
 private struct ActivityShareTicket: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let context: ActivityEngagementContext
     let avatarImage: UIImage?
 
@@ -749,50 +758,51 @@ private struct ActivityShareTicket: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.actor.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
 
                     Text("@\(context.actor.handle)")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: WanderTheme.spacing2)
 
-                Text("rec.me")
-                    .font(WanderTypography.editorialCardTitle)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                Text("ASTIR")
+                    .font(AstirTypography.metadata)
+                    .tracking(2.2)
+                    .foregroundStyle(brandMode.accentText)
             }
 
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(brandMode.border)
                 .frame(height: 1)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 (Text(context.actor.displayName).fontWeight(.regular)
                     + Text(" \(context.actionTitle) ")
                     + Text(context.placeName).fontWeight(.black))
-                    .font(.system(size: 20))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
                     Image(systemName: ticketIcon)
-                        .font(.system(size: 12, weight: .black))
+                        .font(AstirTypography.caption)
 
                     Text(context.placeDetail)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(AstirTypography.bodySmall)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(brandMode.secondaryText)
 
                 if let note = context.note {
                     Text("“\(note)”")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(AstirTypography.bodySmall)
                         .italic()
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -800,10 +810,10 @@ private struct ActivityShareTicket: View {
         }
         .padding(WanderTheme.spacing4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .checkInTicketSurface(
             accent: ticketAccent,
-            surface: WanderTheme.surfaceBone.color,
+            surface: brandMode.raisedBackground,
             notchEdges: .both,
             castsShadow: true,
             borderWidth: 1.5
@@ -828,14 +838,14 @@ private struct ActivityShareTicket: View {
                     .scaledToFill()
             } else {
                 Text(initials)
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.accentForeground)
             }
         }
         .frame(width: 54, height: 54)
-        .background(WanderTheme.terracotta.color)
+        .background(brandMode.accent)
         .clipShape(Circle())
-        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+        .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
     }
 
     private var ticketIcon: String {
@@ -851,13 +861,14 @@ private struct ActivityShareTicket: View {
         switch context.ticketKind {
         case .checkIn: WanderTheme.pinSocial.color
         case .wanna: WanderTheme.stateWarning.color
-        case .list: WanderTheme.terracotta.color
+        case .list: brandMode.accent
         case .saved: WanderTheme.categorySage.color
         }
     }
 }
 
 private struct ActivityShareDestinationTray: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let isPreparing: Bool
     let initiallyVisibleDestination: ActivityShareDestination?
     let instagramPhotoAccessInfoAction: (() -> Void)?
@@ -866,8 +877,8 @@ private struct ActivityShareDestinationTray: View {
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
             Text("share this ticket")
-                .font(.system(size: 20, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .font(AstirTypography.sectionTitle)
+                .foregroundStyle(brandMode.primaryText)
 
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
@@ -894,8 +905,8 @@ private struct ActivityShareDestinationTray: View {
             if let instagramPhotoAccessInfoAction {
                 Button(action: instagramPhotoAccessInfoAction) {
                     Label("Instagram Post needs Full Photo Access", systemImage: "info.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                         .contentShape(Rectangle())
                 }
@@ -907,7 +918,7 @@ private struct ActivityShareDestinationTray: View {
         .padding(.top, WanderTheme.spacing4)
         .padding(.bottom, WanderTheme.spacing2)
         .frame(maxWidth: .infinity)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(
             UnevenRoundedRectangle(
                 topLeadingRadius: WanderTheme.radiusSheet,
@@ -919,13 +930,14 @@ private struct ActivityShareDestinationTray: View {
                 topLeadingRadius: WanderTheme.radiusSheet,
                 topTrailingRadius: WanderTheme.radiusSheet
             )
-            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            .stroke(brandMode.border, lineWidth: 1)
         }
-        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, y: -5)
+        .shadow(color: Color.black.opacity(0.14), radius: 18, y: -5)
     }
 }
 
 private struct ActivityShareDestinationButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let destination: ActivityShareDestination
     let action: () -> Void
 
@@ -936,8 +948,8 @@ private struct ActivityShareDestinationButton: View {
                     .frame(width: 58, height: 58)
 
                 Text(destination.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .frame(width: 76)
@@ -965,11 +977,11 @@ private struct ActivityShareDestinationButton: View {
                 }
         case .copyLink:
             Circle()
-                .fill(WanderTheme.surfaceSand.color)
+                .fill(brandMode.recessedBackground)
                 .overlay {
                     Image(systemName: "link")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(brandMode.primaryText)
                 }
         case .instagramStory:
             instagramIcon(showsStoryBadge: true)
@@ -1021,19 +1033,19 @@ private struct ActivityShareDestinationButton: View {
                 }
         case .save:
             Circle()
-                .fill(WanderTheme.terracotta.color)
+                .fill(brandMode.accent)
                 .overlay {
                     Image(systemName: "arrow.down.to.line.compact")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .foregroundStyle(brandMode.accentForeground)
                 }
         case .more:
             Circle()
-                .fill(WanderTheme.surfaceSand.color)
+                .fill(brandMode.recessedBackground)
                 .overlay {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 25, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(brandMode.primaryText)
                 }
         }
     }
@@ -1108,6 +1120,7 @@ private enum ActivityShareInstagramPhotoAccessGuidancePresentation: String, Iden
 
 private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
 
     let primaryTitle: String
     let primaryAction: () -> Void
@@ -1120,11 +1133,11 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                 Button(action: dismiss.callAsFunction) {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                        .background(WanderTheme.surfaceBone.color)
+                        .background(brandMode.raisedBackground)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                        .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close Instagram photo access instructions")
@@ -1134,34 +1147,34 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     Image(systemName: "photo.stack.fill")
                         .font(.system(size: 30, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(width: 58, height: 58)
-                        .background(WanderTheme.terracottaTint.color)
+                        .background(brandMode.accentWash)
                         .clipShape(Circle())
                         .accessibilityHidden(true)
 
                     Text(ActivityShareInstagramPhotoAccessGuidance.title)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
 
                     Text("To open this exact ticket directly in Instagram, go to:")
-                        .font(.system(size: 16))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.secondaryText)
 
                     Text(ActivityShareInstagramPhotoAccessGuidance.settingsPath)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(WanderTheme.spacing4)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .background(brandMode.raisedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                                .stroke(brandMode.border, lineWidth: 1)
                         }
 
                     Text("Without Full Access, Instagram may select a different photo.")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(AstirTypography.bodySmall)
                         .foregroundStyle(WanderTheme.stateWarning.color)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1178,27 +1191,31 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                     dismiss()
                 } label: {
                     Text("Use compatible sharing")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
                         .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                        .background(brandMode.recessedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(brandMode.border, lineWidth: 1)
+                        }
                 }
                 .buttonStyle(.plain)
 
                 Text("Compatible sharing avoids Instagram's Photos permission, but iOS may show an extra chooser.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
             }
         }
         .padding(WanderTheme.spacing4)
-        .background(WanderTheme.canvasWarm.color)
+        .background(brandMode.background)
     }
 }
 
 private struct ActivityShareChromeButton: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
     let accessibilityLabel: String
     let action: () -> Void
@@ -1207,11 +1224,11 @@ private struct ActivityShareChromeButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceBone.color.opacity(0.92))
+                .background(brandMode.raisedBackground.opacity(0.92))
                 .clipShape(Circle())
-                .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -1234,12 +1251,14 @@ enum ActivityShareArtworkRenderer {
 
     static func render(
         context: ActivityEngagementContext,
-        avatarImage: UIImage? = nil
+        avatarImage: UIImage? = nil,
+        brandMode: AstirBrandMode = .editorial
     ) -> UIImage? {
         let artwork = ActivityShareArtwork(
             context: context,
             avatarImage: avatarImage
         )
+            .environment(\.astirBrandMode, brandMode)
             .frame(width: pointSize.width, height: pointSize.height)
         let renderer = ImageRenderer(content: artwork)
         renderer.proposedSize = ProposedViewSize(pointSize)

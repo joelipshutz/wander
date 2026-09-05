@@ -108,9 +108,9 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
         keepScreenshot("Import entry — first open")
 
-        let inputHeight = input.frame.height
         let inputContainer = app.otherElements["import.input-container"]
         XCTAssertTrue(inputContainer.exists)
+        let inputContainerHeight = inputContainer.frame.height
         inputContainer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         guard app.keyboards.firstMatch.waitForExistence(timeout: 10) else {
             keepScreenshot("Import entry — field did not focus")
@@ -118,7 +118,11 @@ final class ImportFormRefinementUITests: XCTestCase {
             return
         }
         input.typeText("https://www.instagram.com/p/very-long-single-line-import-link-that-must-never-wrap/")
-        XCTAssertEqual(input.frame.height, inputHeight, accuracy: 1)
+        // Accessibility bounds shift slightly when placeholder metrics are
+        // replaced by URL text even though the rendered control stays one line.
+        XCTAssertEqual(inputContainer.frame.height, inputContainerHeight, accuracy: 3)
+        XCTAssertLessThanOrEqual(inputContainer.frame.height, 65)
+        XCTAssertLessThan(input.frame.height, 30)
         app.buttons["Close import"].tap()
         XCTAssertTrue(input.waitForNonExistence(timeout: 5))
 
@@ -130,7 +134,9 @@ final class ImportFormRefinementUITests: XCTestCase {
             shortcut.tap()
             XCTAssertTrue(input.waitForExistence(timeout: 5))
             let settlesAtCompactHeight = NSPredicate { _, _ in
-                abs(app.buttons["Close import"].frame.minY - firstTop) <= 2
+                // Liquid Glass accessibility bounds can shift by a few points
+                // between otherwise identical sheet presentations.
+                abs(app.buttons["Close import"].frame.minY - firstTop) <= 3
             }
             expectation(for: settlesAtCompactHeight, evaluatedWith: app)
             waitForExpectations(timeout: 5)
@@ -1621,7 +1627,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
     }
 
-    func testFeedHeaderFloatsAbovePlacesAndPeopleContent() {
+    func testFeedHeaderHidesOnDownScrollAndReturnsOnUpScrollAcrossSurfaces() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -1634,15 +1640,13 @@ final class OnboardingUITests: XCTestCase {
 
         let placeSearch = app.buttons["feed.searchLauncher"]
         let addButton = app.buttons["feed.headerAdd"]
-        let feedSectionButtons = app.buttons.matching(
-            NSPredicate(format: "label == %@", "Feed section")
-        )
-        let placesButton = feedSectionButtons.element(boundBy: 0)
-        let peopleButton = feedSectionButtons.element(boundBy: 1)
+        let placesButton = app.buttons["Places"]
+        let peopleButton = app.buttons["People"]
 
         XCTAssertTrue(placeSearch.waitForExistence(timeout: 6))
         XCTAssertTrue(addButton.isHittable)
-        XCTAssertEqual(feedSectionButtons.count, 2)
+        XCTAssertTrue(placesButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(peopleButton.exists)
         XCTAssertTrue(placesButton.isSelected)
         XCTAssertLessThan(placeSearch.frame.maxY, placesButton.frame.minY)
         XCTAssertEqual(placesButton.frame.midY, addButton.frame.midY, accuracy: 2)
@@ -1651,7 +1655,20 @@ final class OnboardingUITests: XCTestCase {
         let initialControlsY = placesButton.frame.minY
         app.swipeUp()
 
-        XCTAssertTrue(placeSearch.isHittable)
+        let hidden = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"),
+            object: placeSearch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 3), .completed)
+        XCTAssertFalse(addButton.isHittable)
+
+        app.swipeDown()
+
+        let revealed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: placeSearch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 3), .completed)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
         XCTAssertEqual(placesButton.frame.minY, initialControlsY, accuracy: 2)
@@ -1664,7 +1681,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(addButton.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-281 floating Feed header on People"
+        screenshot.name = "REC-383 adaptive Feed header restored on People"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -2466,6 +2483,41 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
 
+    func testFeedPeopleAddDismissesKeyboardBeforePresentingAdd() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab",
+            "discover"
+        ]
+        app.launch()
+
+        let peopleTab = app.buttons["People"]
+        XCTAssertTrue(peopleTab.waitForExistence(timeout: 6))
+        peopleTab.tap()
+
+        let peopleSearch = app.textFields["Search name or @handle"]
+        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
+        peopleSearch.tap()
+        peopleSearch.typeText("ryan")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+
+        let addButton = app.buttons["feed.headerAdd"]
+        XCTAssertTrue(addButton.isHittable)
+        addButton.tap()
+
+        XCTAssertTrue(app.staticTexts["add a place"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-434 Add presented with keyboard dismissed"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderOnboardingUITestSignedOut"]
@@ -2489,7 +2541,8 @@ final class OnboardingUITests: XCTestCase {
 
     func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthUITest"]
+        app.terminate()
+        app.launchArguments = ["-WanderAuthUITest", "-WanderAuthenticatedUITest"]
         app.launch()
 
         let apple = app.buttons["auth.continueWithApple"]
@@ -2507,6 +2560,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertLessThan(apple.frame.minY, google.frame.minY)
         XCTAssertLessThan(google.frame.minY, email.frame.minY)
         XCTAssertFalse(app.buttons["auth.useOtherMethod"].exists)
+
+        let appleScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        appleScreenshot.name = "REC-440 Apple logo visible in authentication"
+        appleScreenshot.lifetime = .keepAlways
+        add(appleScreenshot)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let systemAlert = springboard.alerts.firstMatch

@@ -59,7 +59,7 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertTrue(map.contains("MapMoreFilterMotionStyle.panelTransition"))
     }
 
-    func testMorePanelAndOptionsUseLiquidGlassWithoutChangingCategoryEmoji() throws {
+    func testMorePanelUsesAdaptiveMapGlassAndOptionsUseUnderlineSelection() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -77,10 +77,18 @@ final class MapMoreFilterResetTests: XCTestCase {
         let optionChip = String(map[popoverEnd.lowerBound..<optionEnd.lowerBound])
 
         XCTAssertTrue(popover.contains(".wanderGlassPanel("))
-        XCTAssertTrue(popover.contains("tone: appearance.neutralGlassTone"))
-        XCTAssertFalse(popover.contains(".background(\n            WanderTheme.surfaceBone.color"))
-        XCTAssertTrue(optionChip.contains(".wanderGlassPanel("))
-        XCTAssertTrue(optionChip.contains("tone: appearance.glassTone(isSelected: isSelected)"))
+        XCTAssertTrue(
+            popover.contains("tone: appearance.neutralGlassTone")
+        )
+        XCTAssertFalse(optionChip.contains(".wanderGlassPanel("))
+        XCTAssertFalse(optionChip.contains(".background(astirBrandMode.raisedBackground"))
+        XCTAssertTrue(optionChip.contains("Rectangle()"))
+        XCTAssertTrue(
+            optionChip.contains(
+                "isSelected ? astirBrandMode.accent : astirBrandMode.border"
+            )
+        )
+        XCTAssertTrue(optionChip.contains(".overlay(alignment: .bottom)"))
         XCTAssertTrue(popover.contains("emoji: WanderPlaceCategory.broadEmoji(for: category)"))
     }
 
