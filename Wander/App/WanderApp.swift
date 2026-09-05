@@ -8,6 +8,7 @@ import UIKit
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let liveAuthArgument = "-WanderUseLiveAuth"
+    static let onboardingStepArgument = "-WanderOnboardingUITestStep"
 
     private static let persistenceKey = "recme.simulator.authenticatedFixture.v1"
     private static let signedOutArguments: Set<String> = [
@@ -40,6 +41,19 @@ enum SimulatorTestSessionPolicy {
         return defaults.bool(forKey: persistenceKey)
     }
 
+    static func forcedOnboardingStep(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> OnboardingStep? {
+        guard isSimulator,
+              arguments.contains(authenticatedFixtureArgument),
+              let flagIndex = arguments.firstIndex(of: onboardingStepArgument)
+        else { return nil }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        return OnboardingStep(rawValue: arguments[valueIndex])
+    }
+
     private static var isSimulatorBuild: Bool {
         #if targetEnvironment(simulator)
         true
@@ -56,6 +70,7 @@ struct WanderApp: App {
     @StateObject private var backend: WanderBackend
     @StateObject private var entryCoordinator: AppEntryCoordinator
     @StateObject private var pushNotifications: PushNotificationManager
+    @StateObject private var productUpsells: ProductUpsellCoordinator
     @StateObject private var calendarReservations: CalendarReservationManager
     #if DEBUG
     @StateObject private var mapCaptureBackend: WanderBackend
@@ -67,6 +82,7 @@ struct WanderApp: App {
     init() {
         let configuration = WanderBackendConfiguration.current()
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
+        let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
         if let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
@@ -78,6 +94,9 @@ struct WanderApp: App {
         analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
         _pushNotifications = StateObject(
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
+        )
+        _productUpsells = StateObject(
+            wrappedValue: ProductUpsellCoordinator(analytics: contextualAnalytics)
         )
         _calendarReservations = StateObject(
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)
@@ -94,17 +113,28 @@ struct WanderApp: App {
                             handle: "joe"
                         )
                     )
-                )
+                ),
+                analytics: contextualAnalytics
             )
         } else {
-            authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+            authStore = AuthSessionStore(
+                provider: ClerkAuthService(configuration: configuration),
+                analytics: contextualAnalytics
+            )
         }
         #else
-        authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        authStore = AuthSessionStore(
+            provider: ClerkAuthService(configuration: configuration),
+            analytics: contextualAnalytics
+        )
         #endif
+        #if DEBUG && targetEnvironment(simulator)
         let backendStore = usesSimulatorTestSession
-            ? WanderBackend()
+            ? WanderBackend(notificationRepository: SimulatorNotificationRepository())
             : WanderBackend(configuration: configuration, authSession: authStore)
+        #else
+        let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
+        #endif
         discoverParser = usesSimulatorTestSession
             ? DeterministicFilterParser()
             : Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
@@ -115,7 +145,8 @@ struct WanderApp: App {
                 auth: authStore,
                 backend: backendStore,
                 analytics: contextualAnalytics,
-                usesLocalSimulatorTestSession: usesSimulatorTestSession
+                usesLocalSimulatorTestSession: usesSimulatorTestSession,
+                forcedLocalSimulatorOnboardingStep: forcedOnboardingStep
             )
         )
         #if DEBUG
@@ -153,6 +184,12 @@ struct WanderApp: App {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderActivityShareMockup") {
                 ActivitySharePreviewMockupRoot()
+            } else if let importCapturePage = ImportImplementationCapturePage.resolved() {
+                ImportImplementationCaptureRoot(page: importCapturePage)
+                    .environmentObject(auth)
+                    .environmentObject(mapCaptureBackend)
+            } else if let importWorkflowMockupPage = ImportWorkflowMockupPage.resolved() {
+                ImportWorkflowMockupRoot(page: importWorkflowMockupPage)
             } else if PlaceImportManualReviewMockupPage.isPresented {
                 PlaceImportManualReviewMockupRoot()
             } else if PlaceImportAdaptiveMockupPage.isPresented {
@@ -184,6 +221,7 @@ struct WanderApp: App {
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)
+            .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
     }
@@ -198,6 +236,7 @@ struct WanderApp: App {
             .environmentObject(auth)
             .environmentObject(mapCaptureBackend)
             .environmentObject(pushNotifications)
+            .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
     }
@@ -224,6 +263,48 @@ struct WanderApp: App {
 }
 
 #if DEBUG
+/// Lets simulator UI tests exercise the native notification authorization
+/// prompt without making remote calls or weakening the production boundary.
+@MainActor
+struct SimulatorNotificationRepository: NotificationRepository {
+    func preferences() async throws -> NotificationPreferences {
+        .allDisabled
+    }
+
+    func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences {
+        update.pushEnabled == false ? .allDisabled : .allEnabled
+    }
+
+    func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String {
+        token
+    }
+
+    func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws {}
+
+    func reconcileClientNotificationIntents(
+        source: String,
+        intents: [ClientNotificationIntent]
+    ) async throws -> NotificationIntentReconciliationResult {
+        NotificationIntentReconciliationResult(queuedCount: intents.count, createdCount: intents.count)
+    }
+
+    func syncCalendarReservations(
+        _ reservations: [CalendarReservationSyncItem],
+        windowStart: Date,
+        windowEnd: Date
+    ) async throws -> CalendarReservationSyncResult {
+        CalendarReservationSyncResult(syncedCount: reservations.count, queuedCount: 0, cancelledCount: 0)
+    }
+
+    func calendarReservation(id: String) async throws -> CalendarReservationPrompt? {
+        nil
+    }
+
+    func completeCalendarReservation(id: String) async throws -> Bool {
+        false
+    }
+}
+
 /// Keeps deterministic design and screenshot captures photo-first without
 /// weakening the authenticated production `place-photo` boundary.
 @MainActor

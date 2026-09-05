@@ -623,10 +623,10 @@ Flow:
 1. Three-slide real-map value carousel: place diary, friends, trusted discovery.
 2. Clerk sign-up or log-in.
 3. Required name and username; profile photo is optional.
-4. Location pre-prompt and native request, with Skip.
-5. Contacts pre-prompt and native request, with Skip.
+4. Location primer and native request, with one neutral Continue action before the system alert.
+5. Contacts primer and native request, with one neutral Continue action before the system alert.
 6. Trusted friend suggestions with multiselect, with Skip.
-7. Notifications pre-prompt and native request, with Skip.
+7. Notifications primer and native request, with one neutral Continue action before the system alert.
 8. Main app. Phase B moves steps 4–7 into contextual tutorial moments.
 
 Rules:
@@ -634,8 +634,8 @@ Rules:
 - Auth-first after the value carousel.
 - Returning users go directly from validated session resolution to their prior app state.
 - No paywall during first-run onboarding.
-- Native permission prompts only after explicit CTA.
-- Every permission screen has a skip path.
+- Native permission prompts only after an explicit neutral Continue/Next CTA.
+- A primer that immediately precedes a native permission request has no close, swipe, or skip path. Denied permissions remain recoverable with an Open Settings action and may then be dismissed.
 - Auto-advance carousel slides every seven seconds, pauses for VoiceOver,
   Reduce Motion, and backgrounding, and always supports manual paging.
 
@@ -711,4 +711,4 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 | 2026-06-01 | Keep analytics vendor-neutral | Define event names now behind an interface, choose provider later. |
 | 2026-06-01 | Complete refreshed design review gate for M2 | Missing Discover, other-user profile, followers/following, Settings, auth gate, block, and access-changed states are now specified in the handoff style. |
 | 2026-07-25 | Require authentication at the app boundary | Logged-out or unverifiable sessions must never render the authenticated app or cached person metadata; Clerk sign-in is the non-dismissable root until a session is confirmed. This supersedes the earlier guest-first/no-account-wall rules. |
-| 2026-07-22 | Ship auth-first Phase A onboarding | User-approved flow starts with a three-slide real-map carousel, then Clerk auth, required identity, and skippable location, Contacts, trusted-friend, and notification steps. Editorial serif is reserved for this first-run narrative. Phase B moves permission education into contextual tutorials without redesigning the reusable steps. |
+| 2026-07-22 | Ship auth-first Phase A onboarding | User-approved flow starts with a three-slide real-map carousel, then Clerk auth, required identity, and location, Contacts, trusted-friend, and notification steps. The permission primers were revised for App Review compliance on 2026-09-03: a primer immediately before a system alert uses one neutral action without a skip path. Editorial serif is reserved for this first-run narrative. Phase B moves permission education into contextual tutorials without redesigning the reusable steps. |

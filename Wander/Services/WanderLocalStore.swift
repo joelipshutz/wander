@@ -187,6 +187,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var saveStreakRecoveryDatesByUserID: [String: [Date]] = [:]
     @Published private(set) var saveStreakCelebration: SaveStreakCelebration?
     @Published private(set) var isSaveFlowPresented = false
+    @Published private(set) var productUpsellTriggerRequest: ProductUpsellTriggerRequest?
     private var activeSaveFlowPresentationLayers: Set<SaveFlowPresentationLayer> = []
 
     var wannaGoReminderItems: [WannaGoReminderItem] {
@@ -5180,7 +5181,16 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft] = [],
         visibility: PlaceVisibility? = nil
     ) -> LocalPlaceVisit? {
-        guard let userPlace = currentUserPlace(matching: userPlaceID) else { return nil }
+        let userPlace: LocalUserPlace
+        if let localUserPlace = currentUserPlace(matching: userPlaceID) {
+            userPlace = localUserPlace
+        } else if let remoteVisiblePlace = remoteCurrentUserVisiblePlace(
+            matching: userPlaceID
+        ) {
+            userPlace = materializeRemoteCurrentUserPlace(remoteVisiblePlace)
+        } else {
+            return nil
+        }
 
         let now = Date.now
         let isRepeatCheckIn = !visits(for: userPlace.id).isEmpty
@@ -6015,6 +6025,20 @@ final class WanderStore: ObservableObject {
         )
     }
 
+    func externalSearchCandidates(
+        name: String,
+        areaHint: String?,
+        category: String?
+    ) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolveSearchEntry(
+            ManualPlaceInput(
+                name: name,
+                areaHint: areaHint,
+                category: category
+            )
+        )
+    }
+
     func photoTextCandidates(for query: String) async throws -> [PlaceCandidate] {
         try await placeResolver.resolveManualEntry(
             ManualPlaceInput(
@@ -6043,7 +6067,8 @@ final class WanderStore: ObservableObject {
         ratingScore: Double? = nil,
         visitedAt: Date = .now,
         plannedDate: Date? = nil,
-        attributes: [PlaceAttributeDraft]? = nil
+        attributes: [PlaceAttributeDraft]? = nil,
+        requestsProductUpsell: Bool = true
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
         if status == .wannaGo,
@@ -6196,6 +6221,9 @@ final class WanderStore: ObservableObject {
             previousSummary: streakSummaryBeforeSave
         )
         persist()
+        if requestsProductUpsell {
+            productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .placeSaved)
+        }
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }
 
@@ -6210,7 +6238,9 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
-        visitedAt: Date = .now
+        visitedAt: Date = .now,
+        plannedDate: Date? = nil,
+        attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         if let existingPlace = place(matching: candidate),
            let existingUserPlace = currentUserPlace(for: existingPlace) {
@@ -6228,7 +6258,10 @@ final class WanderStore: ObservableObject {
                 note: note,
                 sourceType: sourceType,
                 ratingScore: ratingScore,
-                visitedAt: visitedAt
+                visitedAt: visitedAt,
+                plannedDate: plannedDate,
+                attributes: attributes,
+                requestsProductUpsell: false
             )
         }
 
@@ -6239,7 +6272,10 @@ final class WanderStore: ObservableObject {
             note: note,
             sourceType: sourceType,
             ratingScore: ratingScore,
-            visitedAt: visitedAt
+            visitedAt: visitedAt,
+            plannedDate: plannedDate,
+            attributes: attributes,
+            requestsProductUpsell: false
         )
     }
 
@@ -6331,6 +6367,7 @@ final class WanderStore: ObservableObject {
         visitedAt: Date = .now,
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
+        requestsProductUpsell: Bool = true,
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -6345,7 +6382,8 @@ final class WanderStore: ObservableObject {
             ratingScore: ratingScore,
             visitedAt: visitedAt,
             plannedDate: plannedDate,
-            attributes: attributes
+            attributes: attributes,
+            requestsProductUpsell: requestsProductUpsell
         )
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
@@ -7244,10 +7282,14 @@ final class WanderStore: ObservableObject {
         )
         trackFollowCreated(source: source, outcome: "local_only")
         persist()
+        productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .followCreated)
     }
 
     @discardableResult
     func follow(userID: String, source: FollowSource = .profile, backend: WanderBackend?) async -> Bool {
+        let wasAlreadyFollowing = follows.contains {
+            $0.followerUserID == currentUser.id && $0.followedUserID == userID
+        }
         let follow = upsertFollow(userID: userID, source: source)
 
         guard let follow else {
@@ -7257,6 +7299,9 @@ final class WanderStore: ObservableObject {
         guard let backend else {
             trackFollowCreated(source: source, outcome: "queued")
             persist()
+            if !wasAlreadyFollowing {
+                productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .followCreated)
+            }
             return false
         }
 
@@ -7271,6 +7316,9 @@ final class WanderStore: ObservableObject {
             await refreshRemoteSocialGraph(backend: backend)
             await refreshRemoteVisiblePlaces(backend: backend)
             trackFollowCreated(source: source, outcome: "succeeded")
+            if !wasAlreadyFollowing {
+                productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .followCreated)
+            }
             return true
         } catch {
             follow.syncStateRaw = SyncState.failed.rawValue

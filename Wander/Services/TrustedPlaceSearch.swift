@@ -387,6 +387,359 @@ enum MapSearchCandidatePolicy {
     }
 }
 
+enum DiscoverPlaceSearchCandidate: Identifiable {
+    case trusted(VisiblePlaceGroup)
+    case recme(PlaceCandidate)
+    case external(PlaceCandidate)
+
+    var id: String {
+        switch self {
+        case .trusted(let group):
+            "trusted|\(group.key)"
+        case .recme(let candidate):
+            "recme|\(candidate.id)"
+        case .external(let candidate):
+            "external|\(candidate.id)"
+        }
+    }
+}
+
+enum DiscoverExternalPlaceSearchPlanner {
+    private static let fallbackQualifierTokens: Set<String> = [
+        "best", "cozy", "date", "easy", "favorite", "good", "great", "highly",
+        "late", "loved", "night", "pastry", "quiet", "rated", "top",
+        "view", "weekend", "wifi", "worth"
+    ]
+
+    static func input(query: String, filters: DiscoverFilters) -> ManualPlaceInput? {
+        guard filters.relationship == nil,
+              filters.ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
+              filters.statuses.isEmpty || filters.opinion == .favorite
+        else {
+            return nil
+        }
+
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        let parsedCategory = filters.categories
+            .map(WanderPlaceCategory.normalizedPrimaryCategory)
+            .sorted()
+            .first
+        let inferredCategory = parsedCategory == nil ? inferredCategoryMatch(in: query) : nil
+        let category = parsedCategory ?? inferredCategory?.entry.id
+        let taxonomyEntry = category.flatMap { category in
+            WanderPlaceCategory.taxonomy.first { $0.id == category }
+        }
+        let providerQueryPlan: TrustedPlaceSearchQuery
+        if let inferredCategory {
+            var inferredFilters = filters
+            inferredFilters.categories.insert(inferredCategory.entry.id)
+            providerQueryPlan = TrustedPlaceSearchQuery(
+                query,
+                consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: inferredFilters)
+            )
+        } else {
+            providerQueryPlan = queryPlan
+        }
+        let requiredQuery = providerQueryPlan.requiredTokens.joined(separator: " ")
+        let matchedCategoryTokens = Set(
+            taxonomyEntry
+                .flatMap { matchedCategoryTerm(in: query, entry: $0) }
+                .map(normalizedTokens) ?? []
+        )
+        let nonCategoryTokens = normalizedTokens(requiredQuery)
+            .filter { !matchedCategoryTokens.contains($0) }
+        let usesCategoryFallback = nonCategoryTokens.isEmpty
+            || nonCategoryTokens.allSatisfy(fallbackQualifierTokens.contains)
+        let providerQuery: String
+        if let taxonomyEntry, usesCategoryFallback {
+            providerQuery = matchedCategoryTerm(in: query, entry: taxonomyEntry)
+                ?? taxonomyEntry.defaultSubcategory
+                ?? taxonomyEntry.group
+        } else if !requiredQuery.isEmpty {
+            providerQuery = requiredQuery
+        } else {
+            providerQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let providerCategory = parsedCategory != nil || usesCategoryFallback
+            ? category
+            : nil
+
+        guard !providerQuery.isEmpty else { return nil }
+        return ManualPlaceInput(
+            name: providerQuery,
+            areaHint: filters.area,
+            category: providerCategory
+        )
+    }
+
+    private static func inferredCategoryMatch(
+        in query: String
+    ) -> (entry: PlaceCategoryTaxonomyEntry, term: String)? {
+        WanderPlaceCategory.taxonomy
+            .compactMap { entry -> (entry: PlaceCategoryTaxonomyEntry, term: String)? in
+                guard let term = matchedCategoryTerm(in: query, entry: entry) else { return nil }
+                return (entry, term)
+            }
+            .sorted { lhs, rhs in
+                let lhsCount = normalizedTokens(lhs.term).count
+                let rhsCount = normalizedTokens(rhs.term).count
+                if lhsCount != rhsCount { return lhsCount > rhsCount }
+                return lhs.term.count > rhs.term.count
+            }
+            .first
+    }
+
+    private static func matchedCategoryTerm(
+        in query: String,
+        entry: PlaceCategoryTaxonomyEntry
+    ) -> String? {
+        let queryTokens = normalizedTokens(query)
+        return ([entry.group, entry.defaultSubcategory].compactMap { $0 }
+            + entry.aliases
+            + entry.subcategories)
+            .filter { term in
+                let termTokens = normalizedTokens(term)
+                guard !termTokens.isEmpty, termTokens.count <= queryTokens.count else { return false }
+                return queryTokens.indices.contains { start in
+                    let end = start + termTokens.count
+                    guard end <= queryTokens.count else { return false }
+                    return Array(queryTokens[start..<end]) == termTokens
+                }
+            }
+            .sorted { lhs, rhs in
+                let lhsCount = normalizedTokens(lhs).count
+                let rhsCount = normalizedTokens(rhs).count
+                if lhsCount != rhsCount { return lhsCount > rhsCount }
+                return lhs.count > rhs.count
+            }
+            .first
+            .map { normalizedTokens($0).joined(separator: " ") }
+    }
+
+    private static func normalizedTokens(_ value: String) -> [String] {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map { token in
+                let value = String(token)
+                if value.hasSuffix("ies"), value.count > 3 {
+                    return String(value.dropLast(3)) + "y"
+                }
+                if value.hasSuffix("s"), value.count > 3 {
+                    return String(value.dropLast())
+                }
+                return value
+            }
+    }
+}
+
+enum DiscoverPlaceSearchRankingPolicy {
+    static let version = "discover_cross_corpus_v1"
+
+    private struct ScoredCandidate {
+        let candidate: DiscoverPlaceSearchCandidate
+        let relevance: Int
+        let sourcePriority: Int
+        let originalIndex: Int
+    }
+
+    static func orderedCandidates(
+        query: String,
+        filters: DiscoverFilters,
+        trusted: [VisiblePlaceGroup],
+        recme: [PlaceCandidate],
+        external: [PlaceCandidate],
+        limit: Int = 24
+    ) -> [DiscoverPlaceSearchCandidate] {
+        guard limit > 0 else { return [] }
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        let nameQuery = queryPlan.requiredTokens.isEmpty && filters.hasRecognizedFacet
+            ? ""
+            : (queryPlan.requiredTokens.isEmpty
+                ? query
+                : queryPlan.requiredTokens.joined(separator: " "))
+
+        var uniqueRecme: [PlaceCandidate] = []
+        for candidate in recme {
+            guard !trustedContains(candidate, trusted: trusted),
+                  !uniqueRecme.contains(where: { matches($0, candidate) })
+            else { continue }
+            uniqueRecme.append(candidate)
+        }
+
+        var uniqueExternal: [PlaceCandidate] = []
+        for candidate in external {
+            guard !trustedContains(candidate, trusted: trusted),
+                  !uniqueRecme.contains(where: { matches($0, candidate) }),
+                  !uniqueExternal.contains(where: { matches($0, candidate) })
+            else { continue }
+            uniqueExternal.append(candidate)
+        }
+
+        let scoredTrusted = trusted.enumerated().map { index, group in
+            ScoredCandidate(
+                candidate: .trusted(group),
+                relevance: relevance(
+                    names: group.places.map { $0.place.canonicalName },
+                    categories: group.places.map { $0.categoryPresentation.assignment.primaryCategory },
+                    areaValues: group.places.flatMap {
+                        [$0.place.address, $0.place.locality, $0.place.region, $0.place.country].compactMap { $0 }
+                    },
+                    query: nameQuery,
+                    filters: filters
+                ),
+                sourcePriority: 3,
+                originalIndex: index
+            )
+        }
+        let scoredRecme = uniqueRecme.enumerated().map { index, candidate in
+            scored(
+                .recme(candidate),
+                candidate: candidate,
+                query: nameQuery,
+                filters: filters,
+                sourcePriority: 2,
+                originalIndex: index
+            )
+        }
+        let scoredExternal = uniqueExternal.enumerated().map { index, candidate in
+            scored(
+                .external(candidate),
+                candidate: candidate,
+                query: nameQuery,
+                filters: filters,
+                sourcePriority: 1,
+                originalIndex: index
+            )
+        }
+
+        return (scoredTrusted + scoredRecme + scoredExternal)
+            .sorted { lhs, rhs in
+                if lhs.relevance != rhs.relevance {
+                    return lhs.relevance > rhs.relevance
+                }
+                if lhs.sourcePriority != rhs.sourcePriority {
+                    return lhs.sourcePriority > rhs.sourcePriority
+                }
+                if lhs.originalIndex != rhs.originalIndex {
+                    return lhs.originalIndex < rhs.originalIndex
+                }
+                return lhs.candidate.id < rhs.candidate.id
+            }
+            .prefix(limit)
+            .map(\.candidate)
+    }
+
+    private static func scored(
+        _ result: DiscoverPlaceSearchCandidate,
+        candidate: PlaceCandidate,
+        query: String,
+        filters: DiscoverFilters,
+        sourcePriority: Int,
+        originalIndex: Int
+    ) -> ScoredCandidate {
+        ScoredCandidate(
+            candidate: result,
+            relevance: relevance(
+                names: [candidate.name],
+                categories: [candidate.primaryCategory],
+                areaValues: [candidate.address, candidate.locality, candidate.region, candidate.country]
+                    .compactMap { $0 },
+                query: query,
+                filters: filters
+            ),
+            sourcePriority: sourcePriority,
+            originalIndex: originalIndex
+        )
+    }
+
+    private static func relevance(
+        names: [String],
+        categories: [String],
+        areaValues: [String],
+        query: String,
+        filters: DiscoverFilters
+    ) -> Int {
+        var score = names
+            .map { Int(MapSearchQueryPolicy.lexicalScore(forName: $0, query: query)) }
+            .max() ?? 0
+
+        let requestedCategories = Set(
+            filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        )
+        let candidateCategories = Set(
+            categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        )
+        if !requestedCategories.isDisjoint(with: candidateCategories) {
+            score = max(score, 360)
+        }
+
+        if let area = filters.area,
+           areaValues.contains(where: { containsPhrase($0, phrase: area) }) {
+            score = max(score, 240)
+        }
+
+        // The provider and trusted-memory layers have already applied their own
+        // semantic/filter matching. Keep those candidates eligible even when
+        // their place name does not contain the natural-language query.
+        return max(score, 120)
+    }
+
+    private static func trustedContains(
+        _ candidate: PlaceCandidate,
+        trusted: [VisiblePlaceGroup]
+    ) -> Bool {
+        trusted.contains { group in
+            group.places.contains { VisiblePlaceGrouping.matches($0, candidate: candidate) }
+        }
+    }
+
+    private static func matches(_ lhs: PlaceCandidate, _ rhs: PlaceCandidate) -> Bool {
+        if let lhsProviderID = normalized(lhs.sourceProviderPlaceID),
+           let rhsProviderID = normalized(rhs.sourceProviderPlaceID),
+           normalized(lhs.sourceProvider) == normalized(rhs.sourceProvider),
+           lhsProviderID == rhsProviderID {
+            return true
+        }
+
+        guard canonicalName(lhs.name) == canonicalName(rhs.name),
+              let lhsLatitude = lhs.latitude,
+              let lhsLongitude = lhs.longitude,
+              let rhsLatitude = rhs.latitude,
+              let rhsLongitude = rhs.longitude
+        else {
+            return false
+        }
+        return abs(lhsLatitude - rhsLatitude) <= 0.00075
+            && abs(lhsLongitude - rhsLongitude) <= 0.00075
+    }
+
+    private static func containsPhrase(_ value: String, phrase: String) -> Bool {
+        canonicalName(value).contains(canonicalName(phrase))
+    }
+
+    private static func canonicalName(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        let normalized = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalized?.isEmpty == false ? normalized : nil
+    }
+}
+
 private final class TrustedPlaceSearchDocumentCache: @unchecked Sendable {
     private struct Revision: Equatable {
         let placeUpdatedAt: Date

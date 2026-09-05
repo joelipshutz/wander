@@ -1,0 +1,32 @@
+{
+  "bug_id": "REC-404",
+  "captured_at": "2026-09-03T20:09:46-07:00",
+  "source": {
+    "kind": "user_supplied_physical_device_recording",
+    "filename": "ScreenRecording_09-03-2026-20-09-46_1.mp4",
+    "duration_seconds": 13.60195,
+    "dimensions": "1206x2622",
+    "state_server_capture": "unavailable_repo_has_no_debug_bridge"
+  },
+  "sequence": [
+    {
+      "panel": 1,
+      "timestamp_seconds": 4.25,
+      "observation": "Bodega Wine Bar is selected and its compact place card is entering above the map chrome."
+    },
+    {
+      "panel": 2,
+      "timestamp_seconds": 5.0,
+      "observation": "The compact place card is fully visible and ready for a single tap."
+    },
+    {
+      "panel": 3,
+      "timestamp_seconds": 5.75,
+      "observation": "After the attempted card interaction and the app-driven recenter, the card is gone and the selected pin remains active, but no place profile is visible."
+    }
+  ],
+  "observed": "The compact place card disappears as the app-driven pin recenter completes, so the attempted card interaction does not present the place profile. The failure repeats for multiple places.",
+  "root_cause": "The camera tracker classified the programmatic pin-selection recenter as a one-finger user pan and dismissed the compact selection when MapKit reported the camera animation complete.",
+  "expected": "The first compact place-card tap immediately presents the selected place's full profile while preserving the selected pin context.",
+  "visual_fixture": "rec-404-map-card-first-tap-still-fails-pre.png"
+}

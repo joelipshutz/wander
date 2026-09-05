@@ -62,8 +62,20 @@ struct SettingsScreen: View {
 
                 Button {
                     Task {
-                        await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
-                        try? await auth.signOut()
+                        await pushNotifications.unregisterStoredDeviceTokenIfPossible(
+                            backend: backend,
+                            userID: session.userID,
+                            authSession: auth
+                        )
+                        do {
+                            try await auth.signOut()
+                        } catch {
+                            await pushNotifications.restoreRegistrationAfterFailedAccountTeardown(
+                                userID: session.userID,
+                                backend: backend,
+                                authSession: auth
+                            )
+                        }
                     }
                 } label: {
                     HStack(spacing: WanderTheme.spacing2) {
@@ -506,7 +518,7 @@ struct NotificationSettingsSheet: View {
                 }
             }
         }
-        .task {
+        .task(id: auth.state.session?.userID) {
             await load()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -592,7 +604,19 @@ struct NotificationSettingsSheet: View {
         if isChangingEnabledState || pushNotifications.isRequestingAuthorization || pushNotifications.isRegisteringToken {
             return notificationsEnabled ? "disabling" : "allowing"
         }
-        return notificationsEnabled ? "disable notifications" : "allow notifications"
+        if notificationsEnabled {
+            return "disable notifications"
+        }
+        switch pushNotifications.authorizationStatus {
+        case .notDetermined:
+            return "continue"
+        case .denied:
+            return "open settings"
+        case .authorized, .provisional, .ephemeral:
+            return "allow notifications"
+        @unknown default:
+            return "continue"
+        }
     }
 
     private func actionLabel(title: String, systemImage: String) -> some View {
@@ -648,21 +672,30 @@ struct NotificationSettingsSheet: View {
         Binding {
             pushNotifications.saveStreakRemindersEnabled
         } set: { isEnabled in
+            guard let userID = auth.state.session?.userID else { return }
             pushNotifications.setSaveStreakRemindersEnabled(
                 isEnabled,
-                for: store.currentUser.id
+                for: userID
             )
             Task {
-                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+                await pushNotifications.reconcileSaveStreakReminder(
+                    store.saveStreakSummary,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
             }
         }
     }
 
     private func load() async {
         await pushNotifications.refreshAuthorizationStatus()
-        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+        guard case .signedIn(let session) = auth.state,
+              backend.canRegisterPushNotifications else {
             return
         }
+        let userID = session.userID
+        pushNotifications.bindNotificationPreferences(to: userID)
 
         isLoading = true
         errorMessage = nil
@@ -670,23 +703,40 @@ struct NotificationSettingsSheet: View {
 
         do {
             let loadedPreferences = try await backend.notificationPreferences()
-            preferences = pushNotifications.canRegisterForRemoteNotifications && loadedPreferences.pushEnabled
+            guard isCurrentNotificationAccount(userID) else { return }
+            let resolvedPreferences = pushNotifications.canRegisterForRemoteNotifications && loadedPreferences.pushEnabled
                 ? loadedPreferences
                 : .allDisabled
-            pushNotifications.applyNotificationPreferences(preferences)
-            pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+            preferences = resolvedPreferences
+            pushNotifications.applyNotificationPreferences(resolvedPreferences, for: userID)
+            pushNotifications.configureSaveStreakReminders(for: userID)
+            await pushNotifications.reconcileWannaGoReminders(
+                store.wannaGoReminderItems,
+                backend: backend,
+                userID: userID,
+                authSession: auth
+            )
+            guard isCurrentNotificationAccount(userID) else { return }
+            await pushNotifications.reconcileSaveStreakReminder(
+                store.saveStreakSummary,
+                backend: backend,
+                userID: userID,
+                authSession: auth
+            )
         } catch {
-            errorMessage = "Could not load notification settings."
+            if isCurrentNotificationAccount(userID) {
+                errorMessage = "Could not load notification settings."
+            }
         }
     }
 
     private func enableNotifications(permissionAlreadyGranted: Bool = false) async {
-        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+        guard case .signedIn(let session) = auth.state,
+              backend.canRegisterPushNotifications else {
             errorMessage = "Sign in to turn on notifications."
             return
         }
+        let userID = session.userID
 
         if pushNotifications.authorizationStatus == .denied && !permissionAlreadyGranted {
             isWaitingForSettingsAuthorization = true
@@ -706,66 +756,111 @@ struct NotificationSettingsSheet: View {
         }
         guard let enabledPreferences = await pushNotifications.enableNotifications(
             backend: backend,
-            authState: auth.state
+            expectedUserID: userID,
+            authSession: auth
         ) else {
+            guard isCurrentNotificationAccount(userID) else { return }
             preferences = .allDisabled
             errorMessage = pushNotifications.lastErrorMessage ?? "Notifications were not allowed."
             return
         }
+        guard isCurrentNotificationAccount(userID) else { return }
         preferences = enabledPreferences
-        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
-        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
-        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+        pushNotifications.configureSaveStreakReminders(for: userID)
+        await pushNotifications.reconcileWannaGoReminders(
+            store.wannaGoReminderItems,
+            backend: backend,
+            userID: userID,
+            authSession: auth
+        )
+        guard isCurrentNotificationAccount(userID) else { return }
+        await pushNotifications.reconcileSaveStreakReminder(
+            store.saveStreakSummary,
+            backend: backend,
+            userID: userID,
+            authSession: auth
+        )
+        guard isCurrentNotificationAccount(userID) else { return }
         await calendarReservations.syncIfNeeded(
             backend: backend,
             store: store,
-            userID: store.currentUser.id,
+            userID: userID,
             force: true,
             reason: "notifications_enabled"
         )
     }
 
     private func disableNotifications() async {
-        guard auth.isSignedIn, backend.canRegisterPushNotifications else { return }
+        guard case .signedIn(let session) = auth.state,
+              backend.canRegisterPushNotifications else { return }
+        let userID = session.userID
 
         isChangingEnabledState = true
         errorMessage = nil
         pushNotifications.clearLastError()
         defer { isChangingEnabledState = false }
 
-        if let disabledPreferences = await pushNotifications.disableNotifications(backend: backend) {
+        if let disabledPreferences = await pushNotifications.disableNotifications(
+            backend: backend,
+            userID: userID,
+            authSession: auth
+        ) {
+            guard isCurrentNotificationAccount(userID) else { return }
             preferences = disabledPreferences
-        } else {
+        } else if isCurrentNotificationAccount(userID) {
             errorMessage = pushNotifications.lastErrorMessage
         }
     }
 
     private func save(_ update: NotificationPreferencesUpdate) async {
-        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+        guard case .signedIn(let session) = auth.state,
+              backend.canRegisterPushNotifications else {
             return
         }
+        let userID = session.userID
 
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
         do {
-            preferences = try await backend.updateNotificationPreferences(update)
-            pushNotifications.applyNotificationPreferences(preferences)
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
-            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary, backend: backend)
+            let savedPreferences = try await backend.updateNotificationPreferences(update)
+            guard isCurrentNotificationAccount(userID) else { return }
+            preferences = savedPreferences
+            pushNotifications.applyNotificationPreferences(savedPreferences, for: userID)
+            await pushNotifications.reconcileWannaGoReminders(
+                store.wannaGoReminderItems,
+                backend: backend,
+                userID: userID,
+                authSession: auth
+            )
+            guard isCurrentNotificationAccount(userID) else { return }
+            await pushNotifications.reconcileSaveStreakReminder(
+                store.saveStreakSummary,
+                backend: backend,
+                userID: userID,
+                authSession: auth
+            )
+            guard isCurrentNotificationAccount(userID) else { return }
             if update.reservationRemindersEnabled == true {
                 await calendarReservations.syncIfNeeded(
                     backend: backend,
                     store: store,
-                    userID: store.currentUser.id,
+                    userID: userID,
                     force: true,
                     reason: "reservation_reminders_enabled"
                 )
             }
         } catch {
-            errorMessage = "Could not save notification settings."
+            if isCurrentNotificationAccount(userID) {
+                errorMessage = "Could not save notification settings."
+            }
         }
+    }
+
+    private func isCurrentNotificationAccount(_ userID: String) -> Bool {
+        auth.state.session?.userID == userID
+            && pushNotifications.notificationPreferencesUserID == userID
     }
 }
 

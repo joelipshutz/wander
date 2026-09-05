@@ -232,6 +232,7 @@ struct ContactInviteSheet: View {
         }
         .foregroundStyle(brandMode.primaryText)
         .tint(brandMode.accent)
+        .interactiveDismissDisabled(accessState == .primer)
         .task {
             analytics.track(
                 AnalyticsEvent(
@@ -297,7 +298,7 @@ struct ContactInviteSheet: View {
             }
 
             HStack {
-                if canDismiss {
+                if canDismiss && accessState != .primer {
                     Button {
                         onWalkthroughDismiss?()
                         dismiss()
@@ -718,7 +719,7 @@ struct ContactInviteSheet: View {
                         ProgressView()
                             .tint(brandMode.accentForeground)
                     } else {
-                        Text("continue to contacts")
+                        Text("Continue")
                     }
                 }
                 .font(AstirTypography.control)
@@ -734,13 +735,7 @@ struct ContactInviteSheet: View {
             }
             .buttonStyle(.plain)
             .disabled(isLoadingContacts)
-
-            Button("not now") {
-                if canDismiss { dismiss() }
-            }
-            .font(AstirTypography.control)
-            .foregroundStyle(brandMode.secondaryText)
-            .frame(minHeight: WanderTheme.tapMinimum)
+            .accessibilityIdentifier("invite.permissionContinue")
 
             Spacer()
         }

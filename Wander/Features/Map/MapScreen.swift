@@ -3,6 +3,15 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+/// The root resolves this anchor in its own coordinate space, avoiding a
+/// second safe-area offset on notices displayed below the map filters.
+struct MapFilterBoundsKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 enum SharedVisitOutboxNotice {
     static func message(
         pendingInvites: [PendingSharedVisitInvite],
@@ -817,7 +826,15 @@ final class MapCameraRegionTracker {
         }
     }
 
-    func finishCameraChange(_ region: MKCoordinateRegion) -> MapCameraInteraction {
+    func finishCameraChange(
+        _ region: MKCoordinateRegion,
+        isUserInitiated: Bool = true
+    ) -> MapCameraInteraction {
+        guard isUserInitiated else {
+            synchronize(with: region)
+            return .stationary
+        }
+
         let startRegion = interactionStartRegion ?? self.region
         self.region = region
         interactionStartRegion = nil
@@ -1780,8 +1797,11 @@ struct MapScreen: View {
                     onLongPress: handleNativeMapLongPress,
                     onNativeFeatureSelection: handleNativeMapFeatureSelection,
                     onCameraChange: handleMapCameraChange,
-                    onCameraInteractionEnd: { region in
-                        handleMapCameraInteractionEnd(region)
+                    onCameraInteractionEnd: { region, isUserInitiated in
+                        handleMapCameraInteractionEnd(
+                            region,
+                            isUserInitiated: isUserInitiated
+                        )
                         handleFeaturedCameraChange(region)
                     }
                 )
@@ -1907,6 +1927,9 @@ struct MapScreen: View {
                             .padding(.top, 0)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .anchorPreference(key: MapFilterBoundsKey.self, value: .bounds) { $0 }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("map.filters")
                         .overlay(alignment: .topTrailing) {
                             if isMoreFiltersPresented {
                                 MapMoreFiltersPopover(
@@ -2226,6 +2249,9 @@ struct MapScreen: View {
         }
         .fullScreenCover(isPresented: $isLocationEducationPresented) {
             MapLocationEducationPrompt(
+                permissionAction: OnboardingLocationPermissionPolicy.action(
+                    for: locationPermission.authorizationStatus
+                ),
                 isRequesting: isRequestingLocationPermission,
                 onAllow: allowLocationFromEducation,
                 onCancel: cancelLocationEducation
@@ -2914,8 +2940,14 @@ struct MapScreen: View {
         cameraRegionTracker.recordCameraChange(region)
     }
 
-    private func handleMapCameraInteractionEnd(_ region: MKCoordinateRegion) {
-        switch cameraRegionTracker.finishCameraChange(region) {
+    private func handleMapCameraInteractionEnd(
+        _ region: MKCoordinateRegion,
+        isUserInitiated: Bool
+    ) {
+        switch cameraRegionTracker.finishCameraChange(
+            region,
+            isUserInitiated: isUserInitiated
+        ) {
         case .stationary:
             break
         case .zoom:
@@ -5231,7 +5263,14 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             return result
         case .sharedVisit(let invitation):
             return await acceptSharedVisit(invitation, submission: submission)
@@ -5259,7 +5298,14 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             return result
         }
     }
@@ -5425,7 +5471,14 @@ struct MapScreen: View {
             guard removal != nil else {
                 return false
             }
-            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems, backend: backend)
+            if let userID = auth.state.session?.userID {
+                await pushNotifications.reconcileWannaGoReminders(
+                    store.wannaGoReminderItems,
+                    backend: backend,
+                    userID: userID,
+                    authSession: auth
+                )
+            }
             placeSaveDraftStore.clear()
 
             clearNativeMapFeatureSelection()
@@ -5840,8 +5893,8 @@ struct MapScreen: View {
                 let granted = await locationPermission.requestAccess()
                 isRequestingLocationPermission = false
                 trackMapLocationPermissionResult(granted ? "true" : "false")
+                isLocationEducationPresented = false
                 if granted {
-                    isLocationEducationPresented = false
                     performCurrentLocationRecenter()
                 }
             }
@@ -5896,8 +5949,8 @@ struct MapScreen: View {
     }
 
     /// Merely rendering `UserAnnotation` triggers the system location prompt.
-    /// Keep permission requests behind the onboarding upsell or the explicit
-    /// recenter action so "Not now" remains a real choice.
+    /// Keep permission requests behind the onboarding primer or the explicit
+    /// recenter action so the system alert always has clear user context.
     private static var canShowUserLocation: Bool {
         let status = CLLocationManager().authorizationStatus
         return status == .authorizedWhenInUse || status == .authorizedAlways
@@ -6239,7 +6292,7 @@ private struct NativeMapView: UIViewRepresentable {
     let onLongPress: (CLLocationCoordinate2D) -> Void
     let onNativeFeatureSelection: (MKMapFeatureAnnotation) -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
-    let onCameraInteractionEnd: (MKCoordinateRegion) -> Void
+    let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -6290,6 +6343,7 @@ private struct NativeMapView: UIViewRepresentable {
         private var annotationAccessibilityRefreshScheduled = false
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
+        private var isProgrammaticCameraChangeInFlight = false
         private var suppressNextCompletedTap = false
         private lazy var tapRecognizer: PassiveMapTapGestureRecognizer = {
             let recognizer = PassiveMapTapGestureRecognizer()
@@ -6408,8 +6462,10 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let isUserInitiated = !isProgrammaticCameraChangeInFlight
+            isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
-            parent.onCameraInteractionEnd(mapView.region)
+            parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
 
         func gestureRecognizer(
@@ -6509,6 +6565,10 @@ private struct NativeMapView: UIViewRepresentable {
             guard lastCameraRevision != parent.cameraRequest.revision else { return }
             let isInitialRequest = lastCameraRevision == nil
             lastCameraRevision = parent.cameraRequest.revision
+            isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify(
+                from: mapView.region,
+                to: parent.cameraRequest.region
+            ) != .stationary
             mapView.setRegion(
                 parent.cameraRequest.region,
                 animated: isInitialRequest ? false : parent.cameraRequest.animated
@@ -9198,6 +9258,7 @@ private struct RecenterButton: View {
 }
 
 private struct MapLocationEducationPrompt: View {
+    let permissionAction: OnboardingLocationPermissionAction
     let isRequesting: Bool
     let onAllow: () -> Void
     let onCancel: () -> Void
@@ -9245,7 +9306,7 @@ private struct MapLocationEducationPrompt: View {
                             ProgressView()
                                 .tint(AstirTheme.ink.color)
                         }
-                        Text(isRequesting ? "Requesting location…" : "Allow Location")
+                        Text(isRequesting ? "Requesting location…" : primaryTitle)
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(AstirTheme.ink.color)
@@ -9256,12 +9317,14 @@ private struct MapLocationEducationPrompt: View {
                 .disabled(isRequesting)
                 .accessibilityIdentifier("map.locationEducation.allow")
 
-                Button("Cancel", action: onCancel)
-                    .font(AstirTypography.control)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .disabled(isRequesting)
-                    .accessibilityIdentifier("map.locationEducation.cancel")
+                if permissionAction != .request {
+                    Button("Cancel", action: onCancel)
+                        .font(AstirTypography.control)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .disabled(isRequesting)
+                        .accessibilityIdentifier("map.locationEducation.cancel")
+                }
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing6)
@@ -9283,6 +9346,10 @@ private struct MapLocationEducationPrompt: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+    }
+
+    private var primaryTitle: String {
+        OnboardingLocationPermissionPolicy.primaryTitle(for: permissionAction)
     }
 }
 
@@ -11232,6 +11299,37 @@ struct MapPlaceSaveSubmission {
     let reconcilesSharedVisitInvitees: Bool
     var visitedAt: Date = .now
     var plannedDate: Date? = nil
+
+    func replacingImportCandidate(
+        _ candidate: PlaceCandidate,
+        sourceType: AddSourceType,
+        status importStatus: PlaceStatus? = nil
+    ) -> MapPlaceSaveSubmission {
+        let status = importStatus ?? self.status
+        let recategorizedCandidate = candidate.recategorized(as: self.candidate.categoryAssignment)
+        let nextContext = MapPlaceSaveContext.importCandidate(
+            recategorizedCandidate,
+            sourceType: sourceType,
+            status: status,
+            defaultVisibility: visibility,
+            ratingScore: status == .been ? ratingScore : nil,
+            note: note ?? ""
+        )
+        return MapPlaceSaveSubmission(
+            context: nextContext,
+            candidate: recategorizedCandidate,
+            status: status,
+            visibility: visibility,
+            ratingScore: status == .been ? ratingScore : nil,
+            note: note,
+            attributes: attributes,
+            photoAttachments: status == .been ? photoAttachments : [],
+            inviteeUserIDs: status == .been ? inviteeUserIDs : [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: visitedAt,
+            plannedDate: status == .wannaGo ? plannedDate : nil
+        )
+    }
 }
 
 struct MapPlaceSavePhotoAttachment: Identifiable {
@@ -11477,6 +11575,55 @@ func persistNewPlaceSaveSubmission(
 }
 
 @MainActor
+func persistImportedPlaceSaveSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    sourceType: AddSourceType,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> SaveResult? {
+    guard CommunityContentPolicy.allows(submission.note),
+          submission.attributes.allSatisfy({ attribute in
+              (try? CommunityContentPolicy.validateJSONText(attribute.valueJSON)) != nil
+          })
+    else {
+        return nil
+    }
+
+    let existing = store.existingImportSave(matching: submission.candidate)
+    let shouldApplyDetails = existing == nil
+        || (existing?.status == .wannaGo && submission.status == .been)
+    let result = store.saveImportedCandidate(
+        submission.candidate,
+        status: submission.status,
+        visibility: submission.visibility,
+        note: submission.note,
+        sourceType: sourceType,
+        ratingScore: submission.ratingScore,
+        visitedAt: submission.visitedAt,
+        plannedDate: submission.plannedDate,
+        attributes: shouldApplyDetails ? submission.attributes : nil
+    )
+
+    guard shouldApplyDetails else { return result }
+    let targetVisit = submission.status == .been
+        ? store.visits(for: result.userPlaceID).first
+        : nil
+    await queueSharedVisitInvitees(
+        for: submission,
+        sourceVisit: targetVisit,
+        store: store,
+        backend: backend
+    )
+    await persistVisitPhotoAttachments(
+        submission.photoAttachments,
+        to: targetVisit,
+        store: store,
+        backend: backend
+    )
+    return result
+}
+
+@MainActor
 func persistScopedVisitOrWantSubmission(
     _ submission: MapPlaceSaveSubmission,
     store: WanderStore,
@@ -11559,14 +11706,13 @@ func persistScopedVisitOrWantSubmission(
 }
 
 @MainActor
-private func queueSharedVisitInvitees(
+func queueSharedVisitInvitees(
     for submission: MapPlaceSaveSubmission,
     sourceVisit: LocalPlaceVisit?,
     store: WanderStore,
     backend: WanderBackend?
 ) async {
-    guard let backend,
-          submission.status == .been,
+    guard submission.status == .been,
           let sourceVisit
     else { return }
 
@@ -11584,7 +11730,9 @@ private func queueSharedVisitInvitees(
         return
     }
 
-    _ = await store.retryPendingSharedVisitInvites(backend: backend)
+    if let backend {
+        _ = await store.retryPendingSharedVisitInvites(backend: backend)
+    }
 }
 
 @MainActor
@@ -12079,6 +12227,55 @@ struct MapPlaceSaveFlowSheet: View {
     }
 }
 
+enum MapPlaceSaveEditorPresentation {
+    case sheet
+    case inlineStaging
+    case inlineSaving
+
+    var showsInlineSaveAction: Bool {
+        self == .inlineSaving
+    }
+}
+
+private struct MapPlaceSaveEditorLifecycleModifier: ViewModifier {
+    let context: MapPlaceSaveContext
+    @Binding var isChoosingPlaceType: Bool
+    @Binding var selectedAssignment: PlaceCategoryAssignment
+    @Binding var selectedCuisine: String?
+    let placeTypePickerMode: PlaceTypePickerMode
+    let suggestedCuisine: String?
+    let suggestionReason: String?
+    let recentCuisines: [String]
+    let removeConfirmationTitle: String
+    let removeTitle: String
+    @Binding var isShowingRemoveConfirmation: Bool
+    let onPlaceTypeSelection: () -> Void
+    let onRemoveConfirmed: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isChoosingPlaceType) {
+                PlaceTypePickerSheet(
+                    selectedAssignment: $selectedAssignment,
+                    selectedCuisine: $selectedCuisine,
+                    placeName: context.candidate.name,
+                    suggestedCuisine: suggestedCuisine,
+                    suggestionReason: suggestionReason,
+                    recentCuisines: recentCuisines,
+                    initialMode: placeTypePickerMode,
+                    onSelect: onPlaceTypeSelection
+                )
+                .id(placeTypePickerMode)
+            }
+            .alert(removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
+                Button(removeTitle, role: .destructive, action: onRemoveConfirmed)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(context.removeConfirmationMessage)
+            }
+    }
+}
+
 struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var astirBrandMode
@@ -12091,6 +12288,8 @@ struct MapPlaceSaveEditor: View {
     let onClose: @MainActor () -> Void
     let onContentExpansionRequested: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
+    let presentation: MapPlaceSaveEditorPresentation
+    let onSubmissionChange: (@MainActor (MapPlaceSaveSubmission) -> Void)?
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -12139,7 +12338,9 @@ struct MapPlaceSaveEditor: View {
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
         onClose: @escaping @MainActor () -> Void,
         onContentExpansionRequested: @escaping @MainActor () -> Void = {},
-        onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
+        onSaveCompleted: @escaping @MainActor (SaveResult) -> Void,
+        presentation: MapPlaceSaveEditorPresentation = .sheet,
+        onSubmissionChange: (@MainActor (MapPlaceSaveSubmission) -> Void)? = nil
     ) {
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
@@ -12159,6 +12360,8 @@ struct MapPlaceSaveEditor: View {
         self.onClose = onClose
         self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
+        self.presentation = presentation
+        self.onSubmissionChange = onSubmissionChange
         let initialAssignment = restoredForm?.selectedAssignment ?? initialContext.candidate.categoryAssignment
         let initialVisibility = restoredForm?.selectedVisibility
             ?? initialContext.initialVisibility.normalizedForStealthMode
@@ -12340,6 +12543,39 @@ struct MapPlaceSaveEditor: View {
         store.isPrivateProfile ? .selfOnly : selectedVisibility
     }
 
+    private var currentSubmission: MapPlaceSaveSubmission {
+        MapPlaceSaveSubmission(
+            context: context,
+            candidate: selectedCandidate,
+            status: selectedStatus,
+            visibility: saveVisibility,
+            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
+                selectedRatingScore,
+                status: selectedStatus
+            ),
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
+            attributes: attributeDrafts(),
+            photoAttachments: MapPlaceSaveSubmissionPolicy.checkInValues(
+                visitPhotoAttachments,
+                status: selectedStatus
+            ),
+            inviteeUserIDs: canInviteFriends
+                ? MapPlaceSaveSubmissionPolicy.checkInValues(
+                    selectedInviteeUserIDs,
+                    status: selectedStatus
+                )
+                : [],
+            reconcilesSharedVisitInvitees: context.editedVisit != nil
+                && canInviteFriends
+                && didLoadSharedVisitInvitees,
+            visitedAt: visitedAt,
+            plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
+                plannedDate,
+                status: selectedStatus
+            )
+        )
+    }
+
     private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
         Binding(
             get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
@@ -12349,7 +12585,17 @@ struct MapPlaceSaveEditor: View {
         )
     }
 
+    @ViewBuilder
     var body: some View {
+        switch presentation {
+        case .sheet:
+            sheetEditor
+        case .inlineStaging, .inlineSaving:
+            inlineEditor
+        }
+    }
+
+    private var sheetEditor: some View {
         NavigationStack {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
@@ -12374,50 +12620,6 @@ struct MapPlaceSaveEditor: View {
                         saveFooter
                     }
                 }
-                .sheet(isPresented: $isChoosingPlaceType) {
-                    PlaceTypePickerSheet(
-                        selectedAssignment: $selectedAssignment,
-                        selectedCuisine: $selectedCuisine,
-                        placeName: context.candidate.name,
-                        suggestedCuisine: cuisineSuggestionValue,
-                        suggestionReason: cuisineSuggestionReason,
-                        recentCuisines: recentRestaurantCuisines,
-                        initialMode: placeTypePickerMode
-                    ) {
-                        handlePlaceTypeSelection()
-                    }
-                    .id(placeTypePickerMode)
-                }
-                .onAppear {
-                    store.saveFlowDidPresent(.saveSheet)
-                    restoreWalkthroughSavePresentationIfNeeded()
-                    if store.isPrivateProfile {
-                        selectedVisibility = .selfOnly
-                    }
-                    if isReadyForDetails {
-                        refreshQuestionBlocksIfNeeded()
-                        syncAnswersForCurrentQuestions()
-                    }
-                }
-                .task(id: context.id) {
-                    await loadSharedVisitInviteesIfNeeded()
-                }
-                .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
-                    if isPrivateProfile {
-                        selectedVisibility = .selfOnly
-                        selectedInviteeUserIDs = []
-                    }
-                }
-                .onChange(of: canInviteFriends) { _, canInvite in
-                    if !canInvite {
-                        selectedInviteeUserIDs = []
-                    }
-                }
-                .onChange(of: draftUpdate, initial: true) { _, update in
-                    walkthroughs.recordUserActivity()
-                    guard let draftID else { return }
-                    onDraftChange(draftID, update.form, update.submittedAt)
-                }
                 .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                     prepareWalkthroughTarget(target, with: walkthroughScrollProxy)
                 }
@@ -12431,20 +12633,123 @@ struct MapPlaceSaveEditor: View {
                 .task(id: walkthroughAutomationTaskID) {
                     await runWalkthroughAutomationIfNeeded(with: walkthroughScrollProxy)
                 }
-                .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
-                    Button(context.removeTitle, role: .destructive) {
-                        removeSave()
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text(context.removeConfirmationMessage)
-                }
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
         .interactiveDismissDisabled(
             walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving
         )
+        .modifier(MapPlaceSaveEditorLifecycleModifier(
+            context: context,
+            isChoosingPlaceType: $isChoosingPlaceType,
+            selectedAssignment: $selectedAssignment,
+            selectedCuisine: $selectedCuisine,
+            placeTypePickerMode: placeTypePickerMode,
+            suggestedCuisine: cuisineSuggestionValue,
+            suggestionReason: cuisineSuggestionReason,
+            recentCuisines: recentRestaurantCuisines,
+            removeConfirmationTitle: context.removeConfirmationTitle,
+            removeTitle: context.removeTitle,
+            isShowingRemoveConfirmation: $isShowingRemoveConfirmation,
+            onPlaceTypeSelection: handlePlaceTypeSelection,
+            onRemoveConfirmed: removeSave
+        ))
+        .onAppear {
+            prepareEditor(isSheet: true)
+        }
+        .task(id: context.id) {
+            await loadSharedVisitInviteesIfNeeded()
+        }
+        .onChange(of: store.isPrivateProfile) { oldValue, newValue in
+            handlePrivateProfileChange(oldValue, newValue)
+        }
+        .onChange(of: canInviteFriends) { oldValue, newValue in
+            handleInviteAvailabilityChange(oldValue, newValue)
+        }
+        .onChange(of: draftUpdate, initial: true) { oldValue, newValue in
+            handleDraftUpdate(oldValue, newValue)
+        }
+    }
+
+    private var inlineEditor: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            singleScreenContent
+
+            if presentation.showsInlineSaveAction, isReadyForDetails {
+                saveFooter
+                    .padding(.horizontal, -WanderTheme.spacing4)
+                    .padding(.bottom, -WanderTheme.spacing2)
+            }
+        }
+        .background(editorBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .modifier(MapPlaceSaveEditorLifecycleModifier(
+            context: context,
+            isChoosingPlaceType: $isChoosingPlaceType,
+            selectedAssignment: $selectedAssignment,
+            selectedCuisine: $selectedCuisine,
+            placeTypePickerMode: placeTypePickerMode,
+            suggestedCuisine: cuisineSuggestionValue,
+            suggestionReason: cuisineSuggestionReason,
+            recentCuisines: recentRestaurantCuisines,
+            removeConfirmationTitle: context.removeConfirmationTitle,
+            removeTitle: context.removeTitle,
+            isShowingRemoveConfirmation: $isShowingRemoveConfirmation,
+            onPlaceTypeSelection: handlePlaceTypeSelection,
+            onRemoveConfirmed: removeSave
+        ))
+        .onAppear {
+            prepareEditor(isSheet: false)
+        }
+        .task(id: context.id) {
+            await loadSharedVisitInviteesIfNeeded()
+        }
+        .onChange(of: store.isPrivateProfile) { oldValue, newValue in
+            handlePrivateProfileChange(oldValue, newValue)
+        }
+        .onChange(of: canInviteFriends) { oldValue, newValue in
+            handleInviteAvailabilityChange(oldValue, newValue)
+        }
+        .onChange(of: draftUpdate, initial: true) { oldValue, newValue in
+            handleDraftUpdate(oldValue, newValue)
+        }
+    }
+
+    private func prepareEditor(isSheet: Bool) {
+        if isSheet {
+            store.saveFlowDidPresent(.saveSheet)
+            restoreWalkthroughSavePresentationIfNeeded()
+        }
+        if store.isPrivateProfile {
+            selectedVisibility = .selfOnly
+        }
+        if isReadyForDetails {
+            refreshQuestionBlocksIfNeeded()
+            syncAnswersForCurrentQuestions()
+        }
+    }
+
+    private func handlePrivateProfileChange(_ oldValue: Bool, _ isPrivateProfile: Bool) {
+        if isPrivateProfile {
+            selectedVisibility = .selfOnly
+            selectedInviteeUserIDs = []
+        }
+    }
+
+    private func handleInviteAvailabilityChange(_ oldValue: Bool, _ canInvite: Bool) {
+        if !canInvite {
+            selectedInviteeUserIDs = []
+        }
+    }
+
+    private func handleDraftUpdate(_ oldValue: PlaceSaveDraftUpdate, _ update: PlaceSaveDraftUpdate) {
+        if presentation == .sheet {
+            walkthroughs.recordUserActivity()
+        }
+        if let draftID {
+            onDraftChange(draftID, update.form, update.submittedAt)
+        }
+        onSubmissionChange?(currentSubmission)
     }
 
     private var editorBackground: Color {
@@ -13825,36 +14130,7 @@ struct MapPlaceSaveEditor: View {
         isSaving = true
         errorMessage = nil
 
-        let submission = MapPlaceSaveSubmission(
-            context: context,
-            candidate: selectedCandidate,
-            status: selectedStatus,
-            visibility: saveVisibility,
-            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
-                selectedRatingScore,
-                status: selectedStatus
-            ),
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
-            attributes: attributes,
-            photoAttachments: MapPlaceSaveSubmissionPolicy.checkInValues(
-                visitPhotoAttachments,
-                status: selectedStatus
-            ),
-            inviteeUserIDs: canInviteFriends
-                ? MapPlaceSaveSubmissionPolicy.checkInValues(
-                    selectedInviteeUserIDs,
-                    status: selectedStatus
-                )
-                : [],
-            reconcilesSharedVisitInvitees: context.editedVisit != nil
-                && canInviteFriends
-                && didLoadSharedVisitInvitees,
-            visitedAt: visitedAt,
-            plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
-                plannedDate,
-                status: selectedStatus
-            )
-        )
+        let submission = currentSubmission
 
         Task {
             let result = await onSave(submission)
@@ -17143,6 +17419,11 @@ private struct PlaceActivityCard: View {
                     .environmentObject(backend)
             }
         }
+        .blocksProductUpsells(
+            while: selectedProfileID != nil
+                || isShowingCamera
+                || isShowingPhotoPicker
+        )
     }
 
     private var header: some View {

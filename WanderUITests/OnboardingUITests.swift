@@ -1,7 +1,338 @@
 import XCTest
 
 @MainActor
+final class ImportFormRefinementUITests: XCTestCase {
+    func testShareExtensionAutomaticallyCapturesExactlyOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationShare"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Clear test captures"].waitForExistence(timeout: 15))
+        app.buttons["Clear test captures"].tap()
+        defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
+        app.buttons["Share test link"].tap()
+        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "rec.me")).firstMatch
+        if !activity.waitForExistence(timeout: 5) {
+            let more = app.buttons["More"].firstMatch
+            if more.exists { more.tap() }
+        }
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        activity.tap()
+        XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
+        keepScreenshot("Share extension — countdown begins")
+        let captured = app.staticTexts["Captured: 1"]
+        XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
+        XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
+        keepScreenshot("Share extension — automatic capture returned to host")
+    }
+
+    func testMapImportNoticeTracksFiltersAndDismisses() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderImportNoticeUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let dismiss = app.buttons["import.notice.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 15))
+        let filters = app.buttons["map.filter.more"]
+        XCTAssertTrue(filters.exists)
+        let review = app.buttons["import.notice.review"]
+        let filterRow = app.otherElements["map.filters"]
+        // Liquid Glass accessibility bounds differ from SwiftUI's layout
+        // anchor by a few points; the rendered gap should remain about 10pt.
+        // The primary button's accessibility frame excludes its 12pt vertical
+        // content padding. The X glyph is centered on the actual card edge,
+        // while its full 44pt hit target remains inside the card and window.
+        let cardTop = review.frame.minY - 12
+        XCTAssertEqual(cardTop - filterRow.frame.maxY, 10, accuracy: 3)
+        XCTAssertEqual(dismiss.frame.minY, cardTop, accuracy: 1)
+        XCTAssertEqual(dismiss.frame.maxX, review.frame.maxX + 44, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+        XCTAssertLessThanOrEqual(dismiss.frame.maxX, app.frame.maxX)
+        keepScreenshot("Import notice — anchored below filters")
+        dismiss.tap()
+        XCTAssertTrue(dismiss.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(filters.isHittable)
+    }
+
+    func testFailedSourceRemainsRecoverableInCanonicalReview() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationRecovery"]
+        app.launch()
+        XCTAssertTrue(app.buttons["import.retry.capture-instagram-0"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["No places matched"].exists)
+        keepScreenshot("Import review — source retry")
+    }
+
+    func testHistoryBadgeOverlapsTheGlassButtonAfterStartingAnImport() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderOpenImportHub", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let input = app.textFields["import.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        let history = app.buttons["import.history"]
+        let originalCount = Int((history.value as? String ?? "0").split(separator: " ").first ?? "0") ?? 0
+        input.tap()
+        input.typeText("REC409 badge layout fixture")
+        app.buttons["import.start"].tap()
+        let add = app.buttons["map.headerAdd"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        let shortcut = app.buttons["Import your places and lists from Google Maps, Instagram, TikTok, and more here"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 5))
+        shortcut.tap()
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        XCTAssertEqual(history.value as? String, "\(originalCount + 1) imports matching or awaiting review")
+        keepScreenshot("Recents — badge overlaps glass border")
+        history.tap()
+        XCTAssertTrue(app.navigationBars["Import history"].waitForExistence(timeout: 5))
+    }
+
+    func testImportFormReturnsToCompactHeightAfterKeyboardAndDragging() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderMapCapture",
+            "-WanderOpenImportHub", "-WanderDisableWalkthroughs"
+        ]
+        app.launch()
+        let input = app.textFields["import.input"]
+        let clipboard = app.buttons["Paste from clipboard"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        XCTAssertTrue(clipboard.isHittable)
+        // Wait for the measured detent to replace the initial presentation
+        // height before recording the baseline or testing later openings.
+        let firstPresentationSettles = NSPredicate { _, _ in
+            app.frame.maxY - clipboard.frame.maxY < 65
+        }
+        expectation(for: firstPresentationSettles, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        let firstTop = app.buttons["Close import"].frame.minY
+        XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
+        keepScreenshot("Import entry — first open")
+
+        let inputContainer = app.otherElements["import.input-container"]
+        XCTAssertTrue(inputContainer.exists)
+        let inputContainerHeight = inputContainer.frame.height
+        inputContainer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 10) else {
+            keepScreenshot("Import entry — field did not focus")
+            XCTFail("Tapping the full-height input container should open the keyboard")
+            return
+        }
+        input.typeText("https://www.instagram.com/p/very-long-single-line-import-link-that-must-never-wrap/")
+        // Accessibility bounds shift slightly when placeholder metrics are
+        // replaced by URL text even though the rendered control stays one line.
+        XCTAssertEqual(inputContainer.frame.height, inputContainerHeight, accuracy: 3)
+        XCTAssertLessThanOrEqual(inputContainer.frame.height, 65)
+        XCTAssertLessThan(input.frame.height, 30)
+        app.buttons["Close import"].tap()
+        XCTAssertTrue(input.waitForNonExistence(timeout: 5))
+
+        for opening in 2...3 {
+            XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
+            app.buttons["map.headerAdd"].tap()
+            let shortcut = app.buttons["Import your places and lists from Google Maps, Instagram, TikTok, and more here"]
+            XCTAssertTrue(shortcut.waitForExistence(timeout: 5))
+            shortcut.tap()
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let settlesAtCompactHeight = NSPredicate { _, _ in
+                // Liquid Glass can round the accessibility frame by one device
+                // pixel between otherwise identical sheet presentations.
+                abs(app.buttons["Close import"].frame.minY - firstTop) <= 3
+            }
+            expectation(for: settlesAtCompactHeight, evaluatedWith: app)
+            waitForExpectations(timeout: 5)
+            XCTAssertTrue(clipboard.isHittable)
+            XCTAssertLessThan(app.frame.maxY - clipboard.frame.maxY, 65)
+            keepScreenshot("Import entry — open \(opening)")
+            let handle = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: app.frame.midX, dy: firstTop - 10))
+            handle.press(forDuration: 0.1, thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -220)))
+            app.buttons["Close import"].tap()
+            XCTAssertTrue(input.waitForNonExistence(timeout: 5))
+        }
+    }
+
+    private func keepScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+@MainActor
 final class OnboardingUITests: XCTestCase {
+    func testNotificationUpsellUsesTheCentralCampaignInOnboarding() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "notifications",
+            "-WanderNotificationAuthorizationNotDeterminedFixture",
+            "-WanderBypassProductUpsellFrequencyCap"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Continue"].firstMatch.isHittable)
+        XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
+        XCTAssertTrue(app.staticTexts["Onboarding step 5 of 5"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-425 notification upsell in onboarding"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testContextualNotificationUpsellsUseConfiguredSaveAndFollowCopy() {
+        let app = XCUIApplication()
+        let baseArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderDisableWalkthroughs",
+            "-WanderNotificationAuthorizationNotDeterminedFixture"
+        ]
+
+        app.launchArguments = baseArguments + [
+            "-WanderProductUpsellTrigger",
+            "place_saved"
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Continue"].firstMatch.isHittable)
+        XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
+        XCTAssertFalse(app.staticTexts["Onboarding step 5 of 5"].exists)
+
+        let saveScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        saveScreenshot.name = "REC-425 notification upsell after first save"
+        saveScreenshot.lifetime = .keepAlways
+        add(saveScreenshot)
+
+        app.terminate()
+        app.launchArguments = baseArguments + [
+            "-WanderProductUpsellTrigger",
+            "follow_created"
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Keep up with people you follow"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Continue"].firstMatch.isHittable)
+        XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
+
+        let followScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        followScreenshot.name = "REC-425 notification upsell after first follow"
+        followScreenshot.lifetime = .keepAlways
+        add(followScreenshot)
+    }
+
+    func testActualOnboardingPermissionScreensUseSingleNeutralAction() {
+        let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .location)
+            app.resetAuthorizationStatus(for: .contacts)
+        }
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "location"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Find the good stuff nearby"].waitForExistence(timeout: 8))
+        let locationContinue = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(locationContinue.waitForExistence(timeout: 8))
+        XCTAssertEqual(locationContinue.label, "Continue")
+        XCTAssertFalse(app.buttons["Not now"].exists)
+
+        let locationScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        locationScreenshot.name = "REC-396 actual onboarding location permission"
+        locationScreenshot.lifetime = .keepAlways
+        add(locationScreenshot)
+
+        locationContinue.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+
+        app.terminate()
+        app.resetAuthorizationStatus(for: .location)
+        app.resetAuthorizationStatus(for: .contacts)
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "contacts"
+        ]
+        app.launch()
+
+        let contactsContinue = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(contactsContinue.waitForExistence(timeout: 8))
+        XCTAssertTrue(contactsContinue.isHittable)
+        XCTAssertFalse(app.buttons["Not now"].exists)
+
+        let contactsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        contactsScreenshot.name = "REC-396 actual onboarding contacts permission"
+        contactsScreenshot.lifetime = .keepAlways
+        add(contactsScreenshot)
+    }
+
+    func testActualOnboardingNotificationPrimerContinuesToSystemPrompt() {
+        let app = XCUIApplication()
+        addTeardownBlock { app.terminate() }
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep",
+            "notifications",
+            "-WanderBypassProductUpsellFrequencyCap"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        let notificationContinue = app.buttons["Continue"].firstMatch
+        XCTAssertTrue(notificationContinue.isHittable)
+        XCTAssertFalse(app.buttons["Not now"].exists)
+
+        notificationContinue.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+    }
+
+    func testActualFeedContactInvitePrimerUsesSingleNeutralAction() {
+        let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .contacts)
+        addTeardownBlock {
+            app.terminate()
+            app.resetAuthorizationStatus(for: .contacts)
+        }
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseEphemeralEmptyFixtures",
+            "-WanderDisableWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderFeedSurface",
+            "people"
+        ]
+        app.launch()
+
+        let inviteEntry = app.buttons["invite people to rec.me"]
+        XCTAssertTrue(inviteEntry.waitForExistence(timeout: 8))
+        inviteEntry.tap()
+
+        let permissionContinue = app.buttons["invite.permissionContinue"]
+        XCTAssertTrue(permissionContinue.waitForExistence(timeout: 5))
+        XCTAssertEqual(permissionContinue.label, "Continue")
+        XCTAssertFalse(app.buttons["invite.close"].exists)
+        XCTAssertFalse(app.buttons["not now"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-396 actual Feed contact invite permission"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
         let app = XCUIApplication()
         defer {
@@ -124,7 +455,7 @@ final class OnboardingUITests: XCTestCase {
 
         openImport.tap()
 
-        XCTAssertTrue(app.textViews["import.input"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 second-launch Import From destination"
@@ -157,7 +488,7 @@ final class OnboardingUITests: XCTestCase {
         add(promptScreenshot)
 
         openImport.tap()
-        XCTAssertTrue(app.textViews["import.input"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
     }
 
     func testCoachMarkIsUnskippableAndOnlyTheHighlightedAddActionAdvances() {

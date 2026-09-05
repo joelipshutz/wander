@@ -163,6 +163,11 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+            .blocksProductUpsells(
+                while: selectedProfile != nil
+                    || placeSaveFlow != nil
+                    || savedMessage != nil
+            )
             .onChange(of: selectedSurface) { _, surface in
                 if surface == .people {
                     hasMountedPeopleSurface = true

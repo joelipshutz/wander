@@ -3262,6 +3262,9 @@ private struct GraphListScreen: View {
             .task {
                 await store.refreshRemoteSocialGraph(backend: backend)
             }
+            .blocksProductUpsells(
+                while: selectedProfile != nil || showsUnfollowConfirm
+            )
         }
         .tint(brandMode.accent)
         .background(brandMode.background.ignoresSafeArea())

@@ -1443,7 +1443,7 @@ private struct ProfileCalendarMetric: View {
     }
 }
 
-private struct ProfileCalendarDayCell: View {
+struct ProfileCalendarDayCell: View {
     @Environment(\.astirBrandMode) private var brandMode
     let date: Date?
     let summary: ProfileCalendarDaySummary?
@@ -1457,7 +1457,8 @@ private struct ProfileCalendarDayCell: View {
                     size: 40,
                     label: "\(Calendar.current.component(.day, from: date))"
                 )
-                .padding(.top, isToday ? 13 : 5)
+                // The NOW badge must not change the date's position or the row height.
+                .padding(.top, 5)
 
                 if isToday {
                     Text("NOW")

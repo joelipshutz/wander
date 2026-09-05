@@ -696,6 +696,78 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testRepeatCheckInMaterializesRemoteOnlyOwnedSaveBeforeSyncing() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_current", displayName: "Current", handle: "current")
+            )
+        )
+        let remoteUserPlaceID = "e7000000-0000-4000-8000-000000000001"
+        let remotePlaceID = "a0000000-0000-4000-8000-000000000001"
+        let savedAt = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-09-02T23:19:55Z")
+        )
+        let remotePlace = makeRemoteCalendarVisiblePlace(
+            owner: store.currentUser,
+            userPlaceID: remoteUserPlaceID,
+            placeID: remotePlaceID,
+            name: "Remote-Only Park",
+            status: .been,
+            visibility: .followers,
+            savedAt: savedAt,
+            visitedAt: savedAt
+        )
+        let hydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [store.currentUser.id: [remotePlace]]
+                )
+            )
+        )
+        XCTAssertTrue(hydrated)
+        XCTAssertTrue(store.userPlaces.isEmpty)
+
+        let context = MapPlaceSaveContext.addVisitVisiblePlace(
+            remotePlace,
+            attributes: store.attributes(for: remoteUserPlaceID),
+            latestVisit: nil
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: context.candidate,
+            status: .been,
+            visibility: .followers,
+            ratingScore: 4.5,
+            note: "repeat visit",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: Date(timeIntervalSince1970: 1_788_467_321)
+        )
+        let repository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: remoteUserPlaceID,
+                syncState: .synced,
+                placeID: remotePlaceID
+            )
+        )
+
+        let (result, visit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: WanderBackend(userPlaceRepository: repository)
+        )
+
+        XCTAssertEqual(result?.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(visit?.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(repository.savedCheckInDrafts.count, 1)
+        XCTAssertEqual(repository.savedCheckInDrafts.first?.visit.userPlaceID, remoteUserPlaceID)
+        XCTAssertEqual(store.userPlaces.map(\.id), [remoteUserPlaceID])
+        XCTAssertEqual(store.currentUserCalendarProjection.visiblePlaces.count, 1)
+    }
+
     func testCurrentUserCalendarProjectionPreservesPendingLocalMutationOverRemote() async throws {
         let store = WanderStore(fixtures: .seed())
         let pendingSavedAt = try XCTUnwrap(
@@ -3238,6 +3310,85 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.byteSize, 42_000)
         XCTAssertEqual(restoredPhoto?.width, 1200)
         XCTAssertEqual(restoredPhoto?.height, 900)
+    }
+
+    func testInlineImportDetailsPersistPlannedDateAndAttributesLocally() async throws {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "inline-import-details", name: "Inline Details Cafe", category: "coffee",
+            latitude: 34.123, longitude: -118.321, confidence: 0.99
+        )
+        let plannedDate = Date.now.addingTimeInterval(86_400)
+        let submission = MapPlaceSaveSubmission(
+            context: .importCandidate(
+                candidate, sourceType: .link, status: .wannaGo,
+                defaultVisibility: .selfOnly
+            ),
+            candidate: candidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            ratingScore: nil,
+            note: "Try the patio",
+            attributes: [PlaceAttributeDraft(
+                questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                valueType: "personal_label", stringValues: ["Weekend"]
+            )],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            plannedDate: plannedDate
+        )
+
+        let persisted = await persistImportedPlaceSaveSubmission(
+            submission, sourceType: .link, store: store, backend: nil
+        )
+        let result = try XCTUnwrap(persisted)
+        let visible = try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            $0.userPlace.id == result.userPlaceID
+        })
+        XCTAssertEqual(visible.userPlace.note, "Try the patio")
+        XCTAssertEqual(visible.userPlace.status, .wannaGo)
+        XCTAssertEqual(
+            visible.userPlace.plannedDate.map { WannaGoDate.storageString(from: $0) },
+            WannaGoDate.storageString(from: plannedDate)
+        )
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).contains {
+            $0.questionKey == PlaceMemoryAttributeKeys.personalLabels
+                && $0.valueJSON.contains("Weekend")
+        })
+    }
+
+    func testImportSubmissionHonorsLatestRowStatusAfterDetailsCollapse() {
+        let candidate = PlaceCandidate(
+            id: "inline-import-mode", name: "Mode Cafe", category: "coffee",
+            latitude: 34.123, longitude: -118.321, confidence: 0.99
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: .importCandidate(
+                candidate, sourceType: .link, status: .been,
+                defaultVisibility: .selfOnly
+            ),
+            candidate: candidate,
+            status: .been,
+            visibility: .selfOnly,
+            ratingScore: 4.5,
+            note: "Keep this note",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: ["user_friend"],
+            reconcilesSharedVisitInvitees: false
+        )
+
+        let wanna = submission.replacingImportCandidate(
+            candidate, sourceType: .link, status: .wannaGo
+        )
+
+        XCTAssertEqual(wanna.status, .wannaGo)
+        XCTAssertEqual(wanna.context.initialStatus, .wannaGo)
+        XCTAssertEqual(wanna.note, "Keep this note")
+        XCTAssertNil(wanna.ratingScore)
+        XCTAssertTrue(wanna.inviteeUserIDs.isEmpty)
+        XCTAssertTrue(wanna.photoAttachments.isEmpty)
     }
 
     func testAutomaticImportDoesNotCreateASecondCheckInForAnExistingBeenPlace() {
@@ -6860,6 +7011,57 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(serializedProperties.contains("Private note"))
         XCTAssertFalse(serializedProperties.contains("34.05"))
         XCTAssertFalse(serializedProperties.contains("-118.24"))
+    }
+
+    func testNewSaveAndFollowPublishNotificationUpsellTriggersWithoutImportNoise() {
+        let store = WanderStore(fixtures: .empty())
+        let manualCandidate = PlaceCandidate(
+            id: "upsell_manual",
+            name: "Manual Place",
+            category: "coffee",
+            latitude: 34.05,
+            longitude: -118.24,
+            confidence: 1
+        )
+
+        _ = store.saveCandidate(
+            manualCandidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+        let saveRequest = store.productUpsellTriggerRequest
+        XCTAssertEqual(saveRequest?.trigger, .placeSaved)
+
+        _ = store.saveCandidate(
+            manualCandidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+        XCTAssertEqual(store.productUpsellTriggerRequest?.id, saveRequest?.id)
+
+        store.follow(userID: "user_friend", source: .profile)
+        XCTAssertEqual(store.productUpsellTriggerRequest?.trigger, .followCreated)
+
+        let importOnlyStore = WanderStore(fixtures: .empty())
+        _ = importOnlyStore.saveImportedCandidate(
+            PlaceCandidate(
+                id: "upsell_import",
+                name: "Imported Place",
+                category: "restaurant",
+                latitude: 34.06,
+                longitude: -118.25,
+                confidence: 1
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .link
+        )
+        XCTAssertNil(importOnlyStore.productUpsellTriggerRequest)
     }
 
     func testPlaceShareTracksCompletionAndOnlyCountsSuccessfulRecommendations() {
