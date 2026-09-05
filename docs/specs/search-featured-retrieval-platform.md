@@ -81,6 +81,15 @@ lexical fails, semantic may still recover the remote result. Submission IDs,
 cancellation, and query guards prevent a late refinement from replacing a newer
 search.
 
+The immediate deterministic filters also plan both remote corpora. When the
+optional smart parser refines category, area, favorite, or relationship scope,
+the client compares effective requests and restarts each affected provider with
+the refined filters. Restarting clears the old rec.me candidates and provenance;
+cancellation guards reject late results from the previous plan even within the
+same submitted query. Named-owner and non-follower filters stop rec.me retrieval
+because its API cannot enforce those constraints. Unchanged remote requests do
+not restart just because local parsing metadata changed.
+
 ### Rec.me fusion and final cross-corpus ranking
 
 `search_rrf_v1` deduplicates by canonical place id and applies weighted
@@ -232,7 +241,8 @@ rank uses the combined displayed order; provenance is `trusted_memory`,
 `lexical`, `semantic`, `lexical_semantic`, `mapkit`, or `unknown`.
 The ID contains no user, query, or place data. The checked-in PostHog dashboard
 definition owns the Search stage latency, provider/selected-rank, and
-request-outcome views. Applying that dashboard remains a separate explicit
+request-outcome views. Request outcomes exclude legacy events without a nonempty
+opaque submission ID. Applying that dashboard remains a separate explicit
 hosted operation.
 
 ## Evaluation and change process

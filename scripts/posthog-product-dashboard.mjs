@@ -243,6 +243,8 @@ with outcomes as (
     'trusted_place_search_reformulated'
   )
     and timestamp >= now() - interval 30 day
+    and properties.search_request_id is not null
+    and properties.search_request_id != ''
 )
 select
   submitted_requests,

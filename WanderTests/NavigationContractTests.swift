@@ -4135,7 +4135,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("communityPlaceSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("externalPlaceSearchTask?.cancel()"))
-        XCTAssertTrue(source.contains("startCommunityPlaceSearch(query: query, submissionID: submissionID)"))
+        XCTAssertTrue(source.contains("startCommunityPlaceSearch(query: query, filters: localResults.filters, submissionID: submissionID)"))
         XCTAssertTrue(source.contains("startExternalPlaceSearch("))
         XCTAssertTrue(source.contains("backend.searchRecmePlaces("))
         XCTAssertTrue(source.contains("store.externalSearchCandidates("))

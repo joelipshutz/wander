@@ -65,7 +65,7 @@ Future ranker or embedding-policy changes should gain versioned configuration on
 - A read-only production-document pool refresh found 17 top-five-union query/candidate judgments that were not covered by the historical pool. No new quality score is claimed until those candidates are graded. The generated pool remains an ignored local artifact.
 - The full iOS unit run executed 1,524 tests and reported eight failures in pre-existing Map/widget source-contract tests outside this branch's changed files. The focused Search and analytics gates pass; the unrelated failures are recorded rather than folded into REC-384.
 
-## Current-main integration (2026-09-04)
+## Previous-main integration (2026-09-04)
 
 The branch was refreshed against `024ddb9` (build 170). REC-424's Apple Maps
 fallback, eligibility, source labels, physical dedupe, and three-corpus ranking
@@ -95,3 +95,15 @@ passed six tests (eight sections, 17 insights). The Search screenshot smoke
 passed. The broader UI sweep was interrupted after the unit baseline comparison;
 its remaining UI coverage is not represented as passing. The PR and Linear record
 contain the final focused-UI outcomes and exact restart artifacts.
+
+## Current-main integration (2026-09-05)
+
+The branch now includes `c520292` (REC-409 import redesign). Smart-parser filter
+refinement now replans rec.me as well as Apple Maps, clearing stale candidates
+and preserving the existing remote eligibility restrictions. Effective request
+equality avoids redundant restarts. The dashboard excludes legacy events without
+a submission ID from request outcome counts.
+
+See the [integration and benchmark report](../evals/2026-09-05-search-integration.md)
+for controlled delivery measurements, a three-corpus query example, current-main
+regression comparison, and the outstanding live-service verification.

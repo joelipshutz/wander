@@ -359,6 +359,7 @@ struct DiscoverScreen: View {
                     if let submissionID = activePlaceSearchSubmissionID {
                         startCommunityPlaceSearch(
                             query: placesQuery,
+                            filters: placeResults.filters,
                             submissionID: submissionID
                         )
                     }
@@ -607,6 +608,10 @@ struct DiscoverScreen: View {
         let localClock = ContinuousClock()
         let localStart = localClock.now
         let localResults = store.searchTrustedPlaces(query: query, scope: .everyone)
+        let initialCommunityRequest = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query,
+            filters: localResults.filters
+        )
         let initialExternalInput = DiscoverExternalPlaceSearchPlanner.input(
             query: query,
             filters: localResults.filters
@@ -635,7 +640,7 @@ struct DiscoverScreen: View {
             outcome: "succeeded"
         )
 
-        startCommunityPlaceSearch(query: query, submissionID: submissionID)
+        startCommunityPlaceSearch(query: query, filters: localResults.filters, submissionID: submissionID)
         startExternalPlaceSearch(
             query: query,
             filters: localResults.filters,
@@ -662,6 +667,17 @@ struct DiscoverScreen: View {
             isPlaceSearchLoading = false
             isPlaceSearchRefining = false
             placeSearchTask = nil
+            let refinedCommunityRequest = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+                query: query,
+                filters: results.filters
+            )
+            if refinedCommunityRequest != initialCommunityRequest {
+                startCommunityPlaceSearch(
+                    query: query,
+                    filters: results.filters,
+                    submissionID: submissionID
+                )
+            }
             let refinedExternalInput = DiscoverExternalPlaceSearchPlanner.input(
                 query: query,
                 filters: results.filters
@@ -716,14 +732,18 @@ struct DiscoverScreen: View {
         submitPlaceSearch(source: "walkthrough_resume")
     }
 
-    private func startCommunityPlaceSearch(query: String, submissionID: UUID) {
+    private func startCommunityPlaceSearch(
+        query: String,
+        filters: DiscoverFilters,
+        submissionID: UUID
+    ) {
         communityPlaceSearchTask?.cancel()
+        communityPlaceCandidates = []
+        communityProviderProvenanceByCandidateID = [:]
+        communityPlaceSearchResultStage = "none"
+        communityPlaceSearchFailed = false
         isCommunityPlaceSearchLoading = auth.isSignedIn
         guard auth.isSignedIn else {
-            communityPlaceCandidates = []
-            communityProviderProvenanceByCandidateID = [:]
-            communityPlaceSearchResultStage = "none"
-            communityPlaceSearchFailed = false
             communityPlaceSearchTask = nil
             return
         }
@@ -732,7 +752,10 @@ struct DiscoverScreen: View {
             let remoteClock = ContinuousClock()
             let remoteStart = remoteClock.now
             let planStart = remoteClock.now
-            guard let request = await store.recmePlaceSearchRequest(query: query) else {
+            guard let request = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+                query: query,
+                filters: filters
+            ) else {
                 guard isActivePlaceSearch(query: query, submissionID: submissionID) else { return }
                 isCommunityPlaceSearchLoading = false
                 communityPlaceSearchTask = nil

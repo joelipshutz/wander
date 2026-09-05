@@ -990,6 +990,52 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(request.query, "")
     }
 
+    func testRefinedCommunityPlanCarriesCategoryAreaFavoriteAndScope() throws {
+        let query = "friends favorite coffee in Pasadena"
+        let initial = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query, filters: DiscoverFilters(query: query)
+        )
+        let refined = try XCTUnwrap(DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query,
+            filters: DiscoverFilters(
+                query: query, categories: [WanderPlaceCategory.coffeeTeaSweets],
+                area: "Pasadena", relationship: .mutual, opinion: .favorite
+            )
+        ))
+
+        XCTAssertNotEqual(initial, refined)
+        XCTAssertEqual(refined.categories, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(refined.area, "Pasadena")
+        XCTAssertEqual(refined.scope, .friends)
+        XCTAssertTrue(refined.favoriteOnly)
+        XCTAssertEqual(refined.semanticQuery, query)
+        XCTAssertFalse(refined.query.contains("pasadena"))
+    }
+
+    func testRefinedCommunityPlanStopsWhenRemoteCannotEnforceOwnerOrRelationship() {
+        let query = "coffee"
+        XCTAssertNotNil(DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query, filters: DiscoverFilters(query: query)
+        ))
+        for filters in [
+            DiscoverFilters(query: query, ownerQuery: "Ryan"),
+            DiscoverFilters(query: query, relationship: .nonFollower)
+        ] {
+            XCTAssertNil(DiscoverRecmePlaceSearchPlanner.eligibleRequest(query: query, filters: filters))
+        }
+    }
+
+    func testCommunityPlanDoesNotRestartForUnchangedRemoteConstraints() {
+        let query = "quiet place to read"
+        let initial = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query, filters: DiscoverFilters(query: query)
+        )
+        let refined = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query, filters: DiscoverFilters(query: query, sort: .ownerRatingDescending)
+        )
+        XCTAssertEqual(initial, refined)
+    }
+
     func testPlannerUsesDeterministicParserCategoryAndRelationshipAliases() {
         let filters = DiscoverFilters(
             query: "hikes in LA from people",
@@ -1223,6 +1269,127 @@ final class TrustedPlaceSearchTests: XCTestCase {
         }
     }
 
+    func testRefinedPlanForSameQueryCannotBeOverwrittenByCancelledCompletion() async throws {
+        let query = "friends coffee"
+        let oldRepository = SearchProviderPlaceRepository(
+            lexicalResult: .success([makeCandidate("old-lexical")]),
+            semanticResult: .success([makeCandidate("old-semantic")]),
+            waitsForSemanticRelease: true
+        )
+        let oldBackend = WanderBackend(placeRepository: oldRepository)
+        let partialPublished = expectation(description: "Initial plan published")
+        var displayed: [String] = []
+        let oldTask = Task { @MainActor in
+            let outcome = try await oldBackend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: query), includesSemanticProvider: true
+            ) { partial in
+                displayed = partial.candidates.map(\.id)
+                partialPublished.fulfill()
+            }
+            displayed = outcome.candidates.map(\.id)
+        }
+        await fulfillment(of: [partialPublished], timeout: 1)
+        oldTask.cancel()
+        displayed = []
+        let refinedRequest = try XCTUnwrap(DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query,
+            filters: DiscoverFilters(query: query, relationship: .mutual)
+        ))
+        let refinedBackend = WanderBackend(placeRepository: SearchProviderPlaceRepository(
+            lexicalResult: .success([makeCandidate("refined-friend")]),
+            semanticResult: .success([])
+        ))
+        let refined = try await refinedBackend.searchRecmePlaces(
+            refinedRequest, includesSemanticProvider: true
+        )
+        displayed = refined.candidates.map(\.id)
+        oldRepository.releaseSemanticResults()
+        do {
+            try await oldTask.value
+            XCTFail("A previous plan for the same query must not publish a late completion.")
+        } catch is CancellationError {
+            // The superseded provider deliberately ignores cancellation until released.
+        }
+        XCTAssertEqual(displayed, ["refined-friend"])
+    }
+
+    func testControlledProgressiveDeliveryBenchmark() async throws {
+        // Controlled provider delays isolate delivery behavior from live network variability.
+        // Before REC-384, first remote delivery was at the final completion measured here.
+        var firstSamples: [Double] = []
+        var finalSamples: [Double] = []
+        for _ in 0..<10 {
+            let repository = SearchProviderPlaceRepository(
+                lexicalResult: .success([makeCandidate("lexical")]),
+                semanticResult: .success([makeCandidate("semantic")]),
+                lexicalDelay: .milliseconds(40),
+                semanticDelay: .milliseconds(400)
+            )
+            let backend = WanderBackend(placeRepository: repository)
+            let clock = ContinuousClock()
+            let start = clock.now
+            var first: Double?
+            let outcome = try await backend.searchRecmePlaces(
+                RecmePlaceSearchRequest(query: "quiet place to read"),
+                includesSemanticProvider: true
+            ) { partial in
+                first = Self.milliseconds(start.duration(to: clock.now))
+                XCTAssertEqual(partial.candidates.map(\.id), ["lexical"])
+            }
+            let final = Self.milliseconds(start.duration(to: clock.now))
+            let firstValue = try XCTUnwrap(first)
+            XCTAssertLessThan(firstValue, final)
+            XCTAssertEqual(outcome.deliveryStage, .fused)
+            firstSamples.append(firstValue)
+            finalSamples.append(final)
+        }
+        let report: [String: Any] = [
+            "kind": "controlled_provider_delays_not_live_network",
+            "samples": 10, "lexical_delay_ms": 40, "semantic_delay_ms": 400,
+            "first_remote_p50_ms": firstSamples.sorted()[4],
+            "first_remote_p95_ms": firstSamples.sorted()[9],
+            "await_both_first_remote_p50_ms": finalSamples.sorted()[4],
+            "await_both_first_remote_p95_ms": finalSamples.sorted()[9]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
+        print("[REC384DeliveryBenchmark] " + String(decoding: data, as: UTF8.self))
+    }
+
+    func testSemanticRefinementKeepsThreeCorpusOrderDeduplicationAndProvenance() async throws {
+        let query = "quiet place to read"
+        let trusted = makeVisiblePlace(id: "trusted", name: "Neighborhood Cafe")
+        let groups = VisiblePlaceGrouping.groups(from: [trusted], currentUserID: "viewer")
+        let lexical = makeCandidate("cedar", name: "Cedar")
+        let shared = makeCandidate("harbor", name: "Harbor")
+        let semantic = makeCandidate("rainroom", name: "Rainroom")
+        let external = makeCandidate("mapkit", name: "Corner")
+        let backend = WanderBackend(placeRepository: SearchProviderPlaceRepository(
+            lexicalResult: .success([lexical, shared]),
+            semanticResult: .success([shared, semantic])
+        ))
+        var partialIDs: [String] = []
+        let outcome = try await backend.searchRecmePlaces(
+            RecmePlaceSearchRequest(query: query), includesSemanticProvider: true
+        ) { partial in
+            partialIDs = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+                query: query, filters: DiscoverFilters(query: query),
+                trusted: groups, recme: partial.candidates, external: [shared, external]
+            ).map(\.id)
+        }
+        let final = DiscoverPlaceSearchRankingPolicy.orderedCandidates(
+            query: query, filters: DiscoverFilters(query: query),
+            trusted: groups, recme: outcome.candidates, external: [shared, external]
+        )
+        let trustedID = DiscoverPlaceSearchCandidate.trusted(groups[0]).id
+        XCTAssertEqual(partialIDs, [trustedID, "recme|cedar", "recme|harbor", "external|mapkit"])
+        XCTAssertEqual(final.map(\.id), [trustedID, "recme|harbor", "recme|cedar", "recme|rainroom", "external|mapkit"])
+        XCTAssertEqual(outcome.matches.first?.providers, [.lexical, .semantic])
+        XCTAssertEqual(outcome.matches.last?.providers, [.semantic])
+        // None of the canonical names literally contains the query. Semantic results
+        // survive final ranking, shared MapKit records collapse, and trusted ties win.
+        print("[REC384QueryFixture] semantic refinement: trusted, Harbor (both), Cedar (lexical), Rainroom (semantic), Corner (MapKit); shared Harbor deduplicated")
+    }
+
     func testBackendKeepsLexicalFinalWhenSemanticProviderReturnsNoCandidates() async throws {
         let lexical = makeCandidate("lexical-only")
         let repository = SearchProviderPlaceRepository(
@@ -1388,6 +1555,8 @@ private final class SearchProviderPlaceRepository: PlaceRepository {
     let lexicalResult: Result<[PlaceCandidate], Error>
     let semanticResult: Result<[PlaceCandidate], Error>
     let waitsForSemanticRelease: Bool
+    let lexicalDelay: Duration
+    let semanticDelay: Duration
     private(set) var lexicalRequestCount = 0
     private(set) var semanticRequestCount = 0
     private var semanticReleaseContinuation: CheckedContinuation<Void, Never>?
@@ -1396,22 +1565,28 @@ private final class SearchProviderPlaceRepository: PlaceRepository {
     init(
         lexicalResult: Result<[PlaceCandidate], Error>,
         semanticResult: Result<[PlaceCandidate], Error>,
-        waitsForSemanticRelease: Bool = false
+        waitsForSemanticRelease: Bool = false,
+        lexicalDelay: Duration = .zero,
+        semanticDelay: Duration = .zero
     ) {
         self.lexicalResult = lexicalResult
         self.semanticResult = semanticResult
         self.waitsForSemanticRelease = waitsForSemanticRelease
+        self.lexicalDelay = lexicalDelay
+        self.semanticDelay = semanticDelay
     }
 
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] { [] }
 
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         lexicalRequestCount += 1
+        if lexicalDelay > .zero { try await Task.sleep(for: lexicalDelay) }
         return try lexicalResult.get()
     }
 
     func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         semanticRequestCount += 1
+        if semanticDelay > .zero { try await Task.sleep(for: semanticDelay) }
         if waitsForSemanticRelease, !semanticReleaseRequested {
             await withCheckedContinuation { continuation in
                 if semanticReleaseRequested {

@@ -39,7 +39,8 @@ test("search retrieval dashboard uses request-safe stages and outcomes", () => {
   assert.match(latency.query.query, /p95_ms/);
 
   const outcomes = insights.find(({ key }) => key === "search-request-outcomes");
-  assert.match(outcomes.query.query, /search_request_id/);
+  assert.match(outcomes.query.query, /search_request_id is not null/);
+  assert.match(outcomes.query.query, /search_request_id != ''/);
   assert.match(outcomes.query.query, /trusted_place_search_converted/);
   assert.match(outcomes.query.query, /trusted_place_search_reformulated/);
 
