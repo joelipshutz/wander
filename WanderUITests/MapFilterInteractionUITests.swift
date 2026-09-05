@@ -162,19 +162,12 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         var didMeasureInteraction = false
         if #available(iOS 19.0, *) {
-            // XCTest discards the first performance-block invocation. Keep it
-            // as a no-op so the measured pass starts with no selected place.
-            var invocationCount = 0
+            // Warm up with the same complete interaction as the measured pass.
+            // Every invocation restores the unselected map before returning.
             let options = XCTMeasureOptions()
             options.iterationCount = 1
-            options.invocationOptions = [.manuallyStart, .manuallyStop]
 
             measure(metrics: [XCTHitchMetric(application: app)], options: options) {
-                invocationCount += 1
-                startMeasuring()
-                defer { stopMeasuring() }
-                guard invocationCount > 1 else { return }
-
                 selectFirstPin.tap()
                 XCTAssertTrue(card.waitForExistence(timeout: 3))
                 XCTAssertTrue(activePin.waitForExistence(timeout: 2))
@@ -182,18 +175,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                 // Exercise the same physical empty-map tap users use to close
                 // the card. The fixed point is empty in this deterministic fixture.
                 map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
-                XCTAssertEqual(
-                    XCTWaiter.wait(
-                        for: [
-                            XCTNSPredicateExpectation(
-                                predicate: NSPredicate(format: "exists == false"),
-                                object: card
-                            )
-                        ],
-                        timeout: 3
-                    ),
-                    .completed
-                )
+                XCTAssertTrue(card.waitForNonExistence(timeout: 3))
                 XCTAssertTrue(activePin.waitForNonExistence(timeout: 1))
                 XCTAssertEqual(
                     XCTWaiter.wait(

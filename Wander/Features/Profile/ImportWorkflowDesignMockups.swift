@@ -58,7 +58,7 @@ struct ImportImplementationCaptureRoot: View {
         }
         .environmentObject(store)
         .environmentObject(walkthroughs)
-        .preferredColorScheme(.light)
+        .astirAdaptiveBrandMode()
     }
 
     private static var snapshot: PlaceImportSnapshot {

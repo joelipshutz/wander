@@ -134,8 +134,8 @@ final class ImportFormRefinementUITests: XCTestCase {
             shortcut.tap()
             XCTAssertTrue(input.waitForExistence(timeout: 5))
             let settlesAtCompactHeight = NSPredicate { _, _ in
-                // Liquid Glass can round the accessibility frame by one device
-                // pixel between otherwise identical sheet presentations.
+                // Liquid Glass accessibility bounds can shift by a few points
+                // between otherwise identical sheet presentations.
                 abs(app.buttons["Close import"].frame.minY - firstTop) <= 3
             }
             expectation(for: settlesAtCompactHeight, evaluatedWith: app)
