@@ -747,7 +747,7 @@ struct PlaceAttributeDraft: Equatable {
     }
 }
 
-struct VisitAttributeAnswer: Codable, Equatable {
+struct VisitAttributeAnswer: Codable, Equatable, Sendable {
     let questionKey: String
     let valueType: String
     let value: JSONValue
@@ -1603,7 +1603,7 @@ struct CalendarReservationPrompt: Equatable, Sendable {
     let isCancelled: Bool
 }
 
-enum SharedVisitParticipantStatus: String, Codable, Equatable {
+enum SharedVisitParticipantStatus: String, Codable, Equatable, Sendable {
     case owner
     case pending
     case accepted
@@ -1613,7 +1613,7 @@ enum SharedVisitParticipantStatus: String, Codable, Equatable {
     case removed
 }
 
-struct SharedVisitPhotoSnapshot: Identifiable, Codable, Equatable {
+struct SharedVisitPhotoSnapshot: Identifiable, Codable, Equatable, Sendable {
     let photoID: String
     let storageBucket: String
     let storagePath: String
@@ -1627,7 +1627,7 @@ struct SharedVisitPhotoSnapshot: Identifiable, Codable, Equatable {
     var id: String { photoID }
 }
 
-struct SharedVisitInvitation: Identifiable, Codable, Equatable {
+struct SharedVisitInvitation: Identifiable, Codable, Equatable, Sendable {
     let participantID: String
     let groupID: String
     let invitationGeneration: Int

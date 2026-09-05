@@ -51,3 +51,37 @@ The repository-prescribed iPhone 16 Plus / iOS 18.6 simulator is unavailable. Va
 - Swift parsing and `git diff --check`: passed. XcodeGen 2.46.0 regeneration produced only target-order churn, excluded from the change.
 
 To repeat focused checks, run the `WanderTests/FeedModelsTests` suite plus the new `testPerformance*`, `testConcurrentFeedRefreshesForDifferentCommentRoutesStaySerialized`, `testFollowChangeInvalidatesWarmFeedAndDoesNotJoinAnOlderRefresh`, `testFailedWarmFeedRefreshRetainsContentAndCanRetryImmediately`, and `testRetiredFeedRequestCannotRestoreContentAfterReturningToSameAccount` tests on the installed iOS 26.3.1 Simulator. Existing Feed repository/auth/account-switch and Map projection-cache tests were also included. Export XCTest attachments to inspect the measurements.
+
+
+## Additional Map pass — September 5
+
+This follow-up builds on `b441550`, the first measured pass. The isolated redesign verification checkout combines these changes with REC-397 at `ed5b5d6`; both changed Swift files merge cleanly. The original redesign checkout remains untouched.
+
+- Featured results publish as soon as the Featured request succeeds, independently of social hydration. Social refresh still completes as structured child work. Failed Featured loads retain the local/social fallback and do not incorrectly mark the failed area as loaded.
+- Nearby pans reuse a pending Featured request if its prefetched viewport covers the new visible region. Pans outside that area replace it. Request identity and account checks prevent cancelled/replaced responses from publishing or clearing newer work.
+- Native annotation viewport selection uses a coordinate index. It preserves original ordering, keeps the selected pin even outside the viewport, updates after coordinate/selection/removal changes, and uses a linear fallback for broad views. All individual pins remain available. No persistent location or account data cache was added.
+
+| Controlled measurement | Before follow-up | After follow-up | Change |
+| --- | ---: | ---: | ---: |
+| Featured first-content visibility, 100 ms Featured / 500 ms social delay | 505.387 ms | 100.072 ms | 80.20% sooner |
+| Five nearby pan completions during one pending request | Previous path cancels/restarts work at every completion | One request, one delivery observed | Useful pending work is retained |
+| 1,500-pin viewport selection, total over 200 queries | 27.489 ms | 9.921 ms | 63.91% less lookup time |
+| Same viewport selection, mean per query | 0.137 ms | 0.050 ms | About 0.088 ms saved per query |
+
+The pan test counts the new loader’s requests while one response is held pending. It does not claim an 80% reduction in network traffic: the old debounce timing and network cancellation determine how many abandoned attempts actually reach the server.
+
+The coordinate index took 0.640 ms to build for this fixture. That setup cost is recovered after roughly eight such viewport queries with unchanged coordinates. Results depend on pin distribution and viewport size; broad views use a scan instead. These are Simulator Debug measurements of the production loading coordinator/index with synthetic content and delays, not a real-device FPS, MapKit tile-download, or production latency claim. The existing 350 ms reveal and 250 ms post-reveal staging are unchanged and are outside the Featured request timing above.
+
+Focused validation: 57 map tests passed, zero failures on iPhone 17 / iOS 26.3.1. Includes 12 new loading/index/measurement tests and comparison with the previous scan across 100 viewports, coordinate boundaries, selection changes, invalid locations, removal and an empty catalog. Result: `wander-rec-441/DerivedData/Logs/Test/Test-Wander-2026.09.05_10-33-41--0700.xcresult`. Measurement attachments were exported to `/private/tmp/rec441-map-followup-attachments`.
+
+Combined validation and failure triage:
+
+- The complete combined unit portion finished with **1,856 passes and the same eight baseline failures** documented above. The full UI run was stopped at map failures for targeted comparison; its partial bundle reported 1,901 passes / 17 failures, including one cancelled test. This is not a completed or clean full-suite result. Summary, test tree, and metrics were saved under `/private/tmp/rec441-map-followup-full-*.json` before Xcode pruned older bundles.
+- A first full attempt was interrupted because another task was using the same iPhone 17 Simulator. Subsequent validation used a dedicated iPhone 17 / iOS 26.3.1 Simulator named **REC-441 Map Validation**, ID `DFDB998F-AD5A-49AD-AD29-EFB2A3091606`.
+- The comparison build exposed an existing Swift 6 error: shared-visit inbox tasks return value types without declared `Sendable` conformance. Added compiler-checked conformances to `SharedVisitInvitation`, its nested status/photo/answer values, and `JSONValue`, identically in both compared versions. No unchecked conformance or wire-format/runtime behavior change was introduced.
+- With the map follow-up removed, the same two search UI failures reproduced: `testSearchNearbyAndBottomNavigationDismissWithoutResettingMoreFilters` and `testSelectedTicketClearsSearchDockWithoutRedundantResultMessage`. The dense-zoom check passed on this baseline run. Result: `Test-Wander-2026.09.05_11-02-53--0700.xcresult`; summary `/private/tmp/rec441-map-followup-baseline-ui-summary.json`.
+- Restored final source then passed **102 map unit/selection tests** and the three UI checks for warm source switching, selected-pin panning, and usable Map during stalled refresh. The two baseline search failures remained. Dense zoom timed out because two completed gestures produced identical rounded counter readouts (`camera=61`, `frames=59`, `maxFrameGapMs=17`), so the UI test could not detect the second completion. Added a monotonically increasing completion field to the Debug-only probe; the frame-gap threshold and rendering behavior are unchanged. Result before this instrumentation correction: `Test-Wander-2026.09.05_11-05-34--0700.xcresult` (105 passes, three failures).
+- The earlier broad run also recorded one 549 ms first-zoom frame gap. This pass does not claim to eliminate all MapKit/frame-pacing stalls, and a single subsequent successful run would not establish a real-device FPS improvement.
+- Final probe-correction verification: **103 passed, zero failures** (102 map unit/selection tests plus the dense-zoom UI check), with its unchanged 100 ms frame-gap limit. Result: `Test-Wander-2026.09.05_11-11-59--0700.xcresult`; summary `/private/tmp/rec441-map-followup-final-zoom-summary.json`. Together with the immediately preceding run, all four targeted loading/panning/zoom UI checks passed. The combined checkout has the final performance implementation restored. Swift parsing, project regeneration, and `git diff --check` passed; generated target-order-only churn is excluded.
+
+Publication: GitHub write access remains the blocker from the first pass. Automatic approval review also rejected the external Linear checkpoint update because of internal project details. A short, explicit summary was prepared and user approval requested; no further Linear write will occur without that approval. The updated code, measurements, and patch remain local.
