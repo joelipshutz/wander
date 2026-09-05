@@ -119,12 +119,12 @@ struct FeedScreen: View {
                 guard height > 0 else { return }
                 floatingHeaderHeight = height
             }
-            .task(id: auth.isSignedIn) {
+            .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)") {
                 // Commit the selected tab's first frame before starting the
                 // remote refresh and its published state changes.
                 await Task.yield()
                 guard !Task.isCancelled else { return }
-                await refresh()
+                await refresh(force: false)
             }
             .fullScreenCover(item: $selectedProfile) { route in
                 ProfileDetailView(profileID: route.id)
@@ -406,7 +406,7 @@ struct FeedScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        if store.feedLoadState == .loading, page == nil {
+        if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
             FeedLoadingState()
         } else if let page, !page.activity.isEmpty {
             if !page.featuredPlaces.isEmpty {
@@ -463,9 +463,14 @@ struct FeedScreen: View {
     }
 
     private func refresh() async {
+        await refresh(force: true)
+    }
+
+    private func refresh(force: Bool) async {
         _ = await store.refreshFollowedFeed(
             backend: auth.isSignedIn ? backend : nil,
-            preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID
+            preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID,
+            force: force
         )
         guard store.followedFeedPage?.activity.isEmpty != false else { return }
         await store.refreshDiscoverPeopleRecommendations(backend: auth.isSignedIn ? backend : nil)

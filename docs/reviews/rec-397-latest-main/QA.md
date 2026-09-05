@@ -36,7 +36,7 @@ Result bundles from this pass:
 - `/private/tmp/rec397-final-qa-large.xcresult`
 - `/private/tmp/rec397-final-qa-small.xcresult`
 
-This is focused verification. The full app suite was not repeated in this final follow-up, and the earlier unrelated full-suite failures are not claimed fixed. REC-441's separate performance work is not included.
+This is focused verification. The full app suite was not repeated in this capture pass, and the earlier unrelated full-suite failures are not claimed fixed. These screenshots and measurements precede the final landing integration of REC-441 from main `4e6c8ca`; the final combined-build validation is recorded in PR #563.
 
 ## Screenshots
 
@@ -62,6 +62,6 @@ The question-mark emoji placeholders reproduce in a standalone UIKit/CoreText di
 
 ## Publishing
 
-PR #563 remains at remote head `7d4c20a` until GitHub write access is restored. HTTPS Git has no working credential; the connected GitHub app previously returned 403 for content writes. Following the repository's repeated-auth-failure rule, this pass did not repeat unchanged authentication attempts. The prepared PR description is `/Users/joelipshutz/Documents/ChatGPT/New project/rec-397-pr-description.md`.
+Joe subsequently requested landing on main. Git authentication is available, and main `4e6c8ca` (REC-441 performance work) integrated without conflicts. PR #563 includes the Astir foundation from #552 and targets main; its current checks and merge state are the durable landing record.
 
-No merge or TestFlight release is part of this work. The separate REC-426 accessibility matrix and physical-device frame-pacing checks remain release follow-ups.
+No TestFlight release is part of this work. The separate REC-426 accessibility matrix and physical-device frame-pacing checks remain release follow-ups.

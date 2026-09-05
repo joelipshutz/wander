@@ -2,6 +2,15 @@ import XCTest
 @testable import Wander
 
 final class FeedModelsTests: XCTestCase {
+    func testRefreshFreshnessExpiresAndDoesNotTrustClockRollback() {
+        let completedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertFalse(FeedRefreshPolicy.isFresh(completedAt: nil, now: completedAt))
+        XCTAssertTrue(FeedRefreshPolicy.isFresh(completedAt: completedAt, now: completedAt))
+        XCTAssertTrue(FeedRefreshPolicy.isFresh(completedAt: completedAt, now: completedAt.addingTimeInterval(59)))
+        XCTAssertFalse(FeedRefreshPolicy.isFresh(completedAt: completedAt, now: completedAt.addingTimeInterval(60)))
+        XCTAssertFalse(FeedRefreshPolicy.isFresh(completedAt: completedAt, now: completedAt.addingTimeInterval(-1)))
+    }
+
     func testNewestFirstUsesStableIdentifierTieBreakAndPushesClockSkewToEnd() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let activity = [

@@ -40,6 +40,7 @@ struct MapSaveFlowSelectionCoordinator {
 final class MapRenderProjectionCache<Key: Equatable, Value> {
     private let capacityPerPartition: Int
     private var entriesByPartition: [String: [(key: Key, value: Value)]] = [:]
+    private var mostRecentEntry: (partition: String, key: Key, value: Value)?
 
     #if DEBUG
     private(set) var buildCount = 0
@@ -54,11 +55,17 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
         partition: String = "default",
         build: () -> Value
     ) -> Value {
+        // Pin rendering repeatedly reads the same projection. A stable hit
+        // must not copy the LRU array or mutate its dictionary for every pin.
+        if let recent = mostRecentEntry, recent.partition == partition, recent.key == key {
+            return recent.value
+        }
         var entries = entriesByPartition[partition] ?? []
         if let index = entries.firstIndex(where: { $0.key == key }) {
             let entry = entries.remove(at: index)
             entries.append(entry)
             entriesByPartition[partition] = entries
+            mostRecentEntry = (partition, key, entry.value)
             return entry.value
         }
 
@@ -68,6 +75,7 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
             entries.removeFirst(entries.count - capacityPerPartition)
         }
         entriesByPartition[partition] = entries
+        mostRecentEntry = (partition, key, value)
         #if DEBUG
         buildCount += 1
         #endif
@@ -156,6 +164,87 @@ enum MapInitialLoadingPolicy {
         #endif
     }
 
+}
+
+@MainActor
+enum MapInitialSourceLoader {
+    /// Featured can become useful before the larger social snapshot finishes.
+    /// Keep the refresh structured so cancellation still reaches both reads.
+    static func load(
+        fetchFeatured: @MainActor () async -> [VisiblePlace]?,
+        refreshSocial: @MainActor () async -> Bool,
+        onFeatured: @MainActor ([VisiblePlace]) -> Void
+    ) async -> Bool {
+        async let socialRefresh = refreshSocial()
+        let featured = await fetchFeatured()
+        if let featured, !Task.isCancelled {
+            onFeatured(featured)
+        }
+        _ = await socialRefresh
+        return featured != nil && !Task.isCancelled
+    }
+}
+
+@MainActor
+final class MapFeaturedViewportLoader {
+    private var task: Task<Void, Never>?
+    private var requestID: UUID?
+    private var accountID: String?
+    private var requestedViewport: MapViewport?
+
+    func cancel() {
+        task?.cancel()
+        task = nil
+        requestID = nil
+        accountID = nil
+        requestedViewport = nil
+    }
+
+    func load(
+        visibleRegion: MKCoordinateRegion,
+        accountID: String,
+        debounce: Duration = .milliseconds(250),
+        fetch: @escaping @MainActor (MapViewport) async -> [VisiblePlace]?,
+        onLoad: @escaping @MainActor ([VisiblePlace], MapViewport) -> Void
+    ) {
+        // A small pan must not reset the debounce or abandon a slow request
+        // whose prefetch area already includes the new visible region.
+        if self.accountID == accountID, requestID != nil,
+           !MapViewportRefreshPolicy.shouldRefresh(
+               visibleRegion: visibleRegion,
+               loadedViewport: requestedViewport
+           ) {
+            return
+        }
+
+        cancel()
+        let id = UUID()
+        let viewport = MapViewportRefreshPolicy.prefetchedViewport(for: visibleRegion)
+        requestID = id
+        self.accountID = accountID
+        requestedViewport = viewport
+        task = Task { @MainActor [weak self] in
+            defer {
+                if self?.requestID == id {
+                    self?.task = nil
+                    self?.requestID = nil
+                    self?.requestedViewport = nil
+                    self?.accountID = nil
+                }
+            }
+            do {
+                try await Task.sleep(for: debounce)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let places = await fetch(viewport),
+                  !Task.isCancelled,
+                  self?.requestID == id
+            else { return }
+            onLoad(places, viewport)
+        }
+    }
 }
 
 enum MapSearchQueryPolicy {
@@ -1204,6 +1293,70 @@ struct NativeMapAnnotationDescriptor: Equatable {
     }
 }
 
+/// Retains coordinate ordering across selection/style changes. Viewport reads
+/// inspect a latitude slice instead of every saved pin, then restore the
+/// original annotation order (including a selected pin outside the viewport).
+struct MapAnnotationViewportIndex {
+    private var coordinates: [CLLocationCoordinate2D] = []
+    private var latitudeOrder: [Int] = []
+    private var selectedIndices: Set<Int> = []
+
+    mutating func update(_ descriptors: [NativeMapAnnotationDescriptor]) {
+        selectedIndices = Set(descriptors.indices.filter { descriptors[$0].isSelected })
+        let coordinatesChanged = coordinates.count != descriptors.count
+            || descriptors.indices.contains { index in
+                coordinates[index].latitude != descriptors[index].coordinate.latitude
+                    || coordinates[index].longitude != descriptors[index].coordinate.longitude
+            }
+        guard coordinatesChanged else { return }
+        coordinates = descriptors.map(\.coordinate)
+        latitudeOrder = coordinates.indices.filter {
+            coordinates[$0].latitude.isFinite && coordinates[$0].longitude.isFinite
+        }.sorted {
+            coordinates[$0].latitude < coordinates[$1].latitude
+        }
+    }
+
+    func indices(in viewport: MapViewport) -> [Int] {
+        let lower = latitudeBoundary(viewport.minLatitude, inclusive: false)
+        let upper = latitudeBoundary(viewport.maxLatitude, inclusive: true)
+        // A city-wide or world-wide view is cheaper as a linear read. Avoid
+        // sorting most of the catalog just to recover its original order.
+        if upper - lower > coordinates.count / 4 {
+            return coordinates.indices.filter {
+                selectedIndices.contains($0)
+                    || MapViewportRefreshPolicy.contains(coordinates[$0], in: viewport)
+            }
+        }
+        var result = Array(selectedIndices)
+        for offset in lower..<upper {
+            let index = latitudeOrder[offset]
+            let longitude = coordinates[index].longitude
+            if !selectedIndices.contains(index),
+               longitude >= viewport.minLongitude,
+               longitude <= viewport.maxLongitude {
+                result.append(index)
+            }
+        }
+        return result.sorted()
+    }
+
+    private func latitudeBoundary(_ latitude: Double, inclusive: Bool) -> Int {
+        var lower = 0
+        var upper = latitudeOrder.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            let value = coordinates[latitudeOrder[middle]].latitude
+            if value < latitude || (inclusive && value == latitude) {
+                lower = middle + 1
+            } else {
+                upper = middle
+            }
+        }
+        return lower
+    }
+}
+
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1261,7 +1414,8 @@ struct MapScreen: View {
     @State private var featuredViewportPlaces: [VisiblePlace]?
     @State private var featuredPlacesRevision: UInt64 = 0
     @State private var loadedFeaturedViewport: MapViewport?
-    @State private var featuredViewportRefreshTask: Task<Void, Never>?
+    @State private var featuredViewportLoader = MapFeaturedViewportLoader()
+    @State private var initialMapSourceLoadID: UUID?
     @State private var isLoadingMapSources = true
     @State private var hasRevealedInitialMap = false
     @State private var compactCardPhase = MapCompactCardPhase.hidden
@@ -1704,8 +1858,9 @@ struct MapScreen: View {
             }
             return nil
         }()
+        let pinCatalog = renderProjection.pinRenderCatalog
         let nativeSavedAnnotations: [NativeMapAnnotationDescriptor] = annotationGroups.enumerated().map { index, group in
-            let outlines = pinOutlines(for: group)
+            let outlines = pinOutlines(for: group, catalog: pinCatalog)
             let coordinate = CLLocationCoordinate2D(
                 latitude: group.primary.place.latitude,
                 longitude: group.primary.place.longitude
@@ -2143,7 +2298,8 @@ struct MapScreen: View {
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else {
-                    featuredViewportRefreshTask?.cancel()
+                    featuredViewportLoader.cancel()
+                    initialMapSourceLoadID = nil
                     updateFeaturedViewportPlaces(store.visiblePlaces())
                     loadedFeaturedViewport = nil
                     featuredRankingRegion = currentSearchRegion
@@ -2209,7 +2365,8 @@ struct MapScreen: View {
                 typeaheadTask?.cancel()
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
-                featuredViewportRefreshTask?.cancel()
+                featuredViewportLoader.cancel()
+                initialMapSourceLoadID = nil
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 placeProfilePreloadTask?.cancel()
@@ -3109,7 +3266,10 @@ struct MapScreen: View {
     }
 
     private func refreshInitialMapSources() async {
-        featuredViewportRefreshTask?.cancel()
+        featuredViewportLoader.cancel()
+        let loadID = UUID()
+        initialMapSourceLoadID = loadID
+        let requestUserID = store.currentUser.id
         isLoadingMapSources = true
 
         let refreshStallInterval = MapInitialLoadingPolicy.refreshStallInterval()
@@ -3119,22 +3279,44 @@ struct MapScreen: View {
         }
 
         let requestedViewport = Self.initialRemoteViewport
-        async let socialRefresh: Bool = store.refreshRemoteSocialSurfaces(
-            in: requestedViewport,
-            backend: auth.isSignedIn ? backend : nil
+        let didLoadFeatured = await MapInitialSourceLoader.load(
+            fetchFeatured: {
+                await store.fetchRemoteFeaturedViewportPlaces(
+                    in: requestedViewport,
+                    backend: auth.isSignedIn ? backend : nil
+                )
+            },
+            refreshSocial: {
+                await store.refreshRemoteSocialSurfaces(
+                    in: requestedViewport,
+                    backend: auth.isSignedIn ? backend : nil
+                )
+            },
+            onFeatured: { places in
+                guard initialMapSourceLoadID == loadID,
+                      store.currentUser.id == requestUserID
+                else { return }
+                updateFeaturedViewportPlaces(places)
+                loadedFeaturedViewport = requestedViewport
+                featuredRankingRegion = currentSearchRegion
+                isLoadingMapSources = false
+                handleFeaturedCameraChange(currentSearchRegion)
+            }
         )
-        let remoteFeaturedPlaces = await store.fetchRemoteFeaturedViewportPlaces(
-            in: requestedViewport,
-            backend: auth.isSignedIn ? backend : nil
-        )
-        _ = await socialRefresh
-        guard !Task.isCancelled else { return }
-
-        updateFeaturedViewportPlaces(remoteFeaturedPlaces ?? store.visiblePlaces())
-        loadedFeaturedViewport = requestedViewport
-        featuredRankingRegion = currentSearchRegion
-        isLoadingMapSources = false
-        handleFeaturedCameraChange(currentSearchRegion)
+        guard !Task.isCancelled,
+              initialMapSourceLoadID == loadID,
+              store.currentUser.id == requestUserID
+        else { return }
+        initialMapSourceLoadID = nil
+        if !didLoadFeatured {
+            updateFeaturedViewportPlaces(store.visiblePlaces())
+            // An unsuccessful request must not mark this area as loaded and
+            // suppress subsequent camera-triggered retries.
+            loadedFeaturedViewport = nil
+            featuredRankingRegion = currentSearchRegion
+            isLoadingMapSources = false
+            handleFeaturedCameraChange(currentSearchRegion)
+        }
     }
 
     private func revealInitialMapThenRefreshSources() async {
@@ -3170,10 +3352,8 @@ struct MapScreen: View {
     }
 
     private func handleFeaturedCameraChange(_ region: MKCoordinateRegion) {
-        featuredViewportRefreshTask?.cancel()
-        featuredViewportRefreshTask = nil
-
         guard MapSearchPerformancePolicy.shouldFetchFeatured(for: mapFilterState.source) else {
+            featuredViewportLoader.cancel()
             return
         }
 
@@ -3186,26 +3366,24 @@ struct MapScreen: View {
         guard MapViewportRefreshPolicy.shouldRefresh(
             visibleRegion: region,
             loadedViewport: loadedFeaturedViewport
-        ) else { return }
-
-        let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
-        featuredViewportRefreshTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled,
-                  let places = await store.fetchRemoteFeaturedViewportPlaces(
-                      in: requestedViewport,
-                      backend: backend
-                  ),
-                  !Task.isCancelled
-            else { return }
-
-            updateFeaturedViewportPlaces(places)
-            loadedFeaturedViewport = requestedViewport
+        ) else {
+            featuredViewportLoader.cancel()
+            return
         }
+
+        let requestUserID = store.currentUser.id
+        featuredViewportLoader.load(
+            visibleRegion: region,
+            accountID: requestUserID,
+            fetch: { viewport in
+                await store.fetchRemoteFeaturedViewportPlaces(in: viewport, backend: backend)
+            },
+            onLoad: { places, viewport in
+                guard auth.isSignedIn, store.currentUser.id == requestUserID else { return }
+                updateFeaturedViewportPlaces(places)
+                loadedFeaturedViewport = viewport
+            }
+        )
     }
 
     private func updateFeaturedViewportPlaces(_ places: [VisiblePlace]) {
@@ -3287,11 +3465,16 @@ struct MapScreen: View {
     }
 
     private func pinOutlines(for group: VisiblePlaceGroup) -> [MapPinOutline] {
-        let projectedSaveIDs = renderProjection.pinRenderCatalog
-            .saveIDsByGroupKey[group.key]
+        pinOutlines(for: group, catalog: renderProjection.pinRenderCatalog)
+    }
+
+    private func pinOutlines(
+        for group: VisiblePlaceGroup, catalog: MapPinRenderCatalog
+    ) -> [MapPinOutline] {
+        let projectedSaveIDs = catalog.saveIDsByGroupKey[group.key]
         let renderedSaveIDs = Set(group.places.map(\.userPlace.id))
         if projectedSaveIDs == renderedSaveIDs,
-           let outlines = renderProjection.pinRenderCatalog.outlinesByGroupKey[group.key] {
+           let outlines = catalog.outlinesByGroupKey[group.key] {
             return outlines
         }
 
@@ -6337,7 +6520,8 @@ private struct NativeMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         private var parent: NativeMapView
         private var annotationsByID: [String: NativeMapAnnotation] = [:]
-        private var descriptorSnapshotByID: [String: NativeMapAnnotationDescriptor] = [:]
+        private var descriptorSnapshot: [NativeMapAnnotationDescriptor] = []
+        private var annotationViewportIndex = MapAnnotationViewportIndex()
         private var pinViewReferencesByID: [String: WeakNativeMapPinAnnotationView] = [:]
         private var renderedViewport: MapViewport?
         private var annotationAccessibilityRefreshScheduled = false
@@ -6483,10 +6667,9 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         private func synchronizeAnnotations(in mapView: MKMapView) {
-            let nextDescriptorSnapshot = Dictionary(
-                uniqueKeysWithValues: parent.annotations.map { ($0.id, $0) }
-            )
-            let descriptorsChanged = nextDescriptorSnapshot != descriptorSnapshotByID
+            // Descriptors already have stable ordering. Comparing the array
+            // avoids allocating and hashing every pin on unrelated UI updates.
+            let descriptorsChanged = parent.annotations != descriptorSnapshot
             let shouldRefreshViewport: Bool
             if let renderedViewport {
                 shouldRefreshViewport = MapAnnotationViewportPolicy.shouldRefresh(
@@ -6498,17 +6681,15 @@ private struct NativeMapView: UIViewRepresentable {
             }
             guard descriptorsChanged || shouldRefreshViewport else { return }
 
-            descriptorSnapshotByID = nextDescriptorSnapshot
+            if descriptorsChanged {
+                descriptorSnapshot = parent.annotations
+                annotationViewportIndex.update(parent.annotations)
+            }
             let nextRenderedViewport = MapViewportRefreshPolicy.prefetchedViewport(
                 for: mapView.region
             )
-            let renderedDescriptors = parent.annotations.filter { descriptor in
-                descriptor.isSelected
-                    || MapViewportRefreshPolicy.contains(
-                        descriptor.coordinate,
-                        in: nextRenderedViewport
-                    )
-            }
+            let renderedDescriptors = annotationViewportIndex.indices(in: nextRenderedViewport)
+                .map { parent.annotations[$0] }
             #if DEBUG
             let probeStart = ProcessInfo.processInfo.systemUptime
             defer {
@@ -7696,6 +7877,7 @@ private enum MapPerformanceProbe {
     )
 
     private static var isCameraInteractionActive = false
+    private static var completedCameraInteractionCount: UInt64 = 0
     private static var bodyEvaluationCount = 0
     private static var cameraChangeCount = 0
     private static var gestureObserverUpdateCount = 0
@@ -7807,9 +7989,13 @@ private enum MapPerformanceProbe {
     static func finishCameraInteraction() -> String {
         guard isEnabled else { return "" }
         isCameraInteractionActive = false
+        completedCameraInteractionCount &+= 1
         let frameSnapshot = displayLinkSampler?.finish()
         displayLinkSampler = nil
         return [
+            // Identical smooth gestures can have identical rounded metrics.
+            // Give UI checks a completion signal independent of those values.
+            "completion=\(completedCameraInteractionCount)",
             "body=\(bodyEvaluationCount)",
             "camera=\(cameraChangeCount)",
             "observer=\(gestureObserverUpdateCount)",
