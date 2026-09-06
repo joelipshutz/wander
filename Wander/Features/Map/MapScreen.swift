@@ -14565,6 +14565,7 @@ private struct MapSaveVisitPhotoSection: View {
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("save.photos")
