@@ -55,7 +55,15 @@ export async function acquireSocialEvidence(
           evidence: await acquireWithBrightData(
             source,
             configuration.brightDataToken,
-            deadline,
+            // The primary must not consume the fallback's entire window.
+            // Keep at least two thirds for starting/polling Apify when both
+            // providers are configured. Do not start speculative paid runs.
+            configuration.apifyToken
+              ? new Deadline(
+                Math.min(15_000, Math.floor(deadline.remaining() / 3)),
+                dependencies.now,
+              )
+              : deadline,
             dependencies,
             cancellationSignal,
           ),
@@ -84,7 +92,11 @@ export async function acquireSocialEvidence(
     ? acquireWithBrightData(
       source,
       configuration.brightDataToken,
-      deadline,
+      // Metadata enrichment is useful, but waiting for its snapshot must not
+      // strand an already-acquired image carousel at the extraction deadline.
+      configuration.apifyToken
+        ? new Deadline(deadline.remaining(25_000), dependencies.now)
+        : deadline,
       dependencies,
       cancellationSignal,
     )

@@ -41,6 +41,12 @@ import { Deadline, SocialImportError } from "./types.ts";
 // comfortably below the platform response ceiling.
 export const maximumHandlerDurationMilliseconds = 135_000;
 export const maximumExtractionDurationMilliseconds = 120_000;
+// Budget each upstream stage, not just the whole request. Fast stages lend
+// unused time downstream; slow stages cannot spend the next stage's reserve.
+const maximumAcquisitionMilliseconds = 45_000;
+const maximumMediaDownloadMilliseconds = 25_000;
+const maximumMediaPreparationMilliseconds = 20_000;
+const minimumGenerationMilliseconds = 30_000;
 const paidWorkAdmissionFinishTimeoutMilliseconds = 3_000;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -258,12 +264,22 @@ async function runAdmittedImport(
   let evidence: AcquisitionEvidence;
   let acquisitionProvider: AcquisitionProvider;
   try {
-    const acquisition = await acquireSocialEvidence(
-      source,
-      { apifyToken, brightDataToken, instagramMode },
-      extractionDeadline,
+    const acquisition = await observeStage(
+      "acquisition",
       dependencies,
-      signal,
+      () =>
+        acquireSocialEvidence(
+          source,
+          { apifyToken, brightDataToken, instagramMode },
+          stageDeadline(
+            extractionDeadline,
+            75_000,
+            maximumAcquisitionMilliseconds,
+            dependencies,
+          ),
+          dependencies,
+          signal,
+        ),
     );
     evidence = acquisition.evidence;
     acquisitionProvider = acquisition.provider;
@@ -278,30 +294,44 @@ async function runAdmittedImport(
   }
 
   const catalog = evidenceCatalog(evidence);
+  const mediaDeadline = stageDeadline(
+    extractionDeadline,
+    maximumMediaPreparationMilliseconds + minimumGenerationMilliseconds,
+    maximumMediaDownloadMilliseconds,
+    dependencies,
+  );
   const profileUsernames = prioritizedInstagramProfileUsernames(evidence);
   const profileAliasesPromise: Promise<InstagramProfileAlias[]> =
     source.platform === "instagram" && profileUsernames.length > 0 &&
       apifyToken
-      ? acquireInstagramProfileAliases(
-        profileUsernames,
-        apifyToken,
-        extractionDeadline,
+      ? observeStage(
+        "profile_enrichment",
         dependencies,
-        signal,
+        () =>
+          acquireInstagramProfileAliases(
+            profileUsernames,
+            apifyToken,
+            // This helper already caps its own work at 24 seconds, in parallel
+            // with download. Its admission check needs the global budget.
+            extractionDeadline,
+            dependencies,
+            signal,
+          ),
       )
       : Promise.resolve([]);
   let ingestions: MediaIngestion[] = [];
   let profileAliases: InstagramProfileAlias[] = [];
   try {
     const [mediaResult, profileResult] = await Promise.allSettled([
-      ingestAcquiredMedia(
-        evidence.media,
-        source,
-        apifyToken,
-        extractionDeadline,
-        dependencies,
-        signal,
-      ),
+      observeStage("media_download", dependencies, () =>
+        ingestAcquiredMedia(
+          evidence.media,
+          source,
+          apifyToken,
+          mediaDeadline,
+          dependencies,
+          signal,
+        )),
       profileAliasesPromise,
     ]);
     const providerAliases = profileResult.status === "fulfilled"
@@ -332,16 +362,30 @@ async function runAdmittedImport(
   );
   let understanding;
   try {
-    understanding = await understandWithGemini(
-      source,
-      catalog,
-      ingestions,
-      geminiKey,
-      dependencies.env("WANDER_GEMINI_MODEL"),
-      extractionDeadline,
+    understanding = await observeStage(
+      "understanding",
       dependencies,
-      signal,
-      modelProfileAliases,
+      () =>
+        understandWithGemini(
+          source,
+          catalog,
+          ingestions,
+          geminiKey,
+          dependencies.env("WANDER_GEMINI_MODEL"),
+          extractionDeadline,
+          dependencies,
+          signal,
+          modelProfileAliases,
+          undefined,
+          {
+            mediaPreparationDeadline: stageDeadline(
+              extractionDeadline,
+              minimumGenerationMilliseconds,
+              maximumMediaPreparationMilliseconds,
+              dependencies,
+            ),
+          },
+        ),
     );
   } catch (error) {
     const attempts = error instanceof SocialImportError
@@ -480,12 +524,17 @@ async function runAdmittedImport(
     };
   }
 
-  const resolvedHints = await resolvePlaceHintsWithGoogle(
-    grounded.hints,
-    googlePlacesKey,
-    resolutionDeadline,
+  const resolvedHints = await observeStage(
+    "resolution",
     dependencies,
-    signal,
+    () =>
+      resolvePlaceHintsWithGoogle(
+        grounded.hints,
+        googlePlacesKey,
+        resolutionDeadline,
+        dependencies,
+        signal,
+      ),
   );
 
   return {
@@ -731,6 +780,60 @@ function fallbackReason(
       error.code === "deadline_exceeded"
     ? "deadline_exceeded"
     : defaultReason;
+}
+
+function stageDeadline(
+  parent: Deadline,
+  reservedMilliseconds: number,
+  capMilliseconds: number,
+  dependencies: RuntimeDependencies,
+): Deadline {
+  const available = parent.remaining() - reservedMilliseconds;
+  if (available <= 0) throw new SocialImportError("deadline_exceeded");
+  return new Deadline(Math.min(available, capMilliseconds), dependencies.now);
+}
+
+async function observeStage<T>(
+  stage:
+    | "acquisition"
+    | "profile_enrichment"
+    | "media_download"
+    | "understanding"
+    | "resolution",
+  dependencies: RuntimeDependencies,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const started = dependencies.now();
+  let errorCategory: string | null = null;
+  try {
+    return await operation();
+  } catch (error) {
+    // Never log arbitrary error messages/codes: providers can echo private
+    // payloads. Only coarse categories and enumerated numeric HTTP statuses.
+    errorCategory = error instanceof SocialImportError
+      ? error.code === "deadline_exceeded"
+        ? "deadline_exceeded"
+        : /^gemini_http_[45][0-9]{2}$/.test(error.code)
+        ? error.code
+        : error.code === "gemini_output_truncated"
+        ? "gemini_output_truncated"
+        : error.code === "request_cancelled"
+        ? "request_cancelled"
+        : "provider_error"
+      : error instanceof DOMException && error.name === "TimeoutError"
+      ? "timeout"
+      : "unexpected_error";
+    throw error;
+  } finally {
+    console.log(
+      "social_import_stage_complete",
+      JSON.stringify({
+        stage,
+        elapsedMs: Math.max(0, Math.round(dependencies.now() - started)),
+        errorCategory,
+      }),
+    );
+  }
 }
 
 function validBearerHeader(value: string | null): value is string {

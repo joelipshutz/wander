@@ -42,13 +42,15 @@ export async function ingestAcquiredMedia(
   let totalBytes = 0;
   for (const item of media.slice(0, 150)) {
     assertRequestActive(requestSignal);
-    deadline.assertAvailable();
     const remaining = maximumTotalMediaBytes - totalBytes;
     if (remaining <= 0) {
       results.push(failed(item, "media_total_too_large"));
       continue;
     }
     try {
+      // A later asset timing out must not discard bytes already downloaded.
+      // Expired assets are explicitly failed without starting another fetch.
+      deadline.assertAvailable();
       const perItem = item.kind === "video"
         ? maximumVideoBytes
         : maximumImageBytes;

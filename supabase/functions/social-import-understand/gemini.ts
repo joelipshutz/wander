@@ -46,6 +46,7 @@ export type GeminiResponseDiagnostic = {
 export type GeminiDiagnosticOptions = {
   maxOutputTokens?: number;
   onResponse?: (diagnostic: GeminiResponseDiagnostic) => void;
+  mediaPreparationDeadline?: Deadline;
 };
 
 export class GeminiResponseError extends SocialImportError {
@@ -115,7 +116,7 @@ export async function understandWithGemini(
     const parts = await geminiMediaParts(
       ingestions,
       apiKey,
-      deadline,
+      diagnosticOptions.mediaPreparationDeadline ?? deadline,
       dependencies,
       uploadedFiles,
       requestSignal,
@@ -509,75 +510,92 @@ async function generateUnderstanding(
     },
   });
 
-  for (let attempt = 1; attempt <= maximumGeminiAttempts; attempt += 1) {
-    assertRequestActive(requestSignal);
-    deadline.assertAvailable();
-    let result: { response: Response; body: unknown };
-    try {
-      result = await fetchJSON(
-        `${geminiAPIOrigin}/v1beta/models/${
-          encodeURIComponent(model)
-        }:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "x-goog-api-key": apiKey,
-            accept: "application/json",
-            "content-type": "application/json",
-          },
-          body,
-          redirect: "error",
-          signal: requestSignal,
-        },
-        5_000_000,
-        60_000,
-        deadline,
-        dependencies,
-      );
-    } catch (error) {
+  let attemptedRequests = 0;
+  try {
+    for (let attempt = 1; attempt <= maximumGeminiAttempts; attempt += 1) {
       assertRequestActive(requestSignal);
+      deadline.assertAvailable();
+      let result: { response: Response; body: unknown };
+      try {
+        attemptedRequests = attempt;
+        result = await fetchJSON(
+          `${geminiAPIOrigin}/v1beta/models/${
+            encodeURIComponent(model)
+          }:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "x-goog-api-key": apiKey,
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body,
+            redirect: "error",
+            signal: requestSignal,
+          },
+          5_000_000,
+          60_000,
+          deadline,
+          dependencies,
+        );
+      } catch (error) {
+        assertRequestActive(requestSignal);
+        if (
+          error instanceof SocialImportError &&
+          error.code === "deadline_exceeded"
+        ) throw error;
+        if (attempt === maximumGeminiAttempts) {
+          throw new SocialImportError("gemini_transport_error", attempt);
+        }
+        await retryDelay(attempt, deadline, dependencies);
+        continue;
+      }
+      if (result.response.ok) {
+        let parsed: ParsedGeminiUnderstanding;
+        try {
+          parsed = {
+            ...parseGeminiPayload(result.body),
+            attemptCount: attempt,
+          };
+        } catch (error) {
+          const code = error instanceof SocialImportError
+            ? error.code
+            : "gemini_invalid_response";
+          const diagnostic = geminiResponseDiagnostic(result.body, code);
+          diagnosticOptions.onResponse?.(diagnostic);
+          throw new GeminiResponseError(code, attempt, diagnostic);
+        }
+        diagnosticOptions.onResponse?.(
+          geminiResponseDiagnostic(result.body, null),
+        );
+        return parsed;
+      }
       if (
-        error instanceof SocialImportError &&
-        error.code === "deadline_exceeded"
-      ) throw error;
-      if (attempt === maximumGeminiAttempts) {
-        throw new SocialImportError("gemini_transport_error", attempt);
+        !retryableStatus(result.response.status) ||
+        attempt === maximumGeminiAttempts
+      ) {
+        throw new SocialImportError(
+          geminiHTTPErrorCode(result.response.status, result.body),
+          attempt,
+        );
       }
       await retryDelay(attempt, deadline, dependencies);
-      continue;
     }
-    if (result.response.ok) {
-      let parsed: ParsedGeminiUnderstanding;
-      try {
-        parsed = { ...parseGeminiPayload(result.body), attemptCount: attempt };
-      } catch (error) {
-        const code = error instanceof SocialImportError
-          ? error.code
-          : "gemini_invalid_response";
-        const diagnostic = geminiResponseDiagnostic(result.body, code);
-        diagnosticOptions.onResponse?.(diagnostic);
-        throw new GeminiResponseError(code, attempt, diagnostic);
-      }
-      diagnosticOptions.onResponse?.(
-        geminiResponseDiagnostic(result.body, null),
-      );
-      return parsed;
-    }
+    throw new SocialImportError(
+      "gemini_attempts_exhausted",
+      maximumGeminiAttempts,
+    );
+  } catch (error) {
+    // Expiration can happen inside fetch, during backoff, or before the next
+    // retry. Preserve actual requests in all three paths (never report zero
+    // merely because Deadline constructed the final error).
     if (
-      !retryableStatus(result.response.status) ||
-      attempt === maximumGeminiAttempts
+      error instanceof SocialImportError && error.code === "deadline_exceeded"
     ) {
-      throw new SocialImportError(
-        geminiHTTPErrorCode(result.response.status, result.body),
-        attempt,
-      );
+      throw new SocialImportError("deadline_exceeded", attemptedRequests);
     }
-    await retryDelay(attempt, deadline, dependencies);
+    throw error;
   }
-  throw new SocialImportError(
-    "gemini_attempts_exhausted",
-    maximumGeminiAttempts,
-  );
 }
 
 function geminiHTTPErrorCode(status: number, body: unknown): string {
@@ -968,10 +986,9 @@ async function geminiMediaParts(
     } catch (error) {
       rejectMediaForGemini(ingestion, "gemini_video_ingestion_failed");
       assertRequestActive(requestSignal);
-      if (
-        error instanceof SocialImportError &&
-        error.code === "deadline_exceeded"
-      ) throw error;
+      // Keep successfully prepared media when a later video exhausts its
+      // preparation window. Generation uses the separate parent deadline;
+      // failed assets remain excluded and coverage is explicitly incomplete.
     }
   }
 
@@ -1071,8 +1088,7 @@ async function uploadOverflowImageParts(
         if (
           requestSignal?.aborted ||
           (error instanceof SocialImportError &&
-            (error.code === "deadline_exceeded" ||
-              error.code === "request_cancelled"))
+            error.code === "request_cancelled")
         ) {
           fatalError ??= requestSignal?.aborted
             ? new SocialImportError("request_cancelled")
