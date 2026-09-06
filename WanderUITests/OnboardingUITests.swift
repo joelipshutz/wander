@@ -57,9 +57,40 @@ final class ImportFormRefinementUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationRecovery"]
         app.launch()
-        XCTAssertTrue(app.buttons["import.retry.capture-instagram-0"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["import.retry"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Oops that link didn't work."].exists)
         XCTAssertFalse(app.staticTexts["No places matched"].exists)
-        keepScreenshot("Import review — source retry")
+        keepScreenshot("Import report — source retry")
+    }
+
+    func testPartialImportReportShowsSavedAndRemainingPlaces() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Saved (1)"].waitForExistence(timeout: 15))
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["Not saved yet (9)"].exists)
+        for _ in 0..<5 where !app.buttons["Review and add places"].isHittable {
+            app.swipeUp()
+        }
+        let review = app.buttons["Review and add places"]
+        XCTAssertTrue(review.isHittable)
+        review.tap()
+        XCTAssertTrue(app.navigationBars["Review places"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["9 places matched and ready"].exists)
+    }
+
+    func testHistoryCanDeleteMultipleImports() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationHistory"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 15))
+        app.buttons["Select"].tap()
+        app.buttons["Select all"].tap()
+        app.buttons["Delete (5)"].tap()
+        XCTAssertTrue(app.buttons["Delete imports"].waitForExistence(timeout: 5))
+        app.buttons["Delete imports"].tap()
+        XCTAssertTrue(app.staticTexts["No import history yet"].waitForExistence(timeout: 5))
     }
 
     func testHistoryBadgeOverlapsTheGlassButtonAfterStartingAnImport() {

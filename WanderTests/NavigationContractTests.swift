@@ -2132,7 +2132,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
         XCTAssertTrue(addScreen.contains("AddSheetLayout.detents("))
         XCTAssertTrue(addScreen.contains(".onChange(of: importStore.summary.hasPendingImports)"))
-        XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertFalse(importViews.contains("if summary.hasPendingImports"))
         XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
         XCTAssertTrue(
             importViews.contains(
@@ -2264,7 +2264,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(review.contains("importStore.dismiss(itemID: item.id)"))
     }
 
-    func testReceiptBackedHistoryKeepsActionableRowsInReview() throws {
+    func testHistoryReportKeepsSavedAndRemainingRowsTogether() throws {
         let views = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
         )
@@ -2273,9 +2273,10 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
         )
 
-        XCTAssertTrue(destination.contains("PlaceImportReceiptPresentationPolicy.canUseStoredReceipt("))
-        XCTAssertTrue(destination.contains("activeItemCount: activeItemCount"))
-        XCTAssertTrue(destination.contains("![.saved, .dismissed].contains($0.state)"))
+        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
+        XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
+        XCTAssertTrue(views.contains("ImportRemainingReviewScreen(importStore: importStore, batchID: batchID)"))
+        XCTAssertTrue(views.contains("for item in batchItems where ![.saved, .dismissed].contains(item.state)"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {

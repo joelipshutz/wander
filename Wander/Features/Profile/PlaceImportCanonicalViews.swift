@@ -58,32 +58,13 @@ struct PlaceImportCanonicalReviewScreen: View {
                         }
                     }
                     if !recoveryItems.isEmpty {
-                        importSection("Needs attention") {
-                            ForEach(recoveryItems) { item in
-                                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                                    Text(item.isSourceRetry ? "Source scan incomplete" : (item.seed.nameHint ?? "Import needs a retry"))
-                                        .font(AstirTypography.label)
-                                    Text(item.helpMessage ?? "We couldn’t finish matching this source. Your link is safe.")
-                                        .font(AstirTypography.metadata)
-                                        .foregroundStyle(brandMode.secondaryText)
-                                    HStack {
-                                        Button("Retry", systemImage: "arrow.clockwise") {
-                                            importStore.retry(itemID: item.id)
-                                        }
-                                        .accessibilityIdentifier("import.retry.\(item.id)")
-                                        .frame(minHeight: 44)
-                                        if !item.isSourceRetry, item.seed.nameHint != nil {
-                                            Button("Find place", systemImage: "magnifyingglass") {
-                                                rescueItem = item
-                                            }
-                                            .frame(minHeight: 44)
-                                        }
-                                    }
-                                    .tint(brandMode.accentText)
+                        ForEach(scopedBatches) { batch in
+                            let failed = recoveryItems.filter { $0.batchID == batch.id }
+                            if !failed.isEmpty {
+                                ImportSourceHeader(batch: batch, items: importStore.items(for: batch.id))
+                                ImportRetryContent {
+                                    for item in failed { importStore.retry(itemID: item.id) }
                                 }
-                                .padding(WanderTheme.spacing3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                             }
                         }
                     }
@@ -613,7 +594,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             let destination = destinationList(for: batch, itemCount: batchItems.count)
             var entries = batch.receipt?.entries ?? []
 
-            for item in batchItems {
+            for item in batchItems where ![.saved, .dismissed].contains(item.state) {
                 guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 let selected = item.isSelectedForImport ? item.selectedCandidates : []
                 guard !selected.isEmpty else {
@@ -871,6 +852,10 @@ private extension String {
 
 struct PlaceImportHistoryScreen: View {
     @ObservedObject var importStore: PlaceImportStore
+    @Environment(\.astirBrandMode) private var brandMode
+    @State private var isSelecting = false
+    @State private var selectedBatchIDs: Set<String> = []
+    @State private var confirmsDeletion = false
 
     private let columns = [
         GridItem(.flexible(), spacing: WanderTheme.spacing3),
@@ -888,20 +873,37 @@ struct PlaceImportHistoryScreen: View {
                 .astirScreen()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: WanderTheme.spacing4) {
-                        ForEach(historyBatches) { batch in
-                            NavigationLink {
-                                PlaceImportHistoryDestination(
-                                    importStore: importStore,
-                                    batchID: batch.id
-                                )
-                            } label: {
-                                PlaceImportHistoryTile(
-                                    batch: batch,
-                                    items: importStore.items(for: batch.id)
-                                )
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                        Text("The badge counts imports still matching or not yet opened.")
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
+                        LazyVGrid(columns: columns, spacing: WanderTheme.spacing4) {
+                            ForEach(historyBatches) { batch in
+                                if isSelecting {
+                                    Button {
+                                        if !selectedBatchIDs.insert(batch.id).inserted {
+                                            selectedBatchIDs.remove(batch.id)
+                                        }
+                                    } label: {
+                                        historyTile(batch)
+                                            .overlay(alignment: .topLeading) {
+                                                Image(systemName: selectedBatchIDs.contains(batch.id) ? "checkmark.circle.fill" : "circle")
+                                                    .font(.system(size: 26, weight: .semibold))
+                                                    .foregroundStyle(.white, brandMode.accent)
+                                                    .padding(10)
+                                            }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityAddTraits(selectedBatchIDs.contains(batch.id) ? .isSelected : [])
+                                } else {
+                                    NavigationLink {
+                                        PlaceImportHistoryDestination(importStore: importStore, batchID: batch.id)
+                                    } label: {
+                                        historyTile(batch)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding(WanderTheme.spacing4)
@@ -911,6 +913,44 @@ struct PlaceImportHistoryScreen: View {
         }
         .navigationTitle("Import history")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                if !historyBatches.isEmpty {
+                    Button(isSelecting ? "Cancel" : "Select") {
+                        isSelecting.toggle()
+                        selectedBatchIDs.removeAll()
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting {
+                HStack {
+                    Button("Select all") { selectedBatchIDs = Set(historyBatches.map(\.id)) }
+                    Spacer()
+                    Button("Delete (\(selectedBatchIDs.count))", role: .destructive) { confirmsDeletion = true }
+                        .disabled(selectedBatchIDs.isEmpty)
+                }
+                .frame(minHeight: 44)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .background(brandMode.background)
+            }
+        }
+        .confirmationDialog("Delete \(selectedBatchIDs.count) imports?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button("Delete imports", role: .destructive) {
+                importStore.performBatchedMutations {
+                    for id in selectedBatchIDs { importStore.deleteBatch(batchID: id) }
+                }
+                selectedBatchIDs.removeAll()
+                isSelecting = false
+            }
+        } message: {
+            Text("This removes their import history and remaining matches. Places you already saved stay in Wanna and Check In.")
+        }
+    }
+
+    private func historyTile(_ batch: PlaceImportBatch) -> some View {
+        PlaceImportHistoryTile(batch: batch, items: importStore.items(for: batch.id))
     }
 
     private var historyBatches: [PlaceImportBatch] {
@@ -924,24 +964,7 @@ struct PlaceImportHistoryDestination: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        if importStore.batches.first(where: { $0.id == batchID })?.receipt != nil,
-           PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(
-               activeItemCount: activeItemCount
-           ) {
-            PlaceImportReportScreen(importStore: importStore, batchID: batchID)
-        } else {
-            PlaceImportCanonicalReviewScreen(
-                importStore: importStore,
-                batchIDs: [batchID],
-                onDone: { dismiss() }
-            )
-        }
-    }
-
-    private var activeItemCount: Int {
-        importStore.items(for: batchID).filter {
-            ![.saved, .dismissed].contains($0.state)
-        }.count
+        PlaceImportReportScreen(importStore: importStore, batchID: batchID)
     }
 }
 
@@ -978,13 +1001,14 @@ private struct PlaceImportHistoryTile: View {
     }
 
     private var placeCount: Int {
-        batch.receipt?.entries.count ?? items.filter { !$0.isSourceRetry }.count
+        PlaceImportHistoryPresentation.placeCount(batch: batch, items: items)
     }
 }
 
 private struct PlaceImportHistoryArtwork: View {
     let batch: PlaceImportBatch
     let items: [PlaceImportItem]
+    var showsStatus = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -994,37 +1018,34 @@ private struct PlaceImportHistoryArtwork: View {
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
 
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.58)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
+                if showsStatus {
+                    LinearGradient(
+                        colors: [.clear, Color.black.opacity(0.58)],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
 
-                VStack {
-                    HStack {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            CanonicalImportSourceMark(source: batch.source, color: .white, size: 18)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.48), in: Circle())
+                        }
                         Spacer()
-                        CanonicalImportSourceMark(source: batch.source, color: .white, size: 18)
-                            .frame(width: 36, height: 36)
-                            .background(Color.black.opacity(0.48), in: Circle())
+                        HStack(alignment: .bottom) {
+                            Text(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))
+                                .font(AstirTypography.control)
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
                     }
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        Text(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))
-                            .font(AstirTypography.control)
-                            .foregroundStyle(.white)
-                        Spacer()
-                    }
+                    .padding(WanderTheme.spacing3)
                 }
-                .padding(WanderTheme.spacing3)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
-    }
-
-    private var artItems: [PlaceImportItem] {
-        let result = items.filter { !$0.isSourceRetry }
-        return result.isEmpty ? items : result
     }
 
     @ViewBuilder
@@ -1051,43 +1072,135 @@ private struct PlaceImportHistoryArtwork: View {
                 .resizable()
                 .scaledToFill()
         } else {
-            GeometryReader { proxy in
-                let columnCount = artItems.count == 1 ? 1 : 2
-                let rowCount = artItems.count > 2 ? 2 : 1
-                let cellWidth = (proxy.size.width - CGFloat(columnCount - 1) * 2) / CGFloat(columnCount)
-                let cellHeight = (proxy.size.height - CGFloat(rowCount - 1) * 2) / CGFloat(rowCount)
-                let columns = [
-                    GridItem(.flexible(), spacing: 2)
-                ] + (columnCount == 2 ? [GridItem(.flexible(), spacing: 2)] : [])
-                LazyVGrid(columns: columns, spacing: 2) {
-                    ForEach(Array(artItems.prefix(4))) { item in
-                        PlaceImportPhotoThumb(
-                            item: item,
-                            loadsRemotePhoto: true,
-                            size: max(cellWidth, cellHeight),
-                            cornerRadius: 0
-                        )
-                        .frame(width: cellWidth, height: cellHeight)
-                        .clipped()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    }
-                }
+            VStack(spacing: WanderTheme.spacing2) {
+                CanonicalImportSourceMark(source: batch.source, color: .black.opacity(0.65), size: 38)
+                Text("Post preview unavailable")
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(.black.opacity(0.65))
+                    .multilineTextAlignment(.center)
             }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
     private var sourceArtworkURL: URL? {
-        artItems.lazy
+        items.lazy
             .compactMap(\.seed.sourceThumbnailURLString)
             .compactMap(URL.init(string:))
             .first
     }
 
-    private var placeCount: Int {
-        batch.receipt?.entries.count ?? artItems.count
+}
+
+private struct ImportRemainingReviewScreen: View {
+    @ObservedObject var importStore: PlaceImportStore
+    let batchID: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        PlaceImportCanonicalReviewScreen(
+            importStore: importStore, batchIDs: [batchID], onDone: { dismiss() }
+        )
+    }
+}
+
+/// Source artwork and the original link have the same position for successful
+/// and failed imports. A missing cover never becomes a photo of a matched POI.
+private struct ImportSourceHeader: View {
+    let batch: PlaceImportBatch
+    let items: [PlaceImportItem]
+    @Environment(\.astirBrandMode) private var brandMode
+    @State private var copiedLink = false
+    @State private var fetchedThumbnailURL: String?
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            PlaceImportHistoryArtwork(batch: batch, items: artworkItems, showsStatus: false)
+                .frame(width: batch.source == .googleMaps ? 288 : 180, height: batch.source == .googleMaps ? 180 : 320)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("Original \(batch.source.canonicalName) post preview")
+
+            HStack(spacing: WanderTheme.spacing3) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(batch.source.canonicalName)
+                        .font(AstirTypography.cardTitle)
+                    if let sourceURL, let url = URL(string: sourceURL) {
+                        Link(sourceURL, destination: url)
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.accentText)
+                            .lineLimit(2)
+                    }
+                    Text(batch.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let sourceURL {
+                    Button {
+                        UIPasteboard.general.string = sourceURL
+                        copiedLink = true
+                    } label: {
+                        Image(systemName: copiedLink ? "checkmark" : "doc.on.doc")
+                            .frame(width: 44, height: 44)
+                            .foregroundStyle(brandMode.accentText)
+                            .wanderGlassCapsule(tone: copiedLink ? .selected : .neutral)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(copiedLink ? "Link copied" : "Copy source link")
+                }
+            }
+            .padding(WanderTheme.spacing3)
+            .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .task(id: sourceURL) {
+            fetchedThumbnailURL = nil
+            guard !items.contains(where: { $0.seed.sourceThumbnailURLString != nil }),
+                  let sourceURL, let url = URL(string: sourceURL),
+                  [.instagram, .tiktok].contains(batch.source)
+            else { return }
+            let metadata = await PublicSocialImportMetadataProvider().metadata(for: url, source: batch.source)
+            guard !Task.isCancelled else { return }
+            fetchedThumbnailURL = (metadata?.thumbnailURL ?? metadata?.mediaItems.first?.imageURL)?.absoluteString
+        }
     }
 
+    private var sourceURL: String? { items.lazy.compactMap(\.seed.sourceURLString).first }
+
+    private var artworkItems: [PlaceImportItem] {
+        guard let fetchedThumbnailURL else { return items }
+        return items.map { item in
+            var item = item
+            item.seed.sourceThumbnailURLString = fetchedThumbnailURL
+            return item
+        }
+    }
+}
+
+private struct ImportRetryContent: View {
+    let retry: () -> Void
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing4) {
+            Text("Oops that link didn't work.")
+                .font(AstirTypography.sheetTitle)
+                .foregroundStyle(brandMode.primaryText)
+                .multilineTextAlignment(.center)
+            Button(action: retry) {
+                Label("Retry", systemImage: "arrow.clockwise")
+                    .font(AstirTypography.control)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("import.retry")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, WanderTheme.spacing3)
+    }
 }
 
 private struct CanonicalImportSourceMark: View {
@@ -1123,25 +1236,37 @@ struct PlaceImportReportScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.astirBrandMode) private var brandMode
     @State private var expandedDetailEntryIDs: Set<String> = []
-    @State private var copiedLink = false
 
     var body: some View {
         Group {
-            if let batch, let receipt = batch.receipt {
+            if let batch {
                 ScrollView {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        PlaceImportHistoryArtwork(batch: batch, items: items)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 220)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        ImportSourceHeader(batch: batch, items: items)
 
-                        sourceLinkCard(batch: batch)
+                        if !savedEntries.isEmpty {
+                            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                                Text("Saved (\(savedEntries.count))")
+                                    .font(AstirTypography.sectionTitle)
+                                ForEach(savedEntries) { entry in reportRow(entry) }
+                            }
+                        }
 
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                            Text("Places")
-                                .font(AstirTypography.sectionTitle)
-                            ForEach(receipt.entries) { entry in
-                                reportRow(entry)
+                        if isMatching {
+                            ProgressView("Matching your places…")
+                                .frame(maxWidth: .infinity, minHeight: 80)
+                        } else {
+                            if !remainingItems.isEmpty {
+                                remainingPlacesSection
+                            }
+                            if !failedItems.isEmpty {
+                                ImportRetryContent {
+                                    for item in failedItems { importStore.retry(itemID: item.id) }
+                                }
+                            }
+                            if savedEntries.isEmpty && remainingItems.isEmpty && failedItems.isEmpty {
+                                Text("No places found in this import.")
+                                    .font(AstirTypography.body)
                             }
                         }
                     }
@@ -1160,7 +1285,11 @@ struct PlaceImportReportScreen: View {
         }
         .navigationTitle("Import report")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: isMatching) { _, matching in
+            if !matching { importStore.markReviewOpened(batchIDs: [batchID]) }
+        }
         .task(id: batchID) {
+            importStore.resumePendingImports()
             importStore.markReviewOpened(batchIDs: [batchID])
             if let receipt = batch?.receipt, receipt.presentedAt == nil {
                 importStore.markReceiptPresented(receiptID: receipt.id)
@@ -1168,39 +1297,57 @@ struct PlaceImportReportScreen: View {
         }
     }
 
-    private func sourceLinkCard(batch: PlaceImportBatch) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            CanonicalImportSourceMark(source: batch.source, color: .black, size: 18)
-                .frame(width: 40, height: 40)
-                .background(batch.source.canonicalTint, in: Circle())
+    private var savedEntries: [PlaceImportReceiptEntry] {
+        guard let batch else { return [] }
+        return PlaceImportHistoryPresentation.savedEntries(batch: batch)
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(batch.source.canonicalName)
-                    .font(AstirTypography.cardTitle)
-                Text(batch.createdAt.formatted(date: .long, time: .shortened))
-                    .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private var remainingItems: [PlaceImportItem] {
+        PlaceImportHistoryPresentation.remainingPlaces(items: items)
+            .filter { !$0.candidates.isEmpty }
+    }
 
-            if let sourceURL {
-                Button {
-                    UIPasteboard.general.string = sourceURL
-                    copiedLink = true
-                } label: {
-                    Image(systemName: copiedLink ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 15, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .foregroundStyle(brandMode.accentText)
-                        .wanderGlassCapsule(tone: copiedLink ? .selected : .neutral)
+    private var failedItems: [PlaceImportItem] {
+        items.filter { [.needsHelp, .failed].contains($0.state) }
+    }
+
+    private var isMatching: Bool {
+        guard let batch else { return false }
+        return PlaceImportHistoryPresentation.isMatching(batch: batch, items: items)
+    }
+
+    private var remainingPlacesSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("Not saved yet (\(remainingItems.count))")
+                .font(AstirTypography.sectionTitle)
+            Text("These places are still here whenever you want to add them.")
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brandMode.secondaryText)
+            ForEach(remainingItems) { item in
+                HStack(spacing: WanderTheme.spacing3) {
+                    CanonicalImportThumbnail(item: item, size: 54)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.displayName).font(AstirTypography.cardTitle)
+                        if let area = item.displayArea {
+                            Text(area).font(AstirTypography.metadata).foregroundStyle(brandMode.secondaryText)
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(copiedLink ? "Link copied" : "Copy source link")
+                .padding(WanderTheme.spacing3)
+                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             }
+            NavigationLink {
+                ImportRemainingReviewScreen(importStore: importStore, batchID: batchID)
+            } label: {
+                Label("Review and add places", systemImage: "plus")
+                    .font(AstirTypography.control)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(WanderTheme.spacing3)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private func reportRow(_ entry: PlaceImportReceiptEntry) -> some View {

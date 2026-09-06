@@ -95,6 +95,76 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
 }
 
 @MainActor
+final class PlaceImportHistoryRetentionTests: XCTestCase {
+    func testPartialSaveKeepsNineRemainingPlacesAcrossRestartAndLaterSave() throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let batchID = try store.enqueue(source: .textNotes, text: (1...10).map { "Place \($0), Los Angeles" }.joined(separator: "\n"))
+        store.pauseProcessing(batchIDs: [batchID])
+        let original = store.items(for: batchID)
+        XCTAssertEqual(original.count, 10)
+        let first = try XCTUnwrap(original.first)
+        store.markSaved(itemID: first.id, userPlaceID: "saved-first")
+        let entry = PlaceImportReceiptEntry(itemID: first.id, displayName: first.displayName, displayArea: nil, status: .wannaGo, outcome: .added, userPlaceID: "saved-first")
+        store.recordReceipt(batchID: batchID, entries: [entry], destinationListID: nil)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let batch = try XCTUnwrap(store.batches.first)
+        let remaining = PlaceImportHistoryPresentation.remainingPlaces(items: store.items(for: batchID))
+        XCTAssertEqual(remaining.count, 9)
+        XCTAssertEqual(PlaceImportHistoryPresentation.savedEntries(batch: batch).count, 1)
+        XCTAssertEqual(PlaceImportHistoryPresentation.placeCount(batch: batch, items: store.items(for: batchID)), 10)
+        XCTAssertFalse(remaining.contains { $0.id == first.id })
+        let next = try XCTUnwrap(remaining.first)
+        store.markSaved(itemID: next.id, userPlaceID: "saved-second")
+        store.recordReceipt(batchID: batchID, entries: [entry, PlaceImportReceiptEntry(itemID: next.id, displayName: next.displayName, displayArea: nil, status: .been, outcome: .added, userPlaceID: "saved-second")], destinationListID: nil)
+        let restored = PlaceImportStore(persistence: persistence)
+        XCTAssertEqual(PlaceImportHistoryPresentation.remainingPlaces(items: restored.items(for: batchID)).count, 8)
+        XCTAssertEqual(restored.batches.first?.receipt?.entries.count, 2)
+    }
+
+    func testDeletingSelectedHistoryPersistsAndRetainsOtherImports() throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let first = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        let second = try store.enqueue(source: .textNotes, text: "Bakery, Los Angeles")
+        let retained = try store.enqueue(source: .textNotes, text: "Park, Los Angeles")
+        store.performBatchedMutations {
+            store.deleteBatch(batchID: first)
+            store.deleteBatch(batchID: second)
+        }
+        let restored = PlaceImportStore(persistence: persistence)
+        XCTAssertEqual(restored.batches.map(\.id), [retained])
+        XCTAssertTrue(restored.items.allSatisfy { $0.batchID == retained })
+        XCTAssertEqual(restored.recentImportBadgeCount, 1)
+    }
+
+    func testRetryCreatesAnUnreadResultUntilReopened() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let batchID = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        await store.waitForProcessing(batchID: batchID)
+        store.markReviewOpened(batchIDs: [batchID])
+        XCTAssertEqual(store.recentImportBadgeCount, 0)
+        let item = try XCTUnwrap(store.items(for: batchID).first)
+        store.retry(itemID: item.id)
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        await store.waitForProcessing(batchID: batchID)
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        store.markReviewOpened(batchIDs: [batchID])
+        XCTAssertEqual(store.recentImportBadgeCount, 0)
+    }
+
+    func testRetryWithExistingReceiptStillCountsAsMatching() {
+        var batch = PlaceImportBatch(id: "partial", source: .instagram, sourceName: nil, state: .processing, totalCount: 2)
+        batch.receipt = PlaceImportReceipt(batchID: batch.id, sourceName: nil, entries: [], destinationListID: nil)
+        batch.reviewOpenedAt = .now
+        XCTAssertTrue(PlaceImportHistoryPresentation.isMatching(batch: batch, items: []))
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: []), "Matching…")
+        XCTAssertFalse(PlaceImportHistoryPresentation.needsReview(batch: batch, items: []))
+    }
+}
+
+@MainActor
 final class PlaceImportUnreadReviewTests: XCTestCase {
     func testOnlyOpeningTheSpecificFinishedImportClearsItsBadgeAndPersists() throws {
         let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot())

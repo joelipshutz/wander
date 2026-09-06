@@ -20,7 +20,7 @@ enum PlaceImportBatchState: String, Codable, Equatable {
 
 enum PlaceImportHistoryPresentation {
     static func isMatching(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
-        guard batch.receipt == nil, batch.state != .cancelled else { return false }
+        guard batch.state != .cancelled else { return false }
         return [.queued, .processing].contains(batch.state)
             || items.contains { [.queued, .resolving].contains($0.state) }
     }
@@ -37,19 +37,32 @@ enum PlaceImportHistoryPresentation {
         batch: PlaceImportBatch,
         items: [PlaceImportItem]
     ) -> String {
-        let placeCount = batch.receipt?.entries.count
-            ?? items.filter { !$0.isSourceRetry }.count
+        if batch.state == .cancelled { return "Cancelled" }
+        if isMatching(batch: batch, items: items) { return "Matching…" }
+        let remaining = remainingPlaces(items: items).count
         if batch.receipt != nil {
-            return "\(placeCount) places"
+            let saved = savedEntries(batch: batch).count
+            return remaining > 0 ? "\(saved) saved · \(remaining) remaining" : "\(saved) saved"
         }
-        if batch.state == .cancelled {
-            return "Cancelled"
-        }
-        if isMatching(batch: batch, items: items) {
-            return "Matching…"
+        if items.contains(where: { [.failed, .needsHelp].contains($0.state) }) {
+            return "Needs attention"
         }
         return "Ready to review"
     }
+
+    static func remainingPlaces(items: [PlaceImportItem]) -> [PlaceImportItem] {
+        items.filter { !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state) }
+    }
+
+    static func savedEntries(batch: PlaceImportBatch) -> [PlaceImportReceiptEntry] {
+        batch.receipt?.entries.filter { $0.outcome != .needsReview } ?? []
+    }
+
+    static func placeCount(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Int {
+        max(items.filter { !$0.isSourceRetry }.count,
+            savedEntries(batch: batch).count + remainingPlaces(items: items).count)
+    }
+
 }
 
 enum PlaceImportItemState: String, Codable, Equatable {

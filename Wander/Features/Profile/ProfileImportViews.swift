@@ -34,28 +34,6 @@ struct AddImportEntrySection: View {
 
                     Spacer(minLength: WanderTheme.spacing1)
 
-                    if summary.hasPendingImports {
-                        if summary.processingCount + summary.remainingCount > 0 {
-                            Text("\(summary.processingCount + summary.remainingCount)")
-                                .font(AstirTypography.metadata)
-                                .foregroundStyle(brandMode.accentForeground)
-                                .frame(minWidth: 22, minHeight: 22)
-                                .background(brandMode.accent)
-                                .clipShape(Capsule())
-                                .accessibilityLabel(
-                                    "\(summary.processingCount + summary.remainingCount) places in progress or ready"
-                                )
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(AstirTypography.metadata)
-                                .foregroundStyle(brandMode.accentForeground)
-                                .frame(width: 22, height: 22)
-                                .background(brandMode.accent)
-                                .clipShape(Circle())
-                                .accessibilityLabel("A source scan needs attention")
-                        }
-                    }
-
                     Image(systemName: "chevron.right")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)

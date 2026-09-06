@@ -5,7 +5,7 @@ import UIKit
 /// Captures the production import views with deterministic data and the same
 /// photo repository used by the map screenshot harness.
 enum ImportImplementationCapturePage: String, CaseIterable {
-    case review, details, history, processing, share, recovery
+    case review, details, history, processing, share, recovery, report
 
     static func resolved() -> Self? {
         allCases.first {
@@ -26,6 +26,24 @@ struct ImportImplementationCaptureRoot: View {
         self.page = page
         let persistence = EphemeralPlaceImportPersistence()
         var snapshot = Self.snapshot
+        if page == .report {
+            let original = snapshot.items.filter { $0.batchID == "capture-instagram" }
+            snapshot.items.removeAll { $0.batchID == "capture-instagram" }
+            for index in 0..<10 {
+                var item = original[index % original.count]
+                item = PlaceImportItem(
+                    id: "report-place-\(index)", batchID: "capture-instagram", source: .instagram,
+                    seed: item.seed, state: index == 0 ? .saved : .ready,
+                    candidates: Array(item.candidates.prefix(1)), selectedCandidateID: item.candidates.first?.id
+                )
+                snapshot.items.append(item)
+            }
+            snapshot.batches[0].receipt = PlaceImportReceipt(
+                batchID: "capture-instagram", sourceName: nil,
+                entries: [PlaceImportReceiptEntry(itemID: "report-place-0", displayName: "Maru Coffee", displayArea: "Los Angeles", status: .wannaGo, outcome: .added, userPlaceID: nil)],
+                destinationListID: nil
+            )
+        }
         if page == .recovery {
             snapshot.items = snapshot.items.map { item in
                 var item = item
@@ -47,6 +65,8 @@ struct ImportImplementationCaptureRoot: View {
                 ImportShareHostCaptureView()
             } else if page == .history {
                 PlaceImportHistoryScreen(importStore: importStore)
+            } else if page == .report || page == .recovery {
+                PlaceImportHistoryDestination(importStore: importStore, batchID: "capture-instagram")
             } else {
                 PlaceImportCanonicalReviewScreen(
                     importStore: importStore,
@@ -99,7 +119,7 @@ struct ImportImplementationCaptureRoot: View {
                         rawText: name,
                         nameHint: name,
                         areaHint: "Los Angeles",
-                        sourceURLString: nil,
+                        sourceURLString: "https://example.com/recme-import-ui-fixture",
                         sourceLine: index + 1
                     ),
                     state: source == .snapchat ? .queued : (index == 0 ? .ready : .ambiguous),

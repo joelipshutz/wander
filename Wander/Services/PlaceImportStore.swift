@@ -1731,6 +1731,9 @@ final class PlaceImportStore: ObservableObject {
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         let batchID = items[index].batchID
+        if let batchIndex = batches.firstIndex(where: { $0.id == batchID }) {
+            batches[batchIndex].reviewOpenedAt = nil
+        }
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
     }
