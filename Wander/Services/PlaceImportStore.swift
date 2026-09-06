@@ -1731,6 +1731,9 @@ final class PlaceImportStore: ObservableObject {
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         let batchID = items[index].batchID
+        if let batchIndex = batches.firstIndex(where: { $0.id == batchID }) {
+            batches[batchIndex].reviewOpenedAt = nil
+        }
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
     }
@@ -1949,6 +1952,39 @@ final class PlaceImportStore: ObservableObject {
         batches[index].destinationListID = destinationListID
         batches[index].receipt = receipt
         batches[index].updatedAt = .now
+        persist()
+    }
+
+    private var sourcePreviewRequests: Set<String> = []
+
+    func loadSourcePreview(batchID: String) async {
+        guard let batch = batches.first(where: { $0.id == batchID }),
+              [.instagram, .tiktok].contains(batch.source),
+              let source = items(for: batchID).compactMap(\.seed.sourceURLString).first,
+              let url = URL(string: source),
+              sourcePreviewRequests.insert(batchID).inserted else { return }
+        if batch.sourcePostTitle != nil && items(for: batchID).contains(where: { $0.seed.sourceThumbnailURLString != nil }) { return }
+        let metadata = await PublicSocialImportMetadataProvider().metadata(for: url, source: batch.source)
+        guard !Task.isCancelled else {
+            sourcePreviewRequests.remove(batchID)
+            return
+        }
+        updateSourcePreview(batchID: batchID, title: metadata?.title, caption: metadata?.caption, author: metadata?.authorName,
+            thumbnail: (metadata?.thumbnailURL ?? metadata?.mediaItems.first?.imageURL)?.absoluteString)
+    }
+
+    func updateSourcePreview(batchID: String, title: String?, caption: String? = nil, author: String? = nil, thumbnail: String?) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        if batches[index].source != .googleMaps,
+           let postTitle = PlaceImportHistoryPresentation.postTitle(title: title, caption: caption, author: author) {
+            batches[index].sourcePostTitle = postTitle
+        }
+        if let author { batches[index].sourceAuthorName = author }
+        if let thumbnail {
+            for index in items.indices where items[index].batchID == batchID {
+                items[index].seed.sourceThumbnailURLString = thumbnail
+            }
+        }
         persist()
     }
 

@@ -5,7 +5,7 @@ import UIKit
 /// Captures the production import views with deterministic data and the same
 /// photo repository used by the map screenshot harness.
 enum ImportImplementationCapturePage: String, CaseIterable {
-    case review, details, history, processing, share, recovery
+    case review, details, history, processing, share, recovery, report
 
     static func resolved() -> Self? {
         allCases.first {
@@ -18,14 +18,42 @@ enum ImportImplementationCapturePage: String, CaseIterable {
 
 struct ImportImplementationCaptureRoot: View {
     let page: ImportImplementationCapturePage
-    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+    @StateObject private var store: WanderStore
     @StateObject private var walkthroughs = FirstVisitWalkthroughCoordinator(isEnabled: false)
     @StateObject private var importStore: PlaceImportStore
 
     init(page: ImportImplementationCapturePage) {
         self.page = page
+        let captureStore = WanderStore(fixtures: WanderFixtures.seed())
+        _ = captureStore.createPlaceList(name: "Import picks", description: "", visibility: .followers)
+        _store = StateObject(wrappedValue: captureStore)
         let persistence = EphemeralPlaceImportPersistence()
         var snapshot = Self.snapshot
+        snapshot.batches[0].sourcePostTitle = "Neighborhood coffee stops"
+        snapshot.batches[0].sourceAuthorName = "@coffeeguide"
+        if page == .report {
+            let original = snapshot.items.filter { $0.batchID == "capture-instagram" }
+            snapshot.items.removeAll { $0.batchID == "capture-instagram" }
+            var savedUserPlaceID: String?
+            for index in 0..<10 {
+                var item = original[index % original.count]
+                let candidate = PlaceCandidate(id: "report-candidate-\(index)", name: index == 0 ? "Maru Coffee" : "Neighborhood Cafe \(index)", category: "coffee shop", address: "\(1936 + index) Hillhurst Avenue", locality: "Los Angeles", region: "CA", latitude: 34.104 + Double(index) * 0.01, longitude: -118.287, sourceProvider: "mapkit", confidence: 0.96)
+                if index == 0 {
+                    savedUserPlaceID = captureStore.saveImportedCandidate(candidate, status: .wannaGo, visibility: .selfOnly, note: nil, sourceType: .manual).userPlaceID
+                }
+                item = PlaceImportItem(
+                    id: "report-place-\(index)", batchID: "capture-instagram", source: .instagram,
+                    seed: item.seed, state: index == 0 ? .saved : .ready,
+                    candidates: [candidate], selectedCandidateID: candidate.id
+                )
+                snapshot.items.append(item)
+            }
+            snapshot.batches[0].receipt = PlaceImportReceipt(
+                batchID: "capture-instagram", sourceName: nil,
+                entries: [PlaceImportReceiptEntry(itemID: "report-place-0", displayName: "Maru Coffee", displayArea: "Los Angeles", status: .wannaGo, outcome: .added, userPlaceID: savedUserPlaceID)],
+                destinationListID: nil
+            )
+        }
         if page == .recovery {
             snapshot.items = snapshot.items.map { item in
                 var item = item
@@ -47,6 +75,8 @@ struct ImportImplementationCaptureRoot: View {
                 ImportShareHostCaptureView()
             } else if page == .history {
                 PlaceImportHistoryScreen(importStore: importStore)
+            } else if page == .report || page == .recovery {
+                PlaceImportHistoryDestination(importStore: importStore, batchID: "capture-instagram")
             } else {
                 PlaceImportCanonicalReviewScreen(
                     importStore: importStore,
@@ -99,7 +129,7 @@ struct ImportImplementationCaptureRoot: View {
                         rawText: name,
                         nameHint: name,
                         areaHint: "Los Angeles",
-                        sourceURLString: nil,
+                        sourceURLString: "https://example.com/recme-import-ui-fixture",
                         sourceLine: index + 1
                     ),
                     state: source == .snapchat ? .queued : (index == 0 ? .ready : .ambiguous),

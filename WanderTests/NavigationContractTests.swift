@@ -2132,7 +2132,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
         XCTAssertTrue(addScreen.contains("AddSheetLayout.detents("))
         XCTAssertTrue(addScreen.contains(".onChange(of: importStore.summary.hasPendingImports)"))
-        XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertFalse(importViews.contains("if summary.hasPendingImports"))
         XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
         XCTAssertTrue(
             importViews.contains(
@@ -2202,8 +2202,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
         let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
             .last?.components(separatedBy: "private func sourceLinkCard").first)
-        XCTAssertTrue(report.contains(".task(id: batchID)"))
-        XCTAssertTrue(report.contains("importStore.markReviewOpened(batchIDs: [batchID])"))
+        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})"))
         let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
             .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
         XCTAssertFalse(history.contains("markReviewOpened"))
@@ -2230,10 +2229,10 @@ final class NavigationContractTests: XCTestCase {
         let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
             .components(separatedBy: "struct ImportContentFittingSheet").first)
         XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
-        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(banner.contains(".frame(width: 64, height: 64)"))
         XCTAssertTrue(banner.contains(".background(brandMode.raisedBackground, in: Circle())"))
         XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(banner.contains(".offset(x: 11, y: -11)"))
+        XCTAssertFalse(banner.contains(".offset(x: 11, y: -11)"))
         XCTAssertFalse(banner.contains(".alignmentGuide(.trailing)"))
         XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
         XCTAssertTrue(banner.contains("Button(action: onOpen)"))
@@ -2264,7 +2263,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(review.contains("importStore.dismiss(itemID: item.id)"))
     }
 
-    func testReceiptBackedHistoryKeepsActionableRowsInReview() throws {
+    func testHistoryReportKeepsSavedAndRemainingRowsTogether() throws {
         let views = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
         )
@@ -2273,9 +2272,11 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
         )
 
-        XCTAssertTrue(destination.contains("PlaceImportReceiptPresentationPolicy.canUseStoredReceipt("))
-        XCTAssertTrue(destination.contains("activeItemCount: activeItemCount"))
-        XCTAssertTrue(destination.contains("![.saved, .dismissed].contains($0.state)"))
+        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
+        XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
+        XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,"))
+        XCTAssertFalse(views.contains("Review and add places"))
+        XCTAssertTrue(views.contains("itemIDs.contains(item.id) && item.state != .dismissed"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {
@@ -3479,7 +3480,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(listRow.contains("selection.existingListIDs.contains(list.id)"))
         XCTAssertFalse(listRow.contains("target.isAlreadyInList"))
         XCTAssertTrue(presentationRefresh.contains("for list in eligibleLists"))
-        XCTAssertTrue(presentationRefresh.contains("target.isAlreadyInList(list, store: store)"))
+        XCTAssertTrue(presentationRefresh.contains("targets.allSatisfy({ $0.isAlreadyInList(list, store: store) })"))
         XCTAssertTrue(presentationRefresh.contains("detailByListID[list.id] = makeListDetail(list)"))
         XCTAssertTrue(source.contains("if presentation.needsCompanionWanna"))
     }
@@ -4733,7 +4734,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
         )
         XCTAssertTrue(canonicalImport.contains("presentation: .inlineStaging"))
-        XCTAssertTrue(canonicalImport.contains("presentation: .inlineSaving"))
+        XCTAssertFalse(canonicalImport.contains("presentation: .inlineSaving"))
         XCTAssertFalse(canonicalImport.contains(".sheet(item: $saveRoute"))
         XCTAssertTrue(canonicalImport.contains("stagedDetailSubmissions[item.id] = submission"))
         XCTAssertTrue(sharedEditor.contains("onSubmissionChange?(currentSubmission)"))

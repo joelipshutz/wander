@@ -175,6 +175,10 @@ struct MapPlaceListPickerSheet: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     let target: MapPlaceListTarget
+    var additionalTargets: [MapPlaceListTarget] = []
+    var stagedListIDs: Set<String> = []
+    var onStage: ((Set<String>) -> Void)?
+    private var targets: [MapPlaceListTarget] { [target] + additionalTargets }
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
     @State private var selection = MapPlaceListPickerSelection(existingListIDs: [])
@@ -192,7 +196,7 @@ struct MapPlaceListPickerSheet: View {
                         Text("add to lists")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
-                        Text(target.placeName)
+                        Text(additionalTargets.isEmpty ? target.placeName : "\(targets.count) places")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
@@ -255,7 +259,10 @@ struct MapPlaceListPickerSheet: View {
             .presentationDetents([.large])
             .presentationBackground(brandMode.background)
         }
-        .onAppear(perform: loadMembershipOnce)
+        .onAppear {
+            loadMembershipOnce()
+            for id in stagedListIDs { selection.togglePending(listID: id) }
+        }
         .onChange(of: store.presentationRevision) { _, _ in
             guard didLoadMembership, !isApplying else { return }
             refreshPresentation()
@@ -291,7 +298,7 @@ struct MapPlaceListPickerSheet: View {
                     Text("new list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text("Create it and add this place")
+                    Text(onStage == nil ? "Create it and add this place" : "Create it and select it for this import")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -345,7 +352,7 @@ struct MapPlaceListPickerSheet: View {
                 .foregroundStyle(brandMode.accentText)
                 .frame(width: 18, height: 18)
 
-            Text("This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go.")
+            Text(onStage == nil ? "This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go." : "List choices are applied when you tap Save in the import report. You can also choose Wanna or Check In.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -356,7 +363,7 @@ struct MapPlaceListPickerSheet: View {
 
     private var applyButton: some View {
         Button {
-            if pendingLists.isEmpty {
+            if pendingLists.isEmpty && onStage == nil {
                 dismiss()
             } else {
                 Task { await applyPendingLists() }
@@ -385,6 +392,7 @@ struct MapPlaceListPickerSheet: View {
     }
 
     private var applyButtonTitle: String {
+        if onStage != nil { return "Done" }
         if isApplying { return "Adding…" }
         switch pendingLists.count {
         case 0:
@@ -521,7 +529,7 @@ struct MapPlaceListPickerSheet: View {
                 collaborationLists.append(list)
             }
             detailByListID[list.id] = makeListDetail(list)
-            if target.isAlreadyInList(list, store: store) {
+            if targets.allSatisfy({ $0.isAlreadyInList(list, store: store) }) {
                 existingListIDs.insert(list.id)
             }
         }
@@ -531,7 +539,7 @@ struct MapPlaceListPickerSheet: View {
             yourLists: yourLists,
             collaborationLists: collaborationLists,
             detailByListID: detailByListID,
-            needsCompanionWanna: target.needsCompanionWanna(in: store)
+            needsCompanionWanna: targets.contains { $0.needsCompanionWanna(in: store) }
         )
         selection.replaceExistingListIDs(existingListIDs)
     }
@@ -539,6 +547,11 @@ struct MapPlaceListPickerSheet: View {
     @MainActor
     private func applyPendingLists() async {
         guard !isApplying else { return }
+        if let onStage {
+            onStage(selection.pendingListIDs)
+            dismiss()
+            return
+        }
         let lists = pendingLists
         guard !lists.isEmpty else {
             dismiss()
@@ -549,9 +562,9 @@ struct MapPlaceListPickerSheet: View {
         errorMessage = nil
         var results: [ListPlaceAddResult] = []
         for list in lists {
-            results.append(
-                await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface)
-            )
+            for target in targets {
+                results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface))
+            }
         }
         isApplying = false
         refreshPresentation()
@@ -579,13 +592,21 @@ struct MapPlaceListPickerSheet: View {
             return
         }
 
+        if let onStage {
+            onStage(selection.pendingListIDs.union([list.id]))
+            dismiss()
+            return
+        }
         isApplying = true
         Task { @MainActor in
-            let result = await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface)
+            var results: [ListPlaceAddResult] = []
+            for target in targets {
+                results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface))
+            }
             _ = await store.syncPendingPlaceLists(backend: backend)
             isApplying = false
             refreshPresentation()
-            let summary = MapPlaceListPickerResult.summarize([result])
+            let summary = MapPlaceListPickerResult.summarize(results)
             guard summary.addedCount > 0 || summary.alreadyInListCount > 0 else {
                 errorMessage = summary.message
                 return
