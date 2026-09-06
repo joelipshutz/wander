@@ -6494,6 +6494,11 @@ private struct NativeMapView: UIViewRepresentable {
         mapView.showsScale = false
         mapView.showsCompass = false
         mapView.showsTraffic = false
+        // Place MapKit's bottom branding below the visible map without resizing
+        // the viewport used for camera positioning and annotation hit testing.
+        mapView.insetsLayoutMarginsFromSafeArea = false
+        mapView.layoutMargins.bottom = -100
+        mapView.clipsToBounds = true
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
         for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers {
