@@ -30,6 +30,13 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
 }
 
 final class PlaceImportHistoryPresentationTests: XCTestCase {
+    func testPostTitleSeparatesAuthorFromPlatformTitle() {
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "Cafe Guide on Instagram: “Five coffee stops”", author: "Cafe Guide"), "Five coffee stops")
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "Five coffee stops | Cafe Guide", author: "Cafe Guide"), "Five coffee stops")
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "Cafe Guide on Instagram", caption: "Five coffee stops", author: "Cafe Guide"), "Five coffee stops")
+        XCTAssertNil(PlaceImportHistoryPresentation.postTitle(title: "Cafe Guide on Instagram", author: "Cafe Guide"))
+    }
+
     func testOpenedImportIsDoneButFailedSourceOffersRetry() {
         var batch = PlaceImportBatch(id: "opened", source: .instagram, sourceName: nil, state: .ready, totalCount: 1)
         batch.reviewOpenedAt = .now
@@ -136,9 +143,10 @@ final class PlaceImportHistoryRetentionTests: XCTestCase {
         let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
         let batchID = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
         store.pauseProcessing(batchIDs: [batchID])
-        store.updateSourcePreview(batchID: batchID, title: "A coffee walk", thumbnail: "https://example.com/cover.jpg")
+        store.updateSourcePreview(batchID: batchID, title: "Coffee Guide on Instagram: “A coffee walk”", author: "Coffee Guide", thumbnail: "https://example.com/cover.jpg")
         let restored = PlaceImportStore(persistence: persistence)
-        XCTAssertEqual(restored.batches.first?.sourceName, "A coffee walk")
+        XCTAssertEqual(restored.batches.first?.sourcePostTitle, "A coffee walk")
+        XCTAssertEqual(restored.batches.first?.sourceAuthorName, "Coffee Guide")
         XCTAssertEqual(restored.items(for: batchID).first?.seed.sourceThumbnailURLString, "https://example.com/cover.jpg")
     }
 

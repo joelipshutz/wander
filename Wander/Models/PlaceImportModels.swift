@@ -46,6 +46,21 @@ enum PlaceImportHistoryPresentation {
         return "Ready to review"
     }
 
+    static func postTitle(title: String?, caption: String? = nil, author: String? = nil) -> String? {
+        guard var value = (caption ?? title)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        if let range = value.range(of: #" on (Instagram|TikTok):?\s*"#, options: .regularExpression) {
+            value = String(value[range.upperBound...])
+        }
+        if let author, !author.isEmpty {
+            if value.hasPrefix(author + ": ") { value.removeFirst(author.count + 2) }
+            for suffix in [" | " + author, " - " + author] where value.hasSuffix(suffix) {
+                value.removeLast(suffix.count)
+            }
+        }
+        value = value.trimmingCharacters(in: CharacterSet(charactersIn: " \n\r\"“”"))
+        return value.isEmpty ? nil : value
+    }
+
     static func remainingPlaces(items: [PlaceImportItem]) -> [PlaceImportItem] {
         items.filter { !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state) }
     }
@@ -548,6 +563,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     let id: String
     let source: PlaceImportSource
     var sourceName: String?
+    var sourcePostTitle: String?
+    var sourceAuthorName: String?
     let captureDeliveryID: String?
     let createdAt: Date
     var updatedAt: Date

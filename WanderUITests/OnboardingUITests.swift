@@ -43,12 +43,12 @@ final class ImportFormRefinementUITests: XCTestCase {
         let cardTop = review.frame.minY - 12
         XCTAssertEqual(cardTop - filterRow.frame.maxY, 10, accuracy: 3)
         XCTAssertEqual(dismiss.frame.minY, cardTop, accuracy: 1)
-        XCTAssertEqual(dismiss.frame.maxX, review.frame.maxX + 44, accuracy: 1)
-        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+        XCTAssertEqual(dismiss.frame.maxX, review.frame.maxX + 64, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 64)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 64)
         XCTAssertLessThanOrEqual(dismiss.frame.maxX, app.frame.maxX)
         keepScreenshot("Import notice — anchored below filters")
-        dismiss.tap()
+        dismiss.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.2)).tap()
         XCTAssertTrue(dismiss.waitForNonExistence(timeout: 5))
         XCTAssertTrue(filters.isHittable)
     }
@@ -84,9 +84,77 @@ final class ImportFormRefinementUITests: XCTestCase {
         for _ in 0..<5 where !action.isHittable { app.swipeUp() }
         XCTAssertTrue(action.isHittable)
         action.tap()
+        XCTAssertEqual(action.value as? String, "Selected")
+        XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
+        XCTAssertTrue(app.buttons["import.wanna.report-place-2"].isEnabled)
+        app.buttons["import.save"].tap()
         for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
         XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.staticTexts["8 places matched and ready"].exists)
+    }
+
+    func testBulkStatusOnlyHighlightsUntilSave() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        let all = app.buttons["import.all.wanna"]
+        for _ in 0..<5 where !all.isHittable || all.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        all.tap()
+        XCTAssertEqual(all.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.wanna.report-place-1"].value as? String, "Selected")
+        XCTAssertFalse(app.staticTexts["Saved (10)"].exists)
+        app.buttons["import.checkin.report-place-1"].tap()
+        XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
+        XCTAssertTrue(app.buttons["import.save"].isEnabled)
+        keepScreenshot("Import report — staged choices")
+        app.buttons["import.save"].tap()
+        for _ in 0..<5 where !app.staticTexts["Saved (10)"].isHittable { app.swipeDown() }
+        XCTAssertTrue(app.staticTexts["Saved (10)"].exists)
+        XCTAssertFalse(app.buttons["import.save"].isEnabled)
+    }
+
+    func testListChoiceWaitsForSaveAlongsideCheckIn() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        let lists = app.buttons["import.list.report-place-1"]
+        for _ in 0..<5 where !lists.isHittable || lists.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        lists.tap()
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        app.buttons["Done"].tap()
+        XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
+        XCTAssertEqual(lists.value as? String, "Selected")
+        app.buttons["import.checkin.report-place-1"].tap()
+        XCTAssertEqual(lists.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
+        app.buttons["import.save"].tap()
+        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
+    }
+
+    func testAuthorAppearsInReportButNotHistoryTitle() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationHistory"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Neighborhood coffee stops"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["@coffeeguide"].exists)
+        app.terminate()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["@coffeeguide"].waitForExistence(timeout: 15))
+        keepScreenshot("Import report — source author")
+    }
+
+    func testInlineImportDetailsUseTheCardSurface() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationDetails"]
+        app.launch()
+        let more = app.buttons["Hide more options"].firstMatch
+        for _ in 0..<5 where !more.isHittable || more.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        XCTAssertTrue(more.isHittable)
+        keepScreenshot("Import report — inline details")
     }
 
     func testHistoryCanDeleteMultipleImports() {

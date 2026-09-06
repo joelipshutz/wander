@@ -176,6 +176,8 @@ struct MapPlaceListPickerSheet: View {
     @EnvironmentObject private var backend: WanderBackend
     let target: MapPlaceListTarget
     var additionalTargets: [MapPlaceListTarget] = []
+    var stagedListIDs: Set<String> = []
+    var onStage: ((Set<String>) -> Void)?
     private var targets: [MapPlaceListTarget] { [target] + additionalTargets }
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
@@ -257,7 +259,10 @@ struct MapPlaceListPickerSheet: View {
             .presentationDetents([.large])
             .presentationBackground(brandMode.background)
         }
-        .onAppear(perform: loadMembershipOnce)
+        .onAppear {
+            loadMembershipOnce()
+            for id in stagedListIDs { selection.togglePending(listID: id) }
+        }
         .onChange(of: store.presentationRevision) { _, _ in
             guard didLoadMembership, !isApplying else { return }
             refreshPresentation()
@@ -293,7 +298,7 @@ struct MapPlaceListPickerSheet: View {
                     Text("new list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text("Create it and add this place")
+                    Text(onStage == nil ? "Create it and add this place" : "Create it and select it for this import")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -347,7 +352,7 @@ struct MapPlaceListPickerSheet: View {
                 .foregroundStyle(brandMode.accentText)
                 .frame(width: 18, height: 18)
 
-            Text("This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go.")
+            Text(onStage == nil ? "This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go." : "List choices are applied when you tap Save in the import report. You can also choose Wanna or Check In.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -358,7 +363,7 @@ struct MapPlaceListPickerSheet: View {
 
     private var applyButton: some View {
         Button {
-            if pendingLists.isEmpty {
+            if pendingLists.isEmpty && onStage == nil {
                 dismiss()
             } else {
                 Task { await applyPendingLists() }
@@ -387,6 +392,7 @@ struct MapPlaceListPickerSheet: View {
     }
 
     private var applyButtonTitle: String {
+        if onStage != nil { return "Done" }
         if isApplying { return "Adding…" }
         switch pendingLists.count {
         case 0:
@@ -541,6 +547,11 @@ struct MapPlaceListPickerSheet: View {
     @MainActor
     private func applyPendingLists() async {
         guard !isApplying else { return }
+        if let onStage {
+            onStage(selection.pendingListIDs)
+            dismiss()
+            return
+        }
         let lists = pendingLists
         guard !lists.isEmpty else {
             dismiss()
@@ -581,6 +592,11 @@ struct MapPlaceListPickerSheet: View {
             return
         }
 
+        if let onStage {
+            onStage(selection.pendingListIDs.union([list.id]))
+            dismiss()
+            return
+        }
         isApplying = true
         Task { @MainActor in
             var results: [ListPlaceAddResult] = []

@@ -1,8 +1,14 @@
 import SwiftUI
 import UIKit
 
+private struct ImportListSelectionRequest: Identifiable {
+    let id = UUID()
+    let itemIDs: [String]
+    let targets: [MapPlaceListTarget]
+}
+
 /// One import report keeps saved places above actionable matches. Status actions
-/// save immediately; list membership is independent of Wanna / Check In.
+/// stay staged until Save; list membership is independent of Wanna / Check In.
 struct PlaceImportCanonicalReviewScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchIDs: [String]
@@ -23,15 +29,26 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var showsCommitError = false
     @State private var didExpandInitialDetails = false
     @State private var rescueItem: PlaceImportItem?
-    @State private var listTargets: [MapPlaceListTarget] = []
-    @State private var showsLists = false
+    @State private var listRequest: ImportListSelectionRequest?
+    @State private var pendingStatuses: [String: PlaceStatus] = [:]
+    @State private var pendingLists: [String: Set<String>] = [:]
+    @State private var didReconcileExisting = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 ForEach(scopedBatches) { batch in
                     ImportSourceHeader(importStore: importStore, batch: batch, items: importStore.items(for: batch.id))
-                    PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true)
+                    PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,
+                        pendingStatuses: pendingStatuses,
+                        onStageStatus: { itemID, status in pendingStatuses[itemID] = status },
+                        onStageDetails: { itemID, submission in
+                            stagedDetailSubmissions[itemID] = submission
+                            pendingStatuses[itemID] = submission.status
+                        },
+                        onChooseLists: { itemID in
+                            chooseLists(items: scopedItems.filter { $0.id == itemID })
+                        })
                 }
                 if processingCount > 0 {
                     processingContent
@@ -72,6 +89,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     }
                 }
             }
+            .disabled(isCommitting)
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing6)
@@ -96,11 +114,27 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
             )
         }
-        .sheet(isPresented: $showsLists) {
-            if let first = listTargets.first {
-                MapPlaceListPickerSheet(target: first, additionalTargets: Array(listTargets.dropFirst()), analyticsSurface: "import") { _ in
-                    reconcileListSaves()
-                }
+        .sheet(item: $listRequest) { request in
+            if let first = request.targets.first {
+                MapPlaceListPickerSheet(target: first, additionalTargets: Array(request.targets.dropFirst()),
+                    stagedListIDs: request.itemIDs.reduce(nil as Set<String>?) { result, id in
+                        result.map { $0.intersection(pendingLists[id] ?? []) } ?? (pendingLists[id] ?? [])
+                    } ?? [],
+                    onStage: { listIDs in
+                        for id in request.itemIDs { pendingLists[id] = listIDs }
+                    }, analyticsSurface: "import") { _ in }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if processingCount == 0 && scopedItems.contains(where: { !$0.candidates.isEmpty }) {
+                WanderPrimaryButton(title: isCommitting ? "Saving…" : "Save",
+                    isDisabled: isCommitting || pendingItemIDs.isEmpty,
+                    tone: .espressoConfirmation,
+                    action: { commit(itemIDs: pendingItemIDs) })
+                    .accessibilityIdentifier("import.save")
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.vertical, WanderTheme.spacing2)
+                    .background(brandMode.background)
             }
         }
         .alert("Couldn’t add places", isPresented: $showsCommitError) {
@@ -108,6 +142,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         } message: {
             Text("A place’s details could not be saved. Review its details and try again. Any places already saved are safe.")
         }
+        .task { importStore.resumePendingImports() }
         .task(id: selectionPreparationSignature) {
             if processingCount == 0 {
                 importStore.markReviewOpened(batchIDs: batchIDs)
@@ -115,10 +150,12 @@ struct PlaceImportCanonicalReviewScreen: View {
                     importStore.markReceiptPresented(receiptID: receipt.id)
                 }
             }
-            importStore.resumePendingImports()
             importStore.prepareCandidateSelections(batchIDs: batchIDs)
             importStore.reconcileDuplicates(with: existingPlaces)
-            reconcileListSaves()
+            if !didReconcileExisting {
+                didReconcileExisting = true
+                reconcileListSaves()
+            }
             expandedMatchItemIDs.formUnion(possibleMatchItems.map(\.id))
             if !didExpandInitialDetails,
                let item = displayItems.first(where: { $0.id == initiallyExpandedDetailItemID }) {
@@ -189,32 +226,20 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
     }
 
+    private var pendingItemIDs: Set<String> {
+        Set(pendingStatuses.keys).union(pendingLists.filter { !$0.value.isEmpty }.keys)
+    }
+
     private func masterStatusControl(_ status: PlaceStatus, label: String) -> some View {
         VStack(spacing: 3) {
-            importStatusButton(
-                status,
-                isSelected: false
-            ) {
-                withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
-                    importStore.setIncludedInImport(true, itemIDs: displayItems.map(\.id))
-                    importStore.setStagedStatus(status, itemIDs: scopedItems.map(\.id))
-                    for item in displayItems {
-                        updateDetailStatus(status, itemID: item.id)
-                    }
-                    for item in displayItems where item.selectedCandidates.isEmpty {
-                        if let candidateID = item.candidates.first?.id {
-                            importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
-                        }
-                    }
+            importStatusButton(status, isSelected: !displayItems.isEmpty && displayItems.allSatisfy { pendingStatuses[$0.id] == status }) {
+                for item in displayItems {
+                    stageStatus(status, item: item)
                 }
-                importStore.setStagedStatus(status, itemIDs: scopedItems.map(\.id))
-                commit(itemIDs: Set(scopedItems.map(\.id)))
             }
-            Text(label)
-                .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            .accessibilityIdentifier(status == .been ? "import.all.checkin" : "import.all.wanna")
+            Text(label).font(AstirTypography.metadata).foregroundStyle(brandMode.secondaryText)
+                .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(width: 46)
     }
@@ -435,12 +460,12 @@ struct PlaceImportCanonicalReviewScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             importStatusButton(
                 .wannaGo,
-                isSelected: false
+                isSelected: pendingStatuses[item.id] == .wannaGo
             ) { toggleStatus(.wannaGo, item: item) }
             .accessibilityIdentifier("import.wanna.\(item.id)")
             importStatusButton(
                 .been,
-                isSelected: false
+                isSelected: pendingStatuses[item.id] == .been
             ) { toggleStatus(.been, item: item) }
             .accessibilityIdentifier("import.checkin.\(item.id)")
             listButton(items: [item])
@@ -469,24 +494,22 @@ struct PlaceImportCanonicalReviewScreen: View {
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityRemoveTraits(isSelected ? [] : .isSelected)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
+    private func chooseLists(items: [PlaceImportItem]) {
+        let targets = items.flatMap { item in
+            (item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates)
+                .map { MapPlaceListTarget.candidate($0) }
+        }
+        guard !targets.isEmpty else { return }
+        listRequest = ImportListSelectionRequest(itemIDs: items.map(\.id), targets: targets)
     }
 
     private func listButton(items: [PlaceImportItem]) -> some View {
-        let candidates = items.flatMap { $0.selectedCandidates }
-        let selected = !candidates.isEmpty && candidates.allSatisfy { candidate in
-            store.visiblePlaceLists.contains { store.hasCandidate(candidate, in: $0) }
-        }
-        return Button {
-            guard auth.state.session?.userID == store.currentUser.id else {
-                auth.presentGate(for: .syncPlace)
-                return
-            }
-            listTargets = items.flatMap { item in
-                (item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates)
-                    .map { MapPlaceListTarget.candidate($0) }
-            }
-            showsLists = !listTargets.isEmpty
-        } label: {
+        let selected = !items.isEmpty && items.allSatisfy { !(pendingLists[$0.id] ?? []).isEmpty }
+        return Button { chooseLists(items: items) } label: {
             Image(systemName: "list.bullet")
                 .frame(width: 44, height: 44)
                 .wanderGlassCapsule(tone: selected ? .selected : .neutral)
@@ -494,13 +517,15 @@ struct PlaceImportCanonicalReviewScreen: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Add to list")
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityRemoveTraits(selected ? [] : .isSelected)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 
     private func reconcileListSaves() {
         for batch in scopedBatches {
             var entries = batch.receipt?.entries ?? []
             let originalEntries = entries
-            for item in importStore.items(for: batch.id) where item.state != .saved {
+            for item in importStore.items(for: batch.id) where ![.saved, .dismissed].contains(item.state) {
                 let candidates = item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates
                 let saves = candidates.compactMap { candidate -> PlaceImportReceiptEntry? in
                     guard let existing = store.existingImportSave(matching: candidate) else { return nil }
@@ -520,16 +545,22 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
     }
 
-    private func toggleStatus(_ status: PlaceStatus, item: PlaceImportItem) {
-        guard !isCommitting else { return }
+    private func stageStatus(_ status: PlaceStatus, item: PlaceImportItem) {
+        pendingStatuses[item.id] = status
         importStore.setIncludedInImport(true, itemID: item.id)
-        importStore.setStagedStatus(status, itemID: item.id)
-        updateDetailStatus(status, itemID: item.id)
         if item.selectedCandidates.isEmpty, let candidateID = item.candidates.first?.id {
             importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
         }
         importStore.setStagedStatus(status, itemID: item.id)
-        commit(itemIDs: [item.id])
+        updateDetailStatus(status, itemID: item.id)
+    }
+
+    private func toggleStatus(_ status: PlaceStatus, item: PlaceImportItem) {
+        if pendingStatuses[item.id] == status {
+            pendingStatuses.removeValue(forKey: item.id)
+        } else {
+            stageStatus(status, item: item)
+        }
     }
 
     private func toggleDetails(_ item: PlaceImportItem, candidate: PlaceCandidate?) {
@@ -564,6 +595,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     updated.updatedAt = .now
                     updated.submittedAt = submittedAt
                     detailDrafts[item.id] = updated
+                    if pendingStatuses[item.id] != nil { pendingStatuses[item.id] = form.selectedStatus }
                     importStore.setStagedStatus(form.selectedStatus, itemID: item.id)
                     importStore.setStagedNote(form.note, itemID: item.id)
                     importStore.setStagedRatingScore(form.selectedRatingScore, itemID: item.id)
@@ -628,6 +660,8 @@ struct PlaceImportCanonicalReviewScreen: View {
     private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>) async {
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
         var receipts: [PlaceImportReceiptEntry] = []
+        var completedItems: [String: String] = [:]
+        var completedReceipts: [(String, [PlaceImportReceiptEntry], String?)] = []
         for batch in scopedBatches {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
@@ -636,15 +670,26 @@ struct PlaceImportCanonicalReviewScreen: View {
 
             for item in batchItems where itemIDs.contains(item.id) && item.state != .dismissed {
                 if item.state == .saved {
+                    if let submission = stagedDetailSubmissions[item.id] {
+                        guard await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) != nil else {
+                            showsCommitError = true
+                            return
+                        }
+                    }
+                    for entry in entries where entry.itemID == item.id {
+                        if let id = entry.userPlaceID, let status = pendingStatuses[item.id] {
+                            _ = store.changeImportedSaveStatus(userPlaceID: id, to: status, visitedAt: .now)
+                        }
+                    }
                     for entry in entries where entry.itemID == item.id {
                         if let id = entry.userPlaceID {
-                            _ = store.changeImportedSaveStatus(userPlaceID: id, to: item.stagedStatus, visitedAt: .now)
+                            guard await addPendingLists(itemID: item.id, userPlaceID: id) else { showsCommitError = true; return }
                         }
                     }
                     continue
                 }
                 guard canContinueCommit(expectedUserID: expectedUserID) else { return }
-                let selected = item.isSelectedForImport ? item.selectedCandidates : []
+                let selected = item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates
                 guard !selected.isEmpty else {
                     continue
                 }
@@ -655,7 +700,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 for candidate in selected {
                     guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                     let existing = store.existingImportSave(matching: candidate)
-                    let status = item.stagedStatus
+                    let status = pendingStatuses[item.id] ?? existing?.status ?? .wannaGo
                     let result: SaveResult
                     if let stagedSubmission = stagedDetailSubmissions[item.id] {
                         guard let stagedResult = await persistImportedPlaceSaveSubmission(
@@ -687,6 +732,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     if let destination {
                         _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
                     }
+                    guard await addPendingLists(itemID: item.id, userPlaceID: result.userPlaceID) else { showsCommitError = true; return }
                     lastUserPlaceID = result.userPlaceID
                     entries.append(
                         PlaceImportReceiptEntry(
@@ -700,19 +746,25 @@ struct PlaceImportCanonicalReviewScreen: View {
                     )
                 }
                 if let lastUserPlaceID {
-                    importStore.markSaved(itemID: item.id, userPlaceID: lastUserPlaceID)
+                    completedItems[item.id] = lastUserPlaceID
                 }
             }
 
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
-            importStore.recordReceipt(
-                batchID: batch.id,
-                entries: entries,
-                destinationListID: destination?.id
-            )
+            completedReceipts.append((batch.id, entries, destination?.id))
             receipts.append(contentsOf: entries)
         }
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        importStore.performBatchedMutations {
+            for (id, saveID) in completedItems { importStore.markSaved(itemID: id, userPlaceID: saveID) }
+            for (id, entries, destinationID) in completedReceipts {
+                importStore.recordReceipt(batchID: id, entries: entries, destinationListID: destinationID)
+            }
+        }
+        pendingStatuses = pendingStatuses.filter { !itemIDs.contains($0.key) }
+        pendingLists = pendingLists.filter { !itemIDs.contains($0.key) }
+        stagedDetailSubmissions = stagedDetailSubmissions.filter { !itemIDs.contains($0.key) }
+        detailDrafts = detailDrafts.filter { !itemIDs.contains($0.key) }
         store.flushPersistence()
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
 
@@ -725,6 +777,16 @@ struct PlaceImportCanonicalReviewScreen: View {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             _ = await store.retryPendingSharedVisitInvites(backend: backend)
         }
+    }
+
+    private func addPendingLists(itemID: String, userPlaceID: String) async -> Bool {
+        for id in pendingLists[itemID] ?? [] {
+            guard let list = store.visiblePlaceLists.first(where: { $0.id == id }),
+                  let visible = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID }) else { return false }
+            let result = await MapPlaceListTarget.visiblePlace(visible).add(to: list, store: store, backend: nil, analyticsSurface: "import")
+            guard result.outcome != .permissionDenied else { return false }
+        }
+        return true
     }
 
     private func canContinueCommit(expectedUserID: String) -> Bool {
@@ -1032,7 +1094,7 @@ private struct PlaceImportHistoryTile: View {
                         .stroke(brandMode.border, lineWidth: 1)
                 }
 
-            Text(batch.sourceName ?? items.compactMap(\.seed.socialCaptionHint).first ?? "\(batch.source.canonicalName) post")
+            Text(batch.sourcePostTitle ?? PlaceImportHistoryPresentation.postTitle(title: batch.sourceName, caption: items.compactMap(\.seed.socialCaptionHint).first, author: batch.sourceAuthorName) ?? "\(batch.source.canonicalName) post")
                 .font(AstirTypography.cardTitle)
                 .lineLimit(3)
             HStack(spacing: WanderTheme.spacing2) {
@@ -1173,6 +1235,14 @@ private struct ImportSourceHeader: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("Original \(batch.source.canonicalName) post preview")
 
+            if let author = batch.sourceAuthorName, !author.isEmpty {
+                Text(author)
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("import.source.author")
+            }
+
             HStack(spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(batch.source.canonicalName)
@@ -1268,12 +1338,17 @@ struct PlaceImportReportScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchID: String
     var savedOnly = false
+    var pendingStatuses: [String: PlaceStatus] = [:]
+    var onStageStatus: ((String, PlaceStatus) -> Void)?
+    var onStageDetails: ((String, MapPlaceSaveSubmission) -> Void)?
+    var onChooseLists: ((String) -> Void)?
 
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.astirBrandMode) private var brandMode
     @State private var expandedDetailEntryIDs: Set<String> = []
+    @State private var initializedDetailContexts: Set<String> = []
 
     @State private var savedListTarget: MapPlaceListTarget?
 
@@ -1335,9 +1410,9 @@ struct PlaceImportReportScreen: View {
             }
             if let visible {
                     HStack(spacing: WanderTheme.spacing2) {
-                        reportStatusButton(.wannaGo, visible: visible)
-                        reportStatusButton(.been, visible: visible)
-                        Button { savedListTarget = .visiblePlace(visible) } label: {
+                        reportStatusButton(.wannaGo, visible: visible, itemID: entry.itemID)
+                        reportStatusButton(.been, visible: visible, itemID: entry.itemID)
+                        Button { onChooseLists?(entry.itemID) } label: {
                             Image(systemName: "list.bullet").frame(width: 44, height: 44)
                                 .wanderGlassCapsule(tone: store.visiblePlaceLists.contains { store.hasPlace(visible, in: $0) } ? .selected : .neutral)
                         }.buttonStyle(.plain).accessibilityLabel("Add to list")
@@ -1417,16 +1492,10 @@ struct PlaceImportReportScreen: View {
         return result
     }
 
-    private func reportStatusButton(_ status: PlaceStatus, visible: VisiblePlace) -> some View {
-        let selected = visible.userPlace.status == status
+    private func reportStatusButton(_ status: PlaceStatus, visible: VisiblePlace, itemID: String) -> some View {
+        let selected = (pendingStatuses[itemID] ?? visible.userPlace.status) == status
         return Button {
-            guard !selected else { return }
-            _ = store.changeImportedSaveStatus(
-                userPlaceID: visible.userPlace.id,
-                to: status,
-                visitedAt: .now
-            )
-            beginBackgroundSyncIfPossible()
+            onStageStatus?(itemID, status)
         } label: {
             Image(systemName: status == .been ? "checkmark" : "bookmark.fill")
                 .font(.system(size: 16, weight: .black))
@@ -1441,6 +1510,8 @@ struct PlaceImportReportScreen: View {
         .buttonStyle(.plain)
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityRemoveTraits(selected ? [] : .isSelected)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 
     private func detailContext(for visible: VisiblePlace) -> MapPlaceSaveContext {
@@ -1460,6 +1531,7 @@ struct PlaceImportReportScreen: View {
         visible: VisiblePlace
     ) -> some View {
         let context = detailContext(for: visible)
+        let detailID = "history-details:\(entry.id):\(visible.userPlace.status.rawValue)"
         return MapPlaceSaveEditor(
             context: context,
             onSave: { submission in
@@ -1486,9 +1558,14 @@ struct PlaceImportReportScreen: View {
                     _ = expandedDetailEntryIDs.remove(entry.id)
                 }
             },
-            presentation: .inlineSaving
+            presentation: .inlineStaging,
+            onSubmissionChange: { submission in
+                guard !initializedDetailContexts.insert(detailID).inserted else { return }
+                onStageDetails?(entry.itemID, submission)
+            }
         )
-        .id("history-details:\(entry.id):\(visible.userPlace.status.rawValue)")
+        .id(detailID)
+        .onDisappear { initializedDetailContexts.remove(detailID) }
         .padding(.top, WanderTheme.spacing1)
     }
 

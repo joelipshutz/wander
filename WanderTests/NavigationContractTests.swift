@@ -2229,10 +2229,10 @@ final class NavigationContractTests: XCTestCase {
         let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
             .components(separatedBy: "struct ImportContentFittingSheet").first)
         XCTAssertTrue(banner.contains(".overlay(alignment: .topTrailing)"))
-        XCTAssertTrue(banner.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(banner.contains(".frame(width: 64, height: 64)"))
         XCTAssertTrue(banner.contains(".background(brandMode.raisedBackground, in: Circle())"))
         XCTAssertTrue(banner.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(banner.contains(".offset(x: 11, y: -11)"))
+        XCTAssertFalse(banner.contains(".offset(x: 11, y: -11)"))
         XCTAssertFalse(banner.contains(".alignmentGuide(.trailing)"))
         XCTAssertTrue(banner.contains("Button(action: onDismiss)"))
         XCTAssertTrue(banner.contains("Button(action: onOpen)"))
@@ -2274,7 +2274,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
         XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
-        XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true)"))
+        XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,"))
         XCTAssertFalse(views.contains("Review and add places"))
         XCTAssertTrue(views.contains("itemIDs.contains(item.id) && item.state != .dismissed"))
     }
@@ -4734,7 +4734,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/PlaceImportCanonicalViews.swift")
         )
         XCTAssertTrue(canonicalImport.contains("presentation: .inlineStaging"))
-        XCTAssertTrue(canonicalImport.contains("presentation: .inlineSaving"))
+        XCTAssertFalse(canonicalImport.contains("presentation: .inlineSaving"))
         XCTAssertFalse(canonicalImport.contains(".sheet(item: $saveRoute"))
         XCTAssertTrue(canonicalImport.contains("stagedDetailSubmissions[item.id] = submission"))
         XCTAssertTrue(sharedEditor.contains("onSubmissionChange?(currentSubmission)"))

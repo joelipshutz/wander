@@ -25,9 +25,12 @@ struct ImportImplementationCaptureRoot: View {
     init(page: ImportImplementationCapturePage) {
         self.page = page
         let captureStore = WanderStore(fixtures: WanderFixtures.seed())
+        _ = captureStore.createPlaceList(name: "Import picks", description: "", visibility: .followers)
         _store = StateObject(wrappedValue: captureStore)
         let persistence = EphemeralPlaceImportPersistence()
         var snapshot = Self.snapshot
+        snapshot.batches[0].sourcePostTitle = "Neighborhood coffee stops"
+        snapshot.batches[0].sourceAuthorName = "@coffeeguide"
         if page == .report {
             let original = snapshot.items.filter { $0.batchID == "capture-instagram" }
             snapshot.items.removeAll { $0.batchID == "capture-instagram" }
