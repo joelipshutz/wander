@@ -43,7 +43,7 @@ final class RemoteRepositoryTests: XCTestCase {
             {
               "schema_version": 1,
               "outcome": "ok",
-              "provider_path": "apify_gemini",
+              "provider_path": "brightdata_apify_gemini",
               "hints": [
                 {
                   "name": "Carbon Beach Club",

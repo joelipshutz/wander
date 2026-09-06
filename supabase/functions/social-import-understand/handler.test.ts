@@ -1,4 +1,5 @@
 import { apifyActorRequest, normalizeApifyDataset } from "./apify.ts";
+import { acquireSocialEvidence } from "./acquisition.ts";
 import {
   deterministicFallbackHints,
   evidenceCatalog,
@@ -21,6 +22,7 @@ import {
 } from "./handler.ts";
 import {
   fetchMediaBytes,
+  ingestAcquiredMedia,
   mayReceiveApifyAuthorization,
   validatedMediaURL,
 } from "./media.ts";
@@ -301,6 +303,59 @@ Deno.test("successful handler run authenticates, caps Apify, and returns grounde
   });
   assertEquals(beginCount, 1);
   assertEquals(finishCount, 1);
+  assertSafeResponse(payload, caption);
+});
+
+Deno.test("handler can use Bright Data without Apify and reports an authoritative path", async () => {
+  const caption = "Visit Carbon Beach Club in Malibu.";
+  const dependencies = runtime((input, init) => {
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("api.brightdata.com/datasets/v3/scrape")) {
+      assertEquals(headers.get("authorization"), "Bearer bright-secret");
+      assertEquals(JSON.parse(String(init?.body)), {
+        input: [{ url: instagramURL }],
+      });
+      return Response.json([{
+        url: instagramURL,
+        description: caption,
+        post_content: [{ index: 0, type: "Photo", url: mediaURL }],
+      }]);
+    }
+    if (url === mediaURL) {
+      assertEquals(headers.has("authorization"), false);
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      return geminiResponse([candidate({
+        name: "Carbon Beach Club",
+        area: "Malibu",
+        modality: "caption",
+        evidenceIds: ["caption:0"],
+      })]);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }, {
+    environment: {
+      WANDER_APIFY_TOKEN: undefined,
+      WANDER_BRIGHTDATA_API_TOKEN: "bright-secret",
+    },
+  });
+
+  const response = await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  );
+  const payload = await response.json();
+
+  assertEquals(payload.outcome, "ok");
+  assertEquals(payload.provider_path, "brightdata_gemini");
+  assertEquals(payload.hints.map((hint: { name: string }) => hint.name), [
+    "Carbon Beach Club",
+  ]);
   assertSafeResponse(payload, caption);
 });
 
@@ -934,6 +989,312 @@ Deno.test("paid-work admission cleanup still runs after the main deadline expire
   assertEquals(payload.outcome, "fallback");
   assertEquals(payload.failure_category, "deadline_exceeded");
   assertEquals(finishCount, 1);
+});
+
+Deno.test("stalled secondary scraper cannot starve Gemini and Google Places", async () => {
+  let now = 0;
+  let modelCalls = 0;
+  let placesCalls = 0;
+  let finishes = 0;
+  const dependencies = timeoutRegressionRuntime(
+    (url) => {
+      if (url.includes("/datasets/v3/scrape")) {
+        return Response.json({ snapshot_id: "pending" }, { status: 202 });
+      }
+      if (url.includes("/datasets/v3/snapshot/")) {
+        return Response.json({}, { status: 202 });
+      }
+      if (url.includes(":generateContent")) {
+        modelCalls += 1;
+        assert(now <= 75_000, "acquisition consumed the understanding budget");
+        now += 15_000;
+        return geminiResponse([candidate()]);
+      }
+      if (url.includes("places.googleapis.com")) {
+        placesCalls += 1;
+        return Response.json({ places: [] });
+      }
+      return null;
+    },
+    () => finishes += 1,
+    true,
+  );
+  dependencies.now = () => now;
+  dependencies.sleep = async (delay) => {
+    now += delay;
+  };
+  const payload = await (await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  )).json();
+  assertEquals(payload.provider_path, "apify_gemini");
+  assertEquals(payload.hints.length, 1);
+  assert(modelCalls > 0);
+  assert(placesCalls > 0);
+  assertEquals(finishes, 1);
+  assert(now < maximumHandlerDurationMilliseconds);
+});
+
+Deno.test("stalled Bright reel leaves a real Apify fallback window", async () => {
+  let now = 0;
+  let apifyStarts = 0;
+  const dependencies = runtime((input) => {
+    const url = String(input);
+    if (url.includes("/datasets/v3/scrape")) {
+      return Response.json({ snapshot_id: "pending" }, { status: 202 });
+    }
+    if (url.includes("/datasets/v3/snapshot/")) {
+      return Response.json({}, { status: 202 });
+    }
+    if (url.includes("/v2/actors/")) {
+      apifyStarts += 1;
+      return Response.json({
+        data: {
+          id: "fallback",
+          status: "SUCCEEDED",
+          defaultDatasetId: "fallback",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/")) {
+      return Response.json([{
+        inputUrl: instagramReelURL,
+        videoUrl: "https://images.cdninstagram.com/media/reel.mp4",
+      }]);
+    }
+    throw new Error("unexpected provider call");
+  });
+  dependencies.now = () => now;
+  dependencies.sleep = async (delay) => {
+    now += delay;
+  };
+  const deadline = new Deadline(45_000, dependencies.now);
+  const result = await acquireSocialEvidence(
+    requiredSource(instagramReelURL),
+    {
+      apifyToken: "apify-secret",
+      brightDataToken: "bright-secret",
+      instagramMode: "brightdata_hybrid",
+    },
+    deadline,
+    dependencies,
+  );
+  assertEquals(result.provider, "apify");
+  assertEquals(apifyStarts, 1);
+  assert(deadline.remaining() >= 30_000);
+});
+
+Deno.test("download deadline retains completed slides and marks the remaining slides incomplete", async () => {
+  let now = 0;
+  let downloads = 0;
+  const dependencies = runtime(() => {
+    downloads += 1;
+    if (downloads === 2) {
+      now = 25_000;
+      throw new SocialImportError("deadline_exceeded");
+    }
+    return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+  });
+  dependencies.now = () => now;
+  const media = [0, 1, 2].map((index) => ({
+    id: `media:${index}`,
+    index,
+    kind: "image" as const,
+    url: `${mediaURL}?slide=${index}`,
+    thumbnailURL: null,
+    altText: null,
+  }));
+  const result = await ingestAcquiredMedia(
+    media,
+    requiredSource(instagramURL),
+    null,
+    new Deadline(25_000, dependencies.now),
+    dependencies,
+  );
+  assertEquals(downloads, 2);
+  assertEquals(result.map((item) => item.status), ["ok", "failed", "failed"]);
+  assertEquals(result[0].byteCount, jpeg.byteLength);
+  assertEquals(result[2].errorCode, "deadline_exceeded");
+});
+
+Deno.test("stalled video preparation preserves readable image evidence and the model window", async () => {
+  let now = 0;
+  let modelCalls = 0;
+  let deletes = 0;
+  const origin = "https://generativelanguage.googleapis.com";
+  const videoURL = "https://images.cdninstagram.com/media/reel.mp4";
+  const file = {
+    name: "files/video-123",
+    uri: `${origin}/v1beta/files/video-123`,
+    mimeType: "video/mp4",
+    state: "PROCESSING",
+  };
+  const dependencies = timeoutRegressionRuntime((url) => {
+    if (url.includes("/v2/datasets/")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        childPosts: [{ displayUrl: mediaURL }, { videoUrl: videoURL }],
+      }]);
+    }
+    if (url === videoURL) {
+      return new Response(
+        new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]),
+        { headers: { "content-type": "video/mp4" } },
+      );
+    }
+    if (url === `${origin}/upload/v1beta/files`) {
+      return new Response(null, {
+        headers: {
+          "x-goog-upload-url":
+            `${origin}/upload/v1beta/files?upload_id=session-123`,
+        },
+      });
+    }
+    if (url.includes("upload_id=")) return Response.json({ file });
+    if (url === file.uri) {
+      if (now === 20_000) {
+        deletes += 1;
+        return Response.json({});
+      }
+      now = 20_000;
+      return Response.json({ file });
+    }
+    if (url.includes(":generateContent")) {
+      modelCalls += 1;
+      assertEquals(now, 20_000);
+      return Response.json(
+        geminiPayload(
+          [candidate({
+            modality: "image_text",
+            evidenceIds: ["media:0"],
+            itemIndex: 0,
+          })],
+          postContext(),
+          [{
+            mediaEvidenceId: "media:0",
+            disposition: "place_mentions",
+            candidateItemIndexes: [0],
+          }],
+        ),
+      );
+    }
+    if (url.includes("places.googleapis.com")) {
+      return Response.json({ places: [] });
+    }
+    return null;
+  });
+  dependencies.now = () => now;
+  const payload = await (await handleRequest(
+    jsonRequest(socialRequestBody(instagramURL)),
+    dependencies,
+  )).json();
+  assert(modelCalls > 0);
+  assertEquals(deletes, 1);
+  assertEquals(payload.outcome, "partial");
+  assertEquals(payload.failure_category, "media_incomplete");
+  assertEquals(payload.hints.map((hint: { name: string }) => hint.name), [
+    "Carbon Beach Club",
+  ]);
+});
+
+for (const failure of ["deadline", "transport", "http"] as const) {
+  Deno.test(`Gemini ${failure} exhausting its budget retains the attempted request count`, async () => {
+    let now = 0;
+    let modelCalls = 0;
+    const dependencies = timeoutRegressionRuntime((url) => {
+      if (!url.includes(":generateContent")) return null;
+      modelCalls += 1;
+      now = maximumExtractionDurationMilliseconds;
+      if (failure === "http") return Response.json({}, { status: 503 });
+      if (failure === "transport") {
+        throw new TypeError("private transport detail");
+      }
+      throw new SocialImportError("deadline_exceeded");
+    });
+    dependencies.now = () => now;
+    const payload = await (await handleRequest(
+      jsonRequest(socialRequestBody(instagramURL)),
+      dependencies,
+    )).json();
+    assertEquals(modelCalls, 1);
+    assertEquals(payload.model_attempt_count, 1);
+    assertEquals(payload.failure_category, "deadline_exceeded");
+    assertSafeResponse(payload, "private transport detail");
+  });
+}
+
+function timeoutRegressionRuntime(
+  intercept: (url: string) => Response | null,
+  onFinish: () => void = () => {},
+  hybrid = false,
+): RuntimeDependencies {
+  return runtime((input) => {
+    const url = String(input);
+    const response = intercept(url);
+    if (response) return response;
+    if (url.endsWith("/rest/v1/rpc/current_profile")) {
+      return Response.json([{ id: "user-1" }]);
+    }
+    if (url.includes("/v2/actors/")) {
+      return Response.json({
+        data: {
+          id: "run-1",
+          status: "SUCCEEDED",
+          defaultDatasetId: "dataset-1",
+        },
+      });
+    }
+    if (url.includes("/v2/datasets/")) {
+      return Response.json([{
+        inputUrl: instagramURL,
+        description: "Visit Carbon Beach Club in Malibu.",
+        images: [mediaURL],
+      }]);
+    }
+    if (url === mediaURL) {
+      return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    }
+    throw new Error("unexpected regression fixture call");
+  }, {
+    onFinish,
+    environment: hybrid ? { WANDER_BRIGHTDATA_API_TOKEN: "bright-secret" } : {},
+  });
+}
+
+Deno.test("stage diagnostics expose timing and safe HTTP categories without private evidence", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => {
+    lines.push(values.map(String).join(" "));
+  };
+  try {
+    const dependencies = timeoutRegressionRuntime((url) =>
+      url.includes(":generateContent")
+        ? Response.json({ error: "private provider body" }, { status: 503 })
+        : null
+    );
+    await handleRequest(
+      jsonRequest(socialRequestBody(instagramURL)),
+      dependencies,
+    );
+  } finally {
+    console.log = originalLog;
+  }
+  const stages = lines.filter((line) =>
+    line.startsWith("social_import_stage_complete ")
+  )
+    .map((line) =>
+      JSON.parse(line.slice("social_import_stage_complete ".length))
+    );
+  assertEquals(stages.map((stage) => stage.stage), [
+    "acquisition",
+    "media_download",
+    "understanding",
+  ]);
+  assertEquals(stages[2].errorCategory, "gemini_http_503");
+  assert(stages.every((stage) => typeof stage.elapsedMs === "number"));
+  assertSafeResponse(lines, "Visit Carbon Beach Club in Malibu.");
+  assert(!lines.join(" ").includes("private provider body"));
 });
 
 Deno.test("paid-work admission denials stop before Apify and return safe fallback categories", async () => {
@@ -4569,6 +4930,7 @@ function assertSafeResponse(payload: unknown, rawCaption: string): void {
   for (
     const forbidden of [
       "apify-secret",
+      "bright-secret",
       "gemini-secret",
       instagramURL,
       mediaURL,

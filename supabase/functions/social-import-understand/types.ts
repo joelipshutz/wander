@@ -159,7 +159,13 @@ export type PublicFallbackReason =
 export type UnderstandResponse = {
   schema_version: 1;
   outcome: "ok" | "partial" | "no_places" | "fallback";
-  provider_path: "apify_gemini" | "apify_deterministic";
+  provider_path:
+    | "apify_gemini"
+    | "apify_deterministic"
+    | "brightdata_gemini"
+    | "brightdata_deterministic"
+    | "brightdata_apify_gemini"
+    | "brightdata_apify_deterministic";
   hints: PlaceHint[];
   media_count: number;
   model_attempt_count: number;

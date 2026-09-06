@@ -20,6 +20,50 @@ export const maximumConcurrentGeminiImageUploads = 4;
 export const maximumGeminiVideoInputs = 10;
 export const maximumGeminiFileUploadTimeoutMilliseconds = 60_000;
 
+export type GeminiThinkingLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export type GeminiThinkingProfile = {
+  initial: GeminiThinkingLevel;
+  reconciliation: GeminiThinkingLevel;
+};
+
+export type GeminiTokenUsage = {
+  promptTokens: number;
+  cachedPromptTokens: number;
+  responseTokens: number;
+  thinkingTokens: number;
+  totalTokens: number;
+};
+
+// Deliberately contains no response text, prompts, URLs, or credentials.
+export type GeminiResponseDiagnostic = {
+  finishReason: string | null;
+  answerCharacters: number;
+  errorCode: string | null;
+  tokenUsage: GeminiTokenUsage | null;
+};
+
+export type GeminiDiagnosticOptions = {
+  maxOutputTokens?: number;
+  onResponse?: (diagnostic: GeminiResponseDiagnostic) => void;
+  mediaPreparationDeadline?: Deadline;
+};
+
+export class GeminiResponseError extends SocialImportError {
+  constructor(
+    code: string,
+    attemptCount: number,
+    readonly diagnostic: GeminiResponseDiagnostic,
+  ) {
+    super(code, attemptCount);
+  }
+}
+
+export const defaultGeminiThinkingProfile: GeminiThinkingProfile = {
+  initial: "LOW",
+  reconciliation: "MEDIUM",
+};
+
 const geminiAPIOrigin = "https://generativelanguage.googleapis.com";
 const maximumGeminiFileResponseBytes = 1_000_000;
 const maximumGeminiFilePollAttempts = 20;
@@ -38,6 +82,7 @@ export type GeminiUnderstanding = {
   mediaAssessments: ModelMediaAssessment[];
   postContext?: ModelPostContext;
   attemptCount: number;
+  tokenUsage?: GeminiTokenUsage;
   coverageIncomplete?: true;
   mediaCoverageIncomplete?: true;
   captionCoverageIncomplete?: true;
@@ -54,7 +99,16 @@ export async function understandWithGemini(
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
   profileAliases: InstagramProfileAlias[] = [],
+  thinkingProfile: GeminiThinkingProfile = defaultGeminiThinkingProfile,
+  diagnosticOptions: GeminiDiagnosticOptions = {},
 ): Promise<GeminiUnderstanding> {
+  const maxOutputTokens = diagnosticOptions.maxOutputTokens ?? 16_384;
+  if (
+    !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1_024 ||
+    maxOutputTokens > 65_536
+  ) {
+    throw new SocialImportError("gemini_invalid_output_budget");
+  }
   const model = validModel(modelValue) ?? "gemini-3.5-flash";
   const uploadedFiles: UploadedGeminiFile[] = [];
   try {
@@ -62,7 +116,7 @@ export async function understandWithGemini(
     const parts = await geminiMediaParts(
       ingestions,
       apiKey,
-      deadline,
+      diagnosticOptions.mediaPreparationDeadline ?? deadline,
       dependencies,
       uploadedFiles,
       requestSignal,
@@ -118,6 +172,8 @@ export async function understandWithGemini(
       deadline,
       dependencies,
       requestSignal,
+      thinkingProfile.initial,
+      diagnosticOptions,
     );
     const reconciliation = reconciliationDirective(
       first,
@@ -168,10 +224,15 @@ export async function understandWithGemini(
         deadline,
         dependencies,
         requestSignal,
-        "MEDIUM",
+        thinkingProfile.reconciliation,
+        diagnosticOptions,
       );
       const merged = {
         ...reconciled,
+        tokenUsage: combineGeminiTokenUsage(
+          first.tokenUsage,
+          reconciled.tokenUsage,
+        ),
         candidates: mergeReconciledCandidates(
           first.candidates,
           reconciled.candidates,
@@ -191,7 +252,15 @@ export async function understandWithGemini(
         ? error.attemptCount
         : 0;
       return publicUnderstanding(
-        first,
+        {
+          ...first,
+          tokenUsage: combineGeminiTokenUsage(
+            first.tokenUsage,
+            error instanceof GeminiResponseError
+              ? error.diagnostic.tokenUsage ?? undefined
+              : undefined,
+          ),
+        },
         first.attemptCount + failedAttempts,
         coverageDimensions(first, catalog, ingestions),
       );
@@ -410,6 +479,7 @@ type ParsedGeminiUnderstanding = {
   postContext: ModelPostContext;
   isLegacyResponse: boolean;
   attemptCount: number;
+  tokenUsage?: GeminiTokenUsage;
 };
 
 async function generateUnderstanding(
@@ -419,7 +489,8 @@ async function generateUnderstanding(
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
-  thinkingLevel: "LOW" | "MEDIUM" = "LOW",
+  thinkingLevel: GeminiThinkingLevel = "LOW",
+  diagnosticOptions: GeminiDiagnosticOptions = {},
 ): Promise<ParsedGeminiUnderstanding> {
   const body = JSON.stringify({
     systemInstruction: {
@@ -427,7 +498,7 @@ async function generateUnderstanding(
     },
     contents: [{ role: "user", parts }],
     generationConfig: {
-      maxOutputTokens: 16_384,
+      maxOutputTokens: diagnosticOptions.maxOutputTokens ?? 16_384,
       thinkingConfig: { thinkingLevel },
       mediaResolution: "MEDIA_RESOLUTION_HIGH",
       responseFormat: {
@@ -439,68 +510,92 @@ async function generateUnderstanding(
     },
   });
 
-  for (let attempt = 1; attempt <= maximumGeminiAttempts; attempt += 1) {
-    assertRequestActive(requestSignal);
-    deadline.assertAvailable();
-    let result: { response: Response; body: unknown };
-    try {
-      result = await fetchJSON(
-        `${geminiAPIOrigin}/v1beta/models/${
-          encodeURIComponent(model)
-        }:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "x-goog-api-key": apiKey,
-            accept: "application/json",
-            "content-type": "application/json",
-          },
-          body,
-          redirect: "error",
-          signal: requestSignal,
-        },
-        5_000_000,
-        60_000,
-        deadline,
-        dependencies,
-      );
-    } catch (error) {
+  let attemptedRequests = 0;
+  try {
+    for (let attempt = 1; attempt <= maximumGeminiAttempts; attempt += 1) {
       assertRequestActive(requestSignal);
+      deadline.assertAvailable();
+      let result: { response: Response; body: unknown };
+      try {
+        attemptedRequests = attempt;
+        result = await fetchJSON(
+          `${geminiAPIOrigin}/v1beta/models/${
+            encodeURIComponent(model)
+          }:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "x-goog-api-key": apiKey,
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body,
+            redirect: "error",
+            signal: requestSignal,
+          },
+          5_000_000,
+          60_000,
+          deadline,
+          dependencies,
+        );
+      } catch (error) {
+        assertRequestActive(requestSignal);
+        if (
+          error instanceof SocialImportError &&
+          error.code === "deadline_exceeded"
+        ) throw error;
+        if (attempt === maximumGeminiAttempts) {
+          throw new SocialImportError("gemini_transport_error", attempt);
+        }
+        await retryDelay(attempt, deadline, dependencies);
+        continue;
+      }
+      if (result.response.ok) {
+        let parsed: ParsedGeminiUnderstanding;
+        try {
+          parsed = {
+            ...parseGeminiPayload(result.body),
+            attemptCount: attempt,
+          };
+        } catch (error) {
+          const code = error instanceof SocialImportError
+            ? error.code
+            : "gemini_invalid_response";
+          const diagnostic = geminiResponseDiagnostic(result.body, code);
+          diagnosticOptions.onResponse?.(diagnostic);
+          throw new GeminiResponseError(code, attempt, diagnostic);
+        }
+        diagnosticOptions.onResponse?.(
+          geminiResponseDiagnostic(result.body, null),
+        );
+        return parsed;
+      }
       if (
-        error instanceof SocialImportError &&
-        error.code === "deadline_exceeded"
-      ) throw error;
-      if (attempt === maximumGeminiAttempts) {
-        throw new SocialImportError("gemini_transport_error", attempt);
+        !retryableStatus(result.response.status) ||
+        attempt === maximumGeminiAttempts
+      ) {
+        throw new SocialImportError(
+          geminiHTTPErrorCode(result.response.status, result.body),
+          attempt,
+        );
       }
       await retryDelay(attempt, deadline, dependencies);
-      continue;
     }
-    if (result.response.ok) {
-      try {
-        return { ...parseGeminiPayload(result.body), attemptCount: attempt };
-      } catch (error) {
-        const code = error instanceof SocialImportError
-          ? error.code
-          : "gemini_invalid_response";
-        throw new SocialImportError(code, attempt);
-      }
-    }
+    throw new SocialImportError(
+      "gemini_attempts_exhausted",
+      maximumGeminiAttempts,
+    );
+  } catch (error) {
+    // Expiration can happen inside fetch, during backoff, or before the next
+    // retry. Preserve actual requests in all three paths (never report zero
+    // merely because Deadline constructed the final error).
     if (
-      !retryableStatus(result.response.status) ||
-      attempt === maximumGeminiAttempts
+      error instanceof SocialImportError && error.code === "deadline_exceeded"
     ) {
-      throw new SocialImportError(
-        geminiHTTPErrorCode(result.response.status, result.body),
-        attempt,
-      );
+      throw new SocialImportError("deadline_exceeded", attemptedRequests);
     }
-    await retryDelay(attempt, deadline, dependencies);
+    throw error;
   }
-  throw new SocialImportError(
-    "gemini_attempts_exhausted",
-    maximumGeminiAttempts,
-  );
 }
 
 function geminiHTTPErrorCode(status: number, body: unknown): string {
@@ -542,6 +637,7 @@ function publicUnderstanding(
     mediaAssessments: parsed.mediaAssessments,
     ...(parsed.isLegacyResponse ? {} : { postContext: parsed.postContext }),
     attemptCount,
+    ...(parsed.tokenUsage ? { tokenUsage: parsed.tokenUsage } : {}),
     ...(coverageIncomplete ? { coverageIncomplete: true as const } : {}),
     ...(coverage.mediaIncomplete
       ? { mediaCoverageIncomplete: true as const }
@@ -890,10 +986,9 @@ async function geminiMediaParts(
     } catch (error) {
       rejectMediaForGemini(ingestion, "gemini_video_ingestion_failed");
       assertRequestActive(requestSignal);
-      if (
-        error instanceof SocialImportError &&
-        error.code === "deadline_exceeded"
-      ) throw error;
+      // Keep successfully prepared media when a later video exhausts its
+      // preparation window. Generation uses the separate parent deadline;
+      // failed assets remain excluded and coverage is explicitly incomplete.
     }
   }
 
@@ -993,8 +1088,7 @@ async function uploadOverflowImageParts(
         if (
           requestSignal?.aborted ||
           (error instanceof SocialImportError &&
-            (error.code === "deadline_exceeded" ||
-              error.code === "request_cancelled"))
+            error.code === "request_cancelled")
         ) {
           fatalError ??= requestSignal?.aborted
             ? new SocialImportError("request_cancelled")
@@ -1325,14 +1419,26 @@ function parseGeminiPayload(
   mediaAssessments: ModelMediaAssessment[];
   postContext: ModelPostContext;
   isLegacyResponse: boolean;
+  tokenUsage?: GeminiTokenUsage;
 } {
   const root = asRecord(raw);
   const candidates = Array.isArray(root?.candidates) ? root?.candidates : [];
   const first = asRecord(candidates[0]);
+  if (first?.finishReason === "MAX_TOKENS") {
+    throw new SocialImportError("gemini_output_truncated");
+  }
+  if (first?.finishReason && first.finishReason !== "STOP") {
+    throw new SocialImportError("gemini_incomplete_response");
+  }
   const content = asRecord(first?.content);
   const parts = Array.isArray(content?.parts) ? content?.parts : [];
   const text = parts.map(asRecord)
-    .map((part) => cleanString(part?.text, 2_000_000))
+    .filter((part) => part?.thought !== true)
+    .map((part) =>
+      typeof part?.text === "string" && part.text.length <= 2_000_000
+        ? part.text
+        : null
+    )
     .filter((value): value is string => value !== null)
     .join("");
   if (!text) throw new SocialImportError("gemini_empty_response");
@@ -1375,6 +1481,83 @@ function parseGeminiPayload(
       : validatePostContext(response.postContext),
     mediaAssessments: mediaAssessments.map(validateMediaAssessment),
     isLegacyResponse,
+    ...geminiTokenUsage(root?.usageMetadata),
+  };
+}
+
+function geminiResponseDiagnostic(
+  raw: unknown,
+  errorCode: string | null,
+): GeminiResponseDiagnostic {
+  const root = asRecord(raw);
+  const first = asRecord(
+    Array.isArray(root?.candidates) ? root.candidates[0] : null,
+  );
+  const parts = asRecord(first?.content)?.parts;
+  const finishReason = typeof first?.finishReason === "string" &&
+      /^[A-Z_]{1,64}$/.test(first.finishReason)
+    ? first.finishReason
+    : null;
+  return {
+    finishReason,
+    answerCharacters: Array.isArray(parts)
+      ? parts.map(asRecord).reduce(
+        (count, part) =>
+          count + (part?.thought !== true && typeof part?.text === "string"
+            ? part.text.length
+            : 0),
+        0,
+      )
+      : 0,
+    errorCode,
+    tokenUsage: geminiTokenUsage(root?.usageMetadata).tokenUsage ?? null,
+  };
+}
+
+function geminiTokenUsage(
+  value: unknown,
+): { tokenUsage: GeminiTokenUsage } | Record<string, never> {
+  const usage = asRecord(value);
+  if (!usage) return {};
+  const promptTokens = tokenCount(usage.promptTokenCount);
+  const cachedPromptTokens = tokenCount(usage.cachedContentTokenCount);
+  const responseTokens = tokenCount(usage.candidatesTokenCount);
+  const thinkingTokens = tokenCount(usage.thoughtsTokenCount);
+  const totalTokens = tokenCount(usage.totalTokenCount);
+  if (
+    promptTokens === null && cachedPromptTokens === null &&
+    responseTokens === null && thinkingTokens === null && totalTokens === null
+  ) return {};
+  return {
+    tokenUsage: {
+      promptTokens: promptTokens ?? 0,
+      cachedPromptTokens: cachedPromptTokens ?? 0,
+      responseTokens: responseTokens ?? 0,
+      thinkingTokens: thinkingTokens ?? 0,
+      totalTokens: totalTokens ?? 0,
+    },
+  };
+}
+
+function tokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 &&
+      value <= 1_000_000_000
+    ? value
+    : null;
+}
+
+function combineGeminiTokenUsage(
+  first?: GeminiTokenUsage,
+  second?: GeminiTokenUsage,
+): GeminiTokenUsage | undefined {
+  if (!first) return second;
+  if (!second) return first;
+  return {
+    promptTokens: first.promptTokens + second.promptTokens,
+    cachedPromptTokens: first.cachedPromptTokens + second.cachedPromptTokens,
+    responseTokens: first.responseTokens + second.responseTokens,
+    thinkingTokens: first.thinkingTokens + second.thinkingTokens,
+    totalTokens: first.totalTokens + second.totalTokens,
   };
 }
 
@@ -1619,6 +1802,7 @@ const systemInstruction = [
   "Do not merge nested or similarly named venues merely because one name contains the other or both share one account. Rory's Place and Rory's Other Place, and Gjusta and Gjusta Goods, are distinct destinations when both are presented as options.",
   "Do not infer a place from scenery and do not invent branches, coordinates, provider IDs, or geography.",
   "Inventory every @handle in the supplied caption as a candidate. A venue handle used after destination grammar such as go to, at, stop at, breakfast, lunch, dinner, check in, stay, visit, explore, or as an or/comma/slash alternative is an itinerary destination, not attribution. Handles introduced by by, with, via, follow, photo/video credit, sponsor, or creator-credit grammar remain attribution or incidental.",
+  "Interpret by/with from the whole event context, not as automatic exclusion keywords. A named business actively serving food or operating a pop-up at a named host is a visitable participant, not a creator credit. Preserve distinct guest and host businesses as separate candidates when the post invites visiting both; never infer a permanent guest address from the temporary host location. Former employers, inspiration, sponsors, photographers, and passive collaborators remain attribution unless independently recommended as destinations.",
   "caption_mention_inventory is a deterministic source-order map of caption structure. Treat primary_list_item entries as intended destinations unless stronger evidence disproves that reading. Honorable mentions, credits, and partners are secondary dispositions and do not consume a declared top-N count. Use unstructured as a cue to reason from the surrounding caption rather than silently dropping the mention.",
   "caption_handle_identity_aliases are narrowly scoped public profile identities: source_mention is the caption handle and profile_name is that exact account's display name. Use an alias only to canonicalize a candidate for the same sourceMention. An alias is not evidence that the account is a venue or recommendation, and it must never override the caption grammar or create a candidate for an attribution, creator, sponsor, or credit handle.",
   "For each candidate, sourceMention must be the exact visible, spoken, or textual name or @handle in the cited evidence. Name must be a provider-ready human venue name. For a venue handle, remove @ and unambiguous account/locality qualifiers such as underscores, a cited city suffix, or official; expand an abbreviation only when the handle spelling plus cited whole-post evidence makes one venue name unambiguous. Keep physically distinct venues such as Rory's Place and Rory's Other Place as separate candidates even when they share an account or similar name.",

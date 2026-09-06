@@ -1,8 +1,10 @@
 import {
+  type GeminiResponseDiagnostic,
   maximumConcurrentGeminiImageUploads,
   maximumGeminiFileUploadTimeoutMilliseconds,
   maximumGeminiSemanticPasses,
   maximumInlineImageBytes,
+  parseGeminiUnderstanding,
   selectInlineImageIngestions,
   understandWithGemini,
   validatedGeminiUploadURL,
@@ -21,6 +23,219 @@ const uploadURL =
   `${geminiOrigin}/upload/v1beta/files?upload_id=session-123&upload_protocol=resumable`;
 const fileName = "files/video-123";
 const fileURI = `${geminiOrigin}/v1beta/${fileName}`;
+
+Deno.test("Gemini parses only answer parts", () => {
+  const answer = { candidates: [] };
+  const raw = {
+    candidates: [{
+      finishReason: "STOP",
+      content: {
+        parts: [
+          { thought: true, text: "Summary text is not the JSON answer" },
+          { text: JSON.stringify(answer) },
+        ],
+      },
+    }],
+  };
+  assertEquals(parseGeminiUnderstanding(raw).candidates, []);
+});
+
+Deno.test("Gemini preserves in-string whitespace across response chunks", () => {
+  const text = JSON.stringify({
+    candidates: [modelCandidate("Alpha Cafe", "Alpha Cafe", 0)],
+  });
+  const split = text.indexOf("Alpha Cafe") + "Alpha ".length;
+  const raw = {
+    candidates: [{
+      finishReason: "STOP",
+      content: {
+        parts: [
+          { text: text.slice(0, split) },
+          { text: text.slice(split) },
+        ],
+      },
+    }],
+  };
+  assertEquals(parseGeminiUnderstanding(raw).candidates[0].name, "Alpha Cafe");
+});
+
+Deno.test("Gemini rejects even syntactically valid output when the provider reports truncation", async () => {
+  const diagnostics: GeminiResponseDiagnostic[] = [];
+  const dependencies = runtime(() =>
+    Response.json({
+      candidates: [{
+        finishReason: "MAX_TOKENS",
+        content: {
+          parts: [{ text: '{"candidates":[]}' }],
+        },
+      }],
+      usageMetadata: {
+        promptTokenCount: 100,
+        candidatesTokenCount: 10,
+        thoughtsTokenCount: 16374,
+        totalTokenCount: 16484,
+      },
+    })
+  );
+  await assertRejectsCode(() =>
+    understandWithGemini(
+      source,
+      {
+        texts: [{
+          id: "caption:0",
+          modality: "caption",
+          text: "Two cafes",
+          area: null,
+          mediaID: null,
+        }],
+        media: [],
+      },
+      [],
+      "gemini-secret",
+      "gemini-3.8-flash",
+      new Deadline(100_000, dependencies.now),
+      dependencies,
+      undefined,
+      [],
+      undefined,
+      {
+        maxOutputTokens: 32_768,
+        onResponse: (value) => diagnostics.push(value),
+      },
+    ), "gemini_output_truncated");
+  assertEquals(diagnostics, [{
+    finishReason: "MAX_TOKENS",
+    answerCharacters: 17,
+    errorCode: "gemini_output_truncated",
+    tokenUsage: {
+      promptTokens: 100,
+      cachedPromptTokens: 0,
+      responseTokens: 10,
+      thinkingTokens: 16374,
+      totalTokens: 16484,
+    },
+  }]);
+});
+
+Deno.test("Gemini includes failed reconciliation usage without discarding the valid first pass", async () => {
+  let calls = 0;
+  const dependencies = runtime(() => {
+    calls += 1;
+    if (calls === 1) {
+      return geminiUnderstandingResponse(
+        {
+          intent: "place_list",
+          declaredCount: 2,
+          declaredCountEvidenceIds: ["caption:0"],
+          globalArea: "",
+          globalAreaEvidenceIds: [],
+        },
+        [modelCandidate("Alpha Cafe", "Alpha Cafe", 0)],
+        [],
+        {
+          promptTokenCount: 100,
+          candidatesTokenCount: 20,
+          thoughtsTokenCount: 30,
+          totalTokenCount: 150,
+        },
+      );
+    }
+    return Response.json({
+      candidates: [{
+        finishReason: "MAX_TOKENS",
+        content: { parts: [{ text: '{"candidates":[' }] },
+      }],
+      usageMetadata: {
+        promptTokenCount: 200,
+        candidatesTokenCount: 50,
+        thoughtsTokenCount: 100,
+        totalTokenCount: 350,
+      },
+    });
+  });
+  const result = await understandWithGemini(
+    source,
+    {
+      texts: [{
+        id: "caption:0",
+        modality: "caption",
+        text: "2 cafes: Alpha Cafe and Beta Cafe",
+        area: null,
+        mediaID: null,
+      }],
+      media: [],
+    },
+    [],
+    "gemini-secret",
+    "gemini-3.8-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+  );
+  assertEquals(calls, 2);
+  assertEquals(result.candidates.length, 1);
+  assertEquals(result.tokenUsage, {
+    promptTokens: 300,
+    cachedPromptTokens: 0,
+    responseTokens: 70,
+    thinkingTokens: 130,
+    totalTokens: 500,
+  });
+  assertEquals(result.coverageIncomplete, true);
+});
+
+Deno.test("Gemini output budget is opt-in and bounded before any paid request", async () => {
+  let calls = 0;
+  const dependencies = runtime((_input, init) => {
+    calls += 1;
+    assertEquals(
+      JSON.parse(String(init?.body)).generationConfig.maxOutputTokens,
+      32_768,
+    );
+    return geminiResponse([]);
+  });
+  const catalog: EvidenceCatalog = {
+    texts: [{
+      id: "caption:0",
+      modality: "caption",
+      text: "A photo",
+      area: null,
+      mediaID: null,
+    }],
+    media: [],
+  };
+  await understandWithGemini(
+    source,
+    catalog,
+    [],
+    "gemini-secret",
+    "gemini-3.8-flash",
+    new Deadline(100_000, dependencies.now),
+    dependencies,
+    undefined,
+    [],
+    undefined,
+    { maxOutputTokens: 32_768 },
+  );
+  assertEquals(calls, 1);
+  await assertRejectsCode(
+    () =>
+      understandWithGemini(
+        source,
+        catalog,
+        [],
+        "gemini-secret",
+        "gemini-3.8-flash",
+        new Deadline(100_000, dependencies.now),
+        dependencies,
+        undefined,
+        [],
+        undefined,
+        { maxOutputTokens: 65_537 },
+      ),
+    "gemini_invalid_output_budget",
+  );
+  assertEquals(calls, 1);
+});
 
 Deno.test("Gemini gives bounded large video uploads a full network minute", () => {
   assertEquals(maximumGeminiFileUploadTimeoutMilliseconds, 60_000);
@@ -85,6 +300,13 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
         },
         [],
         [mediaAssessment("media:0")],
+        {
+          promptTokenCount: 100,
+          cachedContentTokenCount: 10,
+          candidatesTokenCount: 20,
+          thoughtsTokenCount: 5,
+          totalTokenCount: 125,
+        },
       );
     }
     if (url === fileURI && method === "DELETE") {
@@ -118,6 +340,13 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
       globalAreaEvidenceIds: [],
     },
     attemptCount: 2,
+    tokenUsage: {
+      promptTokens: 200,
+      cachedPromptTokens: 20,
+      responseTokens: 40,
+      thinkingTokens: 10,
+      totalTokens: 250,
+    },
   });
   assertEquals(maximumGeminiSemanticPasses, 2);
   assertEquals(calls, [
@@ -134,6 +363,12 @@ Deno.test("Gemini uploads and polls videos, references fileData, then deletes th
   const generationConfig = asRecord(generateBody?.generationConfig);
   assertEquals(generationConfig?.maxOutputTokens, 16_384);
   assertEquals(generationConfig?.thinkingConfig, { thinkingLevel: "LOW" });
+  const reconciliationConfig = asRecord(
+    generatedBodies[1]?.generationConfig,
+  );
+  assertEquals(reconciliationConfig?.thinkingConfig, {
+    thinkingLevel: "MEDIUM",
+  });
   assertEquals(generationConfig?.mediaResolution, "MEDIA_RESOLUTION_HIGH");
   const parts = requestParts(generateBody);
   assertEquals(parts[1], {
@@ -1661,6 +1896,7 @@ function geminiUnderstandingResponse(
   postContext: Record<string, unknown>,
   candidates: unknown[],
   mediaAssessments: unknown[] = [],
+  usageMetadata?: Record<string, unknown>,
 ): Response {
   return Response.json({
     candidates: [{
@@ -1674,6 +1910,7 @@ function geminiUnderstandingResponse(
         }],
       },
     }],
+    ...(usageMetadata ? { usageMetadata } : {}),
   });
 }
 

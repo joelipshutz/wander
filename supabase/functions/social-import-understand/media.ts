@@ -32,7 +32,7 @@ type DownloadedMedia = {
 export async function ingestAcquiredMedia(
   media: AcquiredMedia[],
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
@@ -42,13 +42,15 @@ export async function ingestAcquiredMedia(
   let totalBytes = 0;
   for (const item of media.slice(0, 150)) {
     assertRequestActive(requestSignal);
-    deadline.assertAvailable();
     const remaining = maximumTotalMediaBytes - totalBytes;
     if (remaining <= 0) {
       results.push(failed(item, "media_total_too_large"));
       continue;
     }
     try {
+      // A later asset timing out must not discard bytes already downloaded.
+      // Expired assets are explicitly failed without starting another fetch.
+      deadline.assertAvailable();
       const perItem = item.kind === "video"
         ? maximumVideoBytes
         : maximumImageBytes;
@@ -92,7 +94,7 @@ export async function fetchMediaBytes(
   expectedKind: "image" | "video",
   maximumBytes: number,
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
   deadline: Deadline,
   dependencies: RuntimeDependencies,
   requestSignal?: AbortSignal,
@@ -286,7 +288,7 @@ function mediaHeaders(
   destination: URL,
   expectedKind: "image" | "video",
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
 ): Record<string, string> {
   const sourceURL = new URL(source.url);
   const headers: Record<string, string> = {
@@ -294,7 +296,7 @@ function mediaHeaders(
     referer: `${sourceURL.origin}/`,
     "user-agent": "rec.me social import/1.0",
   };
-  if (mayReceiveApifyAuthorization(destination)) {
+  if (apifyToken && mayReceiveApifyAuthorization(destination)) {
     headers.authorization = `Bearer ${apifyToken}`;
   }
   return headers;

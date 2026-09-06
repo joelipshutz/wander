@@ -116,6 +116,33 @@ Deno.test("ordered carousel children remain canonical over top-level media", () 
   );
 });
 
+Deno.test("shared vendor normalization keeps slide tags and array locations", () => {
+  const evidence = normalizeApifyDataset([{
+    url: instagramURL,
+    description: "A tagged venue in Los Angeles.",
+    location: ["Los Angeles", "California", "United States"],
+    post_content: [{
+      index: 0,
+      type: "Photo",
+      url: imageURL,
+      alt_text: "Tagged Venue storefront",
+      tagged_users: [
+        { username: "taggedvenue", full_name: "Tagged Venue" },
+        "captionvenue",
+      ],
+    }],
+  }], source());
+
+  assertEquals(evidence.taggedLocations, [{
+    name: "Los Angeles",
+    area: "California, United States",
+  }]);
+  assertEquals(evidence.media[0].taggedProfiles, [
+    { username: "taggedvenue", fullName: "Tagged Venue" },
+    { username: "captionvenue", fullName: null },
+  ]);
+});
+
 Deno.test("a partial childPosts tail does not suppress a complete declared carousel", () => {
   const slideURLs = Array.from(
     { length: 17 },
