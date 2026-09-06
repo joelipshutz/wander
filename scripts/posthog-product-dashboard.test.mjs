@@ -18,11 +18,36 @@ test("dashboard contract has every requested lifecycle section", () => {
       "Retention",
       "Referrals",
       "Monetization",
+      "Search Retrieval",
       "Notification Operations",
     ],
   );
   assert.equal(sections.find(({ title }) => title === "Monetization").insightKeys.length, 0);
   assert.equal(assertDefinition().insights, insights.length);
+});
+
+test("search retrieval dashboard uses request-safe stages and outcomes", () => {
+  const section = sections.find(({ title }) => title === "Search Retrieval");
+  assert.deepEqual(section.insightKeys, [
+    "search-stage-latency",
+    "search-provider-selection",
+    "search-request-outcomes",
+  ]);
+
+  const latency = insights.find(({ key }) => key === "search-stage-latency");
+  assert.match(latency.query.query, /trusted_place_search_stage_completed/);
+  assert.match(latency.query.query, /p95_ms/);
+
+  const outcomes = insights.find(({ key }) => key === "search-request-outcomes");
+  assert.match(outcomes.query.query, /search_request_id is not null/);
+  assert.match(outcomes.query.query, /search_request_id != ''/);
+  assert.match(outcomes.query.query, /trusted_place_search_converted/);
+  assert.match(outcomes.query.query, /trusted_place_search_reformulated/);
+
+  const searchDefinitions = [latency, outcomes]
+    .map(({ description, query }) => `${description}\n${query.query}`)
+    .join("\n");
+  assert.doesNotMatch(searchDefinitions, /properties\.(query|place_name|coordinates)/);
 });
 
 test("activation funnel exposes every onboarding step", () => {

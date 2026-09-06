@@ -824,19 +824,33 @@ final class WanderBackend: ObservableObject {
 
     func searchRecmePlaces(
         _ request: RecmePlaceSearchRequest,
-        includesSemanticProvider: Bool
+        includesSemanticProvider: Bool,
+        onLexicalResults: (@MainActor @Sendable (RecmePlaceSearchOutcome) -> Void)? = nil
     ) async throws -> RecmePlaceSearchOutcome {
         guard let placeRepository else {
             throw WanderRemoteError.notConfigured
         }
 
+        let clock = ContinuousClock()
+        let totalStart = clock.now
+        try Task.checkCancellation()
+
         guard includesSemanticProvider else {
-            let lexical = try await placeRepository.searchRecmePlaces(request)
-            return RecmePlaceSearchFusion.outcome(
+            let lexicalAttempt = await placeSearchAttempt {
+                try await placeRepository.searchRecmePlaces(request)
+            }
+            try Task.checkCancellation()
+            let lexical = try lexicalAttempt.result.get()
+            return measuredPlaceSearchOutcome(
                 lexical: lexical,
                 semantic: [],
                 semanticStatus: .disabled,
-                limit: request.limit
+                deliveryStage: .lexicalFinal,
+                limit: request.limit,
+                lexicalLatency: lexicalAttempt.latency,
+                semanticLatency: nil,
+                totalStart: totalStart,
+                clock: clock
             )
         }
 
@@ -850,50 +864,146 @@ final class WanderBackend: ObservableObject {
                 try await placeRepository.searchRecmePlacesSemantic(request)
             }
         }
-        let (lexicalResult, semanticResult) = await withTaskCancellationHandler {
-            await (lexicalTask.value, semanticTask.value)
+        return try await withTaskCancellationHandler {
+            let lexicalAttempt = await lexicalTask.value
+            try Task.checkCancellation()
+            if case .success(let lexical) = lexicalAttempt.result {
+                let partial = measuredPlaceSearchOutcome(
+                    lexical: lexical,
+                    semantic: [],
+                    semanticStatus: .pending,
+                    deliveryStage: .lexical,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: nil,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+                onLexicalResults?(partial)
+            }
+
+            let semanticAttempt = await semanticTask.value
+            try Task.checkCancellation()
+
+            switch (lexicalAttempt.result, semanticAttempt.result) {
+            case (.success(let lexical), .success(let semantic)) where semantic.isEmpty:
+                return measuredPlaceSearchOutcome(
+                    lexical: lexical,
+                    semantic: [],
+                    semanticStatus: .succeeded,
+                    deliveryStage: .lexicalFinal,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: semanticAttempt.latency,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+            case (.success(let lexical), .success(let semantic)) where lexical.isEmpty && !semantic.isEmpty:
+                return measuredPlaceSearchOutcome(
+                    lexical: lexical,
+                    semantic: semantic,
+                    semanticStatus: .succeeded,
+                    deliveryStage: .semanticRecovery,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: semanticAttempt.latency,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+            case (.success(let lexical), .success(let semantic)):
+                return measuredPlaceSearchOutcome(
+                    lexical: lexical,
+                    semantic: semantic,
+                    semanticStatus: .succeeded,
+                    deliveryStage: .fused,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: semanticAttempt.latency,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+            case (.success(let lexical), .failure):
+                return measuredPlaceSearchOutcome(
+                    lexical: lexical,
+                    semantic: [],
+                    semanticStatus: .failed,
+                    deliveryStage: .lexicalFinal,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: semanticAttempt.latency,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+            case (.failure(let lexicalError), .success(let semantic)):
+                guard !semantic.isEmpty else { throw lexicalError }
+                return measuredPlaceSearchOutcome(
+                    lexical: [],
+                    semantic: semantic,
+                    semanticStatus: .succeeded,
+                    deliveryStage: .semanticRecovery,
+                    limit: request.limit,
+                    lexicalLatency: lexicalAttempt.latency,
+                    semanticLatency: semanticAttempt.latency,
+                    totalStart: totalStart,
+                    clock: clock
+                )
+            case (.failure(let lexicalError), .failure):
+                throw lexicalError
+            }
         } onCancel: {
             lexicalTask.cancel()
             semanticTask.cancel()
-        }
-
-        switch (lexicalResult, semanticResult) {
-        case (.success(let lexical), .success(let semantic)):
-            return RecmePlaceSearchFusion.outcome(
-                lexical: lexical,
-                semantic: semantic,
-                semanticStatus: .succeeded,
-                limit: request.limit
-            )
-        case (.success(let lexical), .failure):
-            return RecmePlaceSearchFusion.outcome(
-                lexical: lexical,
-                semantic: [],
-                semanticStatus: .failed,
-                limit: request.limit
-            )
-        case (.failure, .success(let semantic)):
-            return RecmePlaceSearchFusion.outcome(
-                lexical: [],
-                semantic: semantic,
-                semanticStatus: .succeeded,
-                limit: request.limit
-            )
-        case (.failure(let lexicalError), .failure):
-            throw lexicalError
         }
     }
 
     private func placeSearchAttempt(
         _ operation: @escaping @MainActor () async throws -> [PlaceCandidate]
-    ) async -> Result<[PlaceCandidate], Error> {
+    ) async -> (result: Result<[PlaceCandidate], Error>, latency: Duration) {
+        let clock = ContinuousClock()
+        let start = clock.now
         do {
-            return .success(try await operation())
+            return (.success(try await operation()), start.duration(to: clock.now))
         } catch is CancellationError {
-            return .failure(CancellationError())
+            return (.failure(CancellationError()), start.duration(to: clock.now))
         } catch {
-            return .failure(error)
+            return (.failure(error), start.duration(to: clock.now))
         }
+    }
+
+    private func measuredPlaceSearchOutcome(
+        lexical: [PlaceCandidate],
+        semantic: [PlaceCandidate],
+        semanticStatus: RecmeSemanticSearchStatus,
+        deliveryStage: RecmePlaceSearchDeliveryStage,
+        limit: Int,
+        lexicalLatency: Duration?,
+        semanticLatency: Duration?,
+        totalStart: ContinuousClock.Instant,
+        clock: ContinuousClock
+    ) -> RecmePlaceSearchOutcome {
+        let fusionStart = clock.now
+        let untimed = RecmePlaceSearchFusion.outcome(
+            lexical: lexical,
+            semantic: semantic,
+            semanticStatus: semanticStatus,
+            limit: limit,
+            deliveryStage: deliveryStage
+        )
+        let fusionLatency = fusionStart.duration(to: clock.now)
+        return RecmePlaceSearchOutcome(
+            matches: untimed.matches,
+            lexicalCount: untimed.lexicalCount,
+            semanticCount: untimed.semanticCount,
+            overlapCount: untimed.overlapCount,
+            semanticStatus: semanticStatus,
+            deliveryStage: deliveryStage,
+            timings: RecmePlaceSearchTimings(
+                lexical: lexicalLatency,
+                semantic: semanticLatency,
+                fusion: fusionLatency,
+                total: totalStart.duration(to: clock.now)
+            )
+        )
     }
 
     func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {

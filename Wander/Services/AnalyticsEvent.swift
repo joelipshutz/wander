@@ -24,6 +24,8 @@ enum WanderAnalyticsSchema {
         "address",
         "body",
         "canonical_name",
+        "candidate_id",
+        "candidate_ids",
         "contact_id",
         "coordinates",
         "display_name",
@@ -36,10 +38,14 @@ enum WanderAnalyticsSchema {
         "note",
         "phone",
         "phone_number",
+        "place_id",
         "place_name",
+        "profile_id",
         "query",
         "raw_query",
         "recipient",
+        "result_id",
+        "result_ids",
         "text",
         "token",
         "url"
@@ -288,7 +294,10 @@ enum WanderAnalyticsEvents {
     static let trustedPlaceSearchLocalResults = "trusted_place_search_local_results"
     static let trustedPlaceSearchRefinedResults = "trusted_place_search_refined_results"
     static let trustedPlaceSearchRemoteResults = "trusted_place_search_remote_results"
+    static let trustedPlaceSearchStageCompleted = "trusted_place_search_stage_completed"
     static let trustedPlaceSearchResultSelected = "trusted_place_search_result_selected"
+    static let trustedPlaceSearchConverted = "trusted_place_search_converted"
+    static let trustedPlaceSearchReformulated = "trusted_place_search_reformulated"
     static let socialPlaceSaved = "social_place_saved"
     static let ownPlaceSyncAttempted = "own_place_sync_attempted"
     static let ownPlaceSyncSucceeded = "own_place_sync_succeeded"

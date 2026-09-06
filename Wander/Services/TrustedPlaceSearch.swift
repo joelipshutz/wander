@@ -914,6 +914,16 @@ enum DiscoverTrustedPlaceSearchPlanner {
 }
 
 enum DiscoverRecmePlaceSearchPlanner {
+    static func eligibleRequest(
+        query: String,
+        filters: DiscoverFilters,
+        limit: Int = 20
+    ) -> RecmePlaceSearchRequest? {
+        // The remote API cannot enforce a named owner or the non-follower scope.
+        guard filters.ownerQuery == nil, filters.relationship != .nonFollower else { return nil }
+        return request(query: query, filters: filters, limit: limit)
+    }
+
     static func request(
         query: String,
         filters: DiscoverFilters,
