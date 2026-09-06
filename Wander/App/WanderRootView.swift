@@ -3309,7 +3309,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .map: "map"
         case .discover: "newspaper"
         case .add: "plus"
-        case .lists: "bookmark.square"
+        case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle"
         }
     }

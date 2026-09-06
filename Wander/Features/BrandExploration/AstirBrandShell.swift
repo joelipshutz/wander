@@ -67,7 +67,7 @@ private enum AstirShellTab: String, CaseIterable, Hashable {
         switch self {
         case .map: "map"
         case .feed: "newspaper"
-        case .lists: "bookmark.square"
+        case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle"
         }
     }
@@ -579,7 +579,7 @@ private struct AstirListRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "bookmark.fill")
+            Image(systemName: PlaceListSymbol.systemImage)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(AstirPalette.paper)
                 .frame(width: 42, height: 42)

@@ -852,7 +852,7 @@ private struct ActivityShareTicket: View {
         switch context.ticketKind {
         case .checkIn: "checkmark.circle.fill"
         case .wanna: "bookmark.fill"
-        case .list: "list.bullet"
+        case .list: PlaceListSymbol.systemImage
         case .saved: "mappin.circle.fill"
         }
     }

@@ -443,7 +443,7 @@ struct NotificationSettingsSheet: View {
                         )
                         notificationToggle(
                             title: "Shared lists",
-                            systemImage: "bookmark.square",
+                            systemImage: PlaceListSymbol.systemImage,
                             binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
                         )
                         notificationToggle(

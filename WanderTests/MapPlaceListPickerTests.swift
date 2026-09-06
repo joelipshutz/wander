@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 @MainActor
@@ -250,8 +251,11 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
-    func testMapListActionUsesTrimlessBookmarkSymbol() {
-        XCTAssertEqual(MapPlaceListActionSymbol.systemImage, "bookmark.fill")
+    func testListSymbolHasNativeOutlineAndFillVariantsDistinctFromWanna() {
+        XCTAssertEqual(PlaceListSymbol.systemImage, "list.bullet.rectangle.portrait")
+        XCTAssertNotEqual(PlaceListSymbol.systemImage, "bookmark.fill")
+        XCTAssertNotNil(UIImage(systemName: PlaceListSymbol.systemImage))
+        XCTAssertNotNil(UIImage(systemName: "\(PlaceListSymbol.systemImage).fill"))
     }
 
     private func makeStore(

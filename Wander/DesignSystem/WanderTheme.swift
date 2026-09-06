@@ -2,6 +2,12 @@ import ImageIO
 import SwiftUI
 import UIKit
 
+/// Shared Lists identity. Bookmark symbols are reserved for Wanna and saved lenses.
+/// Keep the native symbol so labels inherit typography and tab selection can use its fill variant.
+enum PlaceListSymbol {
+    static let systemImage = "list.bullet.rectangle.portrait"
+}
+
 struct WanderColorToken: Equatable {
     let name: String
     let hex: String
