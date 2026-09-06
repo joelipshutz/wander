@@ -2477,7 +2477,7 @@ private struct DiscoverPlaceResultCard: View {
 
                 DiscoverResultActionButton(
                     title: "Add to list",
-                    systemImage: "text.badge.plus",
+                    systemImage: PlaceListSymbol.systemImage,
                     action: addToList
                 )
                 .accessibilityIdentifier("discover.addToList.\(visiblePlace.place.id)")

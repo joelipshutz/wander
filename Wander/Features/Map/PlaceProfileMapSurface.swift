@@ -774,7 +774,7 @@ private struct PlaceProfilePreviewCard: View {
             }
 
             if onAddToList != nil {
-                actionButtonGlyph(systemName: MapPlaceListActionSymbol.systemImage, size: 17)
+                actionButtonGlyph(systemName: PlaceListSymbol.systemImage, size: 17)
             }
 
             if shareContent != nil {
@@ -817,7 +817,7 @@ private struct PlaceProfilePreviewCard: View {
                     activeCardAction = .addToList
                     onAddToList()
                 } label: {
-                    Image(systemName: MapPlaceListActionSymbol.systemImage)
+                    Image(systemName: PlaceListSymbol.systemImage)
                         .font(.system(size: 17, weight: .black))
                 }
                 .buttonStyle(
@@ -1562,7 +1562,7 @@ private struct PlaceProfileFullView: View {
 
                     if let onAddToList {
                         Button(action: onAddToList) {
-                            headerNavigationLabel(systemImage: MapPlaceListActionSymbol.systemImage)
+                            headerNavigationLabel(systemImage: PlaceListSymbol.systemImage)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Add place to lists")
@@ -1592,6 +1592,8 @@ private struct PlaceProfileFullView: View {
             .font(.system(size: 18, weight: .bold))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .foregroundStyle(astirBrandMode.primaryText)
+            // Photo-backed headers need a stable surface beneath their dark/light glyphs.
+            .background(astirBrandMode.raisedBackground, in: Circle())
             .contentShape(Circle())
             .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
     }

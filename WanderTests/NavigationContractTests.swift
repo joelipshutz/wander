@@ -138,7 +138,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
-        XCTAssertEqual(WanderTab.lists.systemImage, "bookmark.square")
+        XCTAssertEqual(WanderTab.lists.systemImage, PlaceListSymbol.systemImage)
         XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
 
         let root = try String(
@@ -3552,7 +3552,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("store.listPhotoAuthorizationScopeKey()"))
         XCTAssertTrue(photoMedia.contains("AstirPlacePhotoAsset(stableKey: place.id)"))
         XCTAssertTrue(photoMedia.contains("eligibleUserIDs: eligibleUserIDs"))
-        XCTAssertTrue(previewMosaic.contains("Image(systemName: \"bookmark.fill\")"))
+        XCTAssertTrue(previewMosaic.contains("Image(systemName: PlaceListSymbol.systemImage)"))
         XCTAssertFalse(previewMosaic.contains("String(list.name.prefix(1))"))
         XCTAssertTrue(previewMosaic.contains("eligibleUserIDs: list.photoContributorUserIDs"))
         XCTAssertTrue(source.contains("photoContributorUserIDs.contains(store.currentUser.id)"))

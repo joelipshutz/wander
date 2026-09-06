@@ -1,10 +1,6 @@
 import SwiftUI
 import UIKit
 
-enum MapPlaceListActionSymbol {
-    static let systemImage = "bookmark.fill"
-}
-
 enum MapPlaceListTarget: Identifiable {
     case candidate(PlaceCandidate)
     case visiblePlace(VisiblePlace)
@@ -432,7 +428,7 @@ struct MapPlaceListPickerSheet: View {
             selection.togglePending(listID: list.id)
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: list.ownerUserID == store.currentUser.id ? "bookmark.fill" : "person.2.fill")
+                Image(systemName: PlaceListSymbol.systemImage)
                     .font(.system(size: 14, weight: .bold))
                     .frame(width: 36, height: 36)
                     .foregroundStyle(list.ownerUserID == store.currentUser.id
