@@ -206,9 +206,6 @@ struct FeedScreen: View {
                 }
             }
         }
-        .task(id: activityNavigation.commentsRoute?.id) {
-            await resolveCommentsRouteIfNeeded()
-        }
     }
 
     private var floatingHeader: some View {

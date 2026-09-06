@@ -1783,7 +1783,10 @@ final class WanderStore: ObservableObject {
         else { return existing }
 
         do {
-            let activity = try await repository.activity(id: activityID)
+            let activity = try await retryActivityRead {
+                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                return try await repository.activity(id: activityID)
+            }
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             guard activity.id == activityID, canDisplayActivity(activity) else {
                 discardCachedActivity(activityID)
@@ -1800,8 +1803,9 @@ final class WanderStore: ObservableObject {
                 nextCursor: currentPage?.nextCursor,
                 fetchedAt: currentPage?.fetchedAt ?? .now
             )
-            await refreshActivityEngagement(activityIDs: [activityID], backend: backend)
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            // Comments supply engagement themselves; do not delay navigation on
+            // an unrelated summary request.
+            activityEngagementErrorByID[activityID] = nil
             return activity
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
@@ -2004,14 +2008,37 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    // Retry only interrupted transport reads, never writes or denied/missing data.
+    // The caller still validates the account and authoritative server response.
+    private func retryActivityRead<Value>(
+        _ operation: () async throws -> Value
+    ) async throws -> Value {
+        try Task.checkCancellation()
+        do {
+            return try await operation()
+        } catch let error as URLError where [
+            .timedOut, .networkConnectionLost, .cannotConnectToHost,
+            .cannotFindHost, .dnsLookupFailed
+        ].contains(error.code) {
+            try await Task.sleep(for: .milliseconds(300))
+            try Task.checkCancellation()
+            return try await operation()
+        }
+    }
+
     @discardableResult
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+        let requestUserID = currentUser.id
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
         else { return true }
 
         do {
-            let page = try await repository.comments(activityID: activityID, before: nil, limit: 50)
+            let page = try await retryActivityRead {
+                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                return try await repository.comments(activityID: activityID, before: nil, limit: 50)
+            }
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
             let pendingDeletedComments = page.comments.filter {
                 pendingActivityCommentDeletionIDs.contains($0.id)
             }
@@ -2038,6 +2065,7 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return true
         } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
         }

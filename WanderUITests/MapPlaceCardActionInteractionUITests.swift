@@ -2,6 +2,36 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardActionInteractionUITests: XCTestCase {
+    func testEditingCheckInShowsStandardPhotoPicker() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest", "-WanderResetWalkthroughs",
+            "-WanderREC386PhotoFixture", "-WanderMapPlace", "Dudley Market QA",
+            "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 12))
+        let edit = app.buttons["Edit check-in"].firstMatch
+        for _ in 0..<7 where !edit.isHittable { app.swipeUp() }
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        let photos = app.buttons["save.photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        // XCTest's first offscreen tap scrolls the medium sheet to its large
+        // detent. Wait for that transition before testing the actual control.
+        if !photos.isHittable { photos.tap() }
+        let hittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"), object: photos
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 5), .completed)
+        capture("REC-443 edit check-in photos")
+        photos.tap()
+        XCTAssertTrue(app.buttons["Choose from Library"].waitForExistence(timeout: 3))
+        capture("REC-443 standard photo options while editing")
+    }
+
     func testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps() {
         let app = XCUIApplication()
         app.launchArguments = [
