@@ -10864,9 +10864,9 @@ struct MapPlaceSaveContext: Identifiable {
 
     var allowsPhotoAttachments: Bool {
         switch mode {
-        case .add, .addVisit, .sharedVisit:
+        case .add, .addVisit, .sharedVisit, .editVisit:
             true
-        case .editVisit, .editWant:
+        case .editWant:
             false
         }
     }
@@ -13105,6 +13105,7 @@ struct MapPlaceSaveEditor: View {
             if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
                     canAddPhotos: true,
+                    existingPhotos: context.editedVisit.map { store.photos(for: $0.id) } ?? [],
                     photos: $visitPhotoAttachments
                 )
             }
@@ -14527,6 +14528,7 @@ struct MapPlaceSaveEditor: View {
 
 private struct MapSaveVisitPhotoSection: View {
     let canAddPhotos: Bool
+    var existingPhotos: [LocalVisitPhoto] = []
     @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
@@ -14537,7 +14539,7 @@ private struct MapSaveVisitPhotoSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Button {
-                if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                if canAddPhotos && photoCount < MapPlaceSavePhotoAttachment.maximumCount {
                     isShowingPhotoMenu = true
                 }
             } label: {
@@ -14551,11 +14553,11 @@ private struct MapSaveVisitPhotoSection: View {
 
                     Spacer()
 
-                    Text(photos.isEmpty ? "add" : "\(photos.count) added")
+                    Text(photoCount == 0 ? "add" : "\(photoCount) added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
 
-                    if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                    if canAddPhotos && photoCount < MapPlaceSavePhotoAttachment.maximumCount {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
@@ -14563,9 +14565,11 @@ private struct MapSaveVisitPhotoSection: View {
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!canAddPhotos || photos.count >= MapPlaceSavePhotoAttachment.maximumCount)
+            .accessibilityIdentifier("save.photos")
+            .disabled(!canAddPhotos || photoCount >= MapPlaceSavePhotoAttachment.maximumCount)
             .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take Photo") {
@@ -14579,9 +14583,16 @@ private struct MapSaveVisitPhotoSection: View {
                 Button("Cancel", role: .cancel) {}
             }
 
-            if !photos.isEmpty {
+            if photoCount > 0 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(existingPhotos) { photo in
+                            VisitPhotoThumbnail(
+                                photo: PlaceActivityPhoto(metadata: photo, entryID: photo.visitID),
+                                size: 82
+                            )
+                            .accessibilityLabel("Existing check-in photo")
+                        }
                         ForEach(Array(photos.enumerated()), id: \.element.id) { index, attachment in
                             ZStack(alignment: .topTrailing) {
                                 Image(uiImage: attachment.image)
@@ -14649,7 +14660,7 @@ private struct MapSaveVisitPhotoSection: View {
         .photosPicker(
             isPresented: $isShowingPhotoPicker,
             selection: $selectedPhotoItems,
-            maxSelectionCount: max(1, MapPlaceSavePhotoAttachment.maximumCount - photos.count),
+            maxSelectionCount: max(1, MapPlaceSavePhotoAttachment.maximumCount - photoCount),
             matching: .images
         )
         .onChange(of: selectedPhotoItems) { _, items in
@@ -14698,12 +14709,15 @@ private struct MapSaveVisitPhotoSection: View {
         }
     }
 
+    private var photoCount: Int { existingPhotos.count + photos.count }
+
     private func appendIfWithinLimits(_ attachment: MapPlaceSavePhotoAttachment) {
-        guard photos.count < MapPlaceSavePhotoAttachment.maximumCount else {
+        guard photoCount < MapPlaceSavePhotoAttachment.maximumCount else {
             photoError = "A check-in can have up to 10 photos."
             return
         }
-        guard photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
+        guard existingPhotos.reduce(0, { $0 + ($1.byteSize ?? 0) })
+            + photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
             photoError = "Those photos are over the 75 MB check-in limit."
             return
         }
