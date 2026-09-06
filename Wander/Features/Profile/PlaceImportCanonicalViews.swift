@@ -1124,10 +1124,10 @@ private struct PlaceImportHistoryArtwork: View {
                 .scaledToFill()
         } else {
             VStack(spacing: WanderTheme.spacing2) {
-                CanonicalImportSourceMark(source: batch.source, color: .black.opacity(0.65), size: 38)
+                CanonicalImportSourceMark(source: batch.source, color: batch.source == .tiktok ? .white.opacity(0.8) : .black.opacity(0.65), size: 38)
                 Text("Post preview unavailable")
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(.black.opacity(0.65))
+                    .foregroundStyle(batch.source == .tiktok ? Color.white.opacity(0.8) : Color.black.opacity(0.65))
                     .multilineTextAlignment(.center)
             }
             .padding(WanderTheme.spacing3)
