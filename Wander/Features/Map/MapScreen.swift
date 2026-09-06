@@ -1267,8 +1267,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
             outlines.map(\.id).joined(separator: ","),
             isSearchResult ? "search" : "saved",
             isSelected ? "selected" : "inactive",
-            isSelected ? title : "",
-            String(bounceRevision)
+            isSelected ? title : ""
         ].joined(separator: "|")
     }
 
@@ -3611,10 +3610,22 @@ struct MapScreen: View {
         guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
         placeProfilePreloadTask?.cancel()
         placeProfilePreloadTask = Task { @MainActor in
-            await Task.yield()
+            // Preparing the hidden full profile mounts its layout and starts
+            // photo/metadata work. Leave the card entrance and map recenter free
+            // of that work, while retaining a warm profile for a later expansion.
+            do {
+                try await Task.sleep(for: .seconds(
+                    MapCompactCardMotionStyle.entranceDuration
+                        + MapCompactCardMotionStyle.nearbyFadeDuration
+                ))
+                while cameraRegionTracker.isInteractionActive {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            } catch { return }
             guard !Task.isCancelled,
                   identity == compactSelectionIdentity,
                   hasSelectedProfile,
+                  compactCardPhase == .presented,
                   !isPlaceProfileMounted,
                   !isPlaceProfilePresented
             else { return }
@@ -3703,6 +3714,8 @@ struct MapScreen: View {
         mapSelectionRevision += 1
         let revision = mapSelectionRevision
         compactCardMotionTask?.cancel()
+        placeProfilePreloadTask?.cancel()
+        placeProfilePreloadTask = nil
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         droppedPinGeocodingTask?.cancel()
@@ -6528,6 +6541,7 @@ private struct NativeMapView: UIViewRepresentable {
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
         private var isProgrammaticCameraChangeInFlight = false
+        private var isCameraMoving = false
         private var suppressNextCompletedTap = false
         private lazy var tapRecognizer: PassiveMapTapGestureRecognizer = {
             let recognizer = PassiveMapTapGestureRecognizer()
@@ -6564,8 +6578,15 @@ private struct NativeMapView: UIViewRepresentable {
             }
 
             applyNativeFeatureClearIfNeeded(to: mapView)
-            applyCameraRequestIfNeeded(to: mapView)
-            synchronizeAnnotations(in: mapView)
+            if lastCameraRevision == nil {
+                // Establish the initial viewport before choosing its pins.
+                applyCameraRequestIfNeeded(to: mapView)
+                synchronizeAnnotations(in: mapView)
+            } else {
+                // Apply selection appearance before starting the recenter animation.
+                synchronizeAnnotations(in: mapView)
+                applyCameraRequestIfNeeded(to: mapView)
+            }
         }
 
         func attachGestureObservers(to mapView: MKMapView) {
@@ -6641,6 +6662,10 @@ private struct NativeMapView: UIViewRepresentable {
             }
         }
 
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            isCameraMoving = true
+        }
+
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             parent.onCameraChange(mapView.region)
         }
@@ -6648,6 +6673,7 @@ private struct NativeMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             let isUserInitiated = !isProgrammaticCameraChangeInFlight
             isProgrammaticCameraChangeInFlight = false
+            isCameraMoving = false
             synchronizeAnnotations(in: mapView)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
@@ -6670,6 +6696,10 @@ private struct NativeMapView: UIViewRepresentable {
             // Descriptors already have stable ordering. Comparing the array
             // avoids allocating and hashing every pin on unrelated UI updates.
             let descriptorsChanged = parent.annotations != descriptorSnapshot
+            // The prefetched viewport already covers ordinary movement. Do not
+            // churn its native views on unrelated SwiftUI updates mid-gesture.
+            // Changed data still applies immediately, including revoked access.
+            guard descriptorsChanged || !isCameraMoving else { return }
             let shouldRefreshViewport: Bool
             if let renderedViewport {
                 shouldRefreshViewport = MapAnnotationViewportPolicy.shouldRefresh(
