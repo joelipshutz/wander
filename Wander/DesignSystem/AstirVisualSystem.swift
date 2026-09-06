@@ -1,4 +1,182 @@
 import SwiftUI
+import UIKit
+import CoreImage
+import os
+
+/// Supplies only the map's pixels. Header controls and the wordmark are never
+/// part of the sampled image, so the blur cannot feed back into itself.
+@MainActor
+final class AstirMapBackdrop: ObservableObject {
+    weak var mapView: UIView?
+    weak var blurView: AstirMapBackdropView?
+    var hasRenderedMap = false
+
+    func refresh() {
+        blurView?.requestCapture()
+    }
+
+    func mapMoved() {
+        // Never show a blurred image from the old camera position, or capture
+        // MapKit's hierarchy while it is animating.
+        blurView?.image = nil
+        refresh()
+    }
+}
+
+private struct AstirMapBackdropSurface: UIViewRepresentable {
+    let source: AstirMapBackdrop
+
+    func makeUIView(context: Context) -> AstirMapBackdropView {
+        let view = AstirMapBackdropView()
+        view.source = source
+        source.blurView = view
+        return view
+    }
+
+    func updateUIView(_ view: AstirMapBackdropView, context: Context) {
+        view.requestCapture()
+    }
+
+    static func dismantleUIView(_ view: AstirMapBackdropView, coordinator: ()) {
+        view.stop()
+    }
+}
+
+/// Gaussian blur preserves the sampled map's colors. No material, tint,
+/// brightness adjustment, saturation adjustment, or colored backing is used.
+enum AstirMapGaussianBlur {
+    nonisolated private static let context = CIContext(options: [.cacheIntermediates: false])
+    nonisolated static func render(_ image: CGImage, inset: CGFloat) -> CGImage? {
+        let input = CIImage(cgImage: image)
+        let blurred = input.clampedToExtent().applyingFilter(
+            "CIGaussianBlur", parameters: [kCIInputRadiusKey: 8]
+        )
+        let output = input.extent.insetBy(dx: inset, dy: inset)
+        return context.createCGImage(blurred, from: output)
+    }
+}
+
+@MainActor
+final class AstirMapBackdropView: UIImageView {
+    weak var source: AstirMapBackdrop?
+    private var captureTask: Task<Void, Never>?
+    private var needsCapture = false
+    private var lastRequestTime: CFTimeInterval = 0
+    private var laidOutBounds = CGRect.zero
+    private var captureID: UUID?
+    private let feather = CAGradientLayer()
+    #if DEBUG
+    private var diagnosticCaptureCount = 0
+    private let recordsDiagnostics = ProcessInfo.processInfo.arguments.contains("-WanderMapBackdropDiagnostic")
+    #endif
+
+    init() {
+        super.init(frame: .zero)
+        isOpaque = false
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        contentMode = .scaleToFill
+        feather.type = .radial
+        feather.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+        feather.locations = [0, 0.55, 1]
+        feather.startPoint = CGPoint(x: 0.5, y: 0.5)
+        feather.endPoint = CGPoint(x: 1, y: 1)
+        layer.mask = feather
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        feather.frame = bounds
+        if bounds != laidOutBounds {
+            laidOutBounds = bounds
+            requestCapture()
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { stop() } else { requestCapture() }
+    }
+
+    func stop() {
+        captureTask?.cancel()
+        captureTask = nil
+        captureID = nil
+        needsCapture = false
+    }
+
+    func requestCapture() {
+        guard window != nil, !bounds.isEmpty else { return }
+        needsCapture = true
+        lastRequestTime = CACurrentMediaTime()
+        guard captureTask == nil else { return }
+        let id = UUID()
+        captureID = id
+        captureTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if captureID == id { captureTask = nil }
+            }
+            while needsCapture, !Task.isCancelled {
+                // Wait for camera/tile/annotation changes to settle. Continuous
+                // map gestures keep postponing the capture; an idle map has no
+                // capture loop, and only one Gaussian render can be in flight.
+                let requestedAt = lastRequestTime
+                let delay = max(0, 0.15 - (CACurrentMediaTime() - requestedAt))
+                if delay > 0 {
+                    do { try await Task.sleep(for: .seconds(delay)) }
+                    catch { return }
+                }
+                if requestedAt != lastRequestTime { continue }
+                guard !Task.isCancelled, source?.hasRenderedMap == true,
+                      let map = source?.mapView,
+                      let window, map.window === window, !bounds.isEmpty
+                else { return }
+                needsCapture = false
+                let captureStartedAt = CACurrentMediaTime()
+                let inset: CGFloat = 20
+                let sampledRect = convert(bounds, to: map).insetBy(dx: -inset, dy: -inset)
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                format.opaque = false
+                let renderer = UIGraphicsImageRenderer(size: sampledRect.size, format: format)
+                let capture = renderer.image { _ in
+                    map.drawHierarchy(
+                        in: map.bounds.offsetBy(dx: -sampledRect.minX, dy: -sampledRect.minY),
+                        afterScreenUpdates: false
+                    )
+                }
+                #if DEBUG
+                if recordsDiagnostics {
+                    diagnosticCaptureCount += 1
+                    if diagnosticCaptureCount == 1 || diagnosticCaptureCount.isMultiple(of: 30) {
+                        let milliseconds = (CACurrentMediaTime() - captureStartedAt) * 1_000
+                        Logger(subsystem: "com.grayline.wander", category: "LogoBlur").info(
+                            "capture=\(self.diagnosticCaptureCount) size=\(self.bounds.width)x\(self.bounds.height) mainThreadMs=\(milliseconds)"
+                        )
+                    }
+                }
+                #endif
+                guard let cgImage = capture.cgImage else { return }
+                let blurred = await Task.detached(priority: .userInitiated) {
+                    AstirMapGaussianBlur.render(cgImage, inset: inset)
+                }.value
+                guard !Task.isCancelled, self.window != nil, let blurred else { return }
+                guard requestedAt == lastRequestTime else { continue }
+                image = UIImage(cgImage: blurred, scale: 1, orientation: .up)
+                #if DEBUG
+                if recordsDiagnostics {
+                    try? image?.pngData()?.write(to: URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("logo-blur-latest.png"))
+                }
+                #endif
+            }
+        }
+    }
+}
 
 enum AstirBrandMode: String, CaseIterable, Equatable {
     case editorial
@@ -219,6 +397,7 @@ struct AstirMastheadLockup: View {
 enum AstirMastheadPresentation {
     case glass
     case localizedBlur
+    case mapBlur(AstirMapBackdrop)
 }
 
 private struct AstirMastheadPresentationModifier: ViewModifier {
@@ -230,6 +409,17 @@ private struct AstirMastheadPresentationModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         switch presentation {
+        case .mapBlur(let source):
+            content
+                .padding(.horizontal, isCompact ? 7 : 9)
+                .padding(.vertical, isCompact ? 5 : 7)
+                .background {
+                    if !reduceTransparency {
+                        AstirMapBackdropSurface(source: source)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
         case .glass:
             content
                 .padding(.horizontal, isCompact ? 12 : 14)

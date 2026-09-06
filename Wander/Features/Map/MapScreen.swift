@@ -1358,6 +1358,7 @@ struct MapAnnotationViewportIndex {
 }
 
 struct MapScreen: View {
+    @StateObject private var mastheadBackdrop = AstirMapBackdrop()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
@@ -1951,6 +1952,7 @@ struct MapScreen: View {
                     onEmptyMapTap: handleEmptyMapTap,
                     onLongPress: handleNativeMapLongPress,
                     onNativeFeatureSelection: handleNativeMapFeatureSelection,
+                    mastheadBackdrop: mastheadBackdrop,
                     onCameraChange: handleMapCameraChange,
                     onCameraInteractionEnd: { region, isUserInitiated in
                         handleMapCameraInteractionEnd(
@@ -2043,7 +2045,7 @@ struct MapScreen: View {
                         AstirFloatingHeaderSurface {
                             VStack(spacing: WanderTheme.spacing1) {
                                 HStack {
-                                    AstirMastheadLockup(presentation: .localizedBlur)
+                                    AstirMastheadLockup(presentation: .mapBlur(mastheadBackdrop))
                                     Spacer()
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
@@ -6474,6 +6476,7 @@ private struct NativeMapView: UIViewRepresentable {
     let onEmptyMapTap: () -> Void
     let onLongPress: (CLLocationCoordinate2D) -> Void
     let onNativeFeatureSelection: (MKMapFeatureAnnotation) -> Void
+    let mastheadBackdrop: AstirMapBackdrop
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
 
@@ -6483,6 +6486,8 @@ private struct NativeMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView(frame: .zero)
+        mastheadBackdrop.mapView = mapView
+        mastheadBackdrop.hasRenderedMap = false
         let configuration = MKStandardMapConfiguration(
             elevationStyle: .flat,
             emphasisStyle: .muted
@@ -6509,6 +6514,7 @@ private struct NativeMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.update(parent: self, mapView: mapView)
+        mastheadBackdrop.refresh()
     }
 
     static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
@@ -6608,6 +6614,7 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            parent.mastheadBackdrop.refresh()
             #if DEBUG
             MapPerformanceProbe.recordNativeAnnotationViewsAdded(views.count)
             #endif
@@ -6643,6 +6650,14 @@ private struct NativeMapView: UIViewRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             parent.onCameraChange(mapView.region)
+            parent.mastheadBackdrop.mapMoved()
+        }
+
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            if fullyRendered {
+                parent.mastheadBackdrop.hasRenderedMap = true
+                parent.mastheadBackdrop.refresh()
+            }
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {

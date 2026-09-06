@@ -41,6 +41,12 @@ across production surfaces by this provisional grammar:
 - Header elements float independently as Liquid Glass components. Blur stays
   localized to each logo, search field, tab control, or action; never add a
   shared material field or put the full header group inside one glass block.
+- The Map masthead is an exception to material styling: blur the rendered map
+  behind the wordmark with no tint, color fill, saturation change, or opacity
+  overlay. Reduce Transparency leaves this wordmark unbacked instead of adding
+  a solid plate. While the camera moves, leave the wordmark unbacked and refresh
+  its blur after movement settles so sampling does not interrupt map animation.
+  Do not substitute a system material for the map-pixel blur.
 - Search and action fields use soft continuous rectangles, not hard boxes. Tabs
   use an editorial underline treatment rather than filled chips. Map source
   filters are the exception: they use compact individual glass chips because
