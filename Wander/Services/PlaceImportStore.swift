@@ -1955,6 +1955,38 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    private var sourcePreviewRequests: Set<String> = []
+
+    func loadSourcePreview(batchID: String) async {
+        guard let batch = batches.first(where: { $0.id == batchID }),
+              [.instagram, .tiktok].contains(batch.source),
+              let source = items(for: batchID).compactMap(\.seed.sourceURLString).first,
+              let url = URL(string: source),
+              sourcePreviewRequests.insert(batchID).inserted else { return }
+        if batch.sourceName != nil && items(for: batchID).contains(where: { $0.seed.sourceThumbnailURLString != nil }) { return }
+        let metadata = await PublicSocialImportMetadataProvider().metadata(for: url, source: batch.source)
+        guard !Task.isCancelled else {
+            sourcePreviewRequests.remove(batchID)
+            return
+        }
+        updateSourcePreview(batchID: batchID, title: metadata?.title,
+            thumbnail: (metadata?.thumbnailURL ?? metadata?.mediaItems.first?.imageURL)?.absoluteString)
+    }
+
+    func updateSourcePreview(batchID: String, title: String?, thumbnail: String?) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           batches[index].source != .googleMaps {
+            batches[index].sourceName = title
+        }
+        if let thumbnail {
+            for index in items.indices where items[index].batchID == batchID {
+                items[index].seed.sourceThumbnailURLString = thumbnail
+            }
+        }
+        persist()
+    }
+
     func markAutomaticSaveCompleted(batchID: String, at date: Date = .now) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
         batches[index].automaticSaveCompletedAt = date

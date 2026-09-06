@@ -2202,8 +2202,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
         let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
             .last?.components(separatedBy: "private func sourceLinkCard").first)
-        XCTAssertTrue(report.contains(".task(id: batchID)"))
-        XCTAssertTrue(report.contains("importStore.markReviewOpened(batchIDs: [batchID])"))
+        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})"))
         let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
             .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
         XCTAssertFalse(history.contains("markReviewOpened"))
@@ -2275,8 +2274,9 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
         XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
-        XCTAssertTrue(views.contains("ImportRemainingReviewScreen(importStore: importStore, batchID: batchID)"))
-        XCTAssertTrue(views.contains("for item in batchItems where ![.saved, .dismissed].contains(item.state)"))
+        XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true)"))
+        XCTAssertFalse(views.contains("Review and add places"))
+        XCTAssertTrue(views.contains("itemIDs.contains(item.id) && item.state != .dismissed"))
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {
@@ -3480,7 +3480,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(listRow.contains("selection.existingListIDs.contains(list.id)"))
         XCTAssertFalse(listRow.contains("target.isAlreadyInList"))
         XCTAssertTrue(presentationRefresh.contains("for list in eligibleLists"))
-        XCTAssertTrue(presentationRefresh.contains("target.isAlreadyInList(list, store: store)"))
+        XCTAssertTrue(presentationRefresh.contains("targets.allSatisfy({ $0.isAlreadyInList(list, store: store) })"))
         XCTAssertTrue(presentationRefresh.contains("detailByListID[list.id] = makeListDetail(list)"))
         XCTAssertTrue(source.contains("if presentation.needsCompanionWanna"))
     }

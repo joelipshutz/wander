@@ -1,9 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The launch import review: every resolved place stays visible, uncertain
-/// source mentions expose up to five independently selectable candidates, and
-/// the source row owns one shared Wanna / Check In state.
+/// One import report keeps saved places above actionable matches. Status actions
+/// save immediately; list membership is independent of Wanna / Check In.
 struct PlaceImportCanonicalReviewScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchIDs: [String]
@@ -24,23 +23,27 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var showsCommitError = false
     @State private var didExpandInitialDetails = false
     @State private var rescueItem: PlaceImportItem?
+    @State private var listTargets: [MapPlaceListTarget] = []
+    @State private var showsLists = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                ForEach(scopedBatches) { batch in
+                    ImportSourceHeader(importStore: importStore, batch: batch, items: importStore.items(for: batch.id))
+                    PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true)
+                }
                 if processingCount > 0 {
                     processingContent
-                } else if displayItems.isEmpty && recoveryItems.isEmpty {
+                } else if displayItems.isEmpty && recoveryItems.isEmpty && scopedBatches.allSatisfy({ $0.receipt == nil }) {
                     ContentUnavailableView(
                         "No places matched",
                         systemImage: "mappin.slash",
                         description: Text("Nothing from this import is ready to add.")
                     )
                 } else {
-                    if !displayItems.isEmpty {
-                        reviewHeader
-                        applyToAllControls
-                    }
+                    if !displayItems.isEmpty { reviewHeader }
+                    if scopedItems.contains(where: { !$0.candidates.isEmpty }) { applyToAllControls }
 
                     if !readyItems.isEmpty {
                         importSection("Ready to add") {
@@ -61,7 +64,6 @@ struct PlaceImportCanonicalReviewScreen: View {
                         ForEach(scopedBatches) { batch in
                             let failed = recoveryItems.filter { $0.batchID == batch.id }
                             if !failed.isEmpty {
-                                ImportSourceHeader(batch: batch, items: importStore.items(for: batch.id))
                                 ImportRetryContent {
                                     for item in failed { importStore.retry(itemID: item.id) }
                                 }
@@ -72,11 +74,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, 94)
+            .padding(.bottom, WanderTheme.spacing6)
         }
         .scrollDismissesKeyboard(.interactively)
         .astirScreen()
-        .navigationTitle("Review places")
+        .navigationTitle("Import report")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
@@ -94,8 +96,12 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
             )
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            floatingCommitButton
+        .sheet(isPresented: $showsLists) {
+            if let first = listTargets.first {
+                MapPlaceListPickerSheet(target: first, additionalTargets: Array(listTargets.dropFirst()), analyticsSurface: "import") { _ in
+                    reconcileListSaves()
+                }
+            }
         }
         .alert("Couldn’t add places", isPresented: $showsCommitError) {
             Button("OK", role: .cancel) {}
@@ -109,8 +115,10 @@ struct PlaceImportCanonicalReviewScreen: View {
                     importStore.markReceiptPresented(receiptID: receipt.id)
                 }
             }
+            importStore.resumePendingImports()
             importStore.prepareCandidateSelections(batchIDs: batchIDs)
             importStore.reconcileDuplicates(with: existingPlaces)
+            reconcileListSaves()
             expandedMatchItemIDs.formUnion(possibleMatchItems.map(\.id))
             if !didExpandInitialDetails,
                let item = displayItems.first(where: { $0.id == initiallyExpandedDetailItemID }) {
@@ -167,11 +175,16 @@ struct PlaceImportCanonicalReviewScreen: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     masterStatusControl(.wannaGo, label: "Wanna")
                     masterStatusControl(.been, label: "Check In")
+                    VStack(spacing: 3) {
+                        listButton(items: scopedItems.filter { !$0.isSourceRetry })
+                        Text("List").font(AstirTypography.metadata)
+                    }
                 }
             }
-            .frame(width: 100)
+            .frame(width: 148)
+            .disabled(isCommitting)
             // Match the card's inner trailing inset so the master controls
-            // form two clean vertical columns with every place row.
+            // align with the three actions on each place row.
             .padding(.trailing, WanderTheme.spacing3)
         }
     }
@@ -180,12 +193,11 @@ struct PlaceImportCanonicalReviewScreen: View {
         VStack(spacing: 3) {
             importStatusButton(
                 status,
-                isSelected: selectedItems.count == displayItems.count
-                    && selectedItems.allSatisfy { $0.stagedStatus == status }
+                isSelected: false
             ) {
                 withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
                     importStore.setIncludedInImport(true, itemIDs: displayItems.map(\.id))
-                    importStore.setStagedStatus(status, itemIDs: displayItems.map(\.id))
+                    importStore.setStagedStatus(status, itemIDs: scopedItems.map(\.id))
                     for item in displayItems {
                         updateDetailStatus(status, itemID: item.id)
                     }
@@ -195,6 +207,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                         }
                     }
                 }
+                importStore.setStagedStatus(status, itemIDs: scopedItems.map(\.id))
+                commit(itemIDs: Set(scopedItems.map(\.id)))
             }
             Text(label)
                 .font(AstirTypography.metadata)
@@ -239,8 +253,9 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                rowStatusControls(item)
             }
+            rowStatusControls(item)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Button {
                 toggleDetails(item, candidate: item.selectedCandidate)
@@ -286,8 +301,9 @@ struct PlaceImportCanonicalReviewScreen: View {
                         .foregroundStyle(brandMode.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                rowStatusControls(item)
             }
+            rowStatusControls(item)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Button {
                 withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
@@ -419,14 +435,19 @@ struct PlaceImportCanonicalReviewScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             importStatusButton(
                 .wannaGo,
-                isSelected: item.isSelectedForImport && item.stagedStatus == .wannaGo
+                isSelected: false
             ) { toggleStatus(.wannaGo, item: item) }
+            .accessibilityIdentifier("import.wanna.\(item.id)")
             importStatusButton(
                 .been,
-                isSelected: item.isSelectedForImport && item.stagedStatus == .been
+                isSelected: false
             ) { toggleStatus(.been, item: item) }
+            .accessibilityIdentifier("import.checkin.\(item.id)")
+            listButton(items: [item])
+                .accessibilityIdentifier("import.list.\(item.id)")
         }
-        .frame(width: 100)
+        .frame(width: 148)
+        .disabled(isCommitting)
     }
 
     private func importStatusButton(
@@ -450,43 +471,65 @@ struct PlaceImportCanonicalReviewScreen: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var floatingCommitButton: some View {
-        WanderPrimaryButton(
-            title: processingCount > 0 ? "Done" : (isCommitting ? "Adding…" : commitButtonTitle),
-            systemImage: isCommitting ? nil : (selectedCandidateCount == 0 ? "xmark" : "arrow.down.circle.fill"),
-            isDisabled: isCommitting,
-            tone: .espressoConfirmation,
-            action: {
-                if processingCount > 0 {
-                    onDone()
-                } else {
-                    commit()
-                }
+    private func listButton(items: [PlaceImportItem]) -> some View {
+        let candidates = items.flatMap { $0.selectedCandidates }
+        let selected = !candidates.isEmpty && candidates.allSatisfy { candidate in
+            store.visiblePlaceLists.contains { store.hasCandidate(candidate, in: $0) }
+        }
+        return Button {
+            guard auth.state.session?.userID == store.currentUser.id else {
+                auth.presentGate(for: .syncPlace)
+                return
             }
-        )
-        .padding(.horizontal, WanderTheme.spacing4)
-        .padding(.top, WanderTheme.spacing2)
-        .padding(.bottom, WanderTheme.spacing2)
+            listTargets = items.flatMap { item in
+                (item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates)
+                    .map { MapPlaceListTarget.candidate($0) }
+            }
+            showsLists = !listTargets.isEmpty
+        } label: {
+            Image(systemName: "list.bullet")
+                .frame(width: 44, height: 44)
+                .wanderGlassCapsule(tone: selected ? .selected : .neutral)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add to list")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private var commitButtonTitle: String {
-        guard selectedCandidateCount > 0 else { return "Done" }
-        return "Add \(selectedCandidateCount) place\(selectedCandidateCount == 1 ? "" : "s")"
+    private func reconcileListSaves() {
+        for batch in scopedBatches {
+            var entries = batch.receipt?.entries ?? []
+            let originalEntries = entries
+            for item in importStore.items(for: batch.id) where item.state != .saved {
+                let candidates = item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates
+                let saves = candidates.compactMap { candidate -> PlaceImportReceiptEntry? in
+                    guard let existing = store.existingImportSave(matching: candidate) else { return nil }
+                    return PlaceImportReceiptEntry(itemID: item.id, displayName: candidate.name,
+                        displayArea: candidateArea(candidate), status: existing.status, outcome: .existing,
+                        userPlaceID: existing.userPlaceID)
+                }
+                if !candidates.isEmpty && saves.count == candidates.count, let last = saves.last?.userPlaceID {
+                    entries.removeAll { $0.itemID == item.id }
+                    entries.append(contentsOf: saves)
+                    importStore.markSaved(itemID: item.id, userPlaceID: last)
+                }
+            }
+            if entries != originalEntries {
+                importStore.recordReceipt(batchID: batch.id, entries: entries, destinationListID: batch.destinationListID)
+            }
+        }
     }
 
     private func toggleStatus(_ status: PlaceStatus, item: PlaceImportItem) {
-        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
-            if item.isSelectedForImport && item.stagedStatus == status {
-                importStore.setIncludedInImport(false, itemID: item.id)
-            } else {
-                importStore.setIncludedInImport(true, itemID: item.id)
-                importStore.setStagedStatus(status, itemID: item.id)
-                updateDetailStatus(status, itemID: item.id)
-                if item.selectedCandidates.isEmpty, let candidateID = item.candidates.first?.id {
-                    importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
-                }
-            }
+        guard !isCommitting else { return }
+        importStore.setIncludedInImport(true, itemID: item.id)
+        importStore.setStagedStatus(status, itemID: item.id)
+        updateDetailStatus(status, itemID: item.id)
+        if item.selectedCandidates.isEmpty, let candidateID = item.candidates.first?.id {
+            importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
         }
+        importStore.setStagedStatus(status, itemID: item.id)
+        commit(itemIDs: [item.id])
     }
 
     private func toggleDetails(_ item: PlaceImportItem, candidate: PlaceCandidate?) {
@@ -563,12 +606,9 @@ struct PlaceImportCanonicalReviewScreen: View {
         detailDrafts[itemID] = draft
     }
 
-    private func commit() {
+    private func commit(itemIDs: Set<String>) {
         guard !isCommitting else { return }
-        guard selectedCandidateCount > 0 else {
-            onDone()
-            return
-        }
+        guard !itemIDs.isEmpty else { return }
         guard let expectedUserID = auth.state.session?.userID,
               expectedUserID == store.currentUser.id
         else {
@@ -578,14 +618,14 @@ struct PlaceImportCanonicalReviewScreen: View {
 
         isCommitting = true
         commitTask = Task { @MainActor in
-            await commitScopedImports(expectedUserID: expectedUserID)
+            await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
             isCommitting = false
             commitTask = nil
         }
     }
 
     @MainActor
-    private func commitScopedImports(expectedUserID: String) async {
+    private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>) async {
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
         var receipts: [PlaceImportReceiptEntry] = []
         for batch in scopedBatches {
@@ -594,7 +634,15 @@ struct PlaceImportCanonicalReviewScreen: View {
             let destination = destinationList(for: batch, itemCount: batchItems.count)
             var entries = batch.receipt?.entries ?? []
 
-            for item in batchItems where ![.saved, .dismissed].contains(item.state) {
+            for item in batchItems where itemIDs.contains(item.id) && item.state != .dismissed {
+                if item.state == .saved {
+                    for entry in entries where entry.itemID == item.id {
+                        if let id = entry.userPlaceID {
+                            _ = store.changeImportedSaveStatus(userPlaceID: id, to: item.stagedStatus, visitedAt: .now)
+                        }
+                    }
+                    continue
+                }
                 guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 let selected = item.isSelectedForImport ? item.selectedCandidates : []
                 guard !selected.isEmpty else {
@@ -667,7 +715,6 @@ struct PlaceImportCanonicalReviewScreen: View {
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
         store.flushPersistence()
         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
-        onDone()
 
         guard case .signedIn = auth.state, !receipts.isEmpty else { return }
         Task { @MainActor in
@@ -951,6 +998,7 @@ struct PlaceImportHistoryScreen: View {
 
     private func historyTile(_ batch: PlaceImportBatch) -> some View {
         PlaceImportHistoryTile(batch: batch, items: importStore.items(for: batch.id))
+            .task { await importStore.loadSourcePreview(batchID: batch.id) }
     }
 
     private var historyBatches: [PlaceImportBatch] {
@@ -977,13 +1025,16 @@ private struct PlaceImportHistoryTile: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             PlaceImportHistoryArtwork(batch: batch, items: items)
                 .frame(maxWidth: .infinity)
-                .frame(height: 184)
+                .frame(height: 280)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .stroke(brandMode.border, lineWidth: 1)
                 }
 
+            Text(batch.sourceName ?? items.compactMap(\.seed.socialCaptionHint).first ?? "\(batch.source.canonicalName) post")
+                .font(AstirTypography.cardTitle)
+                .lineLimit(3)
             HStack(spacing: WanderTheme.spacing2) {
                 CanonicalImportSourceMark(source: batch.source, color: .black, size: 13)
                 Text(batch.createdAt.formatted(date: .abbreviated, time: .omitted))
@@ -1108,11 +1159,11 @@ private struct ImportRemainingReviewScreen: View {
 /// Source artwork and the original link have the same position for successful
 /// and failed imports. A missing cover never becomes a photo of a matched POI.
 private struct ImportSourceHeader: View {
+    @ObservedObject var importStore: PlaceImportStore
     let batch: PlaceImportBatch
     let items: [PlaceImportItem]
     @Environment(\.astirBrandMode) private var brandMode
     @State private var copiedLink = false
-    @State private var fetchedThumbnailURL: String?
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
@@ -1155,27 +1206,13 @@ private struct ImportSourceHeader: View {
             .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .task(id: sourceURL) {
-            fetchedThumbnailURL = nil
-            guard !items.contains(where: { $0.seed.sourceThumbnailURLString != nil }),
-                  let sourceURL, let url = URL(string: sourceURL),
-                  [.instagram, .tiktok].contains(batch.source)
-            else { return }
-            let metadata = await PublicSocialImportMetadataProvider().metadata(for: url, source: batch.source)
-            guard !Task.isCancelled else { return }
-            fetchedThumbnailURL = (metadata?.thumbnailURL ?? metadata?.mediaItems.first?.imageURL)?.absoluteString
+            await importStore.loadSourcePreview(batchID: batch.id)
         }
     }
 
     private var sourceURL: String? { items.lazy.compactMap(\.seed.sourceURLString).first }
 
-    private var artworkItems: [PlaceImportItem] {
-        guard let fetchedThumbnailURL else { return items }
-        return items.map { item in
-            var item = item
-            item.seed.sourceThumbnailURLString = fetchedThumbnailURL
-            return item
-        }
-    }
+    private var artworkItems: [PlaceImportItem] { items }
 }
 
 private struct ImportRetryContent: View {
@@ -1184,7 +1221,7 @@ private struct ImportRetryContent: View {
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing4) {
-            Text("Oops that link didn't work.")
+            Text("Oops that link didn't work")
                 .font(AstirTypography.sheetTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
@@ -1230,6 +1267,7 @@ private struct CanonicalImportSourceMark: View {
 struct PlaceImportReportScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchID: String
+    var savedOnly = false
 
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -1237,63 +1275,23 @@ struct PlaceImportReportScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @State private var expandedDetailEntryIDs: Set<String> = []
 
+    @State private var savedListTarget: MapPlaceListTarget?
+
     var body: some View {
         Group {
-            if let batch {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        ImportSourceHeader(batch: batch, items: items)
-
-                        if !savedEntries.isEmpty {
-                            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                                Text("Saved (\(savedEntries.count))")
-                                    .font(AstirTypography.sectionTitle)
-                                ForEach(savedEntries) { entry in reportRow(entry) }
-                            }
-                        }
-
-                        if isMatching {
-                            ProgressView("Matching your places…")
-                                .frame(maxWidth: .infinity, minHeight: 80)
-                        } else {
-                            if !remainingItems.isEmpty {
-                                remainingPlacesSection
-                            }
-                            if !failedItems.isEmpty {
-                                ImportRetryContent {
-                                    for item in failedItems { importStore.retry(itemID: item.id) }
-                                }
-                            }
-                            if savedEntries.isEmpty && remainingItems.isEmpty && failedItems.isEmpty {
-                                Text("No places found in this import.")
-                                    .font(AstirTypography.body)
-                            }
-                        }
+            if savedOnly {
+                if !savedEntries.isEmpty {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("Saved (\(savedEntries.count))").font(AstirTypography.sectionTitle)
+                        ForEach(savedEntries) { entry in reportRow(entry) }
                     }
-                    .padding(WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing6)
                 }
-                .astirScreen()
             } else {
-                ContentUnavailableView(
-                    "Report unavailable",
-                    systemImage: "doc.text.magnifyingglass",
-                    description: Text("This import has not been completed yet.")
-                )
-                .astirScreen()
+                PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})
             }
         }
-        .navigationTitle("Import report")
-        .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: isMatching) { _, matching in
-            if !matching { importStore.markReviewOpened(batchIDs: [batchID]) }
-        }
-        .task(id: batchID) {
-            importStore.resumePendingImports()
-            importStore.markReviewOpened(batchIDs: [batchID])
-            if let receipt = batch?.receipt, receipt.presentedAt == nil {
-                importStore.markReceiptPresented(receiptID: receipt.id)
-            }
+        .sheet(item: $savedListTarget) { target in
+            MapPlaceListPickerSheet(target: target, analyticsSurface: "import") { _ in }
         }
     }
 
@@ -1316,40 +1314,6 @@ struct PlaceImportReportScreen: View {
         return PlaceImportHistoryPresentation.isMatching(batch: batch, items: items)
     }
 
-    private var remainingPlacesSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Not saved yet (\(remainingItems.count))")
-                .font(AstirTypography.sectionTitle)
-            Text("These places are still here whenever you want to add them.")
-                .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.secondaryText)
-            ForEach(remainingItems) { item in
-                HStack(spacing: WanderTheme.spacing3) {
-                    CanonicalImportThumbnail(item: item, size: 54)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.displayName).font(AstirTypography.cardTitle)
-                        if let area = item.displayArea {
-                            Text(area).font(AstirTypography.metadata).foregroundStyle(brandMode.secondaryText)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(WanderTheme.spacing3)
-                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            }
-            NavigationLink {
-                ImportRemainingReviewScreen(importStore: importStore, batchID: batchID)
-            } label: {
-                Label("Review and add places", systemImage: "plus")
-                    .font(AstirTypography.control)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .foregroundStyle(brandMode.accentForeground)
-                    .background(brandMode.accent, in: Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
     private func reportRow(_ entry: PlaceImportReceiptEntry) -> some View {
         let visible = visiblePlace(for: entry)
         return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -1368,13 +1332,17 @@ struct PlaceImportReportScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let visible {
+            }
+            if let visible {
                     HStack(spacing: WanderTheme.spacing2) {
                         reportStatusButton(.wannaGo, visible: visible)
                         reportStatusButton(.been, visible: visible)
+                        Button { savedListTarget = .visiblePlace(visible) } label: {
+                            Image(systemName: "list.bullet").frame(width: 44, height: 44)
+                                .wanderGlassCapsule(tone: store.visiblePlaceLists.contains { store.hasPlace(visible, in: $0) } ? .selected : .neutral)
+                        }.buttonStyle(.plain).accessibilityLabel("Add to list")
                     }
-                    .frame(width: 100)
-                }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if let visible {

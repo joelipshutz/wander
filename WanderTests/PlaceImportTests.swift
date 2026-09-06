@@ -30,6 +30,15 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
 }
 
 final class PlaceImportHistoryPresentationTests: XCTestCase {
+    func testOpenedImportIsDoneButFailedSourceOffersRetry() {
+        var batch = PlaceImportBatch(id: "opened", source: .instagram, sourceName: nil, state: .ready, totalCount: 1)
+        batch.reviewOpenedAt = .now
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: []), "Done")
+        let item = PlaceImportItem(batchID: batch.id, source: .instagram,
+            seed: PlaceImportSeed(rawText: "test", nameHint: nil, areaHint: nil, sourceURLString: nil, sourceLine: 1), state: .failed)
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: [item]), "Retry")
+    }
+
     func testQueuedAndProcessingImportsStayLabeledAsMatching() {
         let queued = PlaceImportBatch(
             id: "queued",
@@ -120,6 +129,17 @@ final class PlaceImportHistoryRetentionTests: XCTestCase {
         let restored = PlaceImportStore(persistence: persistence)
         XCTAssertEqual(PlaceImportHistoryPresentation.remainingPlaces(items: restored.items(for: batchID)).count, 8)
         XCTAssertEqual(restored.batches.first?.receipt?.entries.count, 2)
+    }
+
+    func testPostPreviewTitleAndCoverSurviveRestart() throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let batchID = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        store.pauseProcessing(batchIDs: [batchID])
+        store.updateSourcePreview(batchID: batchID, title: "A coffee walk", thumbnail: "https://example.com/cover.jpg")
+        let restored = PlaceImportStore(persistence: persistence)
+        XCTAssertEqual(restored.batches.first?.sourceName, "A coffee walk")
+        XCTAssertEqual(restored.items(for: batchID).first?.seed.sourceThumbnailURLString, "https://example.com/cover.jpg")
     }
 
     func testDeletingSelectedHistoryPersistsAndRetainsOtherImports() throws {

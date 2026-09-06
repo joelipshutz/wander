@@ -58,7 +58,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationRecovery"]
         app.launch()
         XCTAssertTrue(app.buttons["import.retry"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Oops that link didn't work."].exists)
+        XCTAssertTrue(app.staticTexts["Oops that link didn't work"].exists)
         XCTAssertFalse(app.staticTexts["No places matched"].exists)
         keepScreenshot("Import report — source retry")
     }
@@ -69,15 +69,24 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Saved (1)"].waitForExistence(timeout: 15))
         app.swipeUp()
-        XCTAssertTrue(app.staticTexts["Not saved yet (9)"].exists)
-        for _ in 0..<5 where !app.buttons["Review and add places"].isHittable {
-            app.swipeUp()
-        }
-        let review = app.buttons["Review and add places"]
-        XCTAssertTrue(review.isHittable)
-        review.tap()
-        XCTAssertTrue(app.navigationBars["Review places"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["9 places matched and ready"].exists)
+        XCTAssertFalse(app.buttons["Review and add places"].exists)
+        XCTAssertTrue(app.buttons["import.list.report-place-1"].exists)
+        XCTAssertTrue(app.navigationBars["Import report"].exists)
+        keepScreenshot("Import report — inline review")
+    }
+
+    func testSingleInlineSaveLeavesOtherMatchesAvailable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        let action = app.buttons["import.checkin.report-place-1"]
+        for _ in 0..<5 where !action.isHittable { app.swipeUp() }
+        XCTAssertTrue(action.isHittable)
+        action.tap()
+        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
+        XCTAssertTrue(app.staticTexts["8 places matched and ready"].exists)
     }
 
     func testHistoryCanDeleteMultipleImports() {

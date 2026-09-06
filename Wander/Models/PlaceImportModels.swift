@@ -39,14 +39,10 @@ enum PlaceImportHistoryPresentation {
     ) -> String {
         if batch.state == .cancelled { return "Cancelled" }
         if isMatching(batch: batch, items: items) { return "Matching…" }
-        let remaining = remainingPlaces(items: items).count
-        if batch.receipt != nil {
-            let saved = savedEntries(batch: batch).count
-            return remaining > 0 ? "\(saved) saved · \(remaining) remaining" : "\(saved) saved"
-        }
         if items.contains(where: { [.failed, .needsHelp].contains($0.state) }) {
-            return "Needs attention"
+            return "Retry"
         }
+        if batch.reviewOpenedAt != nil { return "Done" }
         return "Ready to review"
     }
 
