@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class ImportFormRefinementUITests: XCTestCase {
-    func testShareExtensionAutomaticallyCapturesExactlyOnce() {
+    func testShareExtensionAutomaticallyCapturesExactlyOnce() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationShare"]
         app.launch()
@@ -19,6 +19,11 @@ final class ImportFormRefinementUITests: XCTestCase {
         activity.tap()
         XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
         keepScreenshot("Share extension — countdown begins")
+        let sharedInboxUnavailable = app.staticTexts["rec.me could not access its shared inbox. Check the app and extension App Group signing."]
+        if sharedInboxUnavailable.waitForExistence(timeout: 6) {
+            keepScreenshot("Share extension — appearance without Simulator App Group signing")
+            throw XCTSkip("This Simulator build has no App Group container; durable extension capture requires a signed App Group build.")
+        }
         let captured = app.staticTexts["Captured: 1"]
         XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
         XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
@@ -110,7 +115,36 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["import.save"].tap()
         for _ in 0..<5 where !app.staticTexts["Saved (10)"].isHittable { app.swipeDown() }
         XCTAssertTrue(app.staticTexts["Saved (10)"].exists)
-        XCTAssertFalse(app.buttons["import.save"].isEnabled)
+        XCTAssertFalse(app.buttons["import.save"].exists)
+        XCTAssertFalse(app.buttons["import.all.wanna"].exists)
+        keepScreenshot("Import report — all saved, no bulk controls")
+    }
+
+    func testHistoryArtworkCannotStealAdjacentTileTaps() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationHistory"]
+        app.launch()
+        let left = app.buttons["import.history.capture-instagram"]
+        XCTAssertTrue(left.waitForExistence(timeout: 15))
+        // The neighboring Google Maps image has oversized aspect-fill content.
+        // Its clipped pixels must not own the right edge of the left tile.
+        left.coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.3)).tap()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["@coffeeguide"].exists)
+        keepScreenshot("History — left edge opens the selected post")
+    }
+
+    func testSavedImportPlaceOpensItsProfile() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        let saved = app.buttons["import.saved.report-place-0"]
+        for _ in 0..<5 where !saved.isHittable { app.swipeUp() }
+        XCTAssertTrue(saved.isHittable)
+        saved.tap()
+        XCTAssertTrue(app.staticTexts["Maru Coffee"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["import.save"].exists)
+        keepScreenshot("Saved import — place profile")
     }
 
     func testListChoiceWaitsForSaveAlongsideCheckIn() {

@@ -30,6 +30,12 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
 }
 
 final class PlaceImportHistoryPresentationTests: XCTestCase {
+    func testPostTitleRemovesInstagramDescriptionWrapper() {
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "12 likes, 2 comments - cityguide on August 7, 2026: \"Five coffee stops\""), "Five coffee stops")
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "cityguide on August 7, 2026: \"Five coffee stops\""), "Five coffee stops")
+        XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "A visit on August 7, 2026"), "A visit on August 7, 2026")
+    }
+
     func testPostTitleSeparatesAuthorFromPlatformTitle() {
         XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "Cafe Guide on Instagram: “Five coffee stops”", author: "Cafe Guide"), "Five coffee stops")
         XCTAssertEqual(PlaceImportHistoryPresentation.postTitle(title: "Five coffee stops | Cafe Guide", author: "Cafe Guide"), "Five coffee stops")
@@ -112,6 +118,36 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
 
 @MainActor
 final class PlaceImportHistoryRetentionTests: XCTestCase {
+    func testCompletionNoticeIsConsumedAcrossRestartWithoutClearingReviewBadge() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let id = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        await store.waitForProcessing(batchID: id)
+        XCTAssertEqual(store.completionNoticeBatchIDs(in: [id]), [id])
+        store.markCompletionNotified(batchIDs: [id])
+        XCTAssertTrue(store.completionNoticeBatchIDs(in: [id]).isEmpty)
+        XCTAssertEqual(store.recentImportBadgeCount, 1)
+        let restored = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertTrue(restored.completionNoticeBatchIDs(in: [id]).isEmpty)
+        XCTAssertEqual(restored.recentImportBadgeCount, 1)
+        let item = try XCTUnwrap(restored.items(for: id).first)
+        restored.retry(itemID: item.id)
+        await restored.waitForProcessing(batchID: id)
+        XCTAssertEqual(restored.completionNoticeBatchIDs(in: [id]), [id])
+        restored.markReviewOpened(batchIDs: [id])
+        XCTAssertTrue(restored.completionNoticeBatchIDs(in: [id]).isEmpty)
+    }
+
+    func testOldCompletedImportsDoNotGenerateFreshNoticesAfterLaunch() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        let id = try store.enqueue(source: .textNotes, text: "Coffee, Los Angeles")
+        await store.waitForProcessing(batchID: id)
+        let restored = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertTrue(restored.completionNoticeBatchIDs(in: [id]).isEmpty)
+        XCTAssertEqual(restored.recentImportBadgeCount, 1)
+    }
+
     func testPartialSaveKeepsNineRemainingPlacesAcrossRestartAndLaterSave() throws {
         let persistence = InMemoryPlaceImportPersistence()
         var store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())

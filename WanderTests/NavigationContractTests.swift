@@ -134,11 +134,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
-    func testPrimaryTabsUseStaticNativeSymbolsAndSystemSelectionFeedback() throws {
+    func testPrimaryTabsUsePaperListsIconAndSystemSelectionFeedback() throws {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
-        XCTAssertEqual(WanderTab.lists.systemImage, "bookmark.square")
+        XCTAssertEqual(WanderTab.lists.systemImage, PlaceListSymbol.systemImage)
         XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
 
         let root = try String(
@@ -149,6 +149,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
+        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -2123,7 +2124,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("importStore: importStore"))
         XCTAssertTrue(addScreen.contains("AddImportEntrySection("))
         XCTAssertTrue(importViews.contains("PlaceImportHubScreen("))
-        XCTAssertTrue(addScreen.contains("PlaceImportCanonicalReviewScreen("))
+        XCTAssertTrue(addScreen.contains("PlaceImportHistoryDestination("))
+        XCTAssertTrue(addScreen.contains("if importReviewBatchIDs.count == 1"))
         XCTAssertTrue(addScreen.contains("case .importReview(let batchIDs):"))
         XCTAssertFalse(addScreen.contains("PlaceImportSourceScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportHistoryScreen(importStore: importStore)"))
@@ -2186,7 +2188,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(importViews.contains("bottomLeadingRadius: 0"))
         XCTAssertTrue(importViews.contains(".ignoresSafeArea(.container, edges: [.horizontal, .bottom])"))
         XCTAssertTrue(root.contains("onOpenImportHub: presentImportHub"))
-        XCTAssertTrue(addScreen.contains("importCompletionHeight: CGFloat = 710"))
+        XCTAssertTrue(addScreen.contains("importCompletionDetent: PresentationDetent = .large"))
         XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark\")"))
         XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
@@ -3553,7 +3555,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("store.listPhotoAuthorizationScopeKey()"))
         XCTAssertTrue(photoMedia.contains("AstirPlacePhotoAsset(stableKey: place.id)"))
         XCTAssertTrue(photoMedia.contains("eligibleUserIDs: eligibleUserIDs"))
-        XCTAssertTrue(previewMosaic.contains("Image(systemName: \"bookmark.fill\")"))
+        XCTAssertTrue(previewMosaic.contains("Image(systemName: PlaceListSymbol.systemImage)"))
         XCTAssertFalse(previewMosaic.contains("String(list.name.prefix(1))"))
         XCTAssertTrue(previewMosaic.contains("eligibleUserIDs: list.photoContributorUserIDs"))
         XCTAssertTrue(source.contains("photoContributorUserIDs.contains(store.currentUser.id)"))

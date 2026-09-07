@@ -1169,6 +1169,15 @@ final class PlaceImportStore: ObservableObject {
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
+        // Historical terminal imports belong in History, not a fresh toast on
+        // every launch. Still-running imports remain eligible when they finish.
+        for index in batches.indices where !PlaceImportHistoryPresentation.isMatching(
+            batch: batches[index], items: items(for: batches[index].id)
+        ) {
+            if batches[index].completionNotifiedAt == nil {
+                batches[index].completionNotifiedAt = .now
+            }
+        }
     }
 
     /// Separates source-level retry status from place receipt rows written by
@@ -1296,6 +1305,30 @@ final class PlaceImportStore: ObservableObject {
         }.count
     }
 
+    func completionNoticeBatchIDs(in requestedIDs: [String]) -> [String] {
+        let ids = Set(requestedIDs)
+        return batches.filter {
+            ids.contains($0.id) && $0.completionNotifiedAt == nil
+                && PlaceImportHistoryPresentation.needsReview(batch: $0, items: items(for: $0.id))
+        }.map(\.id)
+    }
+
+    func markCompletionNotified(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        for index in batches.indices where ids.contains(batches[index].id) {
+            batches[index].completionNotifiedAt = .now
+        }
+        persist()
+    }
+
+    func allowCompletionNoticeRetry(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        for index in batches.indices where ids.contains(batches[index].id) {
+            batches[index].completionNotifiedAt = nil
+        }
+        persist()
+    }
+
     func markReviewOpened(batchIDs: [String]) {
         let ids = Set(batchIDs)
         var changed = false
@@ -1304,6 +1337,7 @@ final class PlaceImportStore: ObservableObject {
                 batch: batches[index], items: items(for: batches[index].id)
             ) else { continue }
             batches[index].reviewOpenedAt = .now
+            batches[index].completionNotifiedAt = .now
             changed = true
         }
         if changed { persist() }
@@ -1733,6 +1767,7 @@ final class PlaceImportStore: ObservableObject {
         let batchID = items[index].batchID
         if let batchIndex = batches.firstIndex(where: { $0.id == batchID }) {
             batches[batchIndex].reviewOpenedAt = nil
+            batches[batchIndex].completionNotifiedAt = nil
         }
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)

@@ -51,6 +51,11 @@ enum PlaceImportHistoryPresentation {
         if let range = value.range(of: #" on (Instagram|TikTok):?\s*"#, options: .regularExpression) {
             value = String(value[range.upperBound...])
         }
+        // Instagram descriptions can wrap the caption in engagement counts,
+        // account name and a publication date instead of a post title.
+        if let range = value.range(of: #"^(?:[\d.,KMB]+ likes?, [\d.,KMB]+ comments? - )?[@\w.]+ on (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}:\s*"#, options: [.regularExpression, .caseInsensitive]) {
+            value = String(value[range.upperBound...])
+        }
         if let author, !author.isEmpty {
             if value.hasPrefix(author + ": ") { value.removeFirst(author.count + 2) }
             for suffix in [" | " + author, " - " + author] where value.hasSuffix(suffix) {
@@ -579,6 +584,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var requestedRatingScore: Double?
     /// Opening History alone is not a review. Optional for older snapshots.
     var reviewOpenedAt: Date?
+    /// A completion is surfaced once across toast, notification, and relaunch.
+    var completionNotifiedAt: Date?
 
     init(
         id: String = UUID().uuidString.lowercased(),

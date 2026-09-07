@@ -20,6 +20,7 @@ struct ImportImplementationCaptureRoot: View {
     let page: ImportImplementationCapturePage
     @StateObject private var store: WanderStore
     @StateObject private var walkthroughs = FirstVisitWalkthroughCoordinator(isEnabled: false)
+    @StateObject private var productUpsells = ProductUpsellCoordinator()
     @StateObject private var importStore: PlaceImportStore
 
     init(page: ImportImplementationCapturePage) {
@@ -47,6 +48,11 @@ struct ImportImplementationCaptureRoot: View {
                     candidates: [candidate], selectedCandidateID: candidate.id
                 )
                 snapshot.items.append(item)
+            }
+            // The receipt retains its local ID after the save gets a server ID.
+            // Exercise the same identity transition that occurs during sync.
+            if let saved = captureStore.currentUserVisiblePlaces.first(where: { $0.userPlace.id == savedUserPlaceID }) {
+                saved.userPlace.serverID = "report-synced-save"
             }
             snapshot.batches[0].receipt = PlaceImportReceipt(
                 batchID: "capture-instagram", sourceName: nil,
@@ -88,6 +94,7 @@ struct ImportImplementationCaptureRoot: View {
         }
         .environmentObject(store)
         .environmentObject(walkthroughs)
+        .environmentObject(productUpsells)
         .astirAdaptiveBrandMode()
     }
 
@@ -830,7 +837,7 @@ private struct ImportPlaceCard: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
                     if showsListSummary, let listName = place.listName {
-                        Label(listName, systemImage: "square.stack.3d.up.fill")
+                        Label(listName, systemImage: PlaceListSymbol.systemImage)
                             .font(.system(size: 10, weight: .black))
                             .foregroundStyle(WanderTheme.terracottaDark.color)
                             .lineLimit(1)
@@ -1119,7 +1126,7 @@ private struct ImportDetailsEditorMockup: View {
                 ImportDetailChip(
                     title: "Lists",
                     value: "Date night",
-                    systemImage: "square.stack.3d.up"
+                    systemImage: PlaceListSymbol.systemImage
                 )
                 ImportDetailChip(
                     title: "Place type",

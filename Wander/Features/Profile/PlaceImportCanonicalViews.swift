@@ -60,7 +60,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     )
                 } else {
                     if !displayItems.isEmpty { reviewHeader }
-                    if scopedItems.contains(where: { !$0.candidates.isEmpty }) { applyToAllControls }
+                    if !displayItems.isEmpty { applyToAllControls }
 
                     if !readyItems.isEmpty {
                         importSection("Ready to add") {
@@ -126,7 +126,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if processingCount == 0 && scopedItems.contains(where: { !$0.candidates.isEmpty }) {
+            if processingCount == 0 && (!displayItems.isEmpty || !pendingItemIDs.isEmpty) {
                 WanderPrimaryButton(title: isCommitting ? "Saving…" : "Save",
                     isDisabled: isCommitting || pendingItemIDs.isEmpty,
                     tone: .espressoConfirmation,
@@ -782,7 +782,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     private func addPendingLists(itemID: String, userPlaceID: String) async -> Bool {
         for id in pendingLists[itemID] ?? [] {
             guard let list = store.visiblePlaceLists.first(where: { $0.id == id }),
-                  let visible = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID }) else { return false }
+                  let visible = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID || $0.userPlace.localID == userPlaceID }) else { return false }
             let result = await MapPlaceListTarget.visiblePlace(visible).add(to: list, store: store, backend: nil, analyticsSurface: "import")
             guard result.outcome != .permissionDenied else { return false }
         }
@@ -1060,6 +1060,8 @@ struct PlaceImportHistoryScreen: View {
 
     private func historyTile(_ batch: PlaceImportBatch) -> some View {
         PlaceImportHistoryTile(batch: batch, items: importStore.items(for: batch.id))
+            .contentShape(Rectangle())
+            .accessibilityIdentifier("import.history.\(batch.id)")
             .task { await importStore.loadSourcePreview(batchID: batch.id) }
     }
 
@@ -1094,11 +1096,11 @@ private struct PlaceImportHistoryTile: View {
                         .stroke(brandMode.border, lineWidth: 1)
                 }
 
-            Text(batch.sourcePostTitle ?? PlaceImportHistoryPresentation.postTitle(title: batch.sourceName, caption: items.compactMap(\.seed.socialCaptionHint).first, author: batch.sourceAuthorName) ?? "\(batch.source.canonicalName) post")
+            Text(PlaceImportHistoryPresentation.postTitle(title: batch.sourcePostTitle ?? batch.sourceName, caption: batch.sourcePostTitle == nil ? items.compactMap(\.seed.socialCaptionHint).first : nil, author: batch.sourceAuthorName) ?? "\(batch.source.canonicalName) post")
                 .font(AstirTypography.cardTitle)
                 .lineLimit(3)
             HStack(spacing: WanderTheme.spacing2) {
-                CanonicalImportSourceMark(source: batch.source, color: .black, size: 13)
+                CanonicalImportSourceMark(source: batch.source, color: brandMode.primaryText, size: 13)
                 Text(batch.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
@@ -1159,6 +1161,7 @@ private struct PlaceImportHistoryArtwork: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -1351,6 +1354,7 @@ struct PlaceImportReportScreen: View {
     @State private var initializedDetailContexts: Set<String> = []
 
     @State private var savedListTarget: MapPlaceListTarget?
+    @State private var selectedSavedEntryID: String?
 
     var body: some View {
         Group {
@@ -1363,6 +1367,21 @@ struct PlaceImportReportScreen: View {
                 }
             } else {
                 PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})
+            }
+        }
+        .navigationDestination(isPresented: Binding(
+            get: { selectedSavedEntryID != nil },
+            set: { if !$0 { selectedSavedEntryID = nil } }
+        )) {
+            if let entry = savedEntries.first(where: { $0.id == selectedSavedEntryID }),
+               let visible = visiblePlace(for: entry) {
+                PlaceProfileFullScreen(
+                    place: PlaceSheetPlace(visiblePlace: visible),
+                    saves: store.visiblePlaces().filter { VisiblePlaceGrouping.matches($0, visible) }.map(saveSummary),
+                    tasteSaves: store.currentUserVisiblePlaces.map(saveSummary),
+                    currentUserID: store.currentUser.id, action: .none,
+                    onBack: { selectedSavedEntryID = nil }, onAction: {}
+                )
             }
         }
         .sheet(item: $savedListTarget) { target in
@@ -1392,22 +1411,30 @@ struct PlaceImportReportScreen: View {
     private func reportRow(_ entry: PlaceImportReceiptEntry) -> some View {
         let visible = visiblePlace(for: entry)
         return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing3) {
-                reportThumbnail(entry)
+            Button {
+                if visible != nil { selectedSavedEntryID = entry.id }
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    reportThumbnail(entry)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(visible?.place.canonicalName ?? entry.displayName)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(2)
-                    Text(entry.displayArea ?? "Saved place")
-                        .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(visible?.place.canonicalName ?? entry.displayName)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
+                            .lineLimit(2)
+                        Text(entry.displayArea ?? "Saved place")
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(visible == nil)
+            .accessibilityIdentifier("import.saved.\(entry.itemID)")
             if let visible {
                     HStack(spacing: WanderTheme.spacing2) {
                         reportStatusButton(.wannaGo, visible: visible, itemID: entry.itemID)
@@ -1423,7 +1450,7 @@ struct PlaceImportReportScreen: View {
             if let visible {
                 HStack(spacing: WanderTheme.spacing3) {
                     if let listName = destinationListName {
-                        Label(listName, systemImage: "list.bullet")
+                        Label(listName, systemImage: PlaceListSymbol.systemImage)
                             .font(AstirTypography.metadata)
                             .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
@@ -1602,8 +1629,23 @@ struct PlaceImportReportScreen: View {
     }
 
     private func visiblePlace(for entry: PlaceImportReceiptEntry) -> VisiblePlace? {
-        guard let userPlaceID = entry.userPlaceID else { return nil }
-        return store.currentUserVisiblePlaces.first { $0.userPlace.id == userPlaceID }
+        if let id = entry.userPlaceID,
+           let visible = store.currentUserVisiblePlaces.first(where: {
+               $0.userPlace.id == id || $0.userPlace.localID == id
+           }) { return visible }
+        // Sync can replace a local save identity; the original candidate keeps
+        // its provider identity and can locate the current own save safely.
+        guard let item = items.first(where: { $0.id == entry.itemID }),
+              let candidate = item.selectedCandidates.first(where: { $0.name == entry.displayName }),
+              let saved = store.existingImportSave(matching: candidate)
+        else { return nil }
+        return store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }
+    }
+
+    private func saveSummary(_ visible: VisiblePlace) -> PlaceSaveSummary {
+        PlaceSaveSummary(visiblePlace: visible,
+            attributes: store.attributes(for: visible.userPlace.id),
+            viewerFollowsOwner: store.viewerFollows(visible.owner.id))
     }
 
     private var destinationListName: String? {
