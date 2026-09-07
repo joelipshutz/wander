@@ -5,6 +5,14 @@ import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testRootStoreDefersPersistenceRestorationUntilSwiftUIMountsIt() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Wander/App/WanderRootView.swift"))
+        XCTAssertTrue(source.contains("_store = StateObject(wrappedValue: {"))
+        XCTAssertFalse(source.contains("_store = StateObject(wrappedValue: store)"))
+    }
+
     func testAppRootRoutesSignedOutSessionsThroughLoggedOutOnboarding() throws {
         let app = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")

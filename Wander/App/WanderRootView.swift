@@ -415,18 +415,21 @@ struct WanderRootView: View {
         _placeProfileFloatingActionVariant = State(
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
-        let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        let store = Self.makeStore(
-            fixtureMode: fixtureMode,
-            parser: parser,
-            analytics: analytics,
-            persistence: persistence,
-            initialSession: initialSession
-        )
-        if Self.resolvedInitialDarkMap(from: launchArguments) {
-            store.isDarkMapEnabled = true
-        }
-        _store = StateObject(wrappedValue: store)
+        // Keep construction inside StateObject's autoclosure. Root view value
+        // updates must not restore a throwaway store from disk.
+        _store = StateObject(wrappedValue: {
+            let store = Self.makeStore(
+                fixtureMode: fixtureMode,
+                parser: parser,
+                analytics: analytics,
+                persistence: fixtureMode == .empty ? .live : nil,
+                initialSession: initialSession
+            )
+            if Self.resolvedInitialDarkMap(from: launchArguments) {
+                store.isDarkMapEnabled = true
+            }
+            return store
+        }())
         let importPersistence: any PlaceImportPersisting = fixtureMode == .empty
             ? FilePlaceImportPersistence()
             : EphemeralPlaceImportPersistence()
