@@ -1233,7 +1233,7 @@ struct PlaceImportReportScreen: View {
             if let visible {
                 HStack(spacing: WanderTheme.spacing3) {
                     if let listName = destinationListName {
-                        Label(listName, systemImage: "list.bullet")
+                        Label(listName, systemImage: PlaceListSymbol.systemImage)
                             .font(AstirTypography.metadata)
                             .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)

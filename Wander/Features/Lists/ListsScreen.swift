@@ -638,7 +638,7 @@ struct ListsScreen: View {
 
     private var emptyHintRow: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "bookmark.fill")
+            Image(systemName: PlaceListSymbol.systemImage)
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 44, height: 44)
                 .background(astirBrandMode.accentWash)
@@ -1022,7 +1022,7 @@ private struct ListPreviewMosaic: View {
             Rectangle()
                 .fill(astirBrandMode.raisedBackground)
 
-            Image(systemName: "bookmark.fill")
+            Image(systemName: PlaceListSymbol.systemImage)
                 .font(.system(size: 38, weight: .black))
                 .foregroundStyle(astirBrandMode.accent.opacity(0.46))
         }
@@ -6038,7 +6038,7 @@ struct SnapshotListEditorScreen: View {
                 dismiss()
             }
         } else {
-            ContentUnavailableView("List unavailable", systemImage: "list.bullet")
+            ContentUnavailableView("List unavailable", systemImage: PlaceListSymbol.systemImage)
         }
     }
 }

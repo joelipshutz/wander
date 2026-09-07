@@ -800,7 +800,7 @@ private struct ImportPlaceCard: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
                     if showsListSummary, let listName = place.listName {
-                        Label(listName, systemImage: "square.stack.3d.up.fill")
+                        Label(listName, systemImage: PlaceListSymbol.systemImage)
                             .font(.system(size: 10, weight: .black))
                             .foregroundStyle(WanderTheme.terracottaDark.color)
                             .lineLimit(1)
@@ -1089,7 +1089,7 @@ private struct ImportDetailsEditorMockup: View {
                 ImportDetailChip(
                     title: "Lists",
                     value: "Date night",
-                    systemImage: "square.stack.3d.up"
+                    systemImage: PlaceListSymbol.systemImage
                 )
                 ImportDetailChip(
                     title: "Place type",

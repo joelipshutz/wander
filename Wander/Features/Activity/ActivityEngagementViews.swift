@@ -447,7 +447,7 @@ struct ActivityPostcardView: View {
         switch context.ticketKind {
         case .checkIn: "checkmark"
         case .wanna: "plus"
-        case .list: "list.bullet"
+        case .list: PlaceListSymbol.systemImage
         case .saved: "mappin"
         }
     }
@@ -542,7 +542,7 @@ struct ActivityPostcardView: View {
         if let secondaryMetadataTitle {
             if let secondaryMetadataAction {
                 Button(action: secondaryMetadataAction) {
-                    Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                    Label(secondaryMetadataTitle, systemImage: PlaceListSymbol.systemImage)
                         .fontWeight(.bold)
                         .lineLimit(1)
                 }
@@ -551,7 +551,7 @@ struct ActivityPostcardView: View {
                 .frame(minHeight: WanderTheme.tapMinimum, alignment: .leading)
                 .contentShape(Rectangle())
             } else {
-                Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                Label(secondaryMetadataTitle, systemImage: PlaceListSymbol.systemImage)
                     .fontWeight(.bold)
                     .lineLimit(1)
             }
@@ -885,7 +885,7 @@ struct ActivityCommentsScreen: View {
             return categorySymbol(for: visiblePlace.effectiveCategory)
         }
         return switch context.ticketKind {
-        case .list: "list.bullet"
+        case .list: PlaceListSymbol.systemImage
         case .saved, .checkIn, .wanna: "mappin"
         }
     }

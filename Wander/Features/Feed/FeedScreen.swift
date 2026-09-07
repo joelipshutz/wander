@@ -1638,7 +1638,7 @@ private struct FeedActivityModule: View {
 
     private var metadataIcon: String {
         if let place = activity.place { return categorySymbol(for: place.effectiveCategory) }
-        return "list.bullet"
+        return PlaceListSymbol.systemImage
     }
 
     private var fallbackPostcardContext: ActivityEngagementContext {
