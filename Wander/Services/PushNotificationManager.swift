@@ -1194,6 +1194,26 @@ final class PushNotificationManager: ObservableObject {
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
+    /// Remove both waiting and already delivered import notifications after
+    /// review. Match payload IDs so notifications from older builds are covered.
+    func clearImportNotifications(batchIDs: [String]) async {
+        let ids = Set(batchIDs)
+        guard !ids.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let delivered = await center.deliveredNotifications()
+        func matches(_ request: UNNotificationRequest) -> Bool {
+            guard let envelope = request.content.userInfo["recme"] as? [String: Any],
+                  envelope["notification_type"] as? String == "import_finished",
+                  let data = envelope["data"] as? [String: Any],
+                  let batchIDs = data["batch_ids"] as? [String]
+            else { return false }
+            return Set(batchIDs).isSubset(of: ids)
+        }
+        center.removePendingNotificationRequests(withIdentifiers: pending.filter(matches).map(\.identifier))
+        center.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request).filter(matches).map(\.identifier))
+    }
+
     func notifyImportMatchingFinished(
         batchIDs: [String],
         matchedCount: Int,
@@ -1223,7 +1243,7 @@ final class PushNotificationManager: ObservableObject {
                 : "\(matchedCount) places are ready to add to your map."
         }
         content.sound = .default
-        let eventID = "local-import-\(UUID().uuidString.lowercased())"
+        let eventID = "local-import-\(batchIDs.sorted().joined(separator: "|"))"
         content.userInfo = [
             "recme": [
                 "event_id": eventID,
@@ -1256,10 +1276,10 @@ final class PushNotificationManager: ObservableObject {
         needsReviewCount: Int,
         sourceRetryCount: Int = 0,
         backend: WanderBackend
-    ) async {
-        guard !batchIDs.isEmpty else { return }
+    ) async -> Bool {
+        guard !batchIDs.isEmpty else { return false }
         await refreshAuthorizationStatus()
-        guard canRegisterForRemoteNotifications else { return }
+        guard canRegisterForRemoteNotifications else { return false }
 
         let copy = PlaceImportFinishedNotificationCopy.make(
             savedCount: savedCount,
@@ -1285,12 +1305,14 @@ final class PushNotificationManager: ObservableObject {
                     )
                 ]
             )
+            return true
         } catch {
             #if DEBUG
             WanderDebugLog.imports.error(
                 "import completion notification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
+            return false
         }
     }
 

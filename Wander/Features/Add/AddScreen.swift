@@ -114,9 +114,7 @@ enum AddSheetLayout {
     /// Content-height resting detent for the import entry. The native sheet can
     /// still be dragged to full height for keyboard or accessibility needs.
     static let importEntryHeight: CGFloat = 440
-    static let importCompletionHeight: CGFloat = 710
-
-    static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
+    static let importCompletionDetent: PresentationDetent = .large
 
     static func restingDetent(hasPendingImports: Bool) -> PresentationDetent {
         .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
@@ -454,20 +452,10 @@ struct AddScreen: View {
     private var importCompletionDestination: some View {
         if importReviewBatchIDs.count == 1, let batchID = importReviewBatchIDs.first {
             PlaceImportHistoryDestination(importStore: importStore, batchID: batchID)
-        } else if importReviewBatchIDs.allSatisfy({ batchID in
-            let activeCount = importStore.items(for: batchID).filter {
-                ![.saved, .dismissed].contains($0.state)
-            }.count
-            return importStore.batches.first(where: { $0.id == batchID })?.receipt != nil
-                && PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(activeItemCount: activeCount)
-        }) {
-            PlaceImportHistoryScreen(importStore: importStore)
         } else {
-            PlaceImportCanonicalReviewScreen(
-                importStore: importStore,
-                batchIDs: importReviewBatchIDs,
-                onDone: onClose
-            )
+            // Grouped completions select a report in History; they must not
+            // concatenate unrelated post covers and places into one report.
+            PlaceImportHistoryScreen(importStore: importStore)
         }
     }
 
