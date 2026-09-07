@@ -4271,6 +4271,39 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.categoryEmoji, "🍽️")
     }
 
+    func testEditingCheckInOffersPhotosAndAppendsToTheSameVisit() async throws {
+        let store = makeStore()
+        let visiblePlace = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.status == .been })
+        let visit = try XCTUnwrap(store.visits(for: visiblePlace.userPlace.id).first)
+        let existingPhoto = try XCTUnwrap(store.createVisitPhoto(
+            visitID: visit.id, localAssetRef: "existing-photo", byteSize: 20
+        ))
+        let originalIDs = Set(store.photos(for: visit.id).map(\.id))
+        let originalVisitIDs = store.visits(for: visiblePlace.userPlace.id).map(\.id)
+        let context = MapPlaceSaveContext.editVisit(visit, visiblePlace: visiblePlace)
+        XCTAssertTrue(context.allowsPhotoAttachments)
+        XCTAssertTrue(context.initialPhotoAttachments.isEmpty, "Existing photos must not be re-uploaded")
+        let attachment = MapPlaceSavePhotoAttachment(
+            id: UUID(), image: UIImage(), contentType: "image/jpeg",
+            localAssetRef: "new-photo", sourcePhotoID: nil, byteSize: 30
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: context, candidate: context.candidate, status: .been,
+            visibility: context.initialVisibility, ratingScore: visit.ratingScore,
+            note: "Updated check-in", attributes: [], photoAttachments: [attachment],
+            inviteeUserIDs: [], reconcilesSharedVisitInvitees: false
+        )
+        let result = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil)
+        XCTAssertEqual(result?.userPlaceID, visit.userPlaceID)
+        let photos = store.photos(for: visit.id)
+        XCTAssertEqual(photos.count, originalIDs.count + 1)
+        XCTAssertTrue(originalIDs.isSubset(of: Set(photos.map(\.id))))
+        XCTAssertTrue(photos.contains { $0.id == existingPhoto.id })
+        XCTAssertTrue(photos.contains { $0.localAssetRef == "new-photo" })
+        XCTAssertEqual(store.visits(for: visiblePlace.userPlace.id).map(\.id), originalVisitIDs)
+        XCTAssertEqual(visit.note, "Updated check-in")
+    }
+
     func testEditVisitSubmissionPersistsCategoryAndRefreshesMapImmediately() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))

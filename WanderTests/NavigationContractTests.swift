@@ -4657,7 +4657,7 @@ final class NavigationContractTests: XCTestCase {
             "Wander/Features/Profile/ProfileImportViews.swift": 2,
             "Wander/Features/Profile/ProfileScreen.swift": 1,
             "Wander/Features/Map/PlaceProfileMapSurface.swift": 1,
-            "Wander/Features/Map/MapScreen.swift": 2
+            "Wander/Features/Map/MapScreen.swift": 3
         ]
 
         for (path, expectedCallCount) in directSheetEntryPointCallCounts {
