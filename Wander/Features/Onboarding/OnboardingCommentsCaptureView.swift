@@ -6,7 +6,7 @@ import UIKit
 /// Used only to capture the bundled onboarding artwork; never fetches user data.
 /// Capture on iPhone 16 Plus / iOS 26.5 in light appearance with
 /// -WanderAuthenticatedUITest -WanderOnboardingCommentsCapture and
-/// WANDER_COMMENTS_CAPTURE_RECT=44,365,342,320. The PNG is written to Documents.
+/// WANDER_COMMENTS_CAPTURE_RECT=44,240,342,320. The PNG is written to Documents.
 /// Recheck the viewport if the production comments layout changes.
 struct OnboardingCommentsCaptureView: View {
     @StateObject private var store = WanderStore(fixtures: .storefront())
