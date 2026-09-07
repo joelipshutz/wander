@@ -2,10 +2,32 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-/// Shared Lists identity. Bookmark symbols are reserved for Wanna and saved lenses.
-/// Keep the native symbol so labels inherit typography and tab selection can use its fill variant.
+/// Plain bullets identify Lists actions; the paper outline is reserved for bottom navigation.
+/// Bookmark symbols remain reserved for Wanna and saved lenses.
 enum PlaceListSymbol {
-    static let systemImage = "list.bullet.rectangle.portrait"
+    static let systemImage = "list.bullet"
+
+    /// A cached template image lets the native tab bar own selection tint and accessibility.
+    /// The slim border and three evenly spaced rows match the approved paper icon.
+    @MainActor
+    static let paperTabImage: UIImage = {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 28))
+        return renderer.image { _ in
+            UIColor.black.setFill()
+            let paper = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 22, height: 26), cornerRadius: 2.4)
+            paper.append(UIBezierPath(roundedRect: CGRect(x: 2.4, y: 2.4, width: 19.2, height: 23.2), cornerRadius: 1))
+            paper.usesEvenOddFillRule = true
+            paper.fill()
+
+            for y: CGFloat in [7, 14, 21] {
+                UIBezierPath(ovalIn: CGRect(x: 4.6, y: y - 1, width: 2, height: 2)).fill()
+                UIBezierPath(
+                    roundedRect: CGRect(x: 8.6, y: y - 0.7, width: 10.8, height: 1.4),
+                    cornerRadius: 0.7
+                ).fill()
+            }
+        }.withRenderingMode(.alwaysTemplate)
+    }()
 }
 
 struct WanderColorToken: Equatable {

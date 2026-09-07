@@ -251,11 +251,17 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
-    func testListSymbolHasNativeOutlineAndFillVariantsDistinctFromWanna() {
-        XCTAssertEqual(PlaceListSymbol.systemImage, "list.bullet.rectangle.portrait")
+    func testListActionsUsePlainBulletsDistinctFromWanna() {
+        XCTAssertEqual(PlaceListSymbol.systemImage, "list.bullet")
         XCTAssertNotEqual(PlaceListSymbol.systemImage, "bookmark.fill")
         XCTAssertNotNil(UIImage(systemName: PlaceListSymbol.systemImage))
-        XCTAssertNotNil(UIImage(systemName: "\(PlaceListSymbol.systemImage).fill"))
+    }
+
+    func testPaperTabImageFitsNativeIconSlotAndAcceptsSelectionTint() {
+        let image = PlaceListSymbol.paperTabImage
+        XCTAssertEqual(image.size, CGSize(width: 24, height: 28))
+        XCTAssertEqual(image.renderingMode, .alwaysTemplate)
+        XCTAssertNotNil(image.cgImage)
     }
 
     private func makeStore(

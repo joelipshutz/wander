@@ -134,7 +134,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
-    func testPrimaryTabsUseStaticNativeSymbolsAndSystemSelectionFeedback() throws {
+    func testPrimaryTabsUsePaperListsIconAndSystemSelectionFeedback() throws {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
@@ -149,6 +149,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
+        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))

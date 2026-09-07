@@ -993,8 +993,15 @@ private struct AstirTabBar: View {
                     selectedTab = tab
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == tab ? "\(tab.symbol).fill" : tab.symbol)
-                            .font(.system(size: 17, weight: .semibold))
+                        if tab == .lists {
+                            Image(uiImage: PlaceListSymbol.paperTabImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 21)
+                        } else {
+                            Image(systemName: selectedTab == tab ? "\(tab.symbol).fill" : tab.symbol)
+                                .font(.system(size: 17, weight: .semibold))
+                        }
                         Text(tab.title)
                             .font(AstirType.ui(10, weight: .bold))
                     }
