@@ -256,6 +256,7 @@ struct MapPlaceListPickerSheet: View {
             .presentationBackground(brandMode.background)
         }
         .onAppear {
+            guard !didLoadMembership else { return }
             loadMembershipOnce()
             for id in stagedListIDs { selection.togglePending(listID: id) }
         }
