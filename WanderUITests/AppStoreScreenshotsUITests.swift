@@ -86,6 +86,40 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         capture("recme-store-06-lists")
     }
 
+    func testAddOptionsRestoresCompactHeightAfterSeeMore() {
+        let app = launch(arguments: [])
+        let addPlace = app.buttons["map.headerAdd"]
+        XCTAssertTrue(addPlace.waitForExistence(timeout: 10))
+        addPlace.tap()
+        let title = app.staticTexts["add a place"]
+        let seeMore = app.buttons["See more"]
+        let importTitle = app.staticTexts["Import"].firstMatch
+        XCTAssertTrue(seeMore.waitForExistence(timeout: 10))
+        settleForCapture()
+        let restingTitleY = title.frame.minY
+        XCTAssertTrue(seeMore.isHittable)
+        // Native sheet transforms can scale accessibility frames slightly.
+        XCTAssertGreaterThanOrEqual(seeMore.frame.height, 43)
+        XCTAssertTrue(importTitle.isHittable)
+        XCTAssertLessThan(importTitle.frame.minY - seeMore.frame.maxY, 35)
+        capture("REC-446 compact production Add")
+
+        seeMore.tap()
+        let back = app.buttons["Back to add options"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        settleForCapture()
+        XCTAssertLessThan(app.staticTexts["I'm here now"].frame.minY, restingTitleY - 40)
+        capture("REC-446 expanded production suggestions")
+
+        back.tap()
+        XCTAssertTrue(seeMore.waitForExistence(timeout: 5))
+        settleForCapture()
+        XCTAssertEqual(title.frame.minY, restingTitleY, accuracy: 3)
+        XCTAssertTrue(seeMore.isHittable)
+        XCTAssertTrue(importTitle.isHittable)
+        capture("REC-446 returned compact production Add")
+    }
+
     private func launch(arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
