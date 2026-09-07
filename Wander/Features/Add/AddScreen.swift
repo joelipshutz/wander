@@ -109,8 +109,8 @@ enum AddCameraPreviewLayout {
 }
 
 enum AddSheetLayout {
-    static let emptyRestingHeight: CGFloat = 520
-    static let pendingReviewRestingHeight: CGFloat = 570
+    static let emptyRestingHeight: CGFloat = 440
+    static let pendingReviewRestingHeight: CGFloat = 490
     /// Content-height resting detent for the import entry. The native sheet can
     /// still be dragged to full height for keyboard or accessibility needs.
     static let importEntryHeight: CGFloat = 440
@@ -118,12 +118,15 @@ enum AddSheetLayout {
 
     static let importCompletionDetent: PresentationDetent = .height(importCompletionHeight)
 
-    static func restingDetent(hasPendingImports: Bool) -> PresentationDetent {
-        .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
+    static func restingDetent(hasPendingImports: Bool, contentHeight: CGFloat? = nil) -> PresentationDetent {
+        if let contentHeight, contentHeight.isFinite, contentHeight > 0 {
+            return .height(ceil(contentHeight))
+        }
+        return .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
     }
 
-    static func detents(hasPendingImports: Bool) -> Set<PresentationDetent> {
-        [restingDetent(hasPendingImports: hasPendingImports), .large]
+    static func detents(hasPendingImports: Bool, contentHeight: CGFloat? = nil) -> Set<PresentationDetent> {
+        [restingDetent(hasPendingImports: hasPendingImports, contentHeight: contentHeight), .large]
     }
 }
 
@@ -171,6 +174,7 @@ struct AddScreen: View {
     let onOpenImportHub: () -> Void
     let onClose: () -> Void
     @State private var step: AddStep = .source
+    @State private var compactContentHeight: CGFloat?
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
     @State private var selectedSource: AddSourceType = .manual
@@ -226,7 +230,10 @@ struct AddScreen: View {
     }
 
     private var restingDetent: PresentationDetent {
-        AddSheetLayout.restingDetent(hasPendingImports: importStore.summary.hasPendingImports)
+        AddSheetLayout.restingDetent(
+            hasPendingImports: importStore.summary.hasPendingImports,
+            contentHeight: compactContentHeight
+        )
     }
 
     private var showsFloatingCurrentLocationAction: Bool {
@@ -265,7 +272,8 @@ struct AddScreen: View {
         }
         guard addSaveFlow != nil else {
             return AddSheetLayout.detents(
-                hasPendingImports: importStore.summary.hasPendingImports
+                hasPendingImports: importStore.summary.hasPendingImports,
+                contentHeight: compactContentHeight
             )
         }
         return [MapPlaceSaveFlowSheet.compactDetent, .large]
@@ -497,6 +505,24 @@ struct AddScreen: View {
     }
 
     private var compactSheetContent: some View {
+        ScrollView {
+            measuredCompactSheetContent
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func updateCompactContentHeight(_ height: CGFloat) {
+        guard height.isFinite, height > 0 else { return }
+        let measuredHeight = ceil(height)
+        guard compactContentHeight != measuredHeight else { return }
+        let wasResting = selectedDetent == restingDetent
+        compactContentHeight = measuredHeight
+        if wasResting {
+            selectedDetent = restingDetent
+        }
+    }
+
+    private var measuredCompactSheetContent: some View {
         VStack(spacing: 0) {
             compactSourceContent
 
@@ -508,10 +534,17 @@ struct AddScreen: View {
                 }
             )
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing2)
+            .padding(.top, WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing3)
             .background(brandMode.background)
             .walkthroughTarget(.addImport)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            updateCompactContentHeight(height)
         }
     }
 
@@ -541,8 +574,6 @@ struct AddScreen: View {
                     }
                 }
             }
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing4)

@@ -5,6 +5,30 @@ import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testAddOptionsUsesMeasuredHeightWithAndWithoutPendingImports() {
+        XCTAssertEqual(AddSuggestedPlaces.showMoreHeight, 44)
+        for hasPendingImports in [false, true] {
+            let compact = AddSheetLayout.restingDetent(
+                hasPendingImports: hasPendingImports, contentHeight: 452.2
+            )
+            XCTAssertEqual(compact, .height(453))
+            XCTAssertEqual(
+                AddSheetLayout.detents(hasPendingImports: hasPendingImports, contentHeight: 452.2),
+                [compact, .large]
+            )
+        }
+    }
+
+    func testAddOptionsInvalidMeasurementsUseInitialHeight() {
+        for height: CGFloat in [0, -1, .infinity, .nan] {
+            XCTAssertEqual(
+                AddSheetLayout.restingDetent(hasPendingImports: false, contentHeight: height),
+                .height(440)
+            )
+        }
+        XCTAssertEqual(AddSheetLayout.restingDetent(hasPendingImports: true), .height(490))
+    }
+
     func testAppRootRoutesSignedOutSessionsThroughLoggedOutOnboarding() throws {
         let app = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
@@ -2128,8 +2152,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("case .importReview(let batchIDs):"))
         XCTAssertFalse(addScreen.contains("PlaceImportSourceScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportHistoryScreen(importStore: importStore)"))
-        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 520"))
-        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 570"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 440"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 490"))
         XCTAssertTrue(addScreen.contains(".presentationDetents(activeSheetDetents, selection: $selectedDetent)"))
         XCTAssertTrue(addScreen.contains("AddSheetLayout.detents("))
         XCTAssertTrue(addScreen.contains(".onChange(of: importStore.summary.hasPendingImports)"))

@@ -1,28 +1,19 @@
 # Compact Add sheet approval preview
 
-Native SwiftUI design checkpoint for REC-446. Production AddScreen is unchanged.
-The preview uses the production typography, colors, and row/button dimensions,
-with sample places and a MapKit background. Import brand marks are placeholders.
+Approved native SwiftUI design checkpoint for REC-446. `compact.png` is the
+approved iPhone 17 Pro screenshot with the MapKit background loaded.
 
-The proposal removes the flexible spacer between Suggested and Import, uses a
-16-point section gap, and measures content to set the resting detent. See more
-keeps its 44-point minimum height and expands to `.large`. Back to add options
-selects the measured resting detent. Production already uses this restoration
-path through `clearInlineCandidateResults()` and `restingDetent`.
+The production AddScreen now follows this proposal: remove the flexible spacer
+between Suggested and Import, use a 16-point section gap, and measure the
+content to set the resting detent. The 44-point See more control and production
+nearby resolver are unchanged. Back to add options restores the measured
+resting detent; larger content can scroll or expand to full height.
 
-This harness is for visual approval; it does not run the production search,
-import, or save services. The expanded results are illustrative. Production
-integration and its regression suite follow design approval.
+`CompactAddPreview.swift` is a standalone visual harness outside the app target,
+with sample places and illustrative import marks. It does not run production
+search, import, or save services. `render-build.sh` compiles it for an arm64 iOS
+simulator. The optional `--roundtrip` argument exercises its presentation
+states; production behavior is covered by
+`AppStoreScreenshotsUITests.testAddOptionsRestoresCompactHeightAfterSeeMore`.
 
-The optional `--roundtrip` launch argument invokes the same See more and Back
-actions at six-second intervals for deterministic native presentation checking.
-
-Validation: compiled directly with the iOS 26.5 Simulator SDK and rendered on
-an iPhone 17 Pro simulator. `compact-initial.png` shows the content-sized sheet.
-MapKit tiles were unavailable in that capture. A dedicated iPhone SE simulator
-failed to launch the harness twice; small-phone validation remains outstanding.
-No production test pass is claimed for this design-only checkpoint.
-
-Decision needed: approve the tighter section spacing and reduced resting height
-before integrating the layout into AddScreen. Keep the production See more
-handler and Back-to-options restoration behavior intact during integration.
+Current validation and merge evidence belong in REC-446 and its PR.

@@ -68,7 +68,7 @@ struct AddOptionsPreview: View {
         ("🍽️", "Main Street Kitchen", "nearby · Santa Monica · Restaurant")
     ]
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
             if expanded {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
