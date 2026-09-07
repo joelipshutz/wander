@@ -4,6 +4,7 @@ import UserNotifications
 struct ProductUpsellScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var coordinator: ProductUpsellCoordinator
@@ -31,8 +32,8 @@ struct ProductUpsellScreen: View {
                         .padding(.bottom, WanderTheme.spacing2)
                         .background(.ultraThinMaterial)
                 }
-                .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
-                .foregroundStyle(WanderTheme.textInk.color)
+                .background(brandMode.background.ignoresSafeArea())
+                .foregroundStyle(brandMode.primaryText)
             }
         }
         .accessibilityAddTraits(.isModal)
@@ -64,8 +65,8 @@ struct ProductUpsellScreen: View {
                         with: .dismissed
                     )
                 }
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.secondaryText)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 .accessibilityIdentifier("productUpsell.secondary")
             }

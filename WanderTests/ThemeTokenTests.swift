@@ -2,24 +2,24 @@ import XCTest
 @testable import Wander
 
 final class ThemeTokenTests: XCTestCase {
-    func testColorTokensMatchHandoffHexValues() {
+    func testColorTokensMatchAstirEditorialLightValues() {
         let expected: [String: String] = [
-            "color.canvas.warm": "#F3DFCA",
-            "color.surface.bone": "#FFF7EA",
-            "color.surface.raised": "#FFFFFF",
-            "color.surface.sand": "#EFE3D0",
-            "color.text.ink": "#2C2118",
-            "color.text.muted": "#7B6555",
-            "color.text.faint": "#A8957F",
-            "color.text.onAction": "#FFF7EA",
-            "color.border.hairline": "#DBC2AA",
-            "color.border.strong": "#C9AC8F",
-            "color.action.terracotta": "#D46F4D",
-            "color.action.terracottaDark": "#A94F35",
-            "color.action.terracottaTint": "#F6E0D2",
+            "color.canvas.warm": "#F2E9DB",
+            "color.surface.bone": "#FBF6ED",
+            "color.surface.raised": "#FFF9F0",
+            "color.surface.sand": "#E8DED0",
+            "color.text.ink": "#141714",
+            "color.text.muted": "#655F57",
+            "color.text.faint": "#8D877E",
+            "color.text.onAction": "#141714",
+            "color.border.hairline": "#8A8176",
+            "color.border.strong": "#A99F91",
+            "color.action.terracotta": "#F05A3C",
+            "color.action.terracottaDark": "#C9422A",
+            "color.action.terracottaTint": "#FBE0D9",
             "color.surface.sunTint": "#F4E8C9",
             "color.surface.skyTint": "#DBEAF1",
-            "color.pin.you": "#D46F4D",
+            "color.pin.you": "#F05A3C",
             "color.pin.social": "#69B8D7",
             "color.category.moss": "#6F8F5F",
             "color.category.sun": "#E3B64B",
@@ -38,6 +38,19 @@ final class ThemeTokenTests: XCTestCase {
         XCTAssertEqual(actual, expected)
     }
 
+    func testCoreThemeTokensCarryAstirEditorialDarkValues() {
+        XCTAssertEqual(WanderTheme.canvasWarm.darkHex, "#141714")
+        XCTAssertEqual(WanderTheme.surfaceBone.darkHex, "#1B1F1B")
+        XCTAssertEqual(WanderTheme.surfaceRaised.darkHex, "#222622")
+        XCTAssertEqual(WanderTheme.surfaceSand.darkHex, "#101210")
+        XCTAssertEqual(WanderTheme.textInk.darkHex, "#F2E9DB")
+        XCTAssertEqual(WanderTheme.textMuted.darkHex, "#98958D")
+        XCTAssertEqual(WanderTheme.borderHairline.darkHex, "#74786F")
+        XCTAssertEqual(WanderTheme.terracotta.darkHex, "#F05A3C")
+        XCTAssertEqual(WanderTheme.sunTint.darkHex, "#312B1A")
+        XCTAssertEqual(WanderTheme.skyTint.darkHex, "#172A32")
+    }
+
     @MainActor
     func testEspressoConfirmationMatchesProductionCheckInBlack() {
         XCTAssertNil(WanderPrimaryButtonTone.brand.glassTone)
@@ -48,11 +61,11 @@ final class ThemeTokenTests: XCTestCase {
         XCTAssertNil(WanderPrimaryButtonTone.solidBlackConfirmation.glassTone)
     }
 
-    func testDarkMapPaletteUsesWarmHighContrastNightTokens() {
-        XCTAssertEqual(WanderMapAppearance.nightSurface.hex, "#171A1C")
-        XCTAssertEqual(WanderMapAppearance.nightRaised.hex, "#25292C")
-        XCTAssertEqual(WanderMapAppearance.nightText.hex, "#FFF7EA")
-        XCTAssertEqual(WanderMapAppearance.nightMuted.hex, "#CEC1B4")
+    func testDarkMapPaletteUsesAstirEditorialNightTokens() {
+        XCTAssertEqual(WanderMapAppearance.nightSurface.hex, "#141714")
+        XCTAssertEqual(WanderMapAppearance.nightRaised.hex, "#1B1F1B")
+        XCTAssertEqual(WanderMapAppearance.nightText.hex, "#F2E9DB")
+        XCTAssertEqual(WanderMapAppearance.nightMuted.hex, "#98958D")
         XCTAssertEqual(WanderMapAppearance.light.colorScheme, .light)
         XCTAssertEqual(WanderMapAppearance.dark.colorScheme, .dark)
         XCTAssertEqual(WanderMapAppearance.dark.neutralGlassTone, .darkOverlay)

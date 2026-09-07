@@ -680,10 +680,28 @@ struct SupabaseFeedRepository: FeedRepository {
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        try await followedFeed(before: before, limit: limit, onContent: { _ in })
+    }
+
+    func followedFeed(
+        before: String?,
+        limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
         let response: RemoteFollowedFeedPageDTO = try await rpc.call(
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
+        // This projection uses the same server-authorized rows. Media arrives
+        // later, so slow storage/signing cannot hold up the first Feed cards.
+        let content = try await response.followedFeedPage(
+            mediaByActivityID: Dictionary(
+                response.activity.map { ($0.id.lowercased(), [RemoteFeedMediaDTO]()) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        )
+        try Task.checkCancellation()
+        onContent(content)
         let activityIDs = Array(
             Set(response.activity.compactMap { item in
                 UUID(uuidString: item.id)?.uuidString.lowercased()

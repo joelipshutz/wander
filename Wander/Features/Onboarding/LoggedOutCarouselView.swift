@@ -25,14 +25,14 @@ struct OnboardingCarouselSlide: Identifiable, Equatable {
         ),
         OnboardingCarouselSlide(
             id: 1,
-            imageName: "OnboardingMapFriends",
+            imageName: "PlaceCarouselAvatars",
             eyebrow: "STAY CONNECTED",
             title: "See the places your friends love",
             body: "Follow the people you know and keep their best finds close at hand."
         ),
         OnboardingCarouselSlide(
             id: 2,
-            imageName: "OnboardingMapTrusted",
+            imageName: "PlaceCarouselPhotos",
             eyebrow: "TRUSTED DISCOVERY",
             title: "Find places through people you trust",
             body: "Skip anonymous reviews. Discover the spots that matter to people whose taste you know."
@@ -77,11 +77,7 @@ struct LoggedOutCarouselView: View {
 
             VStack(spacing: 0) {
                 HStack {
-                    Image("RecmeMapWordmark")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 157, height: 35, alignment: .leading)
-                        .accessibilityLabel(AppBrand.displayName)
+                    AstirMastheadLockup(isCompact: true)
                     Spacer()
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -127,7 +123,7 @@ struct LoggedOutCarouselView: View {
                         ))
                         logIn()
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     .accessibilityIdentifier("onboarding.logIn")
@@ -136,7 +132,6 @@ struct LoggedOutCarouselView: View {
                 .padding(.bottom, WanderTheme.spacing2)
             }
         }
-        .preferredColorScheme(.light)
         .onAppear { trackViewed() }
         .onChange(of: selection) { _, _ in
             autoAdvanceGeneration += 1
@@ -176,6 +171,7 @@ private struct AutoAdvanceID: Equatable {
 }
 
 private struct OnboardingCarouselSlideView: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let slide: OnboardingCarouselSlide
 
     var body: some View {
@@ -189,6 +185,13 @@ private struct OnboardingCarouselSlideView: View {
                     .scaledToFill()
                     .frame(width: heroWidth, height: heroHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .overlay {
+                        if brandMode.prefersDarkInterface {
+                            Color.black.opacity(0.14)
+                                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .overlay(
                         RoundedRectangle(cornerRadius: 30, style: .continuous)
                             .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
@@ -197,18 +200,18 @@ private struct OnboardingCarouselSlideView: View {
 
                 VStack(spacing: WanderTheme.spacing2) {
                     Text(slide.eyebrow)
-                        .font(.system(size: 11, weight: .black))
+                        .font(AstirTypography.metadata)
                         .tracking(1.6)
                         .foregroundStyle(WanderTheme.terracotta.color)
 
                     Text(slide.title)
-                        .font(WanderTheme.editorialDisplay(size: 35, weight: .bold))
+                        .font(AstirTypography.screenTitle)
                         .multilineTextAlignment(.center)
                         .lineSpacing(-2)
                         .minimumScaleFactor(0.82)
 
                     Text(slide.body)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AstirTypography.body)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .multilineTextAlignment(.center)
                         .lineSpacing(2)
@@ -237,15 +240,16 @@ struct OnboardingLaunchView: View {
                 Image(systemName: "mappin.and.ellipse")
                     .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
-                Text(AppBrand.displayName)
-                    .font(WanderTheme.editorialDisplay(size: 42, weight: .black))
+                Text("ASTIR")
+                    .font(AstirTheme.wordmark(42))
+                    .tracking(6)
 
                 if let message {
                     VStack(spacing: WanderTheme.spacing2) {
                         ProgressView()
                             .tint(WanderTheme.terracotta.color)
                         Text(message)
-                            .font(.body.weight(.semibold))
+                            .font(AstirTypography.bodySmall)
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
                     .padding(.top, WanderTheme.spacing1)

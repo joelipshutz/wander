@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CommunityReportSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
 
@@ -24,7 +25,8 @@ struct CommunityReportSheet: View {
                     reportForm
                 }
             }
-            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+            .foregroundStyle(brandMode.primaryText)
+            .background(brandMode.background.ignoresSafeArea())
             .navigationTitle(receipt == nil ? "report \(subject.kind.displayName)" : "report sent")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -34,6 +36,9 @@ struct CommunityReportSheet: View {
                     }
                 }
             }
+            .tint(brandMode.accent)
+            .toolbarBackground(brandMode.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .interactiveDismissDisabled(isSubmitting)
         .presentationDetents([.large])
@@ -46,14 +51,14 @@ struct CommunityReportSheet: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("What’s going on?")
-                        .font(WanderTypography.editorialTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(brandMode.primaryText)
                     Text(subject.context)
-                        .font(WanderTypography.emphasizedBody)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.cardTitle)
+                        .foregroundStyle(brandMode.secondaryText)
                     Text("Your report is private. The person you report won’t be told who sent it.")
-                        .font(WanderTypography.body)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -65,17 +70,18 @@ struct CommunityReportSheet: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("Anything else? (optional)")
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.primaryText)
                     TextField("Add context for our safety team", text: $details, axis: .vertical)
+                        .font(AstirTypography.body)
                         .lineLimit(3...6)
                         .focused($detailsFocused)
                         .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceRaised.color)
+                        .background(brandMode.recessedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                         .overlay {
                             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                                .stroke(WanderTheme.borderStrong.color, lineWidth: 1)
+                                .stroke(brandMode.border, lineWidth: 1)
                         }
                         .onChange(of: details) { _, newValue in
                             if newValue.count > 500 {
@@ -84,14 +90,14 @@ struct CommunityReportSheet: View {
                         }
                         .accessibilityIdentifier("communityReport.details")
                     Text("\(details.count)/500")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(WanderTypography.emphasizedBody)
+                        .font(AstirTypography.bodySmall)
                         .foregroundStyle(WanderTheme.stateError.color)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("communityReport.error")
@@ -108,8 +114,8 @@ struct CommunityReportSheet: View {
 
                 Link(destination: URL(string: "https://getrec.me/community")!) {
                     Label("Read the rec.me community guidelines", systemImage: "arrow.up.right")
-                        .font(WanderTypography.label)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.accentText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 }
             }
@@ -130,19 +136,19 @@ struct CommunityReportSheet: View {
                     .frame(width: 34, height: 34)
                     .foregroundStyle(
                         selectedReason == reason
-                            ? WanderTheme.textOnAction.color
-                            : WanderTheme.terracottaDark.color
+                            ? brandMode.accentForeground
+                            : brandMode.accent
                     )
                     .background(
                         selectedReason == reason
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.terracottaTint.color
+                            ? brandMode.accent
+                            : brandMode.accentWash
                     )
                     .clipShape(Circle())
 
                 Text(reason.title)
-                    .font(WanderTypography.emphasizedBody)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.cardTitle)
+                    .foregroundStyle(brandMode.primaryText)
 
                 Spacer()
 
@@ -150,20 +156,20 @@ struct CommunityReportSheet: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(
                         selectedReason == reason
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.borderStrong.color
+                            ? brandMode.accent
+                            : brandMode.border
                     )
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(maxWidth: .infinity, minHeight: 58)
-            .background(WanderTheme.surfaceBone.color)
+            .background(brandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                     .stroke(
                         selectedReason == reason
-                            ? WanderTheme.terracotta.color
-                            : WanderTheme.borderHairline.color,
+                            ? brandMode.accent
+                            : brandMode.border,
                         lineWidth: selectedReason == reason ? 2 : 1
                     )
             }
@@ -181,14 +187,14 @@ struct CommunityReportSheet: View {
                     .accessibilityHidden(true)
 
                 Text("Thanks for looking out for the community.")
-                    .font(WanderTypography.editorialTitle)
+                    .font(AstirTypography.sheetTitle)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(brandMode.primaryText)
 
                 Text("Our safety team will review the report. If anyone is in immediate danger, contact local emergency services.")
-                    .font(WanderTypography.body)
+                    .font(AstirTypography.body)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
                 WanderPrimaryButton(title: "Done", systemImage: "checkmark") {
@@ -200,7 +206,7 @@ struct CommunityReportSheet: View {
                         blockReportedUser()
                     } label: {
                         Label(isBlocking ? "Blocking…" : "Block this person", systemImage: "hand.raised.fill")
-                            .font(WanderTypography.emphasizedBody)
+                            .font(AstirTypography.control)
                             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     }
                     .disabled(isBlocking)

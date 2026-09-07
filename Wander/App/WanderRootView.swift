@@ -288,6 +288,8 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -465,10 +467,15 @@ struct WanderRootView: View {
 
     var body: some View {
         stateObservedRoot
+            .environment(\.astirBrandMode, astirBrandMode)
             .environment(
                 \.placeProfileFloatingActionVariant,
                 placeProfileFloatingActionVariant
             )
+    }
+
+    private var astirBrandMode: AstirBrandMode {
+        systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
     private var mapAppearanceColorScheme: ColorScheme {
@@ -515,9 +522,10 @@ struct WanderRootView: View {
                 .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
         }
-        .tint(WanderTheme.terracotta.color)
-        .preferredColorScheme(.light)
-        .toolbarColorScheme(mapAppearanceColorScheme, for: .tabBar)
+        .tint(astirBrandMode.accent)
+        .toolbarBackground(astirBrandMode.background, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -638,8 +646,17 @@ struct WanderRootView: View {
         }
     }
 
+    @ViewBuilder
     private func tabItemLabel(for tab: WanderTab) -> some View {
-        Label(tab.title, systemImage: tab.systemImage)
+        if tab == .lists {
+            Label {
+                Text(tab.title)
+            } icon: {
+                Image(uiImage: PlaceListSymbol.paperTabImage)
+            }
+        } else {
+            Label(tab.title, systemImage: tab.systemImage)
+        }
     }
 
     private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
@@ -693,11 +710,16 @@ struct WanderRootView: View {
             .id(importHubPresentationID)
             .background(ImportContentFittingSheet(height: importHubRestingHeight))
             .presentationDragIndicator(.visible)
-            .presentationBackground(WanderTheme.canvasWarm.color)
+            .presentationBackground(brandMode.background)
         }
         .walkthroughPresenterScrim(
             isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
         )
+        .onChange(of: isPresentingAdd) { _, isPresented in
+            if isPresented {
+                dismissKeyboard()
+            }
+        }
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -1134,6 +1156,7 @@ struct WanderRootView: View {
     }
 
     private func presentAddSheet() {
+        dismissKeyboard()
         if walkthroughs.currentStep?.target == .mapAddAgain {
             walkthroughs.perform(.mapAddAgain)
         } else {
@@ -1151,6 +1174,15 @@ struct WanderRootView: View {
                 name: WanderAnalyticsEvents.appSurfaceViewed,
                 properties: ["surface": "add"]
             )
+        )
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
         )
     }
 
@@ -2700,6 +2732,12 @@ struct WanderRootView: View {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
             }
             #endif
+            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state)
+            else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
             if backend.notificationRepository != nil,
                let preferences = try? await backend.notificationPreferences() {
                 guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
@@ -2736,10 +2774,7 @@ struct WanderRootView: View {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
-            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
-            guard didHydrateCurrentProfile,
-                  shouldContinueSignedInMaintenance(runID: runID, state: state)
-            else {
+            guard didHydrateCurrentProfile else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
@@ -3283,7 +3318,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .map: "map"
         case .discover: "newspaper"
         case .add: "plus"
-        case .lists: "bookmark.square"
+        case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle"
         }
     }

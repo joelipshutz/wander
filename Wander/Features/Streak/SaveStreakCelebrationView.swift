@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SaveStreakCelebrationView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.astirBrandMode) private var brandMode
     @ScaledMetric(relativeTo: .largeTitle) private var streakCountFontSize: CGFloat = 82
     @ScaledMetric(relativeTo: .title) private var streakLabelFontSize: CGFloat = 28
     let celebration: SaveStreakCelebration
@@ -12,13 +13,13 @@ struct SaveStreakCelebrationView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                WanderTheme.textInk.color
+                brandMode.background
                     .ignoresSafeArea()
 
                 RadialGradient(
                     colors: [
-                        WanderTheme.terracottaDark.color.opacity(0.52),
-                        WanderTheme.textInk.color.opacity(0)
+                        brandMode.accent.opacity(0.42),
+                        brandMode.background.opacity(0)
                     ],
                     center: .center,
                     startRadius: 10,
@@ -30,10 +31,7 @@ struct SaveStreakCelebrationView: View {
                     .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("REC.ME")
-                        .font(.system(size: 15, weight: .black, design: .rounded))
-                        .tracking(2.2)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
+                    AstirMastheadLockup(isCompact: true)
                         .padding(.top, max(proxy.safeAreaInsets.top, WanderTheme.spacing4) + WanderTheme.spacing4)
 
                     Spacer(minLength: WanderTheme.spacing6)
@@ -60,17 +58,17 @@ struct SaveStreakCelebrationView: View {
 
                     VStack(spacing: WanderTheme.spacing1) {
                         Text(SaveStreakCelebrationPresentation.visualCount(for: celebration.streakCount))
-                            .font(.system(size: streakCountFontSize, weight: .black, design: .rounded))
+                            .font(.system(size: streakCountFontSize, weight: .semibold, design: .serif))
                             .monospacedDigit()
                             .minimumScaleFactor(0.72)
                             .lineLimit(1)
 
                         Text("day streak!")
-                            .font(.system(size: streakLabelFontSize, weight: .black, design: .rounded))
+                            .font(.system(size: streakLabelFontSize, weight: .semibold, design: .serif))
                             .minimumScaleFactor(0.72)
                             .lineLimit(1)
                     }
-                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .foregroundStyle(brandMode.primaryText)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                     .padding(.top, WanderTheme.spacing6)
@@ -91,8 +89,8 @@ struct SaveStreakCelebrationView: View {
                     .animation(copyAnimation, value: ticketLanded)
 
                     Text(SaveStreakCelebrationPresentation.helperText(for: celebration))
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
+                        .font(AstirTypography.body)
+                        .foregroundStyle(brandMode.secondaryText)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
@@ -105,12 +103,12 @@ struct SaveStreakCelebrationView: View {
 
                     Button(action: onDismiss) {
                         Text("got it")
-                            .font(.system(.body, design: .rounded, weight: .black))
+                            .font(AstirTypography.control)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 54)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .background(WanderTheme.surfaceBone.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .foregroundStyle(brandMode.selectedForeground)
+                            .background(brandMode.selectedFill)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Closes the streak celebration")
@@ -167,6 +165,7 @@ struct SaveStreakConfettiPopView: View {
 }
 
 private struct SaveStreakTicketCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let celebration: SaveStreakCelebration
     let isFaceUp: Bool
 
@@ -186,22 +185,22 @@ private struct SaveStreakTicketCard: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(ticketEyebrow)
-                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .font(AstirTypography.metadata)
                     .tracking(1.3)
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .foregroundStyle(brandMode.accentText)
 
                 Spacer(minLength: 0)
 
                 Text(celebration.placeName)
-                    .font(.system(size: 29, weight: .black, design: .serif))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
 
                 if let detail = celebration.placeDetail {
                     Text(detail)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .font(AstirTypography.label)
+                        .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
                 }
             }
@@ -219,7 +218,7 @@ private struct SaveStreakTicketCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .checkInTicketSurface(
             accent: .clear,
-            surface: WanderTheme.surfaceBone.color,
+            surface: brandMode.raisedBackground,
             notchEdges: .trailing,
             castsShadow: false
         )
@@ -229,16 +228,16 @@ private struct SaveStreakTicketCard: View {
         VStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "flame.fill")
                 .font(.system(size: 30, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+                .foregroundStyle(brandMode.accentText)
             Text("REC.ME")
-                .font(.system(size: 12, weight: .black, design: .rounded))
-                .tracking(1.8)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(AstirTypography.metadata)
+                .tracking(2.2)
+                .foregroundStyle(brandMode.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .checkInTicketSurface(
             accent: .clear,
-            surface: WanderTheme.surfaceBone.color,
+            surface: brandMode.raisedBackground,
             notchEdges: .trailing,
             castsShadow: false
         )
@@ -256,6 +255,7 @@ private struct SaveStreakTicketCard: View {
 }
 
 private struct SaveStreakWeekCard: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let streakCount: Int
     let saveDate: Date
     let recoveryDate: Date?
@@ -270,33 +270,33 @@ private struct SaveStreakWeekCard: View {
                         .font(.system(.caption, design: .rounded, weight: .black))
                         .foregroundStyle(
                             day.isToday
-                                ? WanderTheme.terracottaDark.color
-                                : WanderTheme.textMuted.color
+                                ? brandMode.accent
+                                : brandMode.secondaryText
                         )
 
                     ZStack {
                         Circle()
                             .fill(
                                 day.isRecoveryDay
-                                    ? WanderTheme.terracotta.color.opacity(0.2)
+                                    ? brandMode.accentWash
                                     : day.isCovered
-                                        ? WanderTheme.terracotta.color
-                                        : WanderTheme.surfaceSand.color
+                                        ? brandMode.accent
+                                        : brandMode.recessedBackground
                             )
 
                         if day.isRecoveryDay {
                             Image(systemName: "shield.fill")
                                 .font(.system(size: 10, weight: .black))
-                                .foregroundStyle(WanderTheme.terracottaDark.color)
+                                .foregroundStyle(brandMode.accentText)
                         } else if day.isCovered {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .black))
-                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .foregroundStyle(brandMode.accentForeground)
                         }
 
                         if day.isToday {
                             Circle()
-                                .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                                .stroke(brandMode.primaryText, lineWidth: 2)
                                 .padding(-3)
                         }
                     }
@@ -307,11 +307,11 @@ private struct SaveStreakWeekCard: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color.opacity(0.78), lineWidth: 1)
+                .stroke(brandMode.border.opacity(0.78), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(weekAccessibilityLabel(for: days))

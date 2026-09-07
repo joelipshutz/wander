@@ -122,6 +122,16 @@ enum FeedLoadState: Equatable {
     case failed
 }
 
+enum FeedRefreshPolicy {
+    static let maximumAge: TimeInterval = 60
+
+    static func isFresh(completedAt: Date?, now: Date = .now) -> Bool {
+        guard let completedAt else { return false }
+        let age = now.timeIntervalSince(completedAt)
+        return age >= 0 && age < maximumAge
+    }
+}
+
 enum FeedPresentation {
     private static let futureClockSkewTolerance: TimeInterval = 5 * 60
 

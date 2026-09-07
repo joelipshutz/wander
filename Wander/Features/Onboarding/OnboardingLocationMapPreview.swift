@@ -154,12 +154,12 @@ private struct OnboardingLocationSelectedPlaceCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(OnboardingLocationContent.selectedPlaceName)
-                    .font(WanderTypography.editorialTitle)
+                    .font(AstirTypography.sheetTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(1)
 
                 Text("Coffee · Silver Lake")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
 
                 HStack(spacing: 5) {
@@ -206,7 +206,7 @@ private struct OnboardingLocationSelectedPlaceCard: View {
 
     private func socialProof(_ copy: String) -> some View {
         Text(copy)
-            .font(.system(size: 12, weight: .bold))
+            .font(AstirTypography.metadata)
             .foregroundStyle(WanderTheme.terracotta.color)
             .lineLimit(1)
     }
