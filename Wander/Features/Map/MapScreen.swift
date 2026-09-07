@@ -1942,6 +1942,7 @@ struct MapScreen: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 NativeMapView(
+                    attributionBottomClearance: mapSearchDockClearance,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -6477,6 +6478,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
+    let attributionBottomClearance: CGFloat
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6496,6 +6498,10 @@ private struct NativeMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView(frame: .zero)
+        // MapKit adds the safe area to these margins and renders its own attribution.
+        mapView.layoutMargins = UIEdgeInsets(
+            top: 0, left: 0, bottom: attributionBottomClearance + 10, right: 0
+        )
         let configuration = MKStandardMapConfiguration(
             elevationStyle: .flat,
             emphasisStyle: .muted
@@ -6507,11 +6513,6 @@ private struct NativeMapView: UIViewRepresentable {
         mapView.showsScale = false
         mapView.showsCompass = false
         mapView.showsTraffic = false
-        // Place MapKit's bottom branding below the visible map without resizing
-        // the viewport used for camera positioning and annotation hit testing.
-        mapView.insetsLayoutMarginsFromSafeArea = false
-        mapView.layoutMargins.bottom = -100
-        mapView.clipsToBounds = true
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
         for reuseIdentifier in NativeMapPinAnnotationView.reuseIdentifiers {
@@ -6572,6 +6573,11 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
+                mapView.layoutMargins = UIEdgeInsets(
+                    top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
+                )
+            }
             self.parent = parent
             mapView.showsUserLocation = parent.showsUserLocation
             let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
