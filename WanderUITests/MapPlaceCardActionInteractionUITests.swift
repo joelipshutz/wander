@@ -2,6 +2,59 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardActionInteractionUITests: XCTestCase {
+    func testEditingCheckInKeepsScrollPositionAndOpensPhotos() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest", "-WanderResetWalkthroughs",
+            "-WanderREC386PhotoFixture", "-WanderMapPlace", "Dudley Market QA",
+            "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 12))
+        let edit = app.buttons["Edit check-in"].firstMatch
+        for _ in 0..<7 where !edit.isHittable { app.swipeUp() }
+        edit.tap()
+        let form = app.scrollViews["save.editorScroll"]
+        XCTAssertTrue(form.waitForExistence(timeout: 5))
+        let photos = app.buttons["save.photos"]
+        for index in 0..<5 where !photos.isHittable {
+            form.swipeUp(velocity: .slow)
+            capture("REC-443 editor scroll \(index)")
+        }
+        XCTAssertTrue(photos.isHittable)
+        let scrollReset = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"), object: photos
+        )
+        scrollReset.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [scrollReset], timeout: 2), .completed)
+        photos.tap()
+        XCTAssertTrue(app.buttons["Choose from Library"].waitForExistence(timeout: 5))
+        capture("REC-443 editor photo menu")
+    }
+
+    func testEditingCheckInIncludesPhotoControl() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest", "-WanderResetWalkthroughs",
+            "-WanderREC386PhotoFixture", "-WanderMapPlace", "Dudley Market QA",
+            "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 12))
+        let edit = app.buttons["Edit check-in"].firstMatch
+        for _ in 0..<7 where !edit.isHittable { app.swipeUp() }
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        let photos = app.buttons["save.photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(photos.isEnabled, "Existing check-ins must allow adding photos")
+        XCTAssertTrue(photos.label.contains("photos"))
+
+    }
+
     func testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps() {
         let app = XCUIApplication()
         app.launchArguments = [

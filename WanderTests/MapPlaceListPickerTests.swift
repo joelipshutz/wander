@@ -1,8 +1,28 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 @MainActor
 final class MapPlaceListPickerTests: XCTestCase {
+    func testImportListMembershipPreservesBothSaveStatuses() async throws {
+        let analytics = MapListRecordingAnalyticsClient()
+        let store = makeStore(analytics: analytics)
+        let list = try XCTUnwrap(store.createPlaceList(name: "Import picks", description: "", visibility: .followers))
+        for status in [PlaceStatus.wannaGo, .been] {
+            let candidate = candidate(id: "import-\(status.rawValue)", name: "Import \(status.rawValue)")
+            let save = store.saveImportedCandidate(candidate, status: status, visibility: .selfOnly, note: nil, sourceType: .manual)
+            let result = await MapPlaceListTarget.candidate(candidate).add(to: list, store: store, backend: nil, analyticsSurface: "import")
+            XCTAssertEqual(result.outcome, .added)
+            XCTAssertTrue(store.hasCandidate(candidate, in: list))
+            XCTAssertEqual(store.existingImportSave(matching: candidate)?.status, status)
+            XCTAssertEqual(store.existingImportSave(matching: candidate)?.userPlaceID, save.userPlaceID)
+        }
+        let events = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListItemAdded }
+        XCTAssertEqual(events.count, 2)
+        XCTAssertTrue(events.allSatisfy { $0.properties["surface"] == "import" })
+        XCTAssertTrue(events.allSatisfy { Set($0.properties.keys).isSubset(of: ["surface", "list_role", "companion_save"]) })
+    }
+
     func testSelectionStagesNewMembershipWithoutChangingExistingMembership() {
         var selection = MapPlaceListPickerSelection(existingListIDs: ["already-there"])
 
@@ -250,8 +270,17 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
-    func testMapListActionUsesTrimlessBookmarkSymbol() {
-        XCTAssertEqual(MapPlaceListActionSymbol.systemImage, "bookmark.fill")
+    func testListActionsUsePlainBulletsDistinctFromWanna() {
+        XCTAssertEqual(PlaceListSymbol.systemImage, "list.bullet")
+        XCTAssertNotEqual(PlaceListSymbol.systemImage, "bookmark.fill")
+        XCTAssertNotNil(UIImage(systemName: PlaceListSymbol.systemImage))
+    }
+
+    func testPaperTabImageFitsNativeIconSlotAndAcceptsSelectionTint() {
+        let image = PlaceListSymbol.paperTabImage
+        XCTAssertEqual(image.size, CGSize(width: 24, height: 28))
+        XCTAssertEqual(image.renderingMode, .alwaysTemplate)
+        XCTAssertNotNil(image.cgImage)
     }
 
     private func makeStore(

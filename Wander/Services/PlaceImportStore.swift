@@ -1169,6 +1169,15 @@ final class PlaceImportStore: ObservableObject {
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
+        // Historical terminal imports belong in History, not a fresh toast on
+        // every launch. Still-running imports remain eligible when they finish.
+        for index in batches.indices where !PlaceImportHistoryPresentation.isMatching(
+            batch: batches[index], items: items(for: batches[index].id)
+        ) {
+            if batches[index].completionNotifiedAt == nil {
+                batches[index].completionNotifiedAt = .now
+            }
+        }
     }
 
     /// Separates source-level retry status from place receipt rows written by
@@ -1296,6 +1305,30 @@ final class PlaceImportStore: ObservableObject {
         }.count
     }
 
+    func completionNoticeBatchIDs(in requestedIDs: [String]) -> [String] {
+        let ids = Set(requestedIDs)
+        return batches.filter {
+            ids.contains($0.id) && $0.completionNotifiedAt == nil
+                && PlaceImportHistoryPresentation.needsReview(batch: $0, items: items(for: $0.id))
+        }.map(\.id)
+    }
+
+    func markCompletionNotified(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        for index in batches.indices where ids.contains(batches[index].id) {
+            batches[index].completionNotifiedAt = .now
+        }
+        persist()
+    }
+
+    func allowCompletionNoticeRetry(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        for index in batches.indices where ids.contains(batches[index].id) {
+            batches[index].completionNotifiedAt = nil
+        }
+        persist()
+    }
+
     func markReviewOpened(batchIDs: [String]) {
         let ids = Set(batchIDs)
         var changed = false
@@ -1304,6 +1337,7 @@ final class PlaceImportStore: ObservableObject {
                 batch: batches[index], items: items(for: batches[index].id)
             ) else { continue }
             batches[index].reviewOpenedAt = .now
+            batches[index].completionNotifiedAt = .now
             changed = true
         }
         if changed { persist() }
@@ -1731,6 +1765,10 @@ final class PlaceImportStore: ObservableObject {
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         let batchID = items[index].batchID
+        if let batchIndex = batches.firstIndex(where: { $0.id == batchID }) {
+            batches[batchIndex].reviewOpenedAt = nil
+            batches[batchIndex].completionNotifiedAt = nil
+        }
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
     }
@@ -1949,6 +1987,39 @@ final class PlaceImportStore: ObservableObject {
         batches[index].destinationListID = destinationListID
         batches[index].receipt = receipt
         batches[index].updatedAt = .now
+        persist()
+    }
+
+    private var sourcePreviewRequests: Set<String> = []
+
+    func loadSourcePreview(batchID: String) async {
+        guard let batch = batches.first(where: { $0.id == batchID }),
+              [.instagram, .tiktok].contains(batch.source),
+              let source = items(for: batchID).compactMap(\.seed.sourceURLString).first,
+              let url = URL(string: source),
+              sourcePreviewRequests.insert(batchID).inserted else { return }
+        if batch.sourcePostTitle != nil && items(for: batchID).contains(where: { $0.seed.sourceThumbnailURLString != nil }) { return }
+        let metadata = await PublicSocialImportMetadataProvider().metadata(for: url, source: batch.source)
+        guard !Task.isCancelled else {
+            sourcePreviewRequests.remove(batchID)
+            return
+        }
+        updateSourcePreview(batchID: batchID, title: metadata?.title, caption: metadata?.caption, author: metadata?.authorName,
+            thumbnail: (metadata?.thumbnailURL ?? metadata?.mediaItems.first?.imageURL)?.absoluteString)
+    }
+
+    func updateSourcePreview(batchID: String, title: String?, caption: String? = nil, author: String? = nil, thumbnail: String?) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        if batches[index].source != .googleMaps,
+           let postTitle = PlaceImportHistoryPresentation.postTitle(title: title, caption: caption, author: author) {
+            batches[index].sourcePostTitle = postTitle
+        }
+        if let author { batches[index].sourceAuthorName = author }
+        if let thumbnail {
+            for index in items.indices where items[index].batchID == batchID {
+                items[index].seed.sourceThumbnailURLString = thumbnail
+            }
+        }
         persist()
     }
 

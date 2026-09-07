@@ -20,7 +20,7 @@ enum PlaceImportBatchState: String, Codable, Equatable {
 
 enum PlaceImportHistoryPresentation {
     static func isMatching(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
-        guard batch.receipt == nil, batch.state != .cancelled else { return false }
+        guard batch.state != .cancelled else { return false }
         return [.queued, .processing].contains(batch.state)
             || items.contains { [.queued, .resolving].contains($0.state) }
     }
@@ -37,19 +37,48 @@ enum PlaceImportHistoryPresentation {
         batch: PlaceImportBatch,
         items: [PlaceImportItem]
     ) -> String {
-        let placeCount = batch.receipt?.entries.count
-            ?? items.filter { !$0.isSourceRetry }.count
-        if batch.receipt != nil {
-            return "\(placeCount) places"
+        if batch.state == .cancelled { return "Cancelled" }
+        if isMatching(batch: batch, items: items) { return "Matching…" }
+        if items.contains(where: { [.failed, .needsHelp].contains($0.state) }) {
+            return "Retry"
         }
-        if batch.state == .cancelled {
-            return "Cancelled"
-        }
-        if isMatching(batch: batch, items: items) {
-            return "Matching…"
-        }
+        if batch.reviewOpenedAt != nil { return "Done" }
         return "Ready to review"
     }
+
+    static func postTitle(title: String?, caption: String? = nil, author: String? = nil) -> String? {
+        guard var value = (caption ?? title)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        if let range = value.range(of: #" on (Instagram|TikTok):?\s*"#, options: .regularExpression) {
+            value = String(value[range.upperBound...])
+        }
+        // Instagram descriptions can wrap the caption in engagement counts,
+        // account name and a publication date instead of a post title.
+        if let range = value.range(of: #"^(?:[\d.,KMB]+ likes?, [\d.,KMB]+ comments? - )?[@\w.]+ on (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}:\s*"#, options: [.regularExpression, .caseInsensitive]) {
+            value = String(value[range.upperBound...])
+        }
+        if let author, !author.isEmpty {
+            if value.hasPrefix(author + ": ") { value.removeFirst(author.count + 2) }
+            for suffix in [" | " + author, " - " + author] where value.hasSuffix(suffix) {
+                value.removeLast(suffix.count)
+            }
+        }
+        value = value.trimmingCharacters(in: CharacterSet(charactersIn: " \n\r\"“”"))
+        return value.isEmpty ? nil : value
+    }
+
+    static func remainingPlaces(items: [PlaceImportItem]) -> [PlaceImportItem] {
+        items.filter { !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state) }
+    }
+
+    static func savedEntries(batch: PlaceImportBatch) -> [PlaceImportReceiptEntry] {
+        batch.receipt?.entries.filter { $0.outcome != .needsReview } ?? []
+    }
+
+    static func placeCount(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Int {
+        max(items.filter { !$0.isSourceRetry }.count,
+            savedEntries(batch: batch).count + remainingPlaces(items: items).count)
+    }
+
 }
 
 enum PlaceImportItemState: String, Codable, Equatable {
@@ -539,6 +568,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     let id: String
     let source: PlaceImportSource
     var sourceName: String?
+    var sourcePostTitle: String?
+    var sourceAuthorName: String?
     let captureDeliveryID: String?
     let createdAt: Date
     var updatedAt: Date
@@ -553,6 +584,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var requestedRatingScore: Double?
     /// Opening History alone is not a review. Optional for older snapshots.
     var reviewOpenedAt: Date?
+    /// A completion is surfaced once across toast, notification, and relaunch.
+    var completionNotifiedAt: Date?
 
     init(
         id: String = UUID().uuidString.lowercased(),

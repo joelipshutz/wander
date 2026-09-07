@@ -2928,7 +2928,7 @@ private extension WalkthroughCoachTheme {
         case .tags: "tag.fill"
         case .social: "person.2.fill"
         case .memory: "ticket.fill"
-        case .lists: "bookmark.fill"
+        case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle.fill"
         case .celebration: "sparkles"
         }

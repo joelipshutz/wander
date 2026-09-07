@@ -447,7 +447,7 @@ struct ActivityPostcardView: View {
         switch context.ticketKind {
         case .checkIn: "checkmark"
         case .wanna: "plus"
-        case .list: "list.bullet"
+        case .list: PlaceListSymbol.systemImage
         case .saved: "mappin"
         }
     }
@@ -542,7 +542,7 @@ struct ActivityPostcardView: View {
         if let secondaryMetadataTitle {
             if let secondaryMetadataAction {
                 Button(action: secondaryMetadataAction) {
-                    Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                    Label(secondaryMetadataTitle, systemImage: PlaceListSymbol.systemImage)
                         .fontWeight(.bold)
                         .lineLimit(1)
                 }
@@ -551,7 +551,7 @@ struct ActivityPostcardView: View {
                 .frame(minHeight: WanderTheme.tapMinimum, alignment: .leading)
                 .contentShape(Rectangle())
             } else {
-                Label(secondaryMetadataTitle, systemImage: "list.bullet")
+                Label(secondaryMetadataTitle, systemImage: PlaceListSymbol.systemImage)
                     .fontWeight(.bold)
                     .lineLimit(1)
             }
@@ -705,6 +705,7 @@ private struct ActivityPostcardArtwork: View {
 }
 
 struct ActivityCommentsScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -746,7 +747,7 @@ struct ActivityCommentsScreen: View {
                         .frame(maxWidth: .infinity, minHeight: 140)
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                } else if comments.isEmpty {
+                } else if comments.isEmpty, commentError == nil {
                     emptyState
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
@@ -762,14 +763,21 @@ struct ActivityCommentsScreen: View {
                 }
 
                 if let commentError {
-                    Text(commentError)
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(WanderTheme.stateError.color)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, WanderTheme.spacing4)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text(commentError)
+                        Button("Try again") {
+                            Task { await refreshComments() }
+                        }
+                        .frame(minHeight: 44)
+                        .disabled(isLoading)
+                    }
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
@@ -787,15 +795,11 @@ struct ActivityCommentsScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer
         }
-        .task(id: context.activityID) {
-            isLoading = true
-            let didRefresh = await store.refreshActivityComments(
-                activityID: context.activityID,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
-            isLoading = false
+        .task(id: "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
+            guard scenePhase == .active else { return }
+            await refreshComments()
         }
+        .refreshable { await refreshComments() }
         .fullScreenCover(item: $photoViewerRoute) { route in
             ActivityCommentsPhotoViewer(
                 media: context.media,
@@ -817,6 +821,19 @@ struct ActivityCommentsScreen: View {
             CommunityReportSheet(subject: subject)
                 .environmentObject(backend)
         }
+    }
+
+    @MainActor
+    private func refreshComments() async {
+        isLoading = true
+        commentError = nil
+        let didRefresh = await store.refreshActivityComments(
+            activityID: context.activityID,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard !Task.isCancelled else { return }
+        commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
+        isLoading = false
     }
 
     private var comments: [ActivityComment] {
@@ -885,7 +902,7 @@ struct ActivityCommentsScreen: View {
             return categorySymbol(for: visiblePlace.effectiveCategory)
         }
         return switch context.ticketKind {
-        case .list: "list.bullet"
+        case .list: PlaceListSymbol.systemImage
         case .saved, .checkIn, .wanna: "mappin"
         }
     }
@@ -1202,6 +1219,8 @@ private struct ActivityCommentsFullScreenImage: View {
 }
 
 struct ActivityCommentsRouteScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
@@ -1213,7 +1232,7 @@ struct ActivityCommentsRouteScreen: View {
     @State private var isRetrying = false
 
     var body: some View {
-        Group {
+        ZStack {
             if let route = currentRoute, let context = route.context {
                 ActivityCommentsScreen(
                     context: context,
@@ -1225,6 +1244,10 @@ struct ActivityCommentsRouteScreen: View {
             } else {
                 resolutionState
             }
+        }
+        .task(id: "\(requestID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
+            guard scenePhase == .active else { return }
+            await retry()
         }
         .navigationTitle("comments")
         .navigationBarTitleDisplayMode(.inline)
