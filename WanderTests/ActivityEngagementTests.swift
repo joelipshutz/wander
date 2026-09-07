@@ -926,23 +926,94 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertNil(store.followedFeedPage)
     }
 
-    func testExactActivityEngagementCannotCrossAccountBoundary() async {
+    func testExactActivityDoesNotWaitForEngagementSummariesBeforeOpeningComments() async {
         let store = WanderStore(fixtures: .empty())
         let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
         let repository = ActivityEngagementRepositoryStub(activityResult: activity, suspendSummaries: true)
-        let task = Task { @MainActor in
-            let resolved = await store.activity(id: activity.id, backend: WanderBackend(activityEngagementRepository: repository))
-            return resolved?.id
+        let resolved = await store.activity(
+            id: activity.id, backend: WanderBackend(activityEngagementRepository: repository)
+        )
+        XCTAssertEqual(resolved?.id, activity.id)
+        XCTAssertEqual(repository.summariesRequestCount, 0)
+    }
+
+    func testNotificationActivityRecoversInterruptedConnectionWithoutReopening() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [
+            .failure(URLError(.networkConnectionLost)), .success(activity)
+        ])
+        let resolved = await store.activity(
+            id: activity.id, backend: WanderBackend(activityEngagementRepository: repository)
+        )
+        XCTAssertEqual(resolved?.id, activity.id)
+        XCTAssertEqual(repository.activityRequestCount, 2)
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+    }
+
+    func testCommentsRecoverTimeoutAndStopAfterOneRetry() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = UUID().uuidString
+        let comment = activityComment(id: "comment", activityID: activityID, authorID: store.currentUser.id, relationship: .owner)
+        let page = ActivityCommentsPage(comments: [comment], nextCursor: nil,
+                                       engagement: .empty(activityID: activityID))
+        let repository = ActivityEngagementRepositoryStub(commentsResponses: [
+            .failure(URLError(.timedOut)), .success(page),
+            .failure(URLError(.timedOut)), .failure(URLError(.timedOut))
+        ])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let recovered = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertEqual(repository.commentsRequestCount, 2)
+        let failed = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(repository.commentsRequestCount, 4)
+        XCTAssertNotNil(store.activityEngagementError(for: activityID))
+    }
+
+    func testCommentsDoNotRetryAuthorizationFailure() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = UUID().uuidString
+        let repository = ActivityEngagementRepositoryStub(commentsResponses: [
+            .failure(WanderRemoteError.notAuthenticated)
+        ])
+        let refreshed = await store.refreshActivityComments(
+            activityID: activityID, backend: WanderBackend(activityEngagementRepository: repository)
+        )
+        XCTAssertFalse(refreshed)
+        XCTAssertEqual(repository.commentsRequestCount, 1)
+    }
+
+    func testCommentsResponseCannotCrossAccountBoundaryOrCancellation() async {
+        for changesAccount in [false, true] {
+            let store = WanderStore(fixtures: .empty())
+            let activityID = UUID().uuidString
+            let comment = activityComment(id: "comment", activityID: activityID, authorID: store.currentUser.id, relationship: .owner)
+            let repository = ActivityEngagementRepositoryStub(
+                commentsPage: ActivityCommentsPage(comments: [comment], nextCursor: nil,
+                                                  engagement: .empty(activityID: activityID)),
+                suspendComments: true
+            )
+            let task = Task { @MainActor in
+                await store.refreshActivityComments(
+                    activityID: activityID, backend: WanderBackend(activityEngagementRepository: repository)
+                )
+            }
+            for _ in 0..<100 where repository.commentsRequestCount == 0 { await Task.yield() }
+            XCTAssertEqual(repository.commentsRequestCount, 1)
+            if changesAccount {
+                store.apply(authState: .signedOut)
+                store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
+            } else {
+                task.cancel()
+            }
+            repository.finishComments()
+            let refreshed = await task.value
+            XCTAssertFalse(refreshed)
+            XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+            XCTAssertNil(store.activityEngagementError(for: activityID))
         }
-        for _ in 0..<100 where repository.summariesRequestCount == 0 { await Task.yield() }
-        XCTAssertEqual(repository.summariesRequestCount, 1)
-        store.apply(authState: .signedOut)
-        store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
-        repository.finishSummaries()
-        let result = await task.value
-        XCTAssertNil(result)
-        XCTAssertNil(store.followedFeedPage)
-        XCTAssertNil(store.activityEngagementByID[activity.id])
     }
 
     func testDeniedRemoteCommentsResolutionClearsCachedPreviewAndCanRetry() throws {
@@ -1022,6 +1093,9 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     let deleteError: Error?
     private(set) var activityRequestCount = 0
     private(set) var summariesRequestCount = 0
+    private(set) var commentsRequestCount = 0
+    private var commentsResponses: [Result<ActivityCommentsPage, Error>]
+    private var areCommentsSuspended: Bool
     private(set) var deletedCommentIDs: [String] = []
     private var activityResponses: [Result<FeedActivity, Error>]
     private var isActivitySuspended: Bool
@@ -1037,8 +1111,12 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
         activityResult: FeedActivity? = nil,
         activityResponses: [Result<FeedActivity, Error>]? = nil,
         suspendActivity: Bool = false,
-        suspendSummaries: Bool = false
+        suspendSummaries: Bool = false,
+        commentsResponses: [Result<ActivityCommentsPage, Error>] = [],
+        suspendComments: Bool = false
     ) {
+        self.commentsResponses = commentsResponses
+        self.areCommentsSuspended = suspendComments
         self.placeMatches = placeMatches
         self.summariesResult = summariesResult
         self.setLikeError = setLikeError
@@ -1091,12 +1169,17 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
-        commentsPage ?? ActivityCommentsPage(
+        commentsRequestCount += 1
+        while areCommentsSuspended { await Task.yield() }
+        if !commentsResponses.isEmpty { return try commentsResponses.removeFirst().get() }
+        return commentsPage ?? ActivityCommentsPage(
             comments: [],
             nextCursor: nil,
             engagement: .empty(activityID: activityID)
         )
     }
+
+    func finishComments() { areCommentsSuspended = false }
 
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
         let comment = ActivityComment(
