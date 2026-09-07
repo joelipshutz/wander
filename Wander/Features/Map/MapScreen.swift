@@ -1382,6 +1382,7 @@ struct MapScreen: View {
     @State private var mapSelectionRevision = 0
     @State private var activePinBounceRevision: UInt64 = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
+    @State private var mapActivityEditFlow: PlaceActivityEditPresentation?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
@@ -2394,6 +2395,15 @@ struct MapScreen: View {
         .accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)
         .overlay {
             selectedPlaceProfileOverlay
+        }
+        .sheet(item: $mapActivityEditFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { presentation in
+            MapPlaceSaveFlowSheet(
+                context: presentation.context,
+                onSave: presentation.onSave,
+                onRemove: presentation.onRemove
+            )
         }
         .sheet(item: $mapPlaceListTarget) { target in
             MapPlaceListPickerSheet(target: target) { result in
@@ -3906,6 +3916,9 @@ struct MapScreen: View {
                 .environmentObject(backend)
                 .environmentObject(walkthroughs)
                 .environmentObject(placeSaveDraftStore)
+                .environment(\.presentPlaceActivityEdit, { presentation in
+                    mapActivityEditFlow = presentation
+                })
                 .environment(
                     \.placeProfileFloatingActionVariant,
                     placeProfileFloatingActionVariant
@@ -12800,6 +12813,7 @@ struct MapPlaceSaveEditor: View {
                     )
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("save.editorScroll")
                 .background(editorBackground)
                 .overlay(alignment: .bottom) {
                     if isReadyForDetails {
@@ -17198,7 +17212,27 @@ private struct PlaceActivityPhotoViewerRoute: Identifiable {
     var id: String { photoID }
 }
 
+struct PlaceActivityEditPresentation: Identifiable {
+    let context: MapPlaceSaveContext
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+
+    var id: UUID { context.id }
+}
+
+private struct PlaceActivityEditPresenterKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (PlaceActivityEditPresentation) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var presentPlaceActivityEdit: (@MainActor (PlaceActivityEditPresentation) -> Void)? {
+        get { self[PlaceActivityEditPresenterKey.self] }
+        set { self[PlaceActivityEditPresenterKey.self] = newValue }
+    }
+}
+
 struct PlaceActivitySection: View {
+    @Environment(\.presentPlaceActivityEdit) private var presentPlaceActivityEdit
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -17393,13 +17427,28 @@ struct PlaceActivitySection: View {
     private func edit(_ entry: PlaceActivityEntry) {
         guard entry.canEdit else { return }
 
+        let context: MapPlaceSaveContext
         if entry.kind == .visit, let visit = entry.visit {
-            editFlow = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
+            context = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
         } else if entry.kind == .currentWant {
-            editFlow = MapPlaceSaveContext.editWant(
+            context = MapPlaceSaveContext.editWant(
                 entry.summary.visiblePlace,
                 attributes: store.attributes(for: entry.userPlace.id)
             )
+        } else {
+            return
+        }
+
+        if let presentPlaceActivityEdit {
+            // The Map place profile lives in a replaceable UIKit hosting root.
+            // Present from its stable ancestor so resizing cannot reset edits.
+            presentPlaceActivityEdit(PlaceActivityEditPresentation(
+                context: context,
+                onSave: saveActivityEdit,
+                onRemove: removeActivityEdit
+            ))
+        } else {
+            editFlow = context
         }
     }
 
