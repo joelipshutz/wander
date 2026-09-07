@@ -646,8 +646,17 @@ struct WanderRootView: View {
         }
     }
 
+    @ViewBuilder
     private func tabItemLabel(for tab: WanderTab) -> some View {
-        Label(tab.title, systemImage: tab.systemImage)
+        if tab == .lists {
+            Label {
+                Text(tab.title)
+            } icon: {
+                Image(uiImage: PlaceListSymbol.paperTabImage)
+            }
+        } else {
+            Label(tab.title, systemImage: tab.systemImage)
+        }
     }
 
     private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
@@ -3309,7 +3318,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .map: "map"
         case .discover: "newspaper"
         case .add: "plus"
-        case .lists: "bookmark.square"
+        case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle"
         }
     }

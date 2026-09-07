@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 @MainActor
@@ -250,8 +251,17 @@ final class MapPlaceListPickerTests: XCTestCase {
         XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
-    func testMapListActionUsesTrimlessBookmarkSymbol() {
-        XCTAssertEqual(MapPlaceListActionSymbol.systemImage, "bookmark.fill")
+    func testListActionsUsePlainBulletsDistinctFromWanna() {
+        XCTAssertEqual(PlaceListSymbol.systemImage, "list.bullet")
+        XCTAssertNotEqual(PlaceListSymbol.systemImage, "bookmark.fill")
+        XCTAssertNotNil(UIImage(systemName: PlaceListSymbol.systemImage))
+    }
+
+    func testPaperTabImageFitsNativeIconSlotAndAcceptsSelectionTint() {
+        let image = PlaceListSymbol.paperTabImage
+        XCTAssertEqual(image.size, CGSize(width: 24, height: 28))
+        XCTAssertEqual(image.renderingMode, .alwaysTemplate)
+        XCTAssertNotNil(image.cgImage)
     }
 
     private func makeStore(
