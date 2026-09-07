@@ -1121,6 +1121,7 @@ private struct PlaceImportHistoryTile: View {
 }
 
 private struct PlaceImportHistoryArtwork: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let batch: PlaceImportBatch
     let items: [PlaceImportItem]
     var showsStatus = true
@@ -1189,10 +1190,10 @@ private struct PlaceImportHistoryArtwork: View {
                 .scaledToFill()
         } else {
             VStack(spacing: WanderTheme.spacing2) {
-                CanonicalImportSourceMark(source: batch.source, color: batch.source == .tiktok ? .white.opacity(0.8) : .black.opacity(0.65), size: 38)
+                CanonicalImportSourceMark(source: batch.source, color: batch.source == .tiktok ? .white.opacity(0.8) : brandMode.primaryText.opacity(0.8), size: 38)
                 Text("Post preview unavailable")
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(batch.source == .tiktok ? Color.white.opacity(0.8) : Color.black.opacity(0.65))
+                    .foregroundStyle(batch.source == .tiktok ? Color.white.opacity(0.8) : brandMode.primaryText.opacity(0.8))
                     .multilineTextAlignment(.center)
             }
             .padding(WanderTheme.spacing3)
