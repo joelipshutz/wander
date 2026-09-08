@@ -20,21 +20,21 @@ struct OnboardingCarouselSlide: Identifiable, Equatable {
             id: 0,
             imageName: "OnboardingMapDiary",
             eyebrow: "YOUR PLACE DIARY",
-            title: "Keep track of everywhere you’ve been",
+            title: "Everywhere you’ve been",
             body: "Build a map of the places worth remembering — with notes that bring every visit back."
         ),
         OnboardingCarouselSlide(
             id: 1,
-            imageName: "PlaceCarouselAvatars",
+            imageName: "OnboardingFriendsComments",
             eyebrow: "STAY CONNECTED",
-            title: "See the places your friends love",
+            title: "Places your friends love",
             body: "Follow the people you know and keep their best finds close at hand."
         ),
         OnboardingCarouselSlide(
             id: 2,
             imageName: "PlaceCarouselPhotos",
             eyebrow: "TRUSTED DISCOVERY",
-            title: "Find places through people you trust",
+            title: "Places through people you trust",
             body: "Skip anonymous reviews. Discover the spots that matter to people whose taste you know."
         )
     ]
@@ -186,7 +186,8 @@ private struct OnboardingCarouselSlideView: View {
                     .frame(width: heroWidth, height: heroHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                     .overlay {
-                        if brandMode.prefersDarkInterface {
+                        // Preserve native UI contrast in the comments screenshot.
+                        if brandMode.prefersDarkInterface && slide.id != 1 {
                             Color.black.opacity(0.14)
                                 .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                                 .allowsHitTesting(false)
@@ -197,6 +198,7 @@ private struct OnboardingCarouselSlideView: View {
                             .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                     )
                     .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 18, y: 9)
+                    .accessibilityHidden(true)
 
                 VStack(spacing: WanderTheme.spacing2) {
                     Text(slide.eyebrow)

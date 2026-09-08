@@ -157,7 +157,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let astirBrandShellPage = AstirBrandShellPage.resolved() {
+            if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingCommentsCapture") {
+                OnboardingCommentsCaptureView()
+            } else if let astirBrandShellPage = AstirBrandShellPage.resolved() {
                 AstirBrandShellRoot(page: astirBrandShellPage)
             } else if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)

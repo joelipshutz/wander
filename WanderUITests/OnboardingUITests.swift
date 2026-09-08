@@ -2660,9 +2660,36 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testLoggedOutCarouselPagesKeepActionsVisible() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+        app.launch()
+
+        let page = app.descendants(matching: .any)["onboarding.carouselPage"]
+        XCTAssertTrue(page.waitForExistence(timeout: 5))
+        for index in 1...3 {
+            expectation(for: NSPredicate(format: "value == %@", String(index)), evaluatedWith: page)
+            waitForExpectations(timeout: 3)
+            XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
+            XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "REC-447 splash page \(index)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            if index < 3 {
+                app.swipeLeft()
+            }
+        }
+        // Manual paging must remain available in both directions.
+        app.swipeRight()
+        expectation(for: NSPredicate(format: "value == %@", "2"), evaluatedWith: page)
+        waitForExpectations(timeout: 3)
+    }
+
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderOnboardingUITestSignedOut"]
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "2"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
         app.launch()
