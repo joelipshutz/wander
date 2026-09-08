@@ -2688,11 +2688,14 @@ final class PlaceImportStore: ObservableObject {
 
     private func socialSourceItemCountryCodes(_ item: PlaceImportItem) -> Set<String> {
         let candidate = item.selectedCandidate ?? item.candidates.first
-        return Set([
+        var codes = Set([
             item.seed.areaHint,
-            item.displayArea,
-            candidate?.country
-        ].compactMap { SocialImportCountry.isoCode(for: $0) })
+            item.displayArea
+        ].compactMap { SocialImportCountry.isoCode(forAreaText: $0) })
+        if let providerCountry = SocialImportCountry.isoCode(for: candidate?.country) {
+            codes.insert(providerCountry)
+        }
+        return codes
     }
 
     private func socialSourceItemAreas(_ item: PlaceImportItem) -> Set<String> {
@@ -2713,7 +2716,7 @@ final class PlaceImportStore: ObservableObject {
             localityAndRegion
         ]
         let normalizedAreas = rawAreas.compactMap { value in
-            SocialImportCountry.isoCode(for: value) == nil ? value : nil
+            SocialImportCountry.isoCode(forAreaText: value) == nil ? value : nil
         }
             .map(normalizedName)
             .filter { !$0.isEmpty }

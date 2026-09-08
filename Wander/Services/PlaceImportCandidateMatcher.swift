@@ -336,7 +336,7 @@ enum PlaceImportGeography {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard let country = components.last,
-              let countryCode = SocialImportCountry.isoCode(for: country)
+              let countryCode = SocialImportCountry.isoCode(forAreaText: country)
         else { return nil }
         return (countryCode, Array(components.dropLast()))
     }

@@ -2665,6 +2665,38 @@ final class PlaceImportStoreTests: XCTestCase {
         )
     }
 
+    func testSocialDedupDoesNotTreatLAAreaAsLaosCountryEvidence() async throws {
+        let sourceURL = "https://www.instagram.com/p/ambiguous-country-code/"
+        let entries = [("LA", "US"), ("Laos", "LA")].enumerated().map { index, location in
+            let candidate = PlaceCandidate(
+                id: "country-candidate-\(index)", name: "Garden Cafe", category: "cafe",
+                address: nil, locality: nil, region: nil, country: location.1,
+                latitude: index == 0 ? 34.0522 : 17.9757,
+                longitude: index == 0 ? -118.2437 : 102.6331,
+                sourceProvider: "mapkit", sourceProviderPlaceID: "country-provider-\(index)",
+                confidence: 0.7
+            )
+            return PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL, nameHint: candidate.name, areaHint: location.0,
+                    sourceURLString: sourceURL, sourceLine: index + 1
+                ),
+                candidates: [candidate], selectedCandidateID: nil,
+                helpMessage: "Choose the matching venue from this post."
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(resolutions: [.expandedResolved(entries, sourceName: nil)])
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        XCTAssertEqual(store.items(for: batchID).count, 2)
+        XCTAssertEqual(store.items(for: batchID).compactMap { $0.candidates.first?.country }, ["US", "LA"])
+    }
+
     func testSocialDedupKeepsDistinctAmbiguousVenuesWithTheSameLeadingCandidate() async throws {
         let sourceURL = "https://www.instagram.com/reel/distinct-overlapping-candidates/"
         let rorysPlace = placeImportCandidate(
@@ -5897,7 +5929,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected one unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.count, 1)
-        XCTAssertTrue(entries[0].helpMessage?.contains("needs your help matching") == true)
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post, but place matching needs your help.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
@@ -5939,8 +5971,32 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected clean unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe", "Cafe", "Cafe"])
-        XCTAssertTrue(entries[0].helpMessage?.contains("needs your help matching") == true)
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post, but place matching needs your help.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
+    }
+
+    func testSocialLAHintSurvivesCountryFilteringAndSelectsLosAngelesVenue() async throws {
+        let candidate = placeImportCandidate(name: "Summit Archive")
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: ScriptedDevicePlaceResolver(results: [.candidates([candidate])]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: socialUnderstandingResult(
+                    hint: SocialPlaceSearchHint(name: "Summit Archive", area: "LA", evidence: .itineraryPhrase)
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/reel/la-country-code-regression/"
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL, nameHint: nil, areaHint: nil,
+                sourceURLString: sourceURL, sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
 
     func testPlausibleSoleSocialCandidateRemainsAvailableForReview() async throws {
@@ -8206,6 +8262,44 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         XCTAssertEqual(match.candidates.map(\.id), [sanDiego.id])
         XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testFreeTextAreaAbbreviationsDoNotBecomeCountryFilters() {
+        let candidate = placeImportCandidate(name: "Garden Cafe")
+        for area in ["LA", "la", "L.A.", "CA", "IN", "ME", "DE", "SG", "FR", "VN"] {
+            XCTAssertEqual(
+                SocialImportCountry.candidatesCompatibleWithExactCountry([candidate], areaHint: area),
+                [candidate],
+                "Free-text area \(area) must not be treated as a structured provider country code"
+            )
+        }
+        XCTAssertEqual(SocialImportCountry.isoCode(for: "LA"), "LA")
+        XCTAssertEqual(SocialImportCountry.isoCode(for: "CA"), "CA")
+    }
+
+    func testExplicitLaosCountryNameStillFiltersStructuredProviderCountryCodes() {
+        let local = placeImportCandidate(name: "Garden Cafe")
+        let laos = placeImportCandidate(
+            name: "Garden Cafe", locality: "Vientiane", region: "Vientiane", country: "LA",
+            latitude: 17.9757, longitude: 102.6331
+        )
+        XCTAssertEqual(
+            SocialImportCountry.candidatesCompatibleWithExactCountry([local, laos], areaHint: "Laos"),
+            [laos]
+        )
+        let match = PlaceImportCandidateMatcher.match(
+            [local, laos], nameHint: "Garden Cafe", areaHint: "Laos",
+            selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertEqual(match.candidates.map(\.id), [laos.id])
+        XCTAssertEqual(match.selectedCandidateID, laos.id)
+    }
+
+    func testCountryGuideRequiresCountryNamesInsteadOfLocalAbbreviations() {
+        XCTAssertNil(SocialGuideTextParser.components(from: "Garden Cafe / LA"))
+        XCTAssertNil(SocialGuideTextParser.components(from: "Garden Cafe / CA"))
+        XCTAssertEqual(SocialGuideTextParser.components(from: "Garden Cafe / Laos")?.area, "Laos")
+        XCTAssertEqual(SocialGuideTextParser.components(from: "Garden Cafe / USA")?.area, "USA")
     }
 
     func testSocialCandidateMatcherTreatsLAAliasAsLosAngelesEvidence() {
