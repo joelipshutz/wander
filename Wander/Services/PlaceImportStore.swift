@@ -504,7 +504,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This place was named in the post, but place matching needs your help."
+                            helpMessage: "This place was named in the post. Wander needs your help matching it."
                         )
                     )
                 } else {
@@ -564,7 +564,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This place was named in the post, but place matching needs your help."
+                            helpMessage: "This place was named in the post. Wander needs your help matching it."
                         )
                     )
                 } else {
@@ -799,7 +799,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         originalSeed: PlaceImportSeed,
         to entries: inout [PlaceImportResolvedEntry],
         seenHints: inout Set<String>,
-        helpMessage: String = "This place was named in the post, but place matching needs your help."
+        helpMessage: String = "This place was named in the post. Wander needs your help matching it."
     ) -> Bool {
         guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
         let identity = hintIdentity(hint)
