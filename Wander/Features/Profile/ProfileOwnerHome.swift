@@ -1463,6 +1463,9 @@ struct ProfileCalendarDayCell: View {
                 if isToday {
                     Text("NOW")
                         .font(AstirTypography.metadata)
+                        // This decorative badge shares a fixed-size date cell.
+                        // VoiceOver announces "today" through the cell's label.
+                        .dynamicTypeSize(...DynamicTypeSize.large)
                         .foregroundStyle(brandMode.accentText)
                         .padding(.horizontal, 5)
                         .frame(height: 13)
