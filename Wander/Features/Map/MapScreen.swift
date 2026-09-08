@@ -1382,6 +1382,7 @@ struct MapScreen: View {
     @State private var mapSelectionRevision = 0
     @State private var activePinBounceRevision: UInt64 = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
+    @State private var mapActivityEditFlow: PlaceActivityEditPresentation?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
@@ -1941,6 +1942,7 @@ struct MapScreen: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 NativeMapView(
+                    attributionBottomClearance: mapSearchDockClearance,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -2394,6 +2396,15 @@ struct MapScreen: View {
         .accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)
         .overlay {
             selectedPlaceProfileOverlay
+        }
+        .sheet(item: $mapActivityEditFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { presentation in
+            MapPlaceSaveFlowSheet(
+                context: presentation.context,
+                onSave: presentation.onSave,
+                onRemove: presentation.onRemove
+            )
         }
         .sheet(item: $mapPlaceListTarget) { target in
             MapPlaceListPickerSheet(target: target) { result in
@@ -3906,6 +3917,9 @@ struct MapScreen: View {
                 .environmentObject(backend)
                 .environmentObject(walkthroughs)
                 .environmentObject(placeSaveDraftStore)
+                .environment(\.presentPlaceActivityEdit, { presentation in
+                    mapActivityEditFlow = presentation
+                })
                 .environment(
                     \.placeProfileFloatingActionVariant,
                     placeProfileFloatingActionVariant
@@ -6464,6 +6478,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
+    let attributionBottomClearance: CGFloat
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6483,6 +6498,10 @@ private struct NativeMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView(frame: .zero)
+        // MapKit adds the safe area to these margins and renders its own attribution.
+        mapView.layoutMargins = UIEdgeInsets(
+            top: 0, left: 0, bottom: attributionBottomClearance + 10, right: 0
+        )
         let configuration = MKStandardMapConfiguration(
             elevationStyle: .flat,
             emphasisStyle: .muted
@@ -6554,6 +6573,11 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
+                mapView.layoutMargins = UIEdgeInsets(
+                    top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
+                )
+            }
             self.parent = parent
             mapView.showsUserLocation = parent.showsUserLocation
             let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
@@ -10864,9 +10888,9 @@ struct MapPlaceSaveContext: Identifiable {
 
     var allowsPhotoAttachments: Bool {
         switch mode {
-        case .add, .addVisit, .sharedVisit:
+        case .add, .addVisit, .sharedVisit, .editVisit:
             true
-        case .editVisit, .editWant:
+        case .editWant:
             false
         }
     }
@@ -12800,6 +12824,7 @@ struct MapPlaceSaveEditor: View {
                     )
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("save.editorScroll")
                 .background(editorBackground)
                 .overlay(alignment: .bottom) {
                     if isReadyForDetails {
@@ -12867,7 +12892,7 @@ struct MapPlaceSaveEditor: View {
                     .padding(.bottom, -WanderTheme.spacing2)
             }
         }
-        .background(editorBackground)
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .modifier(MapPlaceSaveEditorLifecycleModifier(
             context: context,
@@ -13105,6 +13130,7 @@ struct MapPlaceSaveEditor: View {
             if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
                     canAddPhotos: true,
+                    existingPhotos: context.editedVisit.map { store.photos(for: $0.id) } ?? [],
                     photos: $visitPhotoAttachments
                 )
             }
@@ -13157,11 +13183,11 @@ struct MapPlaceSaveEditor: View {
                 .textFieldStyle(.plain)
                 .font(AstirTypography.body)
                 .accessibilityIdentifier("save.note")
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(astirBrandMode.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .lineLimit(3, reservesSpace: true)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(astirBrandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
     }
@@ -13178,10 +13204,10 @@ struct MapPlaceSaveEditor: View {
                 .textInputAutocapitalization(.words)
                 .submitLabel(.done)
                 .accessibilityIdentifier("save.droppedPinName")
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(astirBrandMode.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(astirBrandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .onChange(of: droppedPinName) { _, value in
                     if value.count > DroppedPinNamePolicy.maximumLength {
@@ -13221,17 +13247,17 @@ struct MapPlaceSaveEditor: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("planned for")
                                     .font(AstirTypography.metadata)
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .foregroundStyle(astirBrandMode.secondaryText)
                                 Text(WannaGoDate.displayString(for: plannedDate))
                                     .font(AstirTypography.control)
-                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .foregroundStyle(astirBrandMode.primaryText)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.82)
                             }
                         } else {
                             Text("add a date")
                                 .font(AstirTypography.control)
-                                .foregroundStyle(WanderTheme.textInk.color)
+                                .foregroundStyle(astirBrandMode.primaryText)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.82)
                         }
@@ -13252,7 +13278,7 @@ struct MapPlaceSaveEditor: View {
                 .accessibilityValue(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "No date selected")
 
                 if isShowingPlannedDatePicker {
-                    Divider().background(WanderTheme.borderHairline.color)
+                    Divider().background(astirBrandMode.border)
 
                     MultiDatePicker(
                         "Wanna go date",
@@ -13277,7 +13303,7 @@ struct MapPlaceSaveEditor: View {
                     HStack {
                         Label("Past dates are unavailable", systemImage: "calendar.badge.exclamationmark")
                             .font(AstirTypography.caption)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(astirBrandMode.secondaryText)
 
                         Spacer()
 
@@ -13294,16 +13320,16 @@ struct MapPlaceSaveEditor: View {
                     .padding(.bottom, WanderTheme.spacing3)
                 }
             }
-            .background(WanderTheme.surfaceRaised.color)
+            .background(astirBrandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color)
+                    .stroke(astirBrandMode.border)
             )
 
             Text("If notifications are on, rec.me will remind you three days before.")
                 .font(AstirTypography.caption)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -13386,11 +13412,11 @@ struct MapPlaceSaveEditor: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text("more options")
                         .font(AstirTypography.control)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(astirBrandMode.primaryText)
 
                     Text(optionalDetailsSummary)
                         .font(AstirTypography.caption)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
 
@@ -13411,11 +13437,11 @@ struct MapPlaceSaveEditor: View {
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
+                .background(astirBrandMode.recessedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(astirBrandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -13504,11 +13530,11 @@ struct MapPlaceSaveEditor: View {
         return VStack(alignment: .leading, spacing: 0) {
             Text("place type")
                 .font(AstirTypography.label)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 36)
 
-            Divider().background(WanderTheme.borderHairline.color)
+            Divider().background(astirBrandMode.border)
 
             VStack(spacing: 0) {
                 Button {
@@ -13519,7 +13545,7 @@ struct MapPlaceSaveEditor: View {
                 }
                 .buttonStyle(.plain)
 
-                Divider().background(WanderTheme.borderHairline.color)
+                Divider().background(astirBrandMode.border)
 
                 if isRestaurantsFoodSelected {
                     Button {
@@ -13544,11 +13570,11 @@ struct MapPlaceSaveEditor: View {
                 }
             }
         }
-        .background(WanderTheme.surfaceBone.color)
+        .background(astirBrandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color)
+                .stroke(astirBrandMode.border)
         )
     }
 
@@ -14527,6 +14553,7 @@ struct MapPlaceSaveEditor: View {
 
 private struct MapSaveVisitPhotoSection: View {
     let canAddPhotos: Bool
+    var existingPhotos: [LocalVisitPhoto] = []
     @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
@@ -14537,7 +14564,7 @@ private struct MapSaveVisitPhotoSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Button {
-                if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                if canAddPhotos && photoCount < MapPlaceSavePhotoAttachment.maximumCount {
                     isShowingPhotoMenu = true
                 }
             } label: {
@@ -14551,11 +14578,11 @@ private struct MapSaveVisitPhotoSection: View {
 
                     Spacer()
 
-                    Text(photos.isEmpty ? "add" : "\(photos.count) added")
+                    Text(photoCount == 0 ? "add" : "\(photoCount) added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
 
-                    if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                    if canAddPhotos && photoCount < MapPlaceSavePhotoAttachment.maximumCount {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
@@ -14563,9 +14590,11 @@ private struct MapSaveVisitPhotoSection: View {
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!canAddPhotos || photos.count >= MapPlaceSavePhotoAttachment.maximumCount)
+            .accessibilityIdentifier("save.photos")
+            .disabled(!canAddPhotos || photoCount >= MapPlaceSavePhotoAttachment.maximumCount)
             .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take Photo") {
@@ -14579,9 +14608,16 @@ private struct MapSaveVisitPhotoSection: View {
                 Button("Cancel", role: .cancel) {}
             }
 
-            if !photos.isEmpty {
+            if photoCount > 0 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(existingPhotos) { photo in
+                            VisitPhotoThumbnail(
+                                photo: PlaceActivityPhoto(metadata: photo, entryID: photo.visitID),
+                                size: 82
+                            )
+                            .accessibilityLabel("Existing check-in photo")
+                        }
                         ForEach(Array(photos.enumerated()), id: \.element.id) { index, attachment in
                             ZStack(alignment: .topTrailing) {
                                 Image(uiImage: attachment.image)
@@ -14649,7 +14685,7 @@ private struct MapSaveVisitPhotoSection: View {
         .photosPicker(
             isPresented: $isShowingPhotoPicker,
             selection: $selectedPhotoItems,
-            maxSelectionCount: max(1, MapPlaceSavePhotoAttachment.maximumCount - photos.count),
+            maxSelectionCount: max(1, MapPlaceSavePhotoAttachment.maximumCount - photoCount),
             matching: .images
         )
         .onChange(of: selectedPhotoItems) { _, items in
@@ -14698,12 +14734,15 @@ private struct MapSaveVisitPhotoSection: View {
         }
     }
 
+    private var photoCount: Int { existingPhotos.count + photos.count }
+
     private func appendIfWithinLimits(_ attachment: MapPlaceSavePhotoAttachment) {
-        guard photos.count < MapPlaceSavePhotoAttachment.maximumCount else {
+        guard photoCount < MapPlaceSavePhotoAttachment.maximumCount else {
             photoError = "A check-in can have up to 10 photos."
             return
         }
-        guard photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
+        guard existingPhotos.reduce(0, { $0 + ($1.byteSize ?? 0) })
+            + photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
             photoError = "Those photos are over the 75 MB check-in limit."
             return
         }
@@ -16012,6 +16051,7 @@ private enum CategoryPickerVisuals {
 }
 
 private struct MapSaveQuestionBlock<Content: View>: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let tag: String
     @ViewBuilder var content: Content
@@ -16021,16 +16061,16 @@ private struct MapSaveQuestionBlock<Content: View>: View {
             HStack {
                 Text(title)
                     .font(AstirTypography.cardTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(brandMode.primaryText)
                 Spacer()
                 Text(tag)
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             content
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
@@ -17184,7 +17224,27 @@ private struct PlaceActivityPhotoViewerRoute: Identifiable {
     var id: String { photoID }
 }
 
+struct PlaceActivityEditPresentation: Identifiable {
+    let context: MapPlaceSaveContext
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+
+    var id: UUID { context.id }
+}
+
+private struct PlaceActivityEditPresenterKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (PlaceActivityEditPresentation) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var presentPlaceActivityEdit: (@MainActor (PlaceActivityEditPresentation) -> Void)? {
+        get { self[PlaceActivityEditPresenterKey.self] }
+        set { self[PlaceActivityEditPresenterKey.self] = newValue }
+    }
+}
+
 struct PlaceActivitySection: View {
+    @Environment(\.presentPlaceActivityEdit) private var presentPlaceActivityEdit
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -17379,13 +17439,28 @@ struct PlaceActivitySection: View {
     private func edit(_ entry: PlaceActivityEntry) {
         guard entry.canEdit else { return }
 
+        let context: MapPlaceSaveContext
         if entry.kind == .visit, let visit = entry.visit {
-            editFlow = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
+            context = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
         } else if entry.kind == .currentWant {
-            editFlow = MapPlaceSaveContext.editWant(
+            context = MapPlaceSaveContext.editWant(
                 entry.summary.visiblePlace,
                 attributes: store.attributes(for: entry.userPlace.id)
             )
+        } else {
+            return
+        }
+
+        if let presentPlaceActivityEdit {
+            // The Map place profile lives in a replaceable UIKit hosting root.
+            // Present from its stable ancestor so resizing cannot reset edits.
+            presentPlaceActivityEdit(PlaceActivityEditPresentation(
+                context: context,
+                onSave: saveActivityEdit,
+                onRemove: removeActivityEdit
+            ))
+        } else {
+            editFlow = context
         }
     }
 

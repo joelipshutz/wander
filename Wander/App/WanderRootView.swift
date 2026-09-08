@@ -334,7 +334,6 @@ struct WanderRootView: View {
     @State private var interactiveImportOwnerUserID: String?
     @State private var queuedInteractiveImportBatchIDs: Set<String> = []
     @State private var completedInteractiveImportBatchIDs: Set<String> = []
-    @State private var surfacedImportCompletionBatchIDs: Set<String> = []
     @State private var activeImportCompletionNotice: PlaceImportCompletionNotice?
     @State private var importCompletionBannerTask: Task<Void, Never>?
     @State private var dismissedImportSaveSyncNoticeIDs: Set<String> = []
@@ -662,6 +661,7 @@ struct WanderRootView: View {
     private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
         let syncStates = store.currentUserVisiblePlaces.reduce(into: [String: SyncState]()) { result, visible in
             result[visible.userPlace.id] = visible.userPlace.syncState
+            result[visible.userPlace.localID] = visible.userPlace.syncState
         }
         guard let notice = PlaceImportSaveSyncNotice.resolved(
             batches: importStore.batches,
@@ -1000,12 +1000,24 @@ struct WanderRootView: View {
         }
     }
 
-    private var stateObservedRoot: some View {
+    private var importObservedRoot: some View {
         storeObservedRoot
+        .task(id: importStore.batches.filter { $0.reviewOpenedAt != nil }.map(\.id).sorted()) {
+            let reviewedIDs = importStore.batches.filter { $0.reviewOpenedAt != nil }.map(\.id)
+            if let notice = activeImportCompletionNotice,
+               !Set(notice.batchIDs).isDisjoint(with: reviewedIDs) {
+                dismissImportCompletionBanner()
+            }
+            await pushNotifications.clearImportNotifications(batchIDs: reviewedIDs)
+        }
         .onChange(of: importStore.items) { _, _ in
             guard isSessionValidated else { return }
             reconcilePlaceImports()
         }
+    }
+
+    private var lifecycleObservedRoot: some View {
+        importObservedRoot
         .onChange(of: store.isSaveFlowPresented) { _, isPresented in
             if isPresented {
                 saveStreakCelebrationTask?.cancel()
@@ -1069,6 +1081,10 @@ struct WanderRootView: View {
                 onReview: presentSharedPlaceImportReviewFromNotice
             )
         )
+    }
+
+    private var recoveryObservedRoot: some View {
+        lifecycleObservedRoot
         .alert(
             "Saved to your map",
             isPresented: Binding(
@@ -1100,6 +1116,10 @@ struct WanderRootView: View {
             guard isSessionValidated else { return }
             configureWalkthroughsForCurrentUser()
         }
+    }
+
+    private var stateObservedRoot: some View {
+        recoveryObservedRoot
         .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
             if isBlocked {
                 productUpsells.suspendActivePresentation()
@@ -1417,7 +1437,8 @@ struct WanderRootView: View {
         guard !batchIDs.isEmpty else { return }
         completedAutomaticImportBatchIDs.subtract(batchIDs)
         completedInteractiveImportBatchIDs.subtract(batchIDs)
-        surfacedImportCompletionBatchIDs.subtract(batchIDs)
+        importStore.markCompletionNotified(batchIDs: batchIDs)
+        Task { await pushNotifications.clearImportNotifications(batchIDs: batchIDs) }
         dismissImportCompletionBanner()
         addTabResetToken = UUID()
         addSheetDetent = AddSheetLayout.importCompletionDetent
@@ -1437,7 +1458,6 @@ struct WanderRootView: View {
         activeImportCompletionNotice = nil
         importCompletionBannerTask?.cancel()
         completedInteractiveImportBatchIDs.subtract(batchIDs)
-        surfacedImportCompletionBatchIDs.subtract(batchIDs)
 
         let requestedIDs = Set(batchIDs)
         let batches = importStore.batches.filter { requestedIDs.contains($0.id) }
@@ -1458,11 +1478,10 @@ struct WanderRootView: View {
     private func resumeInteractivePlaceImports() {
         let alreadyTracked = queuedInteractiveImportBatchIDs
             .union(completedInteractiveImportBatchIDs)
-            .union(surfacedImportCompletionBatchIDs)
         let resumableIDs = importStore.batches.compactMap { batch -> String? in
             guard batch.automaticSaveRequested != true,
-                  batch.receipt == nil,
                   batch.reviewOpenedAt == nil,
+                  batch.completionNotifiedAt == nil,
                   !alreadyTracked.contains(batch.id)
             else { return nil }
             let activeItems = importStore.items(for: batch.id).filter {
@@ -1520,13 +1539,13 @@ struct WanderRootView: View {
                     guard !Task.isCancelled else { return }
                 }
                 guard auth.state.session?.userID == expectedUserID,
-                      store.currentUser.id == expectedUserID,
-                      let notice = PlaceImportCompletionNotice.resolved(
+                      store.currentUser.id == expectedUserID else { return }
+                guard let notice = PlaceImportCompletionNotice.resolved(
                         batchIDs: nextBatchIDs,
                         batches: importStore.batches,
                         items: importStore.items
                       )
-                else { return }
+                else { continue }
 
                 completedInteractiveImportBatchIDs.formUnion(notice.batchIDs)
                 analytics.track(
@@ -1542,14 +1561,25 @@ struct WanderRootView: View {
                 if scenePhase == .active {
                     presentPendingImportVerificationIfPossible()
                 } else {
+                    guard let notice = PlaceImportCompletionNotice.resolved(
+                        batchIDs: importStore.completionNoticeBatchIDs(in: nextBatchIDs),
+                        batches: importStore.batches, items: importStore.items
+                    ) else { continue }
+                    importStore.markCompletionNotified(batchIDs: notice.batchIDs)
                     let didScheduleNotification = await pushNotifications.notifyImportMatchingFinished(
                         batchIDs: notice.batchIDs,
                         matchedCount: notice.matchedCount,
                         needsReviewCount: notice.needsReviewCount,
                         sourceRetryCount: notice.sourceRetryCount
                     )
+                    guard auth.state.session?.userID == expectedUserID,
+                          store.currentUser.id == expectedUserID else { return }
                     if didScheduleNotification {
-                        surfacedImportCompletionBatchIDs.formUnion(notice.batchIDs)
+                        completedInteractiveImportBatchIDs.subtract(notice.batchIDs)
+                        await pushNotifications.clearImportNotifications(batchIDs: importStore.batches
+                            .filter { $0.reviewOpenedAt != nil }.map(\.id))
+                    } else {
+                        importStore.allowCompletionNoticeRetry(batchIDs: notice.batchIDs)
                     }
                 }
             }
@@ -1566,7 +1596,6 @@ struct WanderRootView: View {
         activeImportCompletionNotice = nil
         if clearCompletionQueue {
             completedInteractiveImportBatchIDs.removeAll()
-            surfacedImportCompletionBatchIDs.removeAll()
         }
     }
 
@@ -1642,13 +1671,21 @@ struct WanderRootView: View {
                     if scenePhase == .active {
                         presentPendingImportVerificationIfPossible()
                     } else {
-                        await pushNotifications.notifyImportFinished(
+                        importStore.markCompletionNotified(batchIDs: result.batchIDs)
+                        let didSchedule = await pushNotifications.notifyImportFinished(
                             batchIDs: result.batchIDs,
                             savedCount: result.savedCount,
                             needsReviewCount: result.needsReviewCount,
                             sourceRetryCount: result.sourceRetryCount,
                             backend: backend
                         )
+                        guard auth.state.session?.userID == expectedUserID,
+                              store.currentUser.id == expectedUserID else { return }
+                        if didSchedule {
+                            completedAutomaticImportBatchIDs.subtract(result.batchIDs)
+                        } else {
+                            importStore.allowCompletionNoticeRetry(batchIDs: result.batchIDs)
+                        }
                     }
                 }
             }
@@ -1668,21 +1705,23 @@ struct WanderRootView: View {
     private func presentPendingImportVerificationIfPossible() {
         guard scenePhase == .active,
               !isPresentingAdd,
+              !isPresentingImportHub,
               !store.isSaveFlowPresented,
               activeImportCompletionNotice == nil
         else { return }
         let completedIDs = completedAutomaticImportBatchIDs
             .union(completedInteractiveImportBatchIDs)
-            .subtracting(surfacedImportCompletionBatchIDs)
         guard !completedIDs.isEmpty,
               let notice = PlaceImportCompletionNotice.resolved(
-                batchIDs: completedIDs.sorted(),
+                batchIDs: importStore.completionNoticeBatchIDs(in: completedIDs.sorted()),
                 batches: importStore.batches,
                 items: importStore.items
               )
         else { return }
 
-        surfacedImportCompletionBatchIDs.formUnion(notice.batchIDs)
+        completedInteractiveImportBatchIDs.subtract(notice.batchIDs)
+        completedAutomaticImportBatchIDs.subtract(notice.batchIDs)
+        importStore.markCompletionNotified(batchIDs: notice.batchIDs)
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.22)) {
             activeImportCompletionNotice = notice
         }

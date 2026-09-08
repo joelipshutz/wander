@@ -5,15 +5,24 @@ import UIKit
 /// notifications, and final saves remain owned by the containing app.
 final class ShareViewController: UIViewController {
     private enum Palette {
-        static let canvas = UIColor(red: 243 / 255, green: 223 / 255, blue: 202 / 255, alpha: 1)
-        static let surface = UIColor(red: 1, green: 247 / 255, blue: 234 / 255, alpha: 1)
-        static let ink = UIColor(red: 44 / 255, green: 33 / 255, blue: 24 / 255, alpha: 1)
-        static let muted = UIColor(red: 123 / 255, green: 101 / 255, blue: 85 / 255, alpha: 1)
-        static let terracotta = UIColor(red: 212 / 255, green: 111 / 255, blue: 77 / 255, alpha: 1)
-        static let border = UIColor(red: 219 / 255, green: 194 / 255, blue: 170 / 255, alpha: 1)
-        static let error = UIColor(red: 184 / 255, green: 74 / 255, blue: 58 / 255, alpha: 1)
+        private static func adaptive(_ light: UInt32, _ dark: UInt32) -> UIColor {
+            UIColor { traits in
+                let hex = traits.userInterfaceStyle == .dark ? dark : light
+                return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                    green: CGFloat((hex >> 8) & 255) / 255,
+                    blue: CGFloat(hex & 255) / 255, alpha: 1)
+            }
+        }
+        static let canvas = adaptive(0xF2E9DB, 0x141714)
+        static let surface = adaptive(0xFBF6ED, 0x1B1F1B)
+        static let ink = adaptive(0x141714, 0xF2E9DB)
+        static let muted = adaptive(0x655F57, 0x98958D)
+        static let terracotta = adaptive(0xB23620, 0xF05A3C)
+        static let border = adaptive(0x8A8176, 0x74786F)
+        static let error = UIColor.systemRed
     }
 
+    private var borderedViews: [(UIView, UIColor)] = []
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
     private let cardView = UIView()
     private let scrollView = UIScrollView()
@@ -54,6 +63,11 @@ final class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: ShareViewController, _: UITraitCollection) in
+            for (view, color) in self.borderedViews {
+                view.layer.borderColor = color.resolvedColor(with: self.traitCollection).cgColor
+            }
+        }
         preferredContentSize = CGSize(width: 0, height: 440)
         view.backgroundColor = .clear
         view.isOpaque = false
@@ -207,10 +221,11 @@ final class ShareViewController: UIViewController {
             bottom: 10,
             trailing: 10
         )
-        linkContainer.backgroundColor = .white
+        linkContainer.backgroundColor = Palette.surface
         linkContainer.layer.cornerRadius = 16
         linkContainer.layer.borderWidth = 1
-        linkContainer.layer.borderColor = Palette.border.cgColor
+        linkContainer.layer.borderColor = Palette.border.resolvedColor(with: traitCollection).cgColor
+        borderedViews.append((linkContainer, Palette.border))
         linkContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
 
         // Own the progress layers: a system glass button above the sweep
@@ -306,10 +321,11 @@ final class ShareViewController: UIViewController {
     private func sourceIcon(assetName: String) -> UIView {
         let container = UIView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.backgroundColor = .white
+        container.backgroundColor = Palette.surface
         container.layer.cornerRadius = 23
         container.layer.borderWidth = 2
-        container.layer.borderColor = Palette.surface.cgColor
+        container.layer.borderColor = Palette.border.resolvedColor(with: traitCollection).cgColor
+        borderedViews.append((container, Palette.border))
         let image = UIImageView(image: UIImage(named: assetName)?.withRenderingMode(.alwaysTemplate))
         image.translatesAutoresizingMaskIntoConstraints = false
         image.tintColor = Palette.ink
