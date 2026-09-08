@@ -160,6 +160,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Done"].tap()
         XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
         XCTAssertEqual(lists.value as? String, "Selected")
+        keepScreenshot("Import list — selected sky-blue outline")
         app.buttons["import.checkin.report-place-1"].tap()
         XCTAssertEqual(lists.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
