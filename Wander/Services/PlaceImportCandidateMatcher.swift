@@ -332,6 +332,10 @@ enum PlaceImportGeography {
               areaStateCode(in: value) == nil
         else { return nil }
 
+        // A bare "LA" in an area field means Los Angeles. Do not let the
+        // equally valid ISO country code for Laos override that locality alias.
+        guard normalizedWords(value) != ["la"] else { return nil }
+
         let components = value.split(separator: ",", omittingEmptySubsequences: true)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
