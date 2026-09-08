@@ -82,7 +82,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
 | `place_list_created` | A list is created | `visibility`, `collaborator_count` |
-| `place_list_item_added` | A place is successfully added to a list from an instrumented surface (including `map_snapshot` capture) | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
+| `place_list_item_added` | A place is successfully added to a list from an instrumented surface (including `map_snapshot` capture and `import` report list actions) | coarse `surface`; `list_role` (`owner` or `collaborator`); `companion_save` (`none`, `created_wanna`, or `existing_wanna`) |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |

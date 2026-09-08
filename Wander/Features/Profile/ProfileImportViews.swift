@@ -34,28 +34,6 @@ struct AddImportEntrySection: View {
 
                     Spacer(minLength: WanderTheme.spacing1)
 
-                    if summary.hasPendingImports {
-                        if summary.processingCount + summary.remainingCount > 0 {
-                            Text("\(summary.processingCount + summary.remainingCount)")
-                                .font(AstirTypography.metadata)
-                                .foregroundStyle(brandMode.accentForeground)
-                                .frame(minWidth: 22, minHeight: 22)
-                                .background(brandMode.accent)
-                                .clipShape(Capsule())
-                                .accessibilityLabel(
-                                    "\(summary.processingCount + summary.remainingCount) places in progress or ready"
-                                )
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(AstirTypography.metadata)
-                                .foregroundStyle(brandMode.accentForeground)
-                                .frame(width: 22, height: 22)
-                                .background(brandMode.accent)
-                                .clipShape(Circle())
-                                .accessibilityLabel("A source scan needs attention")
-                        }
-                    }
-
                     Image(systemName: "chevron.right")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)
@@ -439,7 +417,7 @@ struct PlaceImportCompletionBanner: View {
             }
             .accessibilityLabel("\(notice.bannerTitle). \(notice.bannerDetail). Review import")
             .accessibilityIdentifier("import.notice.review")
-            .padding(.trailing, 44)
+            .padding(.trailing, 64)
         }
         .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
@@ -455,27 +433,18 @@ struct PlaceImportCompletionBanner: View {
         }
         .shadow(color: Color.black.opacity(0.22), radius: 10, y: 5)
         .overlay(alignment: .topTrailing) {
-            ZStack(alignment: .topTrailing) {
-                Button(action: onDismiss) {
-                    Color.clear
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Dismiss import notification")
-                .accessibilityIdentifier("import.notice.dismiss")
-
+            Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(brandMode.secondaryText)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 32, height: 32)
                     .background(brandMode.raisedBackground, in: Circle())
                     .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
-                    .shadow(color: Color.black.opacity(0.18), radius: 3, y: 1)
-                    .offset(x: 11, y: -11)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                    .frame(width: 64, height: 64)
+                    .contentShape(Rectangle())
             }
-            .frame(width: 44, height: 44, alignment: .topTrailing)
+            .accessibilityLabel("Dismiss import notification")
+            .accessibilityIdentifier("import.notice.dismiss")
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .contain)

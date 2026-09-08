@@ -1942,6 +1942,7 @@ struct MapScreen: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 NativeMapView(
+                    attributionBottomClearance: mapSearchDockClearance,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -6477,6 +6478,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
+    let attributionBottomClearance: CGFloat
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6496,6 +6498,10 @@ private struct NativeMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView(frame: .zero)
+        // MapKit adds the safe area to these margins and renders its own attribution.
+        mapView.layoutMargins = UIEdgeInsets(
+            top: 0, left: 0, bottom: attributionBottomClearance + 10, right: 0
+        )
         let configuration = MKStandardMapConfiguration(
             elevationStyle: .flat,
             emphasisStyle: .muted
@@ -6567,6 +6573,11 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
+                mapView.layoutMargins = UIEdgeInsets(
+                    top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
+                )
+            }
             self.parent = parent
             mapView.showsUserLocation = parent.showsUserLocation
             let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
@@ -12881,7 +12892,7 @@ struct MapPlaceSaveEditor: View {
                     .padding(.bottom, -WanderTheme.spacing2)
             }
         }
-        .background(editorBackground)
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .modifier(MapPlaceSaveEditorLifecycleModifier(
             context: context,
@@ -13172,11 +13183,11 @@ struct MapPlaceSaveEditor: View {
                 .textFieldStyle(.plain)
                 .font(AstirTypography.body)
                 .accessibilityIdentifier("save.note")
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(astirBrandMode.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .lineLimit(3, reservesSpace: true)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(astirBrandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
     }
@@ -13193,10 +13204,10 @@ struct MapPlaceSaveEditor: View {
                 .textInputAutocapitalization(.words)
                 .submitLabel(.done)
                 .accessibilityIdentifier("save.droppedPinName")
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(astirBrandMode.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
+                .background(astirBrandMode.raisedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .onChange(of: droppedPinName) { _, value in
                     if value.count > DroppedPinNamePolicy.maximumLength {
@@ -13236,17 +13247,17 @@ struct MapPlaceSaveEditor: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("planned for")
                                     .font(AstirTypography.metadata)
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .foregroundStyle(astirBrandMode.secondaryText)
                                 Text(WannaGoDate.displayString(for: plannedDate))
                                     .font(AstirTypography.control)
-                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .foregroundStyle(astirBrandMode.primaryText)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.82)
                             }
                         } else {
                             Text("add a date")
                                 .font(AstirTypography.control)
-                                .foregroundStyle(WanderTheme.textInk.color)
+                                .foregroundStyle(astirBrandMode.primaryText)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.82)
                         }
@@ -13267,7 +13278,7 @@ struct MapPlaceSaveEditor: View {
                 .accessibilityValue(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "No date selected")
 
                 if isShowingPlannedDatePicker {
-                    Divider().background(WanderTheme.borderHairline.color)
+                    Divider().background(astirBrandMode.border)
 
                     MultiDatePicker(
                         "Wanna go date",
@@ -13292,7 +13303,7 @@ struct MapPlaceSaveEditor: View {
                     HStack {
                         Label("Past dates are unavailable", systemImage: "calendar.badge.exclamationmark")
                             .font(AstirTypography.caption)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(astirBrandMode.secondaryText)
 
                         Spacer()
 
@@ -13309,16 +13320,16 @@ struct MapPlaceSaveEditor: View {
                     .padding(.bottom, WanderTheme.spacing3)
                 }
             }
-            .background(WanderTheme.surfaceRaised.color)
+            .background(astirBrandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color)
+                    .stroke(astirBrandMode.border)
             )
 
             Text("If notifications are on, rec.me will remind you three days before.")
                 .font(AstirTypography.caption)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -13401,11 +13412,11 @@ struct MapPlaceSaveEditor: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text("more options")
                         .font(AstirTypography.control)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                        .foregroundStyle(astirBrandMode.primaryText)
 
                     Text(optionalDetailsSummary)
                         .font(AstirTypography.caption)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
 
@@ -13426,11 +13437,11 @@ struct MapPlaceSaveEditor: View {
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
+                .background(astirBrandMode.recessedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        .stroke(astirBrandMode.border, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -13519,11 +13530,11 @@ struct MapPlaceSaveEditor: View {
         return VStack(alignment: .leading, spacing: 0) {
             Text("place type")
                 .font(AstirTypography.label)
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(astirBrandMode.secondaryText)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 36)
 
-            Divider().background(WanderTheme.borderHairline.color)
+            Divider().background(astirBrandMode.border)
 
             VStack(spacing: 0) {
                 Button {
@@ -13534,7 +13545,7 @@ struct MapPlaceSaveEditor: View {
                 }
                 .buttonStyle(.plain)
 
-                Divider().background(WanderTheme.borderHairline.color)
+                Divider().background(astirBrandMode.border)
 
                 if isRestaurantsFoodSelected {
                     Button {
@@ -13559,11 +13570,11 @@ struct MapPlaceSaveEditor: View {
                 }
             }
         }
-        .background(WanderTheme.surfaceBone.color)
+        .background(astirBrandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color)
+                .stroke(astirBrandMode.border)
         )
     }
 
@@ -16040,6 +16051,7 @@ private enum CategoryPickerVisuals {
 }
 
 private struct MapSaveQuestionBlock<Content: View>: View {
+    @Environment(\.astirBrandMode) private var brandMode
     let title: String
     let tag: String
     @ViewBuilder var content: Content
@@ -16049,16 +16061,16 @@ private struct MapSaveQuestionBlock<Content: View>: View {
             HStack {
                 Text(title)
                     .font(AstirTypography.cardTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(brandMode.primaryText)
                 Spacer()
                 Text(tag)
                     .font(AstirTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(brandMode.secondaryText)
             }
             content
         }
         .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
+        .background(brandMode.recessedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
