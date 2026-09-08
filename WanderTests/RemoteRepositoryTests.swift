@@ -516,7 +516,8 @@ final class RemoteRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(response.value, "understood")
-        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125])
+        // Allow the 135-second server budget plus 10 seconds for transport.
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [145])
     }
 
     func testSocialImportFunctionRefreshesTheClerkTokenAfterForbiddenResponse() async throws {
@@ -555,7 +556,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 "/functions/v1/social-import-understand"
             ]
         )
-        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [125, 125])
+        XCTAssertEqual(FeedRPCURLProtocol.requestTimeoutIntervals, [145, 145])
     }
 
     func testEdgeFunctionStopsAfterOneFreshTokenRetry() async throws {
