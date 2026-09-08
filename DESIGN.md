@@ -35,6 +35,9 @@ across production surfaces by this provisional grammar:
 - Astir signal coral (`#F05A3C`) is the single brand-action and selection accent.
   Small text on Light paper uses the contrast-safe companion `#B23620`; success,
   warning, info/social, and destructive colors keep their semantic roles.
+  The approved import List selection outline is sky blue (`#42D9FF`, REC-450);
+  its icon and neutral state retain their existing treatment, with neutral glass
+  behind the selected outline to match the approved mockup.
 - Screen, place, list, and major section titles use Dynamic-Type-aware native
   editorial serif. Body, controls, search, identity, and supporting copy use
   Avenir Next; condensed sans is reserved for short metadata.

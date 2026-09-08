@@ -512,7 +512,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         return Button { chooseLists(items: items) } label: {
             Image(systemName: "list.bullet")
                 .frame(width: 44, height: 44)
-                .wanderGlassCapsule(tone: selected ? .selected : .neutral)
+                .modifier(ImportListButtonOutline(isSelected: selected))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add to list")
@@ -1442,7 +1442,7 @@ struct PlaceImportReportScreen: View {
                         reportStatusButton(.been, visible: visible, itemID: entry.itemID)
                         Button { onChooseLists?(entry.itemID) } label: {
                             Image(systemName: "list.bullet").frame(width: 44, height: 44)
-                                .wanderGlassCapsule(tone: store.visiblePlaceLists.contains { store.hasPlace(visible, in: $0) } ? .selected : .neutral)
+                                .modifier(ImportListButtonOutline(isSelected: store.visiblePlaceLists.contains { store.hasPlace(visible, in: $0) }))
                         }.buttonStyle(.plain).accessibilityLabel("Add to list")
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1759,5 +1759,24 @@ struct PlaceImportSaveSyncBanner: View {
             return "\(notice.count) place\(notice.count == 1 ? "" : "s") will sync when you’re back online."
         }
         return "Syncing \(notice.count) place\(notice.count == 1 ? "" : "s") in the background."
+    }
+}
+
+/// The approved List treatment uses neutral glass with a sky-blue selection
+/// outline, keeping the coral selection tint out of this action.
+private struct ImportListButtonOutline: ViewModifier {
+    let isSelected: Bool
+    private let skyBlue = Color(red: 66.0 / 255, green: 217.0 / 255, blue: 1) // #42D9FF
+
+    func body(content: Content) -> some View {
+        content
+            .wanderGlassCapsule(tone: .neutral, showsBorder: !isSelected)
+            .overlay {
+                if isSelected {
+                    Capsule()
+                        .stroke(skyBlue, lineWidth: WanderGlassTone.selected.borderWidth)
+                        .allowsHitTesting(false)
+                }
+            }
     }
 }
