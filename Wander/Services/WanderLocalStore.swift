@@ -3683,7 +3683,7 @@ final class WanderStore: ObservableObject {
     ) -> [LocalPlaceListItem] {
         var latestItemByPlaceGroup: [String: LocalPlaceListItem] = [:]
         latestItemByPlaceGroup.reserveCapacity(items.count)
-        for item in items.sorted(by: { $0.createdAt < $1.createdAt }) {
+        for item in items.sorted(by: listItemPresentationIsOrderedBefore) {
             let groupKey = placeGroupingKeyByReferenceID[item.placeID]
                 ?? "unresolved:\(item.placeID)"
             if let existing = latestItemByPlaceGroup[groupKey] {
@@ -3697,7 +3697,15 @@ final class WanderStore: ObservableObject {
 
         return latestItemByPlaceGroup.values
             .filter { $0.deletedAt == nil }
-        .sorted { $0.createdAt < $1.createdAt }
+            .sorted(by: listItemPresentationIsOrderedBefore)
+    }
+
+    private func listItemPresentationIsOrderedBefore(
+        _ lhs: LocalPlaceListItem,
+        _ rhs: LocalPlaceListItem
+    ) -> Bool {
+        guard lhs.createdAt == rhs.createdAt else { return lhs.createdAt < rhs.createdAt }
+        return lhs.localID < rhs.localID
     }
 
     private func equivalentListItemIndices(

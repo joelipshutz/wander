@@ -5929,7 +5929,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected one unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.count, 1)
-        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post, but place matching needs your help.")
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
@@ -5971,7 +5971,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected clean unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe", "Cafe", "Cafe"])
-        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post, but place matching needs your help.")
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
