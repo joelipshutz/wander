@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cum-Worthy September · Joe + Ryan</title>
+  <style>
+    :root{
+      --ink:#232724;
+      --muted:#6c7069;
+      --paper:#f7f6f2;
+      --line:#dedfd8;
+      --soft:#ecece6;
+      --white:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--ink);
+      background:#e8e9e3;
+    }
+    *{box-sizing:border-box}
+    body{margin:0}
+    button{font:inherit;cursor:pointer;color:inherit}
+    button:focus-visible{outline:3px solid #777;outline-offset:3px}
+    #viewport{position:fixed;inset:0 0 58px;display:grid;place-items:center;overflow:clip}
+    #stage{position:relative;width:1440px;height:900px;flex:none;transform-origin:center}
+    .slide{position:absolute;inset:0;width:1440px;height:900px;padding:58px 78px 54px;background:var(--paper);display:none;overflow:hidden}
+    .slide.active{display:block}
+    h1,h2,h3,h4,p,figure{margin:0}
+    h2{font-size:59px;line-height:1.08;font-weight:650;letter-spacing:-2.2px}
+    h3{font-size:31px;line-height:1.2;font-weight:620;letter-spacing:-.7px}
+    p{font-size:27px;line-height:1.42}
+    .eyebrow{font-size:18px;letter-spacing:.08em;text-transform:uppercase;font-weight:650;color:var(--muted);margin-bottom:22px}
+    .lede{font-size:30px;line-height:1.35;color:var(--muted);margin-top:18px;max-width:1180px}
+    .slidefoot{position:absolute;bottom:23px;right:78px;font-size:17px;color:var(--muted);font-variant-numeric:tabular-nums}
+    .cover{height:100%;display:flex;flex-direction:column;justify-content:center;gap:20px}
+    .cover h1{font-size:104px;line-height:.98;letter-spacing:-5px;font-weight:650;max-width:1250px}
+    .cover p{font-size:42px;letter-spacing:-1.4px;font-weight:400;color:var(--muted)}
+    .cover .date{font-size:20px;letter-spacing:.07em;text-transform:uppercase;margin-top:28px;color:var(--ink);font-weight:650}
+    .section-divider{background:#000;color:#fff}
+    .section-divider .section-heading{height:100%;display:flex;align-items:center}
+    .section-divider h2{font-size:96px;line-height:1.04;letter-spacing:-3px;max-width:1160px;font-weight:600}
+    .section-divider .slidefoot{color:#fff}
+    .rule{border-top:1px solid var(--line)}
+    .exit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:62px;margin-top:70px}
+    .exit-card{border-top:3px solid var(--ink);padding-top:25px;min-height:410px}
+    .exit-card .number{font-size:23px;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:55px}
+    .exit-card h3{font-size:34px;line-height:1.1;letter-spacing:-1px;margin-bottom:26px}
+    .exit-card p{font-size:22px;line-height:1.45;color:var(--muted)}
+    .bottom-callout{position:absolute;left:78px;right:78px;bottom:60px;border-top:1px solid var(--line);padding-top:21px;font-size:24px;line-height:1.35;font-weight:600}
+    .definition-rows{margin-top:48px}
+    .definition-row{display:grid;grid-template-columns:270px 1fr;gap:46px;padding:22px 0;border-bottom:1px solid var(--line);align-items:start}
+    .definition-row h3{font-size:28px}
+    .definition-row p{font-size:25px;line-height:1.32;color:var(--muted)}
+    .objective-head{display:grid;grid-template-columns:270px 1fr;gap:44px;margin-top:35px;align-items:start}
+    .objective-label{background:#000;color:#fff;padding:21px 24px;font-size:19px;letter-spacing:.06em;text-transform:uppercase;font-weight:650}
+    .objective-outcome{font-size:30px;line-height:1.32;font-weight:580}
+    .ship-rows{margin-top:35px}
+    .ship-row{display:grid;grid-template-columns:235px 1fr;gap:34px;padding:19px 0;border-bottom:1px solid var(--line)}
+    .ship-row h3{font-size:24px}
+    .ship-row p{font-size:22px;line-height:1.34;color:var(--muted)}
+    .proof-strip{margin-top:25px;padding:17px 20px;background:#000;color:#fff;font-size:21px;line-height:1.35}
+    .funnel{display:grid;grid-template-columns:repeat(4,1fr);gap:34px;margin-top:58px}
+    .funnel section{border-top:2px solid var(--ink);padding-top:23px;min-height:205px}
+    .funnel .metric{font-size:57px;line-height:1;font-weight:650;letter-spacing:-2px;margin-bottom:15px}
+    .funnel h3{font-size:24px;margin-bottom:11px}
+    .funnel p{font-size:20px;color:var(--muted)}
+    .content-mix{display:grid;grid-template-columns:repeat(3,1fr);gap:38px;margin-top:34px}
+    .content-mix section{border-top:1px solid var(--ink);padding-top:19px}
+    .content-mix strong{font-size:42px;display:block;margin-bottom:10px}
+    .content-mix p{font-size:21px;color:var(--muted)}
+    .month-table{display:grid;grid-template-columns:170px repeat(4,1fr);margin-top:42px;border-top:1px solid var(--ink);border-left:1px solid var(--line)}
+    .month-table>div{padding:18px 17px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:20px;line-height:1.32}
+    .month-table .head{background:#000;color:#fff;font-size:17px;font-weight:650;letter-spacing:.03em}
+    .month-table .week{font-weight:650;font-size:19px}
+    .month-table small{display:block;color:var(--muted);font-size:16px;margin-top:7px;line-height:1.3}
+    .day-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-top:38px}
+    .day{border:1px solid var(--line);min-height:584px;background:rgba(255,255,255,.2);display:flex;flex-direction:column}
+    .day header{background:#000;color:#fff;padding:14px 13px 12px;min-height:76px}
+    .day header strong{display:block;font-size:19px;line-height:1.15}
+    .day header span{font-size:14px;color:#d8d8d3}
+    .day .work{padding:18px 14px;display:flex;flex-direction:column;gap:24px;flex:1}
+    .day .task h3{font-size:18px;line-height:1.2;margin-bottom:7px}
+    .day .task p{font-size:16px;line-height:1.35;color:var(--muted)}
+    .day .proof{margin-top:auto;border-top:1px solid var(--line);padding-top:13px}
+    .day .proof h3{font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+    .day .proof p{font-size:15px;color:var(--ink);margin-top:5px}
+    .close-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:55px}
+    .close-day{border:1px solid var(--line);min-height:495px}
+    .close-day header{background:#000;color:#fff;padding:18px 20px}
+    .close-day header h3{font-size:24px}
+    .close-day .body{padding:24px 20px}
+    .close-day .body section{padding:0 0 23px;margin-bottom:23px;border-bottom:1px solid var(--line)}
+    .close-day .body h4{font-size:19px;margin-bottom:8px}
+    .close-day .body p{font-size:19px;color:var(--muted);line-height:1.35}
+    .operating-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:74px;margin-top:55px}
+    .operating-rows>div{display:grid;grid-template-columns:185px 1fr;gap:25px;padding:20px 0;border-bottom:1px solid var(--line)}
+    .operating-rows h3{font-size:23px}
+    .operating-rows p{font-size:22px;color:var(--muted)}
+    .scoreboard{border:1px solid var(--ink);padding:26px}
+    .scoreboard h3{font-size:27px;margin-bottom:25px}
+    .scoreboard-row{display:flex;justify-content:space-between;gap:25px;padding:14px 0;border-bottom:1px solid var(--line);font-size:20px}
+    .scoreboard-row strong{font-variant-numeric:tabular-nums}
+    .decision-grid{display:grid;grid-template-columns:1fr 1fr;gap:70px;margin-top:72px}
+    .decision-grid section{border-top:2px solid var(--ink);padding-top:26px}
+    .decision-grid h3{font-size:33px;margin-bottom:24px}
+    .decision-grid p{font-size:27px;line-height:1.45;color:var(--muted)}
+    .decision-ask{font-size:42px;line-height:1.25;font-weight:600;margin-top:70px;max-width:1160px;letter-spacing:-1.2px}
+    .controls{position:fixed;bottom:0;left:0;right:0;height:58px;background:#fffdf9;border-top:1px solid #dcded6;display:flex;align-items:center;gap:10px;padding:8px 23px;color:#697264;font-size:12px}
+    .controls button{padding:8px 13px;border:1px solid #e0e3da;background:transparent;border-radius:7px;font-size:12px}
+    .controls button:hover{background:#edf1e7}
+    .spacer{flex:1}
+    #counter{padding:0 12px;font-variant-numeric:tabular-nums}
+    dialog{width:min(1050px,92vw);max-height:84vh;border:1px solid #dde1d7;border-radius:18px;padding:28px;color:var(--ink);background:#fffdf9}
+    dialog::backdrop{background:#1a271d77}
+    dialog header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+    dialog h2{font-size:30px;letter-spacing:-.7px}
+    dialog button{border:1px solid #dee3d7;border-radius:7px;padding:8px 12px;background:#f6f7f1}
+    #overviewList{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    #overviewList button{text-align:left;padding:15px;display:flex;gap:14px;align-items:baseline}
+    #overviewList small{color:var(--muted);min-width:28px}
+    .ship-row{padding:21px 0}
+    .ship-rows{margin-top:32px}
+    .day .task p{font-size:17px}
+    .day .proof p{font-size:16px}
+    .month-table>div{padding:18px 15px;font-size:20px}
+    .month-table .head{line-height:1.5}
+    @media print{
+      #viewport{position:static;display:block;overflow:visible}
+      #stage{transform:none!important;height:auto;width:1440px}
+      .slide{position:relative;display:block!important;break-after:page}
+      .controls,dialog{display:none!important}
+      @page{size:1440px 900px;margin:0}
+    }
+  </style>
+</head>
+<body>
+  <main id="viewport"><div id="stage">
+<section class="slide " data-title="How We Have a Cum-Worthy September"><div class="cover"><h1>How We Have a Cum-Worthy September</h1><p>Joe + Ryan’s September roadmap</p><div class="date">September 7–30, 2026 · Revised from our working session</div></div></section>
+
+<section class="slide " data-title="September exit conditions"><h2>September exit conditions</h2><p class="lede">Four outcomes to organize the month around.</p><div class="ship-rows"><div class="ship-row"><h3>01 / Astir 001</h3><p>The first event is locked internally: a confirmed date, venue, required people, equipment, logistics and a promotion plan with enough lead time.</p></div><div class="ship-row"><h3>02 / 30 friends</h3><p>Thirty friends have the beta and can open it. The rebrand and a clear event experience meet the agreed release conditions.</p></div><div class="ship-row"><h3>03 / Brand</h3><p>Our social presence and website are live. A shared system keeps publishing content, the first newsletter is ready, and the mailing list works.</p></div><div class="ship-row"><h3>04 / Rachel</h3><p>Rachel has access, tools and an agreed role. She can produce content and advance the event components she chooses to own.</p></div></div><div class="proof-strip">September closes with evidence for each outcome. The event date can fall in October.</div></section>
+
+<section class="slide " data-title="The order that makes this possible"><h2>The order that makes this possible</h2><p class="lede">Early work removes the dependencies that would otherwise consume the month.</p><div class="ship-rows"><div class="ship-row"><h3>First / Enable</h3><p>Bring Rachel in immediately. Agree her availability and interests, provide brand assets and tools, and start the shared workspaces.</p></div><div class="ship-row"><h3>Then / Establish</h3><p>Start publishing in Week 1. Build the website and mailing list while researching event feasibility and writing the app’s event spec.</p></div><div class="ship-row"><h3>Next / Commit</h3><p>Choose an event after checking its constraints. Build and test the app experience, gather early feedback, and expand toward 30 friends.</p></div><div class="ship-row"><h3>Finally / Close</h3><p>Secure event commitments, resolve release blockers, and prove the publishing process works repeatedly with multiple contributors.</p></div></div><div class="proof-strip">Proposed dates depend on the Sep 11 scope review. Preserve promotion lead time when choosing the event date.</div></section>
+
+<section class="slide section-divider" data-title="The four objectives"><div class="section-heading"><h2>The four objectives</h2></div></section>
+
+<section class="slide " data-title="01 / Astir 001 locked internally"><h2>01 / Astir 001 locked internally</h2><p class="lede">We know exactly what will happen, who will make it happen and when.</p><div class="ship-rows"><div class="ship-row"><h3>Event discovery</h3><p>Hold an event-planning session. Map the work, outside dependencies, costs and likely lead times before promising a date.</p></div><div class="ship-row"><h3>Concept choice</h3><p>Develop the top two or three concepts. Compare audience, format, cost and complexity. Select a primary concept and a viable backup.</p></div><div class="ship-row"><h3>Date + commitments</h3><p>Confirm venue access, required labor or vendors, equipment and logistics for one date. Record each commitment and unresolved condition.</p></div><div class="ship-row"><h3>Promotion plan</h3><p>Prepare the story, assets, channels, registration route and release calendar. Agree both brand-establishment time and event-promotion time.</p></div><div class="ship-row"><h3>App relationship</h3><p>Define how 001 appears in the app and where registration happens. Resolve that dependency jointly with Objective 02.</p></div></div><div class="proof-strip">EXIT: an approved event brief and commitment record. Public promotion begins when the team agrees the event is ready.</div></section>
+
+<section class="slide " data-title="The shared event workspace"><h2>The shared event workspace</h2><p class="lede">One event record, visible and editable by everyone doing the work.</p><div class="ship-rows"><div class="ship-row"><h3>Brief + boundaries</h3><p>Audience, experience, date options, geography, capacity, budget limit and what makes an opportunity worth pursuing.</p></div><div class="ship-row"><h3>Work breakdown</h3><p>Venue, labor/vendors, equipment, logistics, promotion, registration and app integration. Each component has one accountable owner.</p></div><div class="ship-row"><h3>Current state</h3><p>Track not started, contacting, awaiting reply, held, confirmed or blocked. Keep tentative holds distinct from confirmed bookings.</p></div><div class="ship-row"><h3>Action + evidence</h3><p>Each item includes contact, quote or terms, due date, next action, dependency and a link to the commitment or decision.</p></div><div class="ship-row"><h3>Rachel’s authority</h3><p>After the role conversation, give her selected components and outreach criteria. Agree what she can decide and which commitments need founder input.</p></div></div><div class="proof-strip">EXIT: every required component has an owner and a status. Any remaining blocker is visible before the date is called locked.</div></section>
+
+<section class="slide " data-title="02 / The 30-friends beta"><h2>02 / The 30-friends beta</h2><p class="lede">The gate measures people with access to a usable app. Feedback guides the next release.</p><div class="ship-rows"><div class="ship-row"><h3>Baseline + rebrand</h3><p>Review search together against agreed tasks. Finish the rebrand and verify the baseline flows. The latest search changes still need acceptance.</p></div><div class="ship-row"><h3>Event experience</h3><p>Deliver a clear event hub/tab and a coherent home for 001. Define the smallest version that protects the first impression.</p></div><div class="ship-row"><h3>Release conditions</h3><p>Triage existing issues this week, define P0/P1 severity and fix release blockers. Check map performance on the candidate build.</p></div><div class="ship-row"><h3>Friends + feedback</h3><p>Prepare a named roster and invite route. Collect the 30-question survey after use, hold follow-up meetings, and turn findings into prioritized fixes.</p></div><div class="ship-row"><h3>Gate measurement</h3><p>Count distinct friends who receive the beta and successfully open it. Track feedback and use separately. Confirm the exact gate in Week 1.</p></div></div><div class="proof-strip">EXIT: 30 verified friends with working access, a release that passes the agreed checklist, and a running survey, meeting and feedback process.</div></section>
+
+<section class="slide" data-title="The full development scope"><h2>The full development scope</h2><p class="lede">Objective 02 includes new work, release quality and changes learned from users.</p><div class="ship-rows">
+<div class="ship-row"><h3>Search acceptance</h3><p>Joe + Ryan try the latest search together. Agree representative tasks, record gaps and distinguish acceptable beta quality from later improvements.</p></div>
+<div class="ship-row"><h3>P0/P1 triage</h3><p>Review existing bugs this week. Proposed P0: a critical flow is unusable or data is at risk. P1: a core task fails with no reasonable workaround.</p></div>
+<div class="ship-row"><h3>Map performance</h3><p>Verify the recent performance work on target devices and representative maps. Record slowdowns and regressions against agreed acceptance criteria.</p></div>
+<div class="ship-row"><h3>Events + opt-in</h3><p>Build the approved event experience and newsletter signup integration. Carry the app rebrand and any remaining baseline gaps in the same estimate.</p></div>
+<div class="ship-row"><h3>Feedback fixes</h3><p>Reserve recurring development blocks for survey and interview findings. Implement the highest-impact changes and retest them with users.</p></div>
+</div><div class="proof-strip">RELEASE GATE: accepted search and map behavior, agreed event scope, no open P0/P1 release blockers and tested feedback fixes.</div></section>
+
+<section class="slide" data-title="Survey + follow-up meetings"><h2>Survey + follow-up meetings</h2><p class="lede">Objective 02 includes a repeatable way to learn from the people using the app.</p><div class="ship-rows"><div class="ship-row"><h3>Before rollout</h3><p>Pilot the 30-question Google Form with two testers. Name the collection owner, link the response sheet and check the time to complete.</p></div><div class="ship-row"><h3>After use</h3><p>Send after a meaningful session or failed first attempt, ideally within 24–48 hours. Send one reminder after three days if needed.</p></div><div class="ship-row"><h3>Follow-up meetings</h3><p>Offer a 20-minute conversation to willing respondents. Proposal: 8–10 meetings across the cohort, including blocked and successful users.</p></div><div class="ship-row"><h3>From answer to fix</h3><p>Review responses daily. Record the task, expected result, actual result and impact. Turn actionable findings into owned issues.</p></div><div class="ship-row"><h3>Close the loop</h3><p>Review themes weekly, verify fixes with testers and record retest outcomes. Track survey and meeting status separately from the 30-friends gate.</p></div></div><div class="proof-strip">EXIT: a working form, response tracker, completed user conversations and a prioritized backlog with evidence.</div></section>
+
+<section class="slide " data-title="The event feature needs a crisp spec"><h2>The event feature needs a crisp spec</h2><p class="lede">Joe + Ryan settle the product relationship before committing to a build date.</p><div class="ship-rows"><div class="ship-row"><h3>Experience</h3><p>Define how someone discovers 001, understands it, opens details and registers. Specify upcoming, unavailable and empty states.</p></div><div class="ship-row"><h3>Model + navigation</h3><p>Define event versus place, the relationship to the map, and where the event hub lives. Record any new data model or migration work.</p></div><div class="ship-row"><h3>Scope decision</h3><p>Compare a minimal event hub with fuller integration. A place-profile shortcut or external form remains an option to evaluate.</p></div><div class="ship-row"><h3>Acceptance + tests</h3><p>Test navigation, event details, registration handoff, map/place relationships and failure states. Include regression coverage for the existing app.</p></div><div class="ship-row"><h3>Release review</h3><p>Run a joint walkthrough and user feedback session. Record pass/fail against the spec before increasing the friend cohort.</p></div></div><div class="proof-strip">PROPOSED DEFAULT: include an event hub in the 30-friends release. Change that condition only through an explicit product decision.</div></section>
+
+<section class="slide " data-title="03 / Brand presence + a publishing system"><h2>03 / Brand presence + a publishing system</h2><p class="lede">An established public presence and a process that keeps producing.</p><div class="ship-rows"><div class="ship-row"><h3>Identity + accounts</h3><p>Align the app icon, social avatars, bios and voice with the rebrand. Set up Instagram and TikTok access and profile destinations.</p></div><div class="ship-row"><h3>Website</h3><p>Launch the redesigned domain with a clear brand story and mailing-list signup. Add public event information once it is ready.</p></div><div class="ship-row"><h3>Mailing list</h3><p>Connect website and app signup to the list. Build optional account-creation opt-in in REC-449 and test the subscriber flow.</p></div><div class="ship-row"><h3>Newsletter</h3><p>Create the first complete issue, reusable format and editorial plan. Test delivery internally. Choose a public send date separately.</p></div><div class="ship-row"><h3>Publishing system</h3><p>Create shared asset intake, ideas, drafts, review and scheduling. Multiple contributors can move work forward with clear ownership.</p></div></div><div class="proof-strip">EXIT: live profiles and site, a working list, published content, a complete first newsletter and a repeatable editorial process.</div></section>
+
+<section class="slide" data-title="App signup + the mailing list"><h2>App signup + the mailing list</h2><p class="lede">A shared development dependency for Objective 02 and Objective 03.</p><div class="ship-rows"><div class="ship-row"><h3>Signup choice</h3><p>An optional, unchecked newsletter checkbox appears during account creation. People can continue without subscribing.</p></div><div class="ship-row"><h3>Data + delivery</h3><p>Save the user’s choice and sync explicit opt-ins to the mailing list. Test opt-in, opt-out, retries and failure handling.</p></div><div class="ship-row"><h3>One audience</h3><p>Website signup and app signup feed the same agreed audience model. Existing unsubscribe choices remain respected.</p></div><div class="ship-row"><h3>Newsletter milestone</h3><p>Create the complete first newsletter and test delivery internally. Public launch timing remains a separate editorial decision.</p></div></div><div class="proof-strip">TRACKED IN LINEAR: <a style="color:inherit" href="https://linear.app/recme/issue/REC-449/add-optional-newsletter-opt-in-during-astir-account-creation">REC-449 / Optional newsletter opt-in during account creation</a></div></section>
+
+<section class="slide " data-title="The content workflow"><h2>The content workflow</h2><p class="lede">A proposed cadence to test with Rachel. Post counts below are cumulative.</p><div class="ship-rows"><div class="ship-row"><h3>Shared inputs</h3><p>Pool existing photos, footage, references and ideas. Give contributors brand guidance and reusable templates from the start.</p></div><div class="ship-row"><h3>Editorial session</h3><p>Joe + Ryan sketch the workflow, then shape it with Rachel. Agree topics, quality bar, review turnaround and who can publish.</p></div><div class="ship-row"><h3>One shared queue</h3><p>Each item records the idea, assets, creator, reviewer, channel, publish date and status. Save the live link after publication.</p></div><div class="ship-row"><h3>Scheduler</h3><p>Choose and configure an existing scheduler unless a specific unmet need justifies building one. Verify account access and a scheduled test post.</p></div><div class="ship-row"><h3>September proposal</h3><p>Publish 15 original pieces: one each weekday from Sep 10–30. Create newsletter #1 by Sep 18, then review and rehearse delivery by Sep 25. Cross-posts do not add to the 15.</p></div></div><div class="proof-strip">EXIT: contributors complete the workflow repeatedly, with the next week queued. Confirm or revise cadence with Rachel on Sep 9.</div></section>
+
+<section class="slide " data-title="04 / Rachel is plugged in"><h2>04 / Rachel is plugged in</h2><p class="lede">Week 1 is an onboarding sprint. By Sep 11, she moves into ongoing production.</p><div class="ship-rows"><div class="ship-row"><h3>Role conversation</h3><p>Ask about her interests, capacity and experience, especially events. Agree expectations and working arrangements before assigning the workload.</p></div><div class="ship-row"><h3>Access</h3><p>Provide Slack, the shared boards, brand assets or relevant repo access, social accounts and the content publishing workflow.</p></div><div class="ship-row"><h3>Tools + practice</h3><p>Review the AI tools she already has. Supply a starter toolkit, a short working session and any agreed subscriptions or support.</p></div><div class="ship-row"><h3>Content ownership</h3><p>Give her usable assets and room to create. Complete one draft-to-publish cycle together, then agree when she can publish independently.</p></div><div class="ship-row"><h3>Event ownership</h3><p>Share the event boundaries and work breakdown. Let her choose components, such as venue outreach, with authority and next steps made explicit.</p></div></div><div class="proof-strip">EXIT: By Sep 11: access, tooling, a full content cycle and agreed event ownership. Finish any residual setup by Sep 15.</div></section>
+
+<section class="slide section-divider" data-title="The month"><div class="section-heading"><h2>The month</h2></div></section>
+
+<section class="slide " data-title="Four weekly gates"><h2>Four weekly gates</h2><p class="lede">Proposed workback. The Sep 11 review sets a realistic development forecast.</p>
+<div class="month-table">
+<div class="head">Objective</div><div class="head">Sep 7–13<br>Set up + start</div><div class="head">Sep 14–20<br>Build + validate</div><div class="head">Sep 21–27<br>Commit + expand</div><div class="head">Sep 28–30<br>Close + continue</div>
+<div class="week">001</div><div>Research planning. Compare 2–3 concepts. Start outreach.</div><div>Select concept. Check date, venue, people and equipment.</div><div>Secure commitments and complete promotion plan.</div><div>Verify the internal lock and announce only when ready.</div>
+<div class="week">App + friends</div><div>Triage P0/P1s. Accept search. Check map performance. Spec events and opt-in. Pilot survey.</div><div>Build events and opt-in, fix blockers, collect first surveys and book follow-ups.</div><div>Develop feedback fixes, test the release and expand toward 30 when ready.</div><div>Verify 30 working installs and close critical gaps.</div>
+<div class="week">Brand</div><div>Profiles, site and list. Start the queue.<small>2 posts proposed</small></div><div>Repeat production. Create newsletter #1.<small>7 posts cumulative</small></div><div>Keep publishing. Review newsletter and test delivery.<small>12 posts cumulative</small></div><div>Finish September and queue October.<small>15 posts cumulative</small></div>
+<div class="week">Rachel</div><div>Sprint: role, access, tools, first content cycle and chosen event tasks by Sep 11.</div><div>Produce content, build assets and advance owned event tasks. Residual setup ends Sep 15.</div><div>Produce and publish independently. Advance event work and refine the process.</div><div>Deliver content and event work. Queue October’s production.</div>
+</div></section>
+
+<section class="slide " data-title="Sep 7–13 / Set up + start"><h2>Sep 7–13 / Set up + start</h2><p class="lede">A = first focus block. B = second focus block. Weekend work is optional buffer.</p><div class="day-grid"><article class="day"><header><strong>MON</strong><span>Sep 7</span></header><div class="work"><div class="task"><h3>Working session</h3><p>Use this discussion to settle the four outcomes and record open decisions.</p></div><div class="task"><h3>Plan</h3><p>Prepare the first joint sessions and the shared work list.</p></div><div class="proof"><h3>Output</h3><p>Four outcomes captured.</p></div></div></article><article class="day"><header><strong>TUE</strong><span>Sep 8</span></header><div class="work"><div class="task"><h3>A / Rachel</h3><p>Meet on interests, capacity and role. Supply access and existing assets.</p></div><div class="task"><h3>B / Foundations</h3><p>Split: app lead triages existing bugs; event lead maps planning. Draft content workflow.</p></div><div class="proof"><h3>Output</h3><p>Owners + shared boards.</p></div></div></article><article class="day"><header><strong>WED</strong><span>Sep 9</span></header><div class="work"><div class="task"><h3>A / Product spec</h3><p>Joint search acceptance. App lead defines event scope and newsletter opt-in.</p></div><div class="task"><h3>B / Editorial</h3><p>Train Rachel on tools and workflow. Choose scheduler and first pieces.</p></div><div class="proof"><h3>Output</h3><p>Spec draft + content queue.</p></div></div></article><article class="day"><header><strong>THU</strong><span>Sep 10</span></header><div class="work"><div class="task"><h3>A / Event options</h3><p>Event lead checks 2–3 concepts. App lead fixes triaged blockers.</p></div><div class="task"><h3>B / Brand build</h3><p>Rachel completes a content cycle. Finish site/list setup. Publish piece 1.</p></div><div class="proof"><h3>Output</h3><p>Shortlist + first live post.</p></div></div></article><article class="day"><header><strong>FRI</strong><span>Sep 11</span></header><div class="work"><div class="task"><h3>A / Scope gate</h3><p>Review P0/P1s, search, map performance and scope. Pilot survey. Forecast release.</p></div><div class="task"><h3>B / Brand launch</h3><p>Test site/list. Confirm Rachel’s owned work. Publish piece 2.</p></div><div class="proof"><h3>Output</h3><p>Forecast + live brand links.</p></div></div></article><article class="day"><header><strong>SAT</strong><span>Sep 12</span></header><div class="work"><div class="task"><h3>Optional buffer</h3><p>Use only for slipped setup work or creative asset gathering.</p></div><div class="proof"><h3>Output</h3><p>No required milestone.</p></div></div></article><article class="day"><header><strong>SUN</strong><span>Sep 13</span></header><div class="work"><div class="task"><h3>Optional reset</h3><p>Review replies and prepare Monday’s work if useful.</p></div><div class="proof"><h3>Output</h3><p>Next week ready.</p></div></div></article></div></section>
+
+<section class="slide " data-title="Sep 14–20 / Build + validate"><h2>Sep 14–20 / Build + validate</h2><p class="lede">App and event leads work in parallel. The content owner runs the agreed daily queue.</p><div class="day-grid"><article class="day"><header><strong>MON</strong><span>Sep 14</span></header><div class="work"><div class="task"><h3>A / Build</h3><p>App: events, opt-in and P0/P1 fixes. Event lead resolves shortlist gaps.</p></div><div class="task"><h3>B / Editorial</h3><p>Batch the week’s assets and copy. Publish piece 3.</p></div><div class="proof"><h3>Output</h3><p>Build slice + weekly queue.</p></div></div></article><article class="day"><header><strong>TUE</strong><span>Sep 15</span></header><div class="work"><div class="task"><h3>A / Event choice</h3><p>Choose concept and backup from feasibility evidence.</p></div><div class="task"><h3>B / Production</h3><p>Continue app build and bug fixes. Rachel advances production. Publish piece 4.</p></div><div class="proof"><h3>Output</h3><p>Concept + date candidates.</p></div></div></article><article class="day"><header><strong>WED</strong><span>Sep 16</span></header><div class="work"><div class="task"><h3>A / App review</h3><p>Walk the event flow, search and map. Review P0/P1 fixes against acceptance.</p></div><div class="task"><h3>B / Commitments</h3><p>Confirm labor and equipment needs. Publish piece 5.</p></div><div class="proof"><h3>Output</h3><p>Issue list + event gaps.</p></div></div></article><article class="day"><header><strong>THU</strong><span>Sep 17</span></header><div class="work"><div class="task"><h3>A / Testing</h3><p>Test app, performance and opt-in. Prepare surveys and meeting slots.</p></div><div class="task"><h3>B / Newsletter</h3><p>Complete issue 1 and test delivery internally. Publish piece 6.</p></div><div class="proof"><h3>Output</h3><p>Test results + email ready.</p></div></div></article><article class="day"><header><strong>FRI</strong><span>Sep 18</span></header><div class="work"><div class="task"><h3>A / Release gate</h3><p>Review quality. Invite first friends if ready, then survey after meaningful use.</p></div><div class="task"><h3>B / Weekly proof</h3><p>First newsletter ready. Publish piece 7. Review event commitments.</p></div><div class="proof"><h3>Output</h3><p>Go/no-go + seven posts.</p></div></div></article><article class="day"><header><strong>SAT</strong><span>Sep 19</span></header><div class="work"><div class="task"><h3>Optional buffer</h3><p>Handle replies or release support if needed.</p></div><div class="proof"><h3>Output</h3><p>No required milestone.</p></div></div></article><article class="day"><header><strong>SUN</strong><span>Sep 20</span></header><div class="work"><div class="task"><h3>Optional reset</h3><p>Check the coming week’s queue and availability.</p></div><div class="proof"><h3>Output</h3><p>No required milestone.</p></div></div></article></div></section>
+
+<section class="slide " data-title="Sep 21–27 / Commit + expand"><h2>Sep 21–27 / Commit + expand</h2><p class="lede">Expansion follows release readiness. Event promotion follows the agreed launch conditions.</p><div class="day-grid"><article class="day"><header><strong>MON</strong><span>Sep 21</span></header><div class="work"><div class="task"><h3>A / Feedback</h3><p>Review surveys and meet users. Build the highest-impact feedback fixes.</p></div><div class="task"><h3>B / Commitments</h3><p>Close date and venue dependencies. Publish piece 8.</p></div><div class="proof"><h3>Output</h3><p>Friend roster + venue state.</p></div></div></article><article class="day"><header><strong>TUE</strong><span>Sep 22</span></header><div class="work"><div class="task"><h3>A / Event lock</h3><p>Confirm required people, equipment and logistics for the date.</p></div><div class="task"><h3>B / Publishing</h3><p>Publish piece 9. Hold user meetings and turn evidence into app issues.</p></div><div class="proof"><h3>Output</h3><p>Commitment evidence.</p></div></div></article><article class="day"><header><strong>WED</strong><span>Sep 23</span></header><div class="work"><div class="task"><h3>A / Promotion</h3><p>Review event assets, signup route and lead-time calendar.</p></div><div class="task"><h3>B / App check</h3><p>Retest feedback fixes and map performance. Review opt-in. Publish piece 10.</p></div><div class="proof"><h3>Output</h3><p>Promotion plan + feedback.</p></div></div></article><article class="day"><header><strong>THU</strong><span>Sep 24</span></header><div class="work"><div class="task"><h3>A / Gap close</h3><p>Build remaining P0/P1 and feedback fixes. Event lead closes commitments.</p></div><div class="task"><h3>B / Newsletter</h3><p>Revise issue 1 from review. Prepare next content queue. Publish piece 11.</p></div><div class="proof"><h3>Output</h3><p>Named gap list.</p></div></div></article><article class="day"><header><strong>FRI</strong><span>Sep 25</span></header><div class="work"><div class="task"><h3>A / Weekly gate</h3><p>Review internal event lock and progress toward 30 friends.</p></div><div class="task"><h3>B / Brand proof</h3><p>Newsletter rehearsal complete. Publish piece 12. Review feedback themes.</p></div><div class="proof"><h3>Output</h3><p>Lock status + twelve posts.</p></div></div></article><article class="day"><header><strong>SAT</strong><span>Sep 26</span></header><div class="work"><div class="task"><h3>Optional buffer</h3><p>Handle time-sensitive replies or beta support.</p></div><div class="proof"><h3>Output</h3><p>No required milestone.</p></div></div></article><article class="day"><header><strong>SUN</strong><span>Sep 27</span></header><div class="work"><div class="task"><h3>Optional reset</h3><p>Prepare the final three-day gap list.</p></div><div class="proof"><h3>Output</h3><p>Owners for remaining gaps.</p></div></div></article></div></section>
+
+<section class="slide " data-title="Sep 28–30 / Close September"><h2>Sep 28–30 / Close September</h2><p class="lede">Finish the agreed outcomes and leave October ready to run.</p><div class="close-grid">
+<article class="close-day"><header><h3>MON / SEP 28</h3></header><div class="body"><section><h4>A / Event + app gaps</h4><p>Close outstanding event commitments. Verify beta access person by person and resolve critical issues.</p></section><section><h4>B / Content</h4><p>Publish piece 13. Rachel advances owned event work and October assets.</p></section><section><h4>Output</h4><p>Final gap list with accountable owners.</p></section></div></article>
+<article class="close-day"><header><h3>TUE / SEP 29</h3></header><div class="body"><section><h4>A / Full walkthrough</h4><p>Review event readiness, the friend roster and the website-to-mailing-list journey.</p></section><section><h4>B / October queue</h4><p>Publish piece 14. Schedule next week and finalize the newsletter package.</p></section><section><h4>Output</h4><p>Proof links and a continuing publishing calendar.</p></section></div></article>
+<article class="close-day"><header><h3>WED / SEP 30</h3></header><div class="body"><section><h4>A / Exit review</h4><p>Check all four outcomes. Record what shipped, remaining gaps and the decisions those gaps require.</p></section><section><h4>B / Next month</h4><p>Publish piece 15. Agree event announcement timing and the next app priorities.</p></section><section><h4>Output</h4><p>September results and October owners.</p></section></div></article>
+</div></section>
+
+<section class="slide section-divider" data-title="How we run the work"><div class="section-heading"><h2>How we run the work</h2></div></section>
+
+<section class="slide " data-title="Focus blocks + accountable owners"><h2>Focus blocks + accountable owners</h2><p class="lede">Proposed working rhythm. Assign the app lead and event lead on Sep 8.</p><div class="ship-rows"><div class="ship-row"><h3>Founder capacity</h3><p>Proposal: ten two-hour blocks per founder each week. Joint sessions count against both people’s capacity.</p></div><div class="ship-row"><h3>Parallel work</h3><p>The app lead covers events, search, P0/P1s, performance, opt-in and feedback fixes. The event lead carries planning and commitments.</p></div><div class="ship-row"><h3>Rachel’s capacity</h3><p>Front-load setup into Week 1. From Week 2, Rachel produces content and advances agreed event tasks within her availability.</p></div><div class="ship-row"><h3>Protected capacity</h3><p>Protect two app-lead blocks for feedback fixes and one buffer block each week. Schedule named work into the remaining seven blocks.</p></div><div class="ship-row"><h3>Friday review</h3><p>Open the work itself: build, event commitments, published links and subscriber flow. Reassign or reschedule any work without a credible path.</p></div></div><div class="proof-strip">Day blocks are proposed focus windows, not calendar bookings. Print the daily sheet before work. Joint decisions need both founders; execution needs one owner.</div></section>
+
+<section class="slide " data-title="Decisions that control the schedule"><h2>Decisions that control the schedule</h2><p class="lede">Resolve these early enough to change the plan while time remains.</p><div class="ship-rows"><div class="ship-row"><h3>Sep 8 / Ownership</h3><p>Name the app and event leads. Agree Rachel’s role, availability, access and which event decisions she can make.</p></div><div class="ship-row"><h3>Sep 9 / Brand cadence</h3><p>Confirm channels, post frequency, newsletter format and the shared workflow. The 15-post plan is a starting proposal. Newsletter success means first issue created.</p></div><div class="ship-row"><h3>Sep 11 / App scope</h3><p>Estimate all app work: events, search gaps, P0/P1s, performance and opt-in. Keep feedback capacity free. Reduce scope or revise dates if it exceeds capacity.</p></div><div class="ship-row"><h3>Before event lock</h3><p>Confirm brand-establishment and promotion lead times. Move the event date if commitments or readiness cannot support them.</p></div><div class="ship-row"><h3>If capacity tightens</h3><p>Reduce optional event-feature scope and production complexity. Keep P0/P1 and feedback capacity protected. Reassign work if Rachel’s capacity is lower.</p></div></div><div class="proof-strip">A partial event page, tentative venue hold or unfinished feature stays visibly incomplete until its acceptance conditions pass.</div></section>
+
+<section class="slide " data-title="The September 30 review"><h2>The September 30 review</h2><p class="lede">Four outcomes. The evidence makes the result clear.</p><div class="ship-rows"><div class="ship-row"><h3>001 locked</h3><p>Open the event brief, confirmed date, venue and required commitments. Review the promotion calendar and app dependency.</p></div><div class="ship-row"><h3>30 friends</h3><p>Reconcile 30 distinct friends with working beta access. Open the release checklist, survey responses, meeting notes and prioritized feedback backlog.</p></div><div class="ship-row"><h3>Brand running</h3><p>Open the social profiles, website, signup flow, published posts, completed newsletter, internal delivery test and the next scheduled queue.</p></div><div class="ship-row"><h3>Rachel enabled</h3><p>Review her agreed role, completed work and access. Confirm she can advance owned work without waiting for founders to supply every input.</p></div></div><div class="proof-strip">Success leaves us with a credible first event, a beta in friends’ hands, a functioning brand presence and a team ready to keep going.</div></section>
+  </div></main>
+
+  <nav class="controls" aria-label="Deck controls">
+    <button id="prev" type="button">← Previous</button>
+    <button id="next" type="button">Next →</button>
+    <button id="overview" type="button">Overview</button>
+    <button id="print" type="button">Print / PDF</button>
+    <a href="daily-checklists.html" target="_blank" style="color:inherit;text-decoration:none;padding:8px">Daily printouts</a>
+    <a href="https://docs.google.com/forms/d/1Ke39WEXxVTOSEpmawOh9hWx2xHobpUxSFwenJ1XkhTk/edit" target="_blank" style="color:inherit;text-decoration:none;padding:8px">Google Form draft</a>
+    <a href="astir-beta-feedback-survey.html" target="_blank" style="color:inherit;text-decoration:none;padding:8px">Survey printout</a>
+    <span class="spacer"></span>
+    <span>Arrow keys navigate · G opens overview</span>
+    <span id="counter"></span>
+  </nav>
+
+  <dialog id="overviewDialog">
+    <header><h2>Slide overview</h2><button id="closeOverview" type="button">Close</button></header>
+    <div id="overviewList"></div>
+  </dialog>
+
+  <script>
+    (()=>{
+      'use strict';
+      const slides=[...document.querySelectorAll('.slide')];
+      const stage=document.getElementById('stage');
+      const counter=document.getElementById('counter');
+      const dialog=document.getElementById('overviewDialog');
+      const list=document.getElementById('overviewList');
+      let index=0;
+      const number=n=>String(n).padStart(2,'0');
+      slides.forEach((slide,i)=>{
+        const foot=document.createElement('div');
+        foot.className='slidefoot';
+        foot.textContent=number(i+1);
+        slide.appendChild(foot);
+      });
+      function fit(){
+        const w=window.innerWidth;
+        const h=window.innerHeight-58;
+        const scale=Math.min(w/1440,h/900);
+        stage.style.transform=`scale(${scale})`;
+      }
+      function show(next,{updateHash=true}={}){
+        index=Math.max(0,Math.min(slides.length-1,next));
+        slides.forEach((slide,i)=>slide.classList.toggle('active',i===index));
+        counter.textContent=`${index+1} / ${slides.length}`;
+        document.getElementById('prev').disabled=index===0;
+        document.getElementById('next').disabled=index===slides.length-1;
+        if(updateHash) history.replaceState(null,'','#'+(index+1));
+      }
+      function openOverview(){
+        list.innerHTML=slides.map((slide,i)=>`<button type="button" data-slide="${i}"><small>${number(i+1)}</small><span>${slide.dataset.title}</span></button>`).join('');
+        dialog.showModal();
+      }
+      document.getElementById('prev').onclick=()=>show(index-1);
+      document.getElementById('next').onclick=()=>show(index+1);
+      document.getElementById('overview').onclick=openOverview;
+      document.getElementById('closeOverview').onclick=()=>dialog.close();
+      document.getElementById('print').onclick=()=>window.print();
+      list.onclick=e=>{
+        const button=e.target.closest('[data-slide]');
+        if(!button)return;
+        show(Number(button.dataset.slide));
+        dialog.close();
+      };
+      window.addEventListener('keydown',e=>{
+        if(dialog.open){if(e.key==='Escape')dialog.close();return;}
+        if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){e.preventDefault();show(index+1);}
+        if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();show(index-1);}
+        if(e.key.toLowerCase()==='g')openOverview();
+        if(e.key==='Home')show(0);
+        if(e.key==='End')show(slides.length-1);
+      });
+      window.addEventListener('resize',fit);
+      const requested=Math.max(1,Math.min(slides.length,Number(location.hash.slice(1))||1));
+      fit();
+      show(requested-1,{updateHash:false});
+    })();
+  </script>
+</body>
+</html>
