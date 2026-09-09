@@ -41,11 +41,10 @@ import { Deadline, SocialImportError } from "./types.ts";
 // comfortably below the platform response ceiling.
 export const maximumHandlerDurationMilliseconds = 135_000;
 export const maximumExtractionDurationMilliseconds = 120_000;
-// Budget each upstream stage, not just the whole request. Fast stages lend
-// unused time downstream; slow stages cannot spend the next stage's reserve.
+// Acquisition leaves a media + generation window. Download and upload share
+// that window: a fast download lends time to preparation and vice versa.
+// Separate fixed caps discarded evidence despite unused request time.
 const maximumAcquisitionMilliseconds = 45_000;
-const maximumMediaDownloadMilliseconds = 25_000;
-const maximumMediaPreparationMilliseconds = 20_000;
 const minimumGenerationMilliseconds = 30_000;
 const paidWorkAdmissionFinishTimeoutMilliseconds = 3_000;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
@@ -296,8 +295,8 @@ async function runAdmittedImport(
   const catalog = evidenceCatalog(evidence);
   const mediaDeadline = stageDeadline(
     extractionDeadline,
-    maximumMediaPreparationMilliseconds + minimumGenerationMilliseconds,
-    maximumMediaDownloadMilliseconds,
+    minimumGenerationMilliseconds,
+    maximumExtractionDurationMilliseconds,
     dependencies,
   );
   const profileUsernames = prioritizedInstagramProfileUsernames(evidence);
@@ -378,12 +377,7 @@ async function runAdmittedImport(
           modelProfileAliases,
           undefined,
           {
-            mediaPreparationDeadline: stageDeadline(
-              extractionDeadline,
-              minimumGenerationMilliseconds,
-              maximumMediaPreparationMilliseconds,
-              dependencies,
-            ),
+            mediaPreparationDeadline: mediaDeadline,
           },
         ),
     );

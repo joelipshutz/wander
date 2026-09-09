@@ -1084,6 +1084,125 @@ Deno.test("stalled Bright reel leaves a real Apify fallback window", async () =>
   assert(deadline.remaining() >= 30_000);
 });
 
+for (const acquisitionMilliseconds of [20_000, 44_000]) {
+  Deno.test(`media stages share slack after ${acquisitionMilliseconds}ms acquisition without starving generation`, async () => {
+    let now = 0;
+    let latestTimeout = 0;
+    let modelSawVideo = false;
+    let firstGenerationWindow = 0;
+    let finishes = 0;
+    const originalTimeout = AbortSignal.timeout;
+    // Virtual provider time respects the timeout requested by the real handler.
+    // No network, real delay, or provider credentials are involved.
+    AbortSignal.timeout = (milliseconds) => {
+      latestTimeout = milliseconds;
+      return new AbortController().signal;
+    };
+    const origin = "https://generativelanguage.googleapis.com";
+    const videoURL = "https://images.cdninstagram.com/media/slow.mp4";
+    const file = {
+      name: "files/slow-video",
+      uri: `${origin}/v1beta/files/slow-video`,
+      mimeType: "video/mp4",
+      state: "ACTIVE",
+    };
+    try {
+      const dependencies = runtime((input, init) => {
+        const url = String(input);
+        if (url.endsWith("/current_profile")) {
+          return Response.json([{ id: "user-1" }]);
+        }
+        if (url.includes("/v2/actors/")) {
+          return Response.json({
+            data: {
+              id: "slow-run",
+              status: "SUCCEEDED",
+              defaultDatasetId: "slow-run",
+            },
+          });
+        }
+        if (url.includes("/v2/datasets/")) {
+          now += acquisitionMilliseconds;
+          return Response.json([{
+            inputUrl: instagramReelURL,
+            description: "Visit Carbon Beach Club in Malibu.",
+            videoUrl: videoURL,
+          }]);
+        }
+        if (url === videoURL) {
+          if (latestTimeout < 27_000) {
+            now += latestTimeout;
+            throw new SocialImportError("deadline_exceeded");
+          }
+          now += 27_000;
+          return new Response(
+            new Uint8Array([
+              0,
+              0,
+              0,
+              24,
+              102,
+              116,
+              121,
+              112,
+              105,
+              115,
+              111,
+              109,
+            ]),
+            { headers: { "content-type": "video/mp4" } },
+          );
+        }
+        if (url === `${origin}/upload/v1beta/files`) {
+          now += 4_000;
+          return new Response(null, {
+            headers: {
+              "x-goog-upload-url":
+                `${origin}/upload/v1beta/files?upload_id=slow`,
+            },
+          });
+        }
+        if (url.includes("upload_id=slow")) {
+          now += 4_000;
+          return Response.json({ file });
+        }
+        if (url === file.uri) return Response.json({});
+        if (url.includes(":generateContent")) {
+          const body = JSON.parse(String(init?.body));
+          modelSawVideo ||= body.contents.some((
+            content: { parts: Record<string, unknown>[] },
+          ) => content.parts.some((part) => part.fileData));
+          firstGenerationWindow ||= latestTimeout;
+          now += 5_000;
+          return geminiResponse([candidate()]);
+        }
+        if (url.includes("places.googleapis.com")) {
+          return Response.json({ places: [] });
+        }
+        throw new Error("unexpected slow-media fixture request");
+      }, { onFinish: () => finishes += 1 });
+      dependencies.now = () => now;
+      const payload = await (await handleRequest(
+        jsonRequest(socialRequestBody(instagramReelURL)),
+        dependencies,
+      )).json();
+      assert(
+        modelSawVideo,
+        "the model lost video even though the request had spare time",
+      );
+      assert(
+        firstGenerationWindow >= 30_000,
+        "media spent the generation reserve",
+      );
+      assert(now < maximumHandlerDurationMilliseconds);
+      assertEquals(finishes, 1);
+      assert(payload.failure_category !== "media_incomplete");
+    } finally {
+      AbortSignal.timeout = originalTimeout;
+    }
+  });
+}
+
 Deno.test("download deadline retains completed slides and marks the remaining slides incomplete", async () => {
   let now = 0;
   let downloads = 0;
@@ -1129,7 +1248,7 @@ Deno.test("stalled video preparation preserves readable image evidence and the m
     mimeType: "video/mp4",
     state: "PROCESSING",
   };
-  const dependencies = timeoutRegressionRuntime((url) => {
+  const dependencies = timeoutRegressionRuntime((url, init) => {
     if (url.includes("/v2/datasets/")) {
       return Response.json([{
         inputUrl: instagramURL,
@@ -1152,16 +1271,16 @@ Deno.test("stalled video preparation preserves readable image evidence and the m
     }
     if (url.includes("upload_id=")) return Response.json({ file });
     if (url === file.uri) {
-      if (now === 20_000) {
+      if (init?.method === "DELETE") {
         deletes += 1;
         return Response.json({});
       }
-      now = 20_000;
+      now = 90_000;
       return Response.json({ file });
     }
     if (url.includes(":generateContent")) {
       modelCalls += 1;
-      assertEquals(now, 20_000);
+      assertEquals(now, 90_000);
       return Response.json(
         geminiPayload(
           [candidate({
@@ -1224,13 +1343,13 @@ for (const failure of ["deadline", "transport", "http"] as const) {
 }
 
 function timeoutRegressionRuntime(
-  intercept: (url: string) => Response | null,
+  intercept: (url: string, init?: RequestInit) => Response | null,
   onFinish: () => void = () => {},
   hybrid = false,
 ): RuntimeDependencies {
-  return runtime((input) => {
+  return runtime((input, init) => {
     const url = String(input);
-    const response = intercept(url);
+    const response = intercept(url, init);
     if (response) return response;
     if (url.endsWith("/rest/v1/rpc/current_profile")) {
       return Response.json([{ id: "user-1" }]);

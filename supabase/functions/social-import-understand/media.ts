@@ -10,6 +10,7 @@ export const maximumImageBytes = 10 * 1_024 * 1_024;
 export const maximumVideoBytes = 60 * 1_024 * 1_024;
 export const maximumTotalMediaBytes = 60 * 1_024 * 1_024;
 const maximumMediaFetchAttempts = 3;
+const maximumConcurrentMediaDownloads = 3;
 
 const mediaDomains = [
   "cdninstagram.com",
@@ -40,50 +41,83 @@ export async function ingestAcquiredMedia(
   assertRequestActive(requestSignal);
   const results: MediaIngestion[] = [];
   let totalBytes = 0;
-  for (const item of media.slice(0, 150)) {
+  const boundedMedia = media.slice(0, 150);
+  let nextIndex = 0;
+  while (nextIndex < boundedMedia.length) {
     assertRequestActive(requestSignal);
     const remaining = maximumTotalMediaBytes - totalBytes;
     if (remaining <= 0) {
-      results.push(failed(item, "media_total_too_large"));
-      continue;
-    }
-    try {
-      // A later asset timing out must not discard bytes already downloaded.
-      // Expired assets are explicitly failed without starting another fetch.
-      deadline.assertAvailable();
-      const perItem = item.kind === "video"
-        ? maximumVideoBytes
-        : maximumImageBytes;
-      const downloaded = await fetchMediaBytes(
-        item.url,
-        item.kind,
-        Math.min(perItem, remaining),
-        source,
-        apifyToken,
-        deadline,
-        dependencies,
-        requestSignal,
+      results.push(
+        ...boundedMedia.slice(nextIndex).map((item) =>
+          failed(item, "media_total_too_large")
+        ),
       );
-      totalBytes += downloaded.byteCount;
-      results.push({
-        mediaID: item.id,
-        kind: item.kind,
-        status: "ok",
-        byteCount: downloaded.byteCount,
-        mimeType: downloaded.mimeType,
-        bytes: downloaded.bytes,
-        errorCode: null,
-      });
-    } catch (error) {
-      assertRequestActive(requestSignal);
-      if (
-        error instanceof SocialImportError &&
-        error.code === "request_cancelled"
-      ) throw error;
-      results.push(failed(
-        item,
-        error instanceof SocialImportError ? error.code : "media_fetch_failed",
-      ));
+      break;
+    }
+    // Reserve worst-case bytes before starting a batch. A large video waits
+    // for earlier images rather than receiving an artificially small limit
+    // because their in-flight reservations have not been released yet.
+    const batch: { item: AcquiredMedia; maximumBytes: number }[] = [];
+    let reservedBytes = 0;
+    while (
+      nextIndex < boundedMedia.length &&
+      batch.length < maximumConcurrentMediaDownloads
+    ) {
+      const item = boundedMedia[nextIndex];
+      const maximumBytes = Math.min(
+        remaining,
+        item.kind === "video" ? maximumVideoBytes : maximumImageBytes,
+      );
+      if (reservedBytes + maximumBytes > remaining) break;
+      batch.push({ item, maximumBytes });
+      reservedBytes += maximumBytes;
+      nextIndex += 1;
+    }
+    const completed = await Promise.allSettled(
+      batch.map(async ({ item, maximumBytes }): Promise<MediaIngestion> => {
+        try {
+          deadline.assertAvailable();
+          const downloaded = await fetchMediaBytes(
+            item.url,
+            item.kind,
+            maximumBytes,
+            source,
+            apifyToken,
+            deadline,
+            dependencies,
+            requestSignal,
+          );
+          return {
+            mediaID: item.id,
+            kind: item.kind,
+            status: "ok",
+            byteCount: downloaded.byteCount,
+            mimeType: downloaded.mimeType,
+            bytes: downloaded.bytes,
+            errorCode: null,
+          };
+        } catch (error) {
+          assertRequestActive(requestSignal);
+          if (
+            error instanceof SocialImportError &&
+            error.code === "request_cancelled"
+          ) throw error;
+          return failed(
+            item,
+            error instanceof SocialImportError
+              ? error.code
+              : "media_fetch_failed",
+          );
+        }
+      }),
+    );
+    // Settle all active work before cancellation/admission cleanup. Retain
+    // source order regardless of which response finished first.
+    assertRequestActive(requestSignal);
+    for (const result of completed) {
+      if (result.status === "rejected") throw result.reason;
+      totalBytes += result.value.byteCount ?? 0;
+      results.push(result.value);
     }
   }
   return results;
