@@ -1,8 +1,13 @@
 # September 2026 roadmap
 
-The proposal for Joe and Ryan: Astir 001, the app's 30-friends gate, the brand
-system, and Rachel's enablement. This is the reviewed planning artifact, not a
+The proposal for Joe and Ryan: Astir 001, the app's 30-friends gate, and the brand
+system, with all planned work owned by the two founders. This is a planning artifact, not a
 claim that its planned work has shipped. Dates and forecasts remain proposals.
+
+The revised plan assumes no additional contributor. Daily work sessions identify
+the objective(s) they support: 1 = Astir 001, 2 = app + friends, 3 = brand.
+The original dates, 15-post proposal, and newsletter milestones remain in place,
+subject to the two-founder capacity review.
 
 ## Open the roadmap
 
