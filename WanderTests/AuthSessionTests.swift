@@ -67,6 +67,8 @@ final class AuthSessionTests: XCTestCase {
         }
         let service = ClerkAuthService(
             configuration: configuration,
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { publishableKey in publishableKey }
@@ -442,6 +444,8 @@ final class AuthSessionTests: XCTestCase {
         }
         let service = ClerkAuthService(
             configuration: configuration,
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { _ in "" }
@@ -461,6 +465,8 @@ final class AuthSessionTests: XCTestCase {
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: { try resolution.value.get() },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: cache.value,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
@@ -489,6 +495,8 @@ final class AuthSessionTests: XCTestCase {
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: { throw AuthSessionError.tokenUnavailable },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
@@ -503,6 +511,155 @@ final class AuthSessionTests: XCTestCase {
     }
 
     #if canImport(ClerkKit)
+
+    func testCompletedNativeAuthActivatesReturnedSessionBeforeResolvingIt() async throws {
+        let configuration = WanderBackendConfiguration.current { "$(\($0))" }
+        let session = AuthSession(userID: "user_apple", displayName: "Apple", handle: "apple")
+        var activeID: String? = "sess_old"
+        var activations: [String] = []
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                guard activeID == "sess_apple" else { return nil }
+                return resolvedSession(session, clerkSessionID: "sess_apple")
+            },
+            resolveSessionID: { activeID },
+            activateSession: { id in
+                activations.append(id)
+                activeID = id
+            },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            configureClerk: { $0 }
+        )
+
+        let adoption = try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_apple")
+
+        XCTAssertEqual(adoption, .immediate)
+        XCTAssertEqual(activations, ["sess_apple"])
+        XCTAssertEqual(service.state, .signedIn(session))
+    }
+
+    func testCompletedNativeAuthDoesNotReactivateAlreadySelectedSession() async throws {
+        let configuration = WanderBackendConfiguration.current { "$(\($0))" }
+        let session = AuthSession(userID: "user_google", displayName: "Google", handle: "google")
+        var activations: [String] = []
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { resolvedSession(session, clerkSessionID: "sess_google") },
+            resolveSessionID: { "sess_google" },
+            activateSession: { activations.append($0) },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            configureClerk: { $0 }
+        )
+
+        _ = try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_google")
+
+        XCTAssertTrue(activations.isEmpty)
+        XCTAssertEqual(service.state, .signedIn(session))
+    }
+
+    func testCompletedNativeAuthRecoversWhenActivationResponseIsLost() async throws {
+        let configuration = WanderBackendConfiguration.current { "$(\($0))" }
+        let session = AuthSession(userID: "user_apple", displayName: "Apple", handle: "apple")
+        var activeID: String?
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { resolvedSession(session, clerkSessionID: "sess_apple") },
+            resolveSessionID: { activeID },
+            activateSession: { id in
+                activeID = id
+                throw URLError(.networkConnectionLost)
+            },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            configureClerk: { $0 }
+        )
+
+        _ = try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_apple")
+
+        XCTAssertEqual(service.state, .signedIn(session))
+    }
+
+    func testCompletedNativeAuthRejectsUnrelatedSessionAfterActivationFails() async {
+        let configuration = WanderBackendConfiguration.current { "$(\($0))" }
+        let session = AuthSession(userID: "user_other", displayName: "Other", handle: "other")
+        var activations: [String] = []
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { resolvedSession(session, clerkSessionID: "sess_other") },
+            resolveSessionID: { "sess_other" },
+            activateSession: { id in
+                activations.append(id)
+                throw URLError(.notConnectedToInternet)
+            },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            configureClerk: { $0 }
+        )
+
+        do {
+            _ = try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_apple")
+            XCTFail("Must not accept another account after activation failure")
+        } catch {
+            XCTAssertEqual(error as? AuthSessionError, .sessionUnavailable)
+        }
+        XCTAssertEqual(activations, ["sess_apple"])
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testCompletedNativeAuthTimesOutWhenActivationStalls() async {
+        let configuration = WanderBackendConfiguration.current { "$(\($0))" }
+        var activationContinuation: CheckedContinuation<Void, Never>?
+        var resolutionCount = 0
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                resolutionCount += 1
+                return nil
+            },
+            resolveSessionID: { nil },
+            activateSession: { _ in
+                await withCheckedContinuation { activationContinuation = $0 }
+            },
+            sessionCache: .disabled,
+            nativeAuthSessionFenceStore: .disabled,
+            sessionAdoptionRetryDelaysNanoseconds: [],
+            sessionAdoptionTimeoutNanoseconds: 100_000_000,
+            configureClerk: { $0 }
+        )
+        let task = Task {
+            try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_apple")
+        }
+        while activationContinuation == nil { await Task.yield() }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+
+        do {
+            _ = try await task.value
+            XCTFail("Stalled activation must time out")
+        } catch {
+            XCTAssertEqual(error as? AuthSessionError, .sessionUnavailable)
+        }
+        XCTAssertLessThan(DispatchTime.now().uptimeNanoseconds - startedAt, 500_000_000)
+        activationContinuation?.resume()
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(resolutionCount, 0)
+        XCTAssertEqual(service.state, .signedOut)
+    }
+
+    func testUnlinkedSocialIdentityErrorsMapToAccountRecovery() throws {
+        for code in ["sign_up_if_missing_transfer", "external_account_not_found"] {
+            let data = Data("{\"code\":\"\(code)\"}".utf8)
+            let error = try JSONDecoder().decode(ClerkAPIError.self, from: data)
+            XCTAssertEqual(ClerkAuthService.authError(from: error) as? AuthSessionError, .accountNotFound)
+        }
+    }
+
     func testCompletedNativeAuthRetriesUntilAuthoritativeSessionAppears() async throws {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
@@ -522,6 +679,7 @@ final class AuthSessionTests: XCTestCase {
             configuration: configuration,
             resolveSession: { resolutions.removeFirst() },
             resolveSessionID: { "sess_apple" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [200, 600, 2_000],
@@ -552,6 +710,8 @@ final class AuthSessionTests: XCTestCase {
                 resolutionCount += 1
                 return nil
             },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [200, 600],
@@ -593,6 +753,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(session, clerkSessionID: resolvedClerkSessionID.value)
             },
             resolveSessionID: { activeClerkSessionID.value },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [200, 600],
@@ -644,6 +805,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(unrelatedSession, clerkSessionID: "sess_other")
             },
             resolveSessionID: { "sess_other" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: fenceStore,
             sessionAdoptionRetryDelaysNanoseconds: [],
@@ -666,6 +828,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(unrelatedSession, clerkSessionID: "sess_other")
             },
             resolveSessionID: { "sess_other" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: fenceStore,
             configureClerk: { $0 }
@@ -700,6 +863,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(session, clerkSessionID: "sess_unrelated")
             },
             resolveSessionID: { "sess_unrelated" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: fenceStore,
             configureClerk: { $0 }
@@ -730,6 +894,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(unrelatedSession, clerkSessionID: "sess_active")
             },
             resolveSessionID: { "sess_active" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: fenceStore,
             configureClerk: { $0 }
@@ -760,6 +925,8 @@ final class AuthSessionTests: XCTestCase {
         )
         let service = ClerkAuthService(
             configuration: configuration,
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: failingFenceStore,
             configureClerk: { $0 }
@@ -792,6 +959,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(session, clerkSessionID: "sess_unrelated")
             },
             resolveSessionID: { "sess_unrelated" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: fenceStore,
             configureClerk: { $0 }
@@ -817,6 +985,7 @@ final class AuthSessionTests: XCTestCase {
                 resolvedSession(session, clerkSessionID: "sess_other")
             },
             resolveSessionID: { "sess_apple" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [],
@@ -852,6 +1021,7 @@ final class AuthSessionTests: XCTestCase {
                 }
             },
             resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [],
@@ -903,6 +1073,7 @@ final class AuthSessionTests: XCTestCase {
                 return nil
             },
             resolveSessionID: { "sess_other" },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [],
@@ -1036,6 +1207,8 @@ final class AuthSessionTests: XCTestCase {
                     }
                 }
             },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
@@ -1075,6 +1248,8 @@ final class AuthSessionTests: XCTestCase {
                     refreshStarted.fulfill()
                 }
             },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
@@ -1113,6 +1288,8 @@ final class AuthSessionTests: XCTestCase {
                     refreshStarted.fulfill()
                 }
             },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
@@ -1155,6 +1332,8 @@ final class AuthSessionTests: XCTestCase {
                     AuthSession(userID: "stale", displayName: "Stale", handle: "stale")
                 )
             },
+            resolveSessionID: { nil },
+            activateSession: { _ in },
             sessionCache: .disabled,
             nativeAuthSessionFenceStore: .disabled,
             configureClerk: { $0 }
