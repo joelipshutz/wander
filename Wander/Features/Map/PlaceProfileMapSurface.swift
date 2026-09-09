@@ -1454,6 +1454,8 @@ private struct PlaceProfileFullView: View {
                         .background(astirBrandMode.background)
                     }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("place-profile.scroll")
                 .task(id: place.id) {
                     guard initialSection == .activity else { return }
                     await Task.yield()

@@ -284,22 +284,24 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertFalse(memberPhoto.frame.isEmpty)
         XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 3))
         capture("REC-386 member photo visible in gallery")
+        let profileScroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(profileScroll.waitForExistence(timeout: 3))
 
         let ryanNote = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "QA proof: Ryan's uploaded check-in photo")
         ).firstMatch
-        scrollUp(in: app, until: ryanNote)
+        scrollUp(in: profileScroll, until: ryanNote)
         XCTAssertTrue(ryanNote.isHittable)
         let ryanCheckInPhoto = app.buttons["Open check-in photo by Ryan"]
         XCTAssertTrue(ryanCheckInPhoto.waitForExistence(timeout: 3))
-        scrollUp(in: app, until: ryanCheckInPhoto)
+        scrollUp(in: profileScroll, until: ryanCheckInPhoto)
         XCTAssertTrue(ryanCheckInPhoto.isHittable)
         capture("REC-386 member photo visible in check-in")
 
         let disposableNote = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "QA disposable check-in")
         ).firstMatch
-        scrollDown(in: app, until: disposableNote)
+        scrollDown(in: profileScroll, until: disposableNote)
         XCTAssertTrue(disposableNote.exists)
 
         let editButton = app.buttons["Edit check-in"].firstMatch
@@ -314,8 +316,14 @@ final class MapPlaceCardUITests: XCTestCase {
         confirmation.buttons["Delete check-in"].tap()
 
         XCTAssertFalse(disposableNote.waitForExistence(timeout: 3))
+        let collapsedCard = app.buttons["map.selectedPlaceCard"]
+        if !ryanNote.waitForExistence(timeout: 2) {
+            XCTAssertTrue(collapsedCard.waitForExistence(timeout: 3))
+            collapsedCard.tap()
+        }
+        XCTAssertTrue(profileScroll.waitForExistence(timeout: 3))
         XCTAssertTrue(ryanNote.waitForExistence(timeout: 3))
-        scrollUp(in: app, until: ryanNote)
+        scrollUp(in: profileScroll, until: ryanNote)
         XCTAssertTrue(ryanNote.isHittable)
         capture("REC-386 disposable check-in deleted")
     }
@@ -468,15 +476,15 @@ final class MapPlaceCardUITests: XCTestCase {
         return app
     }
 
-    private func scrollUp(in app: XCUIApplication, until element: XCUIElement) {
+    private func scrollUp(in container: XCUIElement, until element: XCUIElement) {
         for _ in 0..<8 where !element.isHittable {
-            app.swipeUp()
+            container.swipeUp()
         }
     }
 
-    private func scrollDown(in app: XCUIApplication, until element: XCUIElement) {
+    private func scrollDown(in container: XCUIElement, until element: XCUIElement) {
         for _ in 0..<8 where !element.isHittable {
-            app.swipeDown()
+            container.swipeDown()
         }
     }
 

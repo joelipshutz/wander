@@ -1441,6 +1441,7 @@ struct YourMapGeographyCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .strokeBorder(brandMode.border)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("yourMap.prototype.citiesCountries")
         .onChange(of: canExpand) { _, canExpand in
             if !canExpand { isExpanded = false }

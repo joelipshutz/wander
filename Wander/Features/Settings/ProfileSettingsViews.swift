@@ -58,6 +58,7 @@ struct ProfileSettingsHome: View {
             .offset(x: settingsDragOffset)
             .contentShape(Rectangle())
             .simultaneousGesture(interactiveDismissGesture(containerWidth: geometry.size.width))
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.screen")
         }
         .tint(brandMode.accent)
