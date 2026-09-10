@@ -18,10 +18,8 @@ Run `python3 preview/rec-460-452-approved/render-build.py` from the checkout. In
 
 PNG files show light and dark appearance at rest. A still screenshot does not establish the press/movement animation. Review presses toward and away from neighboring controls, cancellation, and single action dispatch on iOS 26 before marking motion QA complete.
 
-## Validation
+## Verification record
 
-- Changed Swift sources pass compiler syntax checking.
-- Eight relevant navigation/glass source-contract XCTest methods pass with zero failures, executed through macOS XCTest against the checkout. This is not the complete iOS suite.
-- The native preview app compiles with the production component definitions. Light and dark screenshots cover iPhone 17 Pro and iPhone 17e on iOS 26.5.
-- The prescribed full iOS test command cannot select iPhone 16 Plus / iOS 18.6 because that runtime is not installed. The full test gate remains pending.
-- Automated pointer checks did not establish sustained-touch cancellation reliably. Press/movement QA remains pending on a touch-capable iOS 26 environment.
+Light and dark screenshots cover iPhone 17 Pro and iPhone 17e on iOS 26.5. They use the production component definitions and preserve the white place-card + in both appearances.
+
+Current build, test, review, and remaining device-QA evidence is maintained in [PR #614](https://github.com/joelipshutz/wander/pull/614) and REC-460 / REC-452.
