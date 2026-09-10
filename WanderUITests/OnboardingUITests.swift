@@ -498,7 +498,7 @@ final class OnboardingUITests: XCTestCase {
         defer {
             app.terminate()
             app.launchArguments = [
-                "-WanderUseLiveAuth",
+                "-WanderResetAuthenticatedUITest",
                 "-WanderOnboardingUITestSignedOut",
             ]
             app.launch()
@@ -657,6 +657,7 @@ final class OnboardingUITests: XCTestCase {
     func testCoachMarkIsUnskippableAndOnlyTheHighlightedAddActionAdvances() {
         let app = XCUIApplication()
         app.launchArguments = [
+            "-WanderAuthenticatedUITest",
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
             "-WanderEnableWalkthroughs",
@@ -2764,6 +2765,7 @@ final class OnboardingUITests: XCTestCase {
     func testCheckInCalendarTrayPresentationLatency() {
         let app = XCUIApplication()
         app.launchArguments = [
+            "-WanderAuthenticatedUITest",
             "-WanderMapCapture",
             "-WanderUseDemoFixtures"
         ]
