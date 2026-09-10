@@ -186,8 +186,17 @@ final class ImportFormRefinementUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationDetails"]
         app.launch()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
         let more = app.buttons["Hide more options"].firstMatch
-        for _ in 0..<5 where !more.isHittable || more.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        // The center of this long form contains an interactive rating slider.
+        // Scroll from the page margin so the gesture cannot adjust the rating
+        // instead of revealing the fields below it.
+        for _ in 0..<8 where !more.isHittable || more.frame.maxY > app.frame.height - 120 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.78))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.98, dy: 0.30)
+                ))
+        }
         XCTAssertTrue(more.isHittable)
         keepScreenshot("Import report — inline details")
     }
