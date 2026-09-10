@@ -1125,19 +1125,10 @@ private struct ListDetailScreen: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ListDetailHeaderToolbar {
                 if let listShareContent {
                     WanderShareButton(content: listShareContent) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.raisedBackground)
-                            .foregroundStyle(brandMode.primaryText)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(brandMode.border, lineWidth: 1)
-                            }
+                        ListDetailHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Share list")
                 }
@@ -1146,12 +1137,7 @@ private struct ListDetailScreen: View {
                     Button {
                         isAddingPlaces = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.accent)
-                            .foregroundStyle(brandMode.accentForeground)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        ListDetailHeaderActionLabel(systemImage: "plus")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
@@ -1161,16 +1147,7 @@ private struct ListDetailScreen: View {
                     Button {
                         onEdit(renderedList)
                     } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.raisedBackground)
-                            .foregroundStyle(brandMode.primaryText)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(brandMode.border, lineWidth: 1)
-                            }
+                        ListDetailHeaderActionLabel(systemImage: "pencil")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
@@ -1180,7 +1157,8 @@ private struct ListDetailScreen: View {
                     if isLeavingList {
                         ProgressView()
                             .tint(brandMode.accent)
-                            .frame(width: 34, height: 34)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .wanderGlassCapsule()
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
@@ -1198,16 +1176,7 @@ private struct ListDetailScreen: View {
                                 Label("Report list", systemImage: "exclamationmark.bubble")
                             }
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 14, weight: .black))
-                                .frame(width: 34, height: 34)
-                                .background(brandMode.raisedBackground)
-                                .foregroundStyle(brandMode.primaryText)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(brandMode.border, lineWidth: 1)
-                                }
+                            ListDetailHeaderActionLabel(systemImage: "ellipsis")
                         }
                         .accessibilityLabel("List actions")
                     }
@@ -6074,5 +6043,46 @@ private struct ListSnapshotCover: View {
             guard !Task.isCancelled else { return }
             downloadedData = result
         }
+    }
+}
+
+// MARK: - List detail header controls
+
+struct ListDetailHeaderActionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 16, weight: .black))
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .foregroundStyle(brandMode.primaryText)
+            .contentShape(Circle())
+            .wanderGlassCapsule()
+    }
+}
+
+/// The toolbar owns placement; each action owns its glass surface.
+struct ListDetailHeaderToolbar<Content: View>: ToolbarContent {
+    @ViewBuilder let content: () -> Content
+
+    var body: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarTrailing) {
+                actions
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarTrailing) {
+                actions
+            }
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            content()
+        }
+        .buttonStyle(.plain)
     }
 }
