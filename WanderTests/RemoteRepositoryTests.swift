@@ -137,6 +137,90 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(functions.rawBodies.first?["client_request_id"] as? String, "stable-request-id")
     }
 
+    func testSocialImportPreservesProviderNeighborhoodEvidenceForTheActualMatcher() async throws {
+        let functions = RecordingRPC()
+        functions.responses["function:social-import-understand"] = Data(
+            """
+            {
+              "schema_version": 1, "outcome": "ok", "provider_path": "apify_gemini",
+              "hints": [{
+                "name": "Fixture Coffee", "area": "Downtown Los Angeles",
+                "modality": "caption", "classification": "destination",
+                "resolved_places": [
+                  {"provider":"google_places","provider_place_id":"wrong-branch","name":"Fixture Coffee",
+                   "locality":"Los Angeles","region":"CA","country":"US",
+                   "area_components":["Echo Park"],"latitude":34.075,"longitude":-118.26},
+                  {"provider":"google_places","provider_place_id":"correct-branch","name":"Fixture Coffee",
+                   "locality":"Los Angeles","region":"CA","country":"US",
+                   "area_components":["Downtown Los Angeles"],"latitude":34.05,"longitude":-118.25}
+                ]
+              }]
+            }
+            """.utf8
+        )
+        let result = try await SupabaseSocialImportUnderstandingRepository(functions: functions).understand(
+            url: URL(string: "https://www.instagram.com/p/Fixture123/")!,
+            source: .instagram, clientRequestID: "neighborhood-fixture"
+        )
+        let hint = try XCTUnwrap(result.hints.first)
+        let match = PlaceImportCandidateMatcher.match(
+            hint.resolvedCandidates, nameHint: hint.name, areaHint: hint.area,
+            selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertEqual(match.selectedCandidateID, "google-places-correct-branch")
+        XCTAssertEqual(match.candidates.count, 2, "Keep the alternative available for review")
+        let wrongOnly = PlaceImportCandidateMatcher.match(
+            hint.resolvedCandidates.filter { $0.id == "google-places-wrong-branch" },
+            nameHint: hint.name, areaHint: hint.area, selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertNil(wrongOnly.selectedCandidateID, "A different neighborhood must not become an automatic match")
+        let correct = try XCTUnwrap(hint.resolvedCandidates.first { $0.id == "google-places-correct-branch" })
+        let encoded = try JSONEncoder().encode(correct)
+        let restored = try JSONDecoder().decode(PlaceCandidate.self, from: encoded)
+        XCTAssertEqual(restored.areaComponents, ["Downtown Los Angeles"])
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy.removeValue(forKey: "areaComponents")
+        let legacyCandidate = try JSONDecoder().decode(
+            PlaceCandidate.self, from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertNil(legacyCandidate.areaComponents, "Previously persisted candidates remain decodable")
+    }
+
+    func testSocialMatcherScoresItsAcceptedNameAndAreaEquivalenceConsistently() throws {
+        let cafe = PlaceCandidate(
+            id: "cafe", name: "SUD café", category: "Cafe", address: nil, locality: "Vancouver",
+            region: "BC", country: "CA", latitude: 49.28, longitude: -123.11, confidence: 0.9
+        )
+        let other = PlaceCandidate(
+            id: "other", name: "SUD SOI", category: "Restaurant", address: nil, locality: "Vancouver",
+            region: "BC", country: "CA", latitude: 49.27, longitude: -123.12, confidence: 0.9
+        )
+        let social = PlaceImportCandidateMatcher.match(
+            [other, cafe], nameHint: "Sud", areaHint: "Vancouver", selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertEqual(social.selectedCandidateID, "cafe")
+        XCTAssertEqual(social.candidates.count, 2)
+        XCTAssertNil(PlaceImportCandidateMatcher.match(
+            [other], nameHint: "Sud", areaHint: "Vancouver", selectionPolicy: .socialGroundedArea
+        ).selectedCandidateID)
+        XCTAssertNil(PlaceImportCandidateMatcher.match(
+            [cafe], nameHint: "Sud", areaHint: "Vancouver", selectionPolicy: .conservative
+        ).selectedCandidateID, "Manual matching must not inherit the social descriptor policy")
+        let downtown = PlaceCandidate(
+            id: "downtown", name: "Fixture Coffee - Downtown", category: "Cafe", address: nil,
+            locality: "Los Angeles", region: "CA", country: "US",
+            areaComponents: ["Downtown Los Angeles"], latitude: 34.05, longitude: -118.25, confidence: 0.9
+        )
+        let full = PlaceImportCandidateMatcher.match(
+            [downtown], nameHint: "Fixture Coffee", areaHint: "Downtown Los Angeles", selectionPolicy: .socialGroundedArea
+        )
+        let abbreviated = PlaceImportCandidateMatcher.match(
+            [downtown], nameHint: "Fixture Coffee", areaHint: "Downtown LA", selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertEqual(full.bestScore, abbreviated.bestScore)
+        XCTAssertEqual(abbreviated.selectedCandidateID, "downtown")
+    }
+
     func testGeminiDecodedRoryVenuesRemainDistinctThroughEvidencePlanning() async throws {
         let functions = RecordingRPC()
         functions.responses["function:social-import-understand"] = Data(

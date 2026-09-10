@@ -1013,6 +1013,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             locality: candidate.locality,
             region: candidate.region,
             country: candidate.country,
+            areaComponents: candidate.areaComponents,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
             sourceProvider: candidate.sourceProvider,

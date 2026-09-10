@@ -41,6 +41,21 @@ npm run test:social-import-eval
 npm run eval:social-import -- --providers current,current-improved --resolve none
 ```
 
+### Actual iOS Google-candidate selection (macOS)
+
+`appSelectionForHints(hints)` from `app-selection.mjs` compiles the production
+Swift matcher and country filter directly and returns their decisions for the
+server's `hints` JSON. Run `npm run test:social-import-selection` on macOS with
+Xcode command-line tools installed. The returned source hashes identify the
+exact matcher used; the adapter retains optional provider neighborhood evidence.
+
+Report unique selected provider IDs separately from extracted hints, candidates
+found, and duplicate selections. `bestScore` is a heuristic ranking score, **not
+a calibrated probability or independently verified accuracy**. This helper does
+not execute the complete import store, MapKit fallback, persistence, or UI; its
+wire adapter is covered by the iOS repository-to-matcher contract tests. Replay
+is offline and does not require provider credentials.
+
 Compare current published token prices against usage from a completed run:
 
 ```bash

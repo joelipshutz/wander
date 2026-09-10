@@ -134,6 +134,9 @@ export type ResolvedPlace = {
   locality: string | null;
   region: string | null;
   country: string | null;
+  // Additional provider-attested neighborhood/district names. Optional so
+  // older clients and cached responses keep the existing wire contract.
+  area_components?: string[];
   latitude: number;
   longitude: number;
   primary_type: string | null;

@@ -17,7 +17,8 @@
     "eval:social-import": "node social-import-eval/run.mjs",
     "eval:social-import:rescore": "node social-import-eval/rescore.mjs",
     "eval:social-import:cost": "node social-import-eval/model-cost-comparison.mjs",
-    "test:social-import-eval": "node --test social-import-eval.test.mjs social-import-eval/model-cost-comparison.test.mjs"
+    "test:social-import-eval": "node --test social-import-eval.test.mjs social-import-eval/model-cost-comparison.test.mjs",
+    "test:social-import-selection": "node --test social-import-eval/app-selection.test.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"

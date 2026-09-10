@@ -2094,6 +2094,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
             let locality: String?
             let region: String?
             let country: String?
+            let areaComponents: [String]?
             let latitude: Double
             let longitude: Double
             let primaryType: String?
@@ -2107,6 +2108,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
                 case locality
                 case region
                 case country
+                case areaComponents = "area_components"
                 case latitude
                 case longitude
                 case primaryType = "primary_type"
@@ -2300,6 +2302,9 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
                 locality: cleaned(value.locality, maximumLength: 160),
                 region: cleaned(value.region, maximumLength: 160),
                 country: cleaned(value.country, maximumLength: 160),
+                areaComponents: value.areaComponents.map {
+                    Array($0.prefix(8)).compactMap { cleaned($0, maximumLength: 160) }
+                },
                 latitude: value.latitude,
                 longitude: value.longitude,
                 sourceProvider: "google_places",
