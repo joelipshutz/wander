@@ -557,6 +557,7 @@ final class MapFilterInteractionUITests: XCTestCase {
     func testLongPressShowsDroppedPinAsAStandardPlaceCard() {
         let app = XCUIApplication()
         app.launchArguments = [
+            "-WanderAuthenticatedUITest",
             "-WanderMapCapture",
             "-WanderUseDemoFixtures"
         ]

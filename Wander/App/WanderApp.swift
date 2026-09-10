@@ -7,6 +7,7 @@ import UIKit
 
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
+    static let resetAuthenticatedFixtureArgument = "-WanderResetAuthenticatedUITest"
     static let liveAuthArgument = "-WanderUseLiveAuth"
     static let onboardingStepArgument = "-WanderOnboardingUITestStep"
 
@@ -23,6 +24,11 @@ enum SimulatorTestSessionPolicy {
         isSimulator: Bool = isSimulatorBuild
     ) -> Bool {
         guard isSimulator else { return false }
+
+        if arguments.contains(resetAuthenticatedFixtureArgument) {
+            defaults.removeObject(forKey: persistenceKey)
+            return true
+        }
 
         if arguments.contains(liveAuthArgument) {
             defaults.removeObject(forKey: persistenceKey)

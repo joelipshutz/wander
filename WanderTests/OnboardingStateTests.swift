@@ -31,6 +31,28 @@ final class OnboardingStateTests: XCTestCase {
             ),
             "An icon relaunch has no custom arguments but must restore the local test session."
         )
+        XCTAssertTrue(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander", "-WanderResetAuthenticatedUITest"],
+                defaults: defaults,
+                isSimulator: true
+            ),
+            "The cleanup launch must clear persistence without constructing live auth."
+        )
+        XCTAssertFalse(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
+        XCTAssertTrue(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander", "-WanderAuthenticatedUITest"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
         XCTAssertFalse(
             SimulatorTestSessionPolicy.isActive(
                 arguments: ["Wander", "-WanderUseLiveAuth"],
