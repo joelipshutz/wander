@@ -22,10 +22,11 @@ This is the project-level design source of truth for Astir (formerly rec.me and 
 
 Joe approved Astir as the public product name and direction 55, the warm family
 statue over a full-width colored base, as the app-icon direction (REC-475).
-Signal versus Oxide is still pending; the production icon remains unchanged
-until that choice is confirmed. Candidate exports and provenance are preserved
-in `docs/brand/approved/astir-55/`; `docs/brand/recme-app-icon.md` remains the
-canonical production icon contract.
+Joe selected the Signal base on September 10, 2026. The approved matte icon
+uses the warm family statue on ink-black above a full-width Signal foundation.
+Exports and provenance are preserved in `docs/brand/approved/astir-55/`;
+`docs/brand/recme-app-icon.md` is the canonical production icon contract.
+The separately approved splash screen is handled in its own change.
 The visual override below began as an exploration; its existing typography,
 adaptive palette, and layout remain in place. This naming and icon approval
 does not change the information architecture, data model, analytics, or backend.

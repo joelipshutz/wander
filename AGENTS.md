@@ -369,13 +369,13 @@ Observability policy:
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- The approved icon is the warm matte neighborhood map in
-  `Wander/Resources/AppIcon.icon/Assets/recme-warm-map-original.png`: cream and
-  peach raised buildings, a sage park with one orange-red tree pin, a blue
-  ocean edge, an irregular palm row contained within the coastal green strip,
-  and centered black-serif `rec.me`. Keep the selected full-frame composition
-  matte and do not crop, reframe, move trees, or add Liquid Glass effects
-  without explicit approval.
+- The approved icon is direction 55: a warm family statue on ink-black above a
+  full-width detached Signal coral foundation, with `ONENESS` at the right.
+  The canonical source is
+  `Wander/Resources/AppIcon.icon/Assets/astir-statue-55-signal.png`.
+  Keep the selected full-frame composition and original pixels matte; do not
+  crop, reframe, recolor, or add Liquid Glass effects without explicit approval.
+  The separately approved splash screen is not part of this icon change.
 - Regenerate the fallback master with `scripts/generate-app-icon-master.swift`;
   it validates and copies the approved Icon Composer source byte-for-byte.
 - Regenerate all platform renditions with

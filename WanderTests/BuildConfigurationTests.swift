@@ -281,7 +281,7 @@ final class BuildConfigurationTests: XCTestCase {
             isDirectory: true
         )
         let sourceURL = iconDirectory.appendingPathComponent(
-            "Assets/recme-warm-map-original.png"
+            "Assets/astir-statue-55-signal.png"
         )
         let documentData = try Data(
             contentsOf: iconDirectory.appendingPathComponent("icon.json")
@@ -307,10 +307,21 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(group["blur-material"] as? Double, 0)
         XCTAssertEqual(
             layer["image-name"] as? String,
-            "recme-warm-map-original.png"
+            "astir-statue-55-signal.png"
         )
         XCTAssertEqual(sourceImage.width, 1024)
         XCTAssertEqual(sourceImage.height, 1024)
+        XCTAssertEqual(
+            try Data(contentsOf: sourceURL),
+            try Data(contentsOf: projectRoot.appendingPathComponent(
+                "docs/brand/approved/astir-55/Astir-App-Icon-55-signal-1024.png"
+            ))
+        )
+        XCTAssertEqual(group["specular"] as? Bool, false)
+        let shadow = try XCTUnwrap(group["shadow"] as? [String: Any])
+        XCTAssertEqual(shadow["opacity"] as? Double, 0)
+        let translucency = try XCTUnwrap(group["translucency"] as? [String: Any])
+        XCTAssertEqual(translucency["enabled"] as? Bool, false)
         XCTAssertEqual(
             try Data(contentsOf: sourceURL),
             try Data(contentsOf: projectRoot.appendingPathComponent(
@@ -332,10 +343,10 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
-        XCTAssertTrue(contract.contains("warm matte neighborhood map"))
+        XCTAssertTrue(contract.contains("warm family statue"))
         XCTAssertTrue(contract.contains("selected full-frame"))
-        XCTAssertTrue(contract.contains("rec.me"))
-        XCTAssertTrue(masterGeneratorSource.contains("recme-warm-map-original.png"))
+        XCTAssertTrue(contract.contains("Signal"))
+        XCTAssertTrue(masterGeneratorSource.contains("astir-statue-55-signal.png"))
         XCTAssertTrue(masterGeneratorSource.contains("1024 x 1024"))
         XCTAssertTrue(masterGeneratorSource.contains("must be opaque"))
         XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))

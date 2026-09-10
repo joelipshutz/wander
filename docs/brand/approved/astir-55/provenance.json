@@ -1,7 +1,7 @@
 {
   "direction": 55,
   "issue": "REC-475",
-  "selection": "pending user palette confirmation; neither candidate is installed yet",
+  "selection": "Signal locked by Joe on 2026-09-10",
   "source": "Astir round 08, warm direction 36 statue with a full-width detached base on ink-black",
   "conversion": "Lossless PNG re-encoding to remove the opaque alpha channel. Every RGB pixel is identical to the approved export; no crop, rescale, restyle, or corner mask.",
   "files": [
@@ -49,5 +49,7 @@
       ],
       "mode": "RGB"
     }
-  ]
+  ],
+  "canonicalSource": "Wander/Resources/AppIcon.icon/Assets/astir-statue-55-signal.png",
+  "canonicalMaster": "Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"
 }
