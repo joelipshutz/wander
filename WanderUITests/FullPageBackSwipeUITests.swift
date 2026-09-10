@@ -2,6 +2,11 @@ import XCTest
 
 @MainActor
 final class FullPageBackSwipeUITests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
     func testInCommonCancelsThenReturnsOnlyToMemberProfile() {
         let app = launch(["-WanderOpenProfile", "user_maya"])
         let entry = app.buttons.containing(NSPredicate(format: "label CONTAINS[c] %@", "in common")).firstMatch
@@ -46,10 +51,8 @@ final class FullPageBackSwipeUITests: XCTestCase {
         XCTAssertTrue(back.waitForNonExistence(timeout: 5))
     }
 
-    func testCommentsPhotoViewerAndSharePreviewReturnToComments() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingCommentsCapture", "-WanderFullPageBackSwipeUITest"]
-        app.launch()
+    func testCommentsPhotoViewerReturnsToComments() {
+        let app = launchComments()
         let photo = app.buttons["Open activity photos"]
         XCTAssertTrue(photo.waitForExistence(timeout: 15))
         photo.tap()
@@ -68,6 +71,12 @@ final class FullPageBackSwipeUITests: XCTestCase {
         photoBack.tap()
         XCTAssertTrue(photo.waitForExistence(timeout: 5))
 
+    }
+
+    func testSharePreviewReturnsToCommentsAndDoesNotDismissUnderSheet() {
+        let app = launchComments()
+        let photo = app.buttons["Open activity photos"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 15))
         app.buttons["Share activity"].firstMatch.tap()
         let shareBack = app.buttons["Close share preview"]
         XCTAssertTrue(shareBack.waitForExistence(timeout: 8))
@@ -85,6 +94,13 @@ final class FullPageBackSwipeUITests: XCTestCase {
         XCTAssertTrue(shareBack.waitForNonExistence(timeout: 5))
         XCTAssertTrue(photo.waitForExistence(timeout: 5))
         capture("Comments restored after share")
+    }
+
+    private func launchComments() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingCommentsCapture", "-WanderFullPageBackSwipeUITest"]
+        app.launch()
+        return app
     }
 
     private func launch(_ arguments: [String]) -> XCUIApplication {
