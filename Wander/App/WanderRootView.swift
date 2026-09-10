@@ -651,7 +651,10 @@ struct WanderRootView: View {
             Label {
                 Text(tab.title)
             } icon: {
-                Image(uiImage: PlaceListSymbol.paperTabImage)
+                Image(uiImage: PlaceListSymbol.paperTabImage(
+                    isSelected: selectedTab == .lists,
+                    isDark: systemColorScheme == .dark
+                ))
             }
         } else {
             Label(tab.title, systemImage: tab.systemImage)
@@ -1277,12 +1280,12 @@ struct WanderRootView: View {
                 routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
             } else {
                 interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
-                    ? "Your check-in finished while rec.me was in the background."
-                    : "This place was added to Wanna while rec.me was in the background."
+                    ? "Your check-in finished while Astir was in the background."
+                    : "This place was added to Wanna while Astir was in the background."
             }
         case .retry:
             placeSaveDraftStore.prepareRetry(
-                message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
+                message: "Save was interrupted before Astir could confirm it. Review your details and try again."
             )
             presentRestoredAddSheet()
         case .editing:

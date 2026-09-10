@@ -181,7 +181,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(state["version"] as? String, "1.5.0")
     }
 
-    func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
+    func testUserFacingBrandUsesAstirWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(
             PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
@@ -189,17 +189,13 @@ final class BuildConfigurationTests: XCTestCase {
         let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
         let generatedProject = try String(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
 
-        XCTAssertEqual(AppBrand.displayName, "rec.me")
-        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "rec.me")
+        XCTAssertEqual(AppBrand.displayName, "Astir")
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Astir")
         XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
 
-        for key in [
-            "NSCameraUsageDescription",
-            "NSContactsUsageDescription",
-            "NSLocationWhenInUseUsageDescription"
-        ] {
+        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription"] {
             let usageDescription = try XCTUnwrap(plist[key] as? String)
-            XCTAssertTrue(usageDescription.contains("rec.me"), "\(key) must use the public app name")
+            XCTAssertTrue(usageDescription.contains("Astir"), "\(key) must use the public app name")
             XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
         }
 
@@ -212,7 +208,19 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(contactsUsage.contains("address book is not uploaded"))
         XCTAssertTrue(contactsUsage.contains("only a number you select"))
 
-        XCTAssertTrue(project.contains("CFBundleDisplayName: rec.me"))
+        for (relativePath, expectedName) in [
+            ("WanderShareExtension/Info.plist", "Save to Astir"),
+            ("WanderWidgets/Info.plist", "Astir"),
+            ("WanderNearbyWidgets/Info.plist", "Astir")
+        ] {
+            let data = try Data(contentsOf: projectRoot.appendingPathComponent(relativePath))
+            let extensionPlist = try XCTUnwrap(
+                PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            )
+            XCTAssertEqual(extensionPlist["CFBundleDisplayName"] as? String, expectedName)
+        }
+
+        XCTAssertTrue(project.contains("CFBundleDisplayName: Astir"))
         XCTAssertTrue(project.contains("PRODUCT_NAME: Wander"))
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander"))
         XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander;"))
@@ -294,7 +302,7 @@ final class BuildConfigurationTests: XCTestCase {
             isDirectory: true
         )
         let sourceURL = iconDirectory.appendingPathComponent(
-            "Assets/recme-warm-map-original.png"
+            "Assets/astir-statue-55-signal.png"
         )
         let documentData = try Data(
             contentsOf: iconDirectory.appendingPathComponent("icon.json")
@@ -320,10 +328,21 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(group["blur-material"] as? Double, 0)
         XCTAssertEqual(
             layer["image-name"] as? String,
-            "recme-warm-map-original.png"
+            "astir-statue-55-signal.png"
         )
         XCTAssertEqual(sourceImage.width, 1024)
         XCTAssertEqual(sourceImage.height, 1024)
+        XCTAssertEqual(
+            try Data(contentsOf: sourceURL),
+            try Data(contentsOf: projectRoot.appendingPathComponent(
+                "docs/brand/approved/astir-55/Astir-App-Icon-55-signal-1024.png"
+            ))
+        )
+        XCTAssertEqual(group["specular"] as? Bool, false)
+        let shadow = try XCTUnwrap(group["shadow"] as? [String: Any])
+        XCTAssertEqual(shadow["opacity"] as? Double, 0)
+        let translucency = try XCTUnwrap(group["translucency"] as? [String: Any])
+        XCTAssertEqual(translucency["enabled"] as? Bool, false)
         XCTAssertEqual(
             try Data(contentsOf: sourceURL),
             try Data(contentsOf: projectRoot.appendingPathComponent(
@@ -345,10 +364,10 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
-        XCTAssertTrue(contract.contains("warm matte neighborhood map"))
+        XCTAssertTrue(contract.contains("warm family statue"))
         XCTAssertTrue(contract.contains("selected full-frame"))
-        XCTAssertTrue(contract.contains("rec.me"))
-        XCTAssertTrue(masterGeneratorSource.contains("recme-warm-map-original.png"))
+        XCTAssertTrue(contract.contains("Signal"))
+        XCTAssertTrue(masterGeneratorSource.contains("astir-statue-55-signal.png"))
         XCTAssertTrue(masterGeneratorSource.contains("1024 x 1024"))
         XCTAssertTrue(masterGeneratorSource.contains("must be opaque"))
         XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))

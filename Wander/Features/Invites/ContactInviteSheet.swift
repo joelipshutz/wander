@@ -638,7 +638,7 @@ struct ContactInviteSheet: View {
                         .lineLimit(1)
 
                     if contact.relationship.isOnRecme {
-                        Text("on rec.me")
+                        Text("on Astir")
                             .font(AstirTypography.metadata)
                             .foregroundStyle(brandMode.accentText)
                             .scaleEffect(0.82)
@@ -767,7 +767,7 @@ struct ContactInviteSheet: View {
                 Text("contacts are off")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text("Turn on Contacts in Settings to browse your address book, or share a rec.me link instead.")
+                Text("Turn on Contacts in Settings to browse your address book, or share an Astir link instead.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
@@ -1213,7 +1213,7 @@ struct ContactInviteSheet: View {
 
     private func contactAccessibilityLabel(for contact: InviteContact) -> String {
         let detail = rowDetail(for: contact)
-        let relationship = contact.relationship.isOnRecme ? "Already on rec.me" : "Phone contact"
+        let relationship = contact.relationship.isOnRecme ? "Already on Astir" : "Phone contact"
         return [contact.displayName, detail, relationship].compactMap { $0 }.joined(separator: ", ")
     }
 

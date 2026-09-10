@@ -139,7 +139,7 @@ enum SharedPlaceImportInboxError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .appGroupUnavailable:
-            "rec.me could not access its shared inbox. Check the app and extension App Group signing."
+            "Astir could not access its shared inbox. Check the app and extension App Group signing."
         case .noSupportedContent:
             "Share a public link, place text, or a supported place file."
         case .tooManyItems:
@@ -153,9 +153,9 @@ enum SharedPlaceImportInboxError: Error, Equatable, LocalizedError {
         case .unsupportedFile:
             "Choose a CSV, JSON, TXT, Markdown, or RTF file."
         case .invalidEnvelope:
-            "The shared import was damaged before rec.me could read it."
+            "The shared import was damaged before Astir could read it."
         case .missingAttachment:
-            "A shared file is no longer available. Share it to rec.me again."
+            "A shared file is no longer available. Share it to Astir again."
         }
     }
 }

@@ -8,9 +8,9 @@ final class InviteFrameworkTests: XCTestCase {
         let list = InviteSurface.listCollaborator(listName: "LA date nights")
 
         XCTAssertEqual(visit.sheetSubtitle, "Who joined you at Gjelina?")
-        XCTAssertEqual(feed.entryTitle, "invite people to rec.me")
+        XCTAssertEqual(feed.entryTitle, "invite people to Astir")
         XCTAssertEqual(list.sheetSubtitle, "Invite people to help build LA date nights.")
-        XCTAssertEqual(visit.entrySubtitle, "Invite them to rec.me, then connect after they join.")
+        XCTAssertEqual(visit.entrySubtitle, "Invite them to Astir, then connect after they join.")
         XCTAssertTrue(list.inviteMessage.contains("add you as a collaborator on LA date nights"))
         XCTAssertEqual(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties, ["surface": "shared_visit"])
         XCTAssertFalse(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties.values.contains("visit-123"))
@@ -284,7 +284,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(ContactInviteWalkthroughContent.selectionGoal, 5)
         XCTAssertEqual(
             ContactInviteWalkthroughContent.inviteProse,
-            "Hey sharing an invite to rec.me a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link. Heads up this invite expires in 24 hours."
+            "Hey sharing an invite to Astir a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link. Heads up this invite expires in 24 hours."
         )
 
         let content = WanderShareContent.appInvite(

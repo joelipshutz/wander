@@ -57,7 +57,7 @@ enum DiscoverPeopleRecommendationReason: Equatable {
                 ? "1 person you follow follows \(profile.displayName)"
                 : "\(count) people you follow follow \(profile.displayName)"
         case .suggested:
-            return "Suggested by rec.me"
+            return "Suggested by Astir"
         }
     }
 }

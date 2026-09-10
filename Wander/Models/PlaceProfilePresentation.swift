@@ -43,7 +43,7 @@ struct PlaceActualRating: Equatable {
         case .friends:
             "Friends rating"
         case .community:
-            "rec.me rating"
+            "Astir rating"
         }
     }
 

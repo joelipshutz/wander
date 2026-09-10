@@ -351,7 +351,7 @@ private struct FutureDateSaveMockup: View {
                     .stroke(WanderTheme.borderHairline.color)
             )
 
-            Text("If notifications are on, rec.me will remind you three days before.")
+            Text("If notifications are on, Astir will remind you three days before.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .fixedSize(horizontal: false, vertical: true)

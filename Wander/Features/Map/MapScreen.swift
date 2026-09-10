@@ -18,7 +18,7 @@ enum SharedVisitOutboxNotice {
         ownerUserID: String
     ) -> String? {
         pendingInvites.contains(where: { $0.ownerUserID == ownerUserID })
-            ? "Friend updates are still sending. rec.me will keep retrying."
+            ? "Friend updates are still sending. Astir will keep retrying."
             : nil
     }
 }
@@ -2146,61 +2146,63 @@ struct MapScreen: View {
                             }
                         }
 
-                        HStack(spacing: WanderTheme.spacing3) {
-                            SearchBar(
-                                    query: $mapQuery,
-                                    isFocused: $isMapSearchFocused,
-                                    focusRequestID: mapSearchFocusRequestID,
-                                    onFocusRequestHandled: { requestID in
-                                        guard mapSearchFocusRequestID == requestID else { return }
-                                        mapSearchFocusRequestID = nil
-                                    },
-                                    onQueryEdited: clearMapSearchPreviewForEditing,
-                                    onClear: clearMapSelectionAndSearch,
-                                    onSubmit: submitMapSearch
-                            )
-                            .walkthroughTarget(
-                                    walkthroughs.currentStep?.target == .mapSendoff
-                                        ? .mapSendoff
-                                        : .mapSearch
+                        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
+                            HStack(spacing: WanderTheme.spacing3) {
+                                SearchBar(
+                                        query: $mapQuery,
+                                        isFocused: $isMapSearchFocused,
+                                        focusRequestID: mapSearchFocusRequestID,
+                                        onFocusRequestHandled: { requestID in
+                                            guard mapSearchFocusRequestID == requestID else { return }
+                                            mapSearchFocusRequestID = nil
+                                        },
+                                        onQueryEdited: clearMapSearchPreviewForEditing,
+                                        onClear: clearMapSelectionAndSearch,
+                                        onSubmit: submitMapSearch
                                 )
-
-                            if isMapSearchFocused {
-                                MapSearchCancelButton(action: cancelMapSearch)
-                            } else {
-                                MapGlassAddButton {
-                                        dismissMoreFilters()
-                                        onAdd()
-                                }
                                 .walkthroughTarget(
-                                        walkthroughs.currentStep?.target == .mapAddAgain
-                                            ? .mapAddAgain
-                                            : .mapAdd
+                                        walkthroughs.currentStep?.target == .mapSendoff
+                                            ? .mapSendoff
+                                            : .mapSearch
                                     )
-                                .walkthroughSlowPulse(
-                                        isActive: walkthroughs.currentStep?.target == .mapAdd
-                                            || walkthroughs.currentStep?.target == .mapAddAgain
-                                )
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .bottomTrailing) {
-                                if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
-                                    RecenterButton(
-                                        isLoading: isRecenteringOnUser,
-                                        showsAttentionBadge: nearbyNeedsLocationPermission
-                                    ) {
-                                        dismissMoreFilters()
-                                        handleNearbyTap()
+
+                                if isMapSearchFocused {
+                                    MapSearchCancelButton(action: cancelMapSearch)
+                                } else {
+                                    MapGlassAddButton {
+                                            dismissMoreFilters()
+                                            onAdd()
                                     }
-                                    .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
-                                    .accessibilityHidden(
-                                        walkthroughs.currentStep?.target == .mapTabs || nearbyOpacity <= 0.5
+                                    .walkthroughTarget(
+                                            walkthroughs.currentStep?.target == .mapAddAgain
+                                                ? .mapAddAgain
+                                                : .mapAdd
+                                        )
+                                    .walkthroughSlowPulse(
+                                            isActive: walkthroughs.currentStep?.target == .mapAdd
+                                                || walkthroughs.currentStep?.target == .mapAddAgain
                                     )
-                                    .padding(.bottom, nearbyClusterBottomPadding)
-                                    .opacity(nearbyOpacity)
-                                    .allowsHitTesting(nearbyOpacity > 0.5)
                                 }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .overlay(alignment: .bottomTrailing) {
+                                    if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
+                                        RecenterButton(
+                                            isLoading: isRecenteringOnUser,
+                                            showsAttentionBadge: nearbyNeedsLocationPermission
+                                        ) {
+                                            dismissMoreFilters()
+                                            handleNearbyTap()
+                                        }
+                                        .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+                                        .accessibilityHidden(
+                                            walkthroughs.currentStep?.target == .mapTabs || nearbyOpacity <= 0.5
+                                        )
+                                        .padding(.bottom, nearbyClusterBottomPadding)
+                                        .opacity(nearbyOpacity)
+                                        .allowsHitTesting(nearbyOpacity > 0.5)
+                                    }
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -2243,7 +2245,10 @@ struct MapScreen: View {
                     .accessibilityHidden(compactCardPhase == .hidden)
 
                 if !hasRevealedInitialMap {
-                    OnboardingLaunchView(message: "Loading your map…")
+                    OnboardingLaunchView(
+                        message: "Loading your map…",
+                        isAnimationEnabled: isMapTabActive
+                    )
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
@@ -5640,7 +5645,7 @@ struct MapScreen: View {
                 }
             }
             if photoCopyFailed {
-                mapSearchMessage = "Checked in. One shared photo will retry when you reopen rec.me."
+                mapSearchMessage = "Checked in. One shared photo will retry when you reopen Astir."
             }
             await store.refreshSharedVisitInbox(backend: backend)
             await store.refreshRemoteVisiblePlaces(backend: backend)
@@ -9020,6 +9025,7 @@ private struct MapGlassAddButton: View {
             systemImage: "plus",
             accessibilityLabel: "Add a place",
             accessibilityIdentifier: "map.headerAdd",
+            isAddAction: true,
             action: action
         )
     }
@@ -9498,7 +9504,7 @@ private struct MapLocationEducationPrompt: View {
                 .accessibilityHidden(true)
 
                 VStack(spacing: WanderTheme.spacing2) {
-                    Text("rec.me works best with your location")
+                    Text("Astir works best with your location")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .multilineTextAlignment(.center)
@@ -13327,7 +13333,7 @@ struct MapPlaceSaveEditor: View {
                     .stroke(astirBrandMode.border)
             )
 
-            Text("If notifications are on, rec.me will remind you three days before.")
+            Text("If notifications are on, Astir will remind you three days before.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

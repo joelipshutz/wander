@@ -169,7 +169,7 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_004),
             .failed(
-                message: "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+                message: "Sign in to the TikTok account enabled for this Astir sandbox, then try again."
             )
         )
         XCTAssertEqual(

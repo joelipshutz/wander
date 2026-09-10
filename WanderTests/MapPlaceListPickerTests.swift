@@ -278,9 +278,41 @@ final class MapPlaceListPickerTests: XCTestCase {
 
     func testPaperTabImageFitsNativeIconSlotAndAcceptsSelectionTint() {
         let image = PlaceListSymbol.paperTabImage
-        XCTAssertEqual(image.size, CGSize(width: 24, height: 28))
+        XCTAssertEqual(image.size, CGSize(width: 22, height: 25))
         XCTAssertEqual(image.renderingMode, .alwaysTemplate)
         XCTAssertNotNil(image.cgImage)
+    }
+
+    func testSelectedPaperTabKeepsSignalInBothAppearances() throws {
+        for isDark in [false, true] {
+            let selected = PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark)
+            let unselected = PlaceListSymbol.paperTabImage(isSelected: false, isDark: isDark)
+            XCTAssertEqual(selected.size, CGSize(width: 22, height: 25))
+            XCTAssertEqual(unselected.size, selected.size)
+            XCTAssertEqual(selected.renderingMode, .alwaysOriginal)
+            XCTAssertEqual(unselected.renderingMode, .alwaysOriginal)
+            XCTAssertEqual(try paperFillRGBA(selected), [240, 90, 60, 255])
+            XCTAssertEqual(try paperFillRGBA(unselected), isDark ? [242, 233, 219, 255] : [20, 23, 20, 255])
+            XCTAssertTrue(selected === PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark))
+        }
+    }
+
+    private func paperFillRGBA(_ image: UIImage) throws -> [UInt8] {
+        let source = try XCTUnwrap(image.cgImage)
+        // A center pixel between rows measures opaque sheet fill without edge antialiasing.
+        let crop = try XCTUnwrap(source.cropping(to: CGRect(
+            x: 10 * image.scale, y: 9 * image.scale, width: 1, height: 1
+        )))
+        var rgba = [UInt8](repeating: 0, count: 4)
+        try rgba.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(
+                data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+            ))
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return rgba
     }
 
     private func makeStore(

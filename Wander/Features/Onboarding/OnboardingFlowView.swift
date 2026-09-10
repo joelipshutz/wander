@@ -59,7 +59,7 @@ struct OnboardingFlowView: View {
                     systemImage: "person.2.fill",
                     accent: WanderTheme.pinSocial.color,
                     title: "Find friends already here",
-                    message: "Allow contacts so rec.me can help connect you with people you know. We won’t message anyone.",
+                    message: "Allow contacts so Astir can help connect you with people you know. We won’t message anyone.",
                     bullets: ["See friends’ place maps", "Share trusted recommendations"],
                     primaryTitle: "Continue",
                     analytics: analytics,
@@ -612,7 +612,7 @@ private struct OnboardingFriendSuggestionsView: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 OnboardingHeadline(
                     eyebrow: "YOUR TRUSTED MAP",
-                    title: "rec.me is better with people",
+                    title: "Astir is better with people",
                     message: "Start with a few people whose taste you’d like to see. You’re always in control of who you follow."
                 )
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -634,7 +634,7 @@ private struct OnboardingFriendSuggestionsView: View {
                         if model.recommendations.isEmpty {
                             OnboardingEmptySuggestions(
                                 title: "Your people will show up here",
-                                message: "Skip for now — we’ll keep finding trusted people as rec.me grows."
+                                message: "Skip for now — we’ll keep finding trusted people as Astir grows."
                             )
                         } else {
                             ScrollView {

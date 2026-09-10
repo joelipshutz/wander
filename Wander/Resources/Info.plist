@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>rec.me</string>
+	<string>Astir</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -53,15 +53,15 @@
 		<string>snssdk1233</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>rec.me reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.</string>
+	<string>Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>rec.me uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.</string>
+	<string>Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>rec.me reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.</string>
+	<string>Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
+	<string>Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
+	<string>Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
 	<key>TikTokClientKey</key>
 	<string>$(WANDER_TIKTOK_CLIENT_KEY)</string>
 	<key>UILaunchScreen</key>
