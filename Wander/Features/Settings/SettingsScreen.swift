@@ -85,7 +85,7 @@ struct SettingsScreen: View {
                         } else {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                         }
-                        Text(auth.isSigningOut ? "signing out" : "sign out")
+                        Text(auth.isSigningOut ? "Signing out" : "Sign out")
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.stateError.color)
@@ -128,7 +128,7 @@ struct SettingsScreen: View {
                 } label: {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "person.crop.circle.badge.plus")
-                        Text("sign in")
+                        Text("Sign in")
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
@@ -273,7 +273,7 @@ struct SettingsScreen: View {
                                 .foregroundStyle(brandMode.secondaryText)
                         }
                         Spacer()
-                        Button("unblock") {
+                        Button("Unblock") {
                             auth.requireSignIn(for: .manageBlocks) {
                                 Task {
                                     await store.unblock(userID: profile.id, backend: backend)
@@ -391,7 +391,7 @@ private struct TrustAndPrivacySheet: View {
             .accessibilityIdentifier(SettingsTrustSurface.sheetAccessibilityID)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("done") {
+                    Button("Done") {
                         dismiss()
                     }
                     .font(AstirTypography.control)

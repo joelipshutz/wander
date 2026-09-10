@@ -136,7 +136,7 @@ struct ProfileSocialGraphScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("done") { dismiss() }
+                    Button("Done") { dismiss() }
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.accentText)
                 }

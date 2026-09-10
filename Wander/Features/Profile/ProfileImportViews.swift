@@ -3506,7 +3506,7 @@ private struct PlaceImportStatusSelector: View {
     var body: some View {
         Button(action: action) {
             Label(
-                status == .been ? CheckInCopy.noun : "Wanna",
+                status == .been ? CheckInCopy.title : "Wanna",
                 systemImage: status == .been ? "checkmark.circle.fill" : "bookmark.fill"
             )
                 .font(AstirTypography.label)
@@ -3520,7 +3520,7 @@ private struct PlaceImportStatusSelector: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(status == .been ? CheckInCopy.noun : "Wanna")
+        .accessibilityLabel(status == .been ? CheckInCopy.title : "Wanna")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

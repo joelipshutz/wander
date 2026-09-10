@@ -43,14 +43,14 @@ struct PlaceActivityMockupRoot: View {
                 ClassicPlaceDetailMockup(selectedSegment: "MY CHECK-INS", entries: ClassicActivityData.mine, mode: .owner)
             case .addVisit:
                 ClassicAddVisitMockup(
-                    title: "check in again",
+                    title: "Check in again",
                     placeSubtitle: "Existing save - new check-in",
                     showsMenu: false,
                     showsInvitedFriend: false
                 )
             case .visitFriendsEditor:
                 ClassicAddVisitMockup(
-                    title: "save this place",
+                    title: "Save this place",
                     placeSubtitle: "New place - check-in",
                     showsMenu: false,
                     showsInvitedFriend: true
@@ -59,7 +59,7 @@ struct PlaceActivityMockupRoot: View {
                 ClassicPlaceDetailMockup(selectedSegment: "ALL", entries: [ClassicActivityData.withFriend], mode: .owner)
             case .photoMenu:
                 ClassicAddVisitMockup(
-                    title: "check in again",
+                    title: "Check in again",
                     placeSubtitle: "Existing save - new check-in",
                     showsMenu: true,
                     showsInvitedFriend: false
@@ -389,7 +389,7 @@ private struct ClassicAddVisitMockup: View {
                     ClassicSegmented(options: ["FRIENDS", "MUTUALS", "ONLY ME"], selected: "FRIENDS")
                 }
 
-                ClassicPrimaryButton(title: "save check-in", systemImage: "checkmark")
+                ClassicPrimaryButton(title: "Save check-in", systemImage: "checkmark")
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, 14)
@@ -783,7 +783,7 @@ private struct ClassicCompactCard: View {
                         Text("RVR")
                             .font(.system(size: 22, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        ClassicStatusPill(title: "check-in", selected: true)
+                        ClassicStatusPill(title: "Check-in", selected: true)
                     }
                     Text("Your rating 3.5/5 - 3 check-ins")
                         .font(.system(size: 13, weight: .semibold))

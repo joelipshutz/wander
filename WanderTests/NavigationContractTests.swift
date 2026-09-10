@@ -2549,10 +2549,10 @@ final class NavigationContractTests: XCTestCase {
             before: "} message:"
         )
 
-        XCTAssertTrue(removeSection.contains("title: isRemoving ? \"removing...\" : \"delete\""))
+        XCTAssertTrue(removeSection.contains("title: isRemoving ? \"Removing...\" : \"Delete\""))
         XCTAssertTrue(
             removeSection.contains(
-                "accessibilityLabel: isRemoving ? \"removing...\" : context.removeTitle"
+                "accessibilityLabel: isRemoving ? \"Removing...\" : context.removeTitle"
             )
         )
         XCTAssertTrue(removeSection.contains("systemImage: \"trash\""))
@@ -2597,7 +2597,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(questionOptions.contains("minHeight: 52"))
         XCTAssertTrue(questionOptions.contains("\"checkmark.circle.fill\""))
         XCTAssertTrue(questionOptions.contains("\"plus.circle\" : \"circle\""))
-        XCTAssertTrue(questionOptions.contains("Text(\"add your own\")"))
+        XCTAssertTrue(questionOptions.contains("Text(\"Add your own\")"))
         XCTAssertTrue(questionOptions.contains("style: StrokeStyle(lineWidth: 1, dash: [5, 4])"))
         XCTAssertFalse(questionOptions.contains("MapSaveWrappingChipLayout"))
         XCTAssertFalse(questionOptions.contains("WanderChip"))
@@ -2616,7 +2616,7 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(plannedDateSection.contains("Text(\"add a date\")"))
+        XCTAssertTrue(plannedDateSection.contains("Text(\"Add a date\")"))
         XCTAssertTrue(plannedDateSection.contains("MultiDatePicker("))
         XCTAssertTrue(plannedDateSection.contains("isShowingPlannedDatePicker = false"))
         XCTAssertTrue(
@@ -3020,8 +3020,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(calendarControls.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
         XCTAssertTrue(calendarControls.contains("title: \"type\""))
         XCTAssertTrue(calendarControls.contains("title: \"tags\""))
-        XCTAssertTrue(calendarControls.contains("allTitle: \"all types\""))
-        XCTAssertTrue(calendarControls.contains("allTitle: \"all tags\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"All types\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"All tags\""))
         XCTAssertTrue(calendarControls.contains("Menu {"))
         XCTAssertTrue(calendarControls.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(calendarControls.contains("TextField("))
@@ -4881,10 +4881,10 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .cuisine"))
-        XCTAssertTrue(placeTypeSection.contains("title: \"food type\""))
+        XCTAssertTrue(placeTypeSection.contains("title: \"Food type\""))
         XCTAssertTrue(placeTypeSection.contains("} else {"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .subcategory"))
-        XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"subcategory\""))
+        XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"Subcategory\""))
         XCTAssertTrue(
             mapScreen.contains(
                 "mode = category == WanderPlaceCategory.restaurantsFood ? .cuisine : .subcategory"

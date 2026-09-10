@@ -292,7 +292,7 @@ struct MapPlaceListPickerSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("new list")
+                    Text("New list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(onStage == nil ? "Create it and add this place" : "Create it and select it for this import")

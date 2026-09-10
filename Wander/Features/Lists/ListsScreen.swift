@@ -588,7 +588,7 @@ struct ListsScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Text("new list")
+                    Text("New list")
                         .font(AstirTypography.control)
                         .padding(.horizontal, WanderTheme.spacing4)
                         .frame(minHeight: 48)
@@ -2238,10 +2238,10 @@ struct ListSaveToastPresentation: Equatable {
             return nil
         case .createdWanna:
             message = "We also saved this to your Wanna Go"
-            actionTitle = "edit"
+            actionTitle = "Edit"
         case .existingWanna:
             message = "This is already saved to your Wanna Go"
-            actionTitle = "edit"
+            actionTitle = "Edit"
         }
     }
 }
@@ -2828,7 +2828,7 @@ private struct PlaceListInviteSheet: View {
                             ProgressView()
                                 .tint(brandMode.accentForeground)
                         }
-                        Text(isAccepting ? "joining..." : "accept invitation")
+                        Text(isAccepting ? "Joining..." : "Accept invitation")
                             .font(AstirTypography.control)
                     }
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -2850,7 +2850,7 @@ private struct PlaceListInviteSheet: View {
             .tint(brandMode.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("not now") { dismiss() }
+                    Button("Not now") { dismiss() }
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)
                 }
@@ -2979,7 +2979,7 @@ private struct CollaboratorInviteSheet: View {
                         .foregroundStyle(brandMode.accentText)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(isCreatingInviteLink ? "creating link..." : "share collaborator invite")
+                        Text(isCreatingInviteLink ? "Creating link..." : "Share collaborator invite")
                             .font(AstirTypography.cardTitle)
                             .foregroundStyle(brandMode.primaryText)
                         Text("Single-use · expires in 7 days")

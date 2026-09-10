@@ -640,7 +640,7 @@ struct AddScreen: View {
                 Button {
                     clearInlineCandidateResults()
                 } label: {
-                    Label("back to add options", systemImage: "chevron.left")
+                    Label("Back to add options", systemImage: "chevron.left")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)
                 }
@@ -1036,7 +1036,7 @@ struct AddScreen: View {
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
-            AstirAddPrimaryButton(title: "try another search", systemImage: "magnifyingglass") {
+            AstirAddPrimaryButton(title: "Try another search", systemImage: "magnifyingglass") {
                 step = .source
                 expandSheet()
                 isQuickAddFocused = true

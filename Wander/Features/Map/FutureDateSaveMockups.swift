@@ -212,7 +212,7 @@ private struct FutureDateSaveMockup: View {
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text("more options")
+                    Text("More options")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
 
@@ -273,7 +273,7 @@ private struct FutureDateSaveMockup: View {
                         .frame(width: 42, height: 42)
 
                         if selectedDate == nil {
-                            Text("add a date")
+                            Text("Add a date")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(WanderTheme.textInk.color)
                         } else {
@@ -327,7 +327,7 @@ private struct FutureDateSaveMockup: View {
                         Spacer()
 
                         if selectedDate != nil {
-                            Button("clear") {
+                            Button("Clear") {
                                 withAnimation(.easeInOut(duration: 0.18)) {
                                     selectedDate = nil
                                     isShowingCalendar = false
@@ -404,7 +404,7 @@ private struct FutureDateSaveMockup: View {
     }
 
     private var saveFooter: some View {
-        WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {}
+        WanderPrimaryButton(title: "Save to my map", systemImage: "checkmark") {}
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, WanderTheme.spacing2)
             .background(WanderTheme.canvasWarm.color)
