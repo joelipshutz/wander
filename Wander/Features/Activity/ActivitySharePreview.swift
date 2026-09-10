@@ -118,7 +118,7 @@ enum ActivityShareTikTokOutcomePolicy {
         case 20_003:
             "TikTok did not grant this account permission to share."
         case 20_004, 22_001:
-            "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+            "Sign in to the TikTok account enabled for this Astir sandbox, then try again."
         case 20_005:
             "TikTok needs Photos access to import this share ticket."
         case 20_006:
@@ -297,14 +297,14 @@ struct ActivitySharePreviewScreen: View {
             .presentationDragIndicator(.hidden)
             .presentationBackground(brandMode.background)
         }
-        .alert("Allow rec.me to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
+        .alert("Allow Astir to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Settings") {
                 guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(settingsURL)
             }
         } message: {
-            Text("Please go to Settings > rec.me and turn on Photos access.")
+            Text("Please go to Settings > Astir and turn on Photos access.")
         }
         .alert("Couldn't make the share image", isPresented: $isShowingExportError) {
             Button("OK", role: .cancel) {}
@@ -1086,8 +1086,8 @@ private struct ActivityShareDestinationButton: View {
 
     private var accessibilityHint: String {
         switch destination.route {
-        case .messages: "Opens Messages with the ticket image and rec.me link."
-        case .copyLink: "Copies the rec.me link."
+        case .messages: "Opens Messages with the ticket image and Astir link."
+        case .copyLink: "Copies the Astir link."
         case .instagramStory: "Opens the Instagram Story composer with the ticket image."
         case .instagramPost:
             "Opens the Instagram post composer with the ticket image. Instagram needs Full Photo Access to select the exact ticket."
@@ -1383,13 +1383,13 @@ enum ActivityShareProviderLauncher {
             "com.snapchat.creativekit.clientID": clientID,
             "com.snapchat.creativekit.backgroundImage": pngData,
             "com.snapchat.creativekit.attachmentURL": contentURL.absoluteString,
-            "com.snapchat.creativekit.appName": "rec.me",
+            "com.snapchat.creativekit.appName": "Astir",
         ]])
 
         components.queryItems = [
             URLQueryItem(name: "checkcount", value: String(UIPasteboard.general.changeCount)),
             URLQueryItem(name: "clientId", value: clientID),
-            URLQueryItem(name: "appDisplayName", value: "rec.me"),
+            URLQueryItem(name: "appDisplayName", value: "Astir"),
         ]
         guard let shareURL = components.url else { return false }
         return await open(shareURL)

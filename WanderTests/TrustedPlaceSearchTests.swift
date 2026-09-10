@@ -937,7 +937,7 @@ final class TrustedPlaceSearchTests: XCTestCase {
 
         XCTAssertEqual(ordered.count, 1)
         guard case .recme = ordered[0] else {
-            return XCTFail("The rec.me row should own a nearby same-name duplicate.")
+            return XCTFail("The Astir row should own a nearby same-name duplicate.")
         }
     }
 

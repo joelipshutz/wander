@@ -265,7 +265,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             ratingStep.message,
-            "Your rating is the average of your check-ins. rec.me rating averages your network's ratings. And fit score predicts how well this place matches your taste"
+            "Your rating is the average of your check-ins. Astir rating averages your network's ratings. And fit score predicts how well this place matches your taste"
         )
 
         let historyStep = try XCTUnwrap(

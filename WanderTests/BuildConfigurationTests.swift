@@ -181,7 +181,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(state["version"] as? String, "1.5.0")
     }
 
-    func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
+    func testUserFacingBrandUsesAstirWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(
             PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
@@ -189,17 +189,29 @@ final class BuildConfigurationTests: XCTestCase {
         let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
         let generatedProject = try String(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
 
-        XCTAssertEqual(AppBrand.displayName, "rec.me")
-        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "rec.me")
+        XCTAssertEqual(AppBrand.displayName, "Astir")
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Astir")
         XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
 
-        for key in ["NSCameraUsageDescription", "NSLocationWhenInUseUsageDescription"] {
+        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription"] {
             let usageDescription = try XCTUnwrap(plist[key] as? String)
-            XCTAssertTrue(usageDescription.contains("rec.me"), "\(key) must use the public app name")
+            XCTAssertTrue(usageDescription.contains("Astir"), "\(key) must use the public app name")
             XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
         }
 
-        XCTAssertTrue(project.contains("CFBundleDisplayName: rec.me"))
+        for (relativePath, expectedName) in [
+            ("WanderShareExtension/Info.plist", "Save to Astir"),
+            ("WanderWidgets/Info.plist", "Astir"),
+            ("WanderNearbyWidgets/Info.plist", "Astir")
+        ] {
+            let data = try Data(contentsOf: projectRoot.appendingPathComponent(relativePath))
+            let extensionPlist = try XCTUnwrap(
+                PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            )
+            XCTAssertEqual(extensionPlist["CFBundleDisplayName"] as? String, expectedName)
+        }
+
+        XCTAssertTrue(project.contains("CFBundleDisplayName: Astir"))
         XCTAssertTrue(project.contains("PRODUCT_NAME: Wander"))
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander"))
         XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander;"))

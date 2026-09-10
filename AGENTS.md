@@ -4,9 +4,9 @@ Repo guidance for Codex, Claude Code, OpenClaw, and any developer joining Wander
 
 ## Project Overview
 
-rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+Astir, formerly rec.me and Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
-North Star: when someone needs a place, rec.me shows where trusted people have actually been, what they thought, and whether it fits the moment.
+North Star: when someone needs a place, Astir shows where trusted people have actually been, what they thought, and whether it fits the moment.
 
 Current wedge: trusted people's place memories become a searchable map you can actually use.
 
@@ -363,7 +363,7 @@ Observability policy:
 
 ## Brand And App Icon
 
-- The canonical public app name is `rec.me`. Internal `Wander*` names, the
+- The canonical public app name is `Astir` (formerly `rec.me` and `Wander`). Internal `Wander*` names, the
   Xcode target/scheme/module, and bundle id `com.grayline.wander` remain stable
   unless a separate migration explicitly changes them.
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
@@ -583,7 +583,7 @@ top-level release announcement to the dedicated rec.me Slack release channel:
 
 The Slack note must include:
 
-- App name `rec.me`, the build number, and whether the build is live/approved or still processing.
+- App name `Astir`, the build number, and whether the build is live/approved or still processing.
 - What changed, written for testers rather than engineers.
 - What needs testing, as a concrete checklist.
 - Known issues or intentionally deferred areas.

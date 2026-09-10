@@ -1057,7 +1057,7 @@ private struct YourMapPrototypeSharePreview: View {
                 WanderShareSheet(content: .place(
                     item: createdLink.url,
                     name: lensTitle,
-                    message: "Explore my saved places on rec.me"
+                    message: "Explore my saved places on Astir"
                 ))
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)

@@ -974,7 +974,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.subject, "Joe Example")
-        XCTAssertEqual(content.message, "See @joe on rec.me")
+        XCTAssertEqual(content.message, "See @joe on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
         XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
         XCTAssertNil(WanderShareContent.profile(serverID: "   ", displayName: "Guest", handle: "you"))
@@ -1065,7 +1065,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20maya")
         XCTAssertEqual(content.items, [content.item, imageFileURL])
         XCTAssertEqual(content.subject, "Maya Chen's map")
-        XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user maya"))
     }
 
@@ -1126,7 +1126,7 @@ final class NavigationContractTests: XCTestCase {
             imageFileURL
         ])
         XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
-        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's rec.me map")
+        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's Astir map")
     }
 
     @MainActor
@@ -1136,17 +1136,17 @@ final class NavigationContractTests: XCTestCase {
             applicationActivities: nil
         )
         let source = WanderShareActivityItemSource(
-            message: "Explore Santa Monica on @maya's rec.me map",
+            message: "Explore Santa Monica on @maya's Astir map",
             subject: "Maya Chen's Santa Monica map"
         )
 
         XCTAssertEqual(
             source.activityViewControllerPlaceholderItem(controller) as? String,
-            "Explore Santa Monica on @maya's rec.me map"
+            "Explore Santa Monica on @maya's Astir map"
         )
         XCTAssertEqual(
             source.activityViewController(controller, itemForActivityType: nil) as? String,
-            "Explore Santa Monica on @maya's rec.me map"
+            "Explore Santa Monica on @maya's Astir map"
         )
         XCTAssertEqual(
             source.activityViewController(controller, subjectForActivityType: nil),
@@ -1932,7 +1932,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
         XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
         XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
-        XCTAssertTrue(profileSettings.contains("Restart rec.me to apply these changes"))
+        XCTAssertTrue(profileSettings.contains("Restart Astir to apply these changes"))
         XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
         XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
@@ -2621,7 +2621,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(plannedDateSection.contains("isShowingPlannedDatePicker = false"))
         XCTAssertTrue(
             plannedDateSection.contains(
-                "If notifications are on, rec.me will remind you three days before."
+                "If notifications are on, Astir will remind you three days before."
             )
         )
         XCTAssertFalse(plannedDateSection.contains("Someday is okay"))
@@ -4173,7 +4173,7 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct DiscoverPlaceResultCard: View",
             before: "private struct DiscoverResultActionButton: View"
         )
-        XCTAssertTrue(resultCard.contains("rec.me rating"))
+        XCTAssertTrue(resultCard.contains("Astir rating"))
         XCTAssertTrue(resultCard.contains("case nil:\n            \"Wanna go\""))
         XCTAssertTrue(resultCard.contains("case .wannaGo:\n            \"In Wanna\""))
         XCTAssertTrue(resultCard.contains("case .been:\n            \"Visited\""))
@@ -4256,7 +4256,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("includesSemanticProvider: semanticEnabled"))
         XCTAssertTrue(source.contains("backend.featureFlag(.semanticPlaceSearchV1"))
         XCTAssertTrue(source.contains("SemanticPlaceSearchAccessPolicy.isEnabled("))
-        XCTAssertTrue(source.contains("Saved on rec.me"))
+        XCTAssertTrue(source.contains("Saved on Astir"))
         XCTAssertTrue(source.contains("From Apple Maps"))
         XCTAssertTrue(source.contains("sourceType: .manual"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))

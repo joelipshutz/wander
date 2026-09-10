@@ -814,7 +814,7 @@ private struct PrivacyTrustRedesignMockup: View {
                 SettingsDivider()
                 PrivacyFactRow(systemImage: "lock.shield.fill", title: "Blocks hide both accounts everywhere")
                 SettingsDivider()
-                PrivacyFactRow(systemImage: "location.slash.fill", title: "rec.me never shares live location")
+                PrivacyFactRow(systemImage: "location.slash.fill", title: "Astir never shares live location")
             }
 
             Text("These controls change who can discover your profile and how future saves begin. You can still choose visibility on each place.")

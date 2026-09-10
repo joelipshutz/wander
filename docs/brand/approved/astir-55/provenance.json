@@ -1,0 +1,53 @@
+{
+  "direction": 55,
+  "issue": "REC-475",
+  "selection": "pending user palette confirmation; neither candidate is installed yet",
+  "source": "Astir round 08, warm direction 36 statue with a full-width detached base on ink-black",
+  "conversion": "Lossless PNG re-encoding to remove the opaque alpha channel. Every RGB pixel is identical to the approved export; no crop, rescale, restyle, or corner mask.",
+  "files": [
+    {
+      "file": "Astir-App-Icon-55-oxide-1024.png",
+      "sha256": "6dcde0a4593a037018dc6c67bb5830931524a27bca1e8fce5b52fb899ee34714",
+      "originalExportSHA256": "f5a21c80efe50d722e2a491e4d00a4f1cf901ba2fed19ec46cadceee36cce8f2",
+      "palette": "oxide",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "file": "Astir-App-Icon-55-signal-1024.png",
+      "sha256": "549d956ffdd57be9e60c8237c81dc66e71dfbd54cc226e995399679cf433a815",
+      "originalExportSHA256": "35da7c3e40913de49014db758f12b2aed55a7296fb74a45d98ca4ae4cef52180",
+      "palette": "signal",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "file": "Astir-Instagram-55-oxide-1024.png",
+      "sha256": "6dcde0a4593a037018dc6c67bb5830931524a27bca1e8fce5b52fb899ee34714",
+      "originalExportSHA256": "f5a21c80efe50d722e2a491e4d00a4f1cf901ba2fed19ec46cadceee36cce8f2",
+      "palette": "oxide",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "file": "Astir-Instagram-55-signal-1024.png",
+      "sha256": "549d956ffdd57be9e60c8237c81dc66e71dfbd54cc226e995399679cf433a815",
+      "originalExportSHA256": "35da7c3e40913de49014db758f12b2aed55a7296fb74a45d98ca4ae4cef52180",
+      "palette": "signal",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    }
+  ]
+}

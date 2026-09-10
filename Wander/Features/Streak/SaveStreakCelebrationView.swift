@@ -229,7 +229,7 @@ private struct SaveStreakTicketCard: View {
             Image(systemName: "flame.fill")
                 .font(.system(size: 30, weight: .black))
                 .foregroundStyle(brandMode.accentText)
-            Text("REC.ME")
+            Text("ASTIR")
                 .font(AstirTypography.metadata)
                 .tracking(2.2)
                 .foregroundStyle(brandMode.secondaryText)
