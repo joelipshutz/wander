@@ -1,0 +1,25 @@
+{
+  "issue": "REC-477",
+  "approvedDirection": 56,
+  "palette": "Signal",
+  "signalHex": "#F05A3C",
+  "sourceRound": "09-glimmer",
+  "sourceAsset": "astir-logo-exploration/versions/09-glimmer/assets/56-signal-glimmer.png",
+  "sourceAssetSha256": "ca42b250579fcd9571ba05520a4940ef8148a199e97aa6aeb16e918ec67e9ae8",
+  "sourceSvgSha256": "9c93778953399260cf0cb51d3586e21c4cf1236016d34527319e9df5c003ba00",
+  "sourceGlyphPathsSha256": "765bfc599ffa8635f00578f07df8d62d5dfad8cd7885bd0180243e6952004f9d",
+  "sourceTypePathsFileSha256": "1205c93b916dcc7fa75151572d360edc0e29fb89b8fb4a38a3e78144e64f74ce",
+  "sourceCanvas": [
+    2200,
+    1050
+  ],
+  "pngSize": [
+    1600,
+    764
+  ],
+  "processing": "Approved still copied byte for byte. STIR-only white alpha mask rendered from preserved paths and original letter transform using Sharp; no photograph redraw, image generation, or source-round changes.",
+  "fontSource": ".NewYork-Medium",
+  "glyphOutlinesEmbedded": true,
+  "maskScope": "S, T, I and R only. Statue, pedestal, inscription and letter counters remain outside the mask.",
+  "status": "Native implementation preview; approval is required before opening a splash PR or landing it."
+}
