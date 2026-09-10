@@ -4597,8 +4597,11 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         visiblePlaceOwnerCountBuildCount += 1
         #endif
-        let counts = visiblePlaces().reduce(into: [String: Int]()) { result, visiblePlace in
-            result[visiblePlace.owner.id, default: 0] += 1
+        // A person's Been/Wanna records can refer to the same physical place.
+        // Group within each owner so shared places still count for every person.
+        let placesByOwnerID = Dictionary(grouping: visiblePlaces(), by: \.owner.id)
+        let counts = placesByOwnerID.mapValues { places in
+            VisiblePlaceGrouping.groups(from: places, currentUserID: currentUser.id).count
         }
         visiblePlaceCountsByOwnerIDCache = counts
         return counts
