@@ -20,7 +20,7 @@ Visual approval and the full iOS test gate are required before squash merge.
 - `swiftc -frontend -parse` succeeds for the edited production source; XcodeGen regenerates with no project diff.
 - The required full `xcodebuild test` command stops before running tests: iPhone 16 Plus / iOS 18.6 is not installed. The available runtime is iOS 26.5. This is a pending gate, not a test pass.
 
-## Captures
+## Previous 20×28pt captures
 
 | Appearance / role | iPhone 17 Pro | iPhone 17e |
 | --- | --- | --- |
@@ -32,3 +32,13 @@ Screenshots use iOS 26.5. The large and compact native renders show standalone c
 ## Narrower Lists tab proposal
 
 The approval preview now replaces its wide system-placeholder Lists symbol with a filled portrait paper glyph: a 20×28pt canvas versus the production paper icon's current 24×28pt canvas. Its height stays fixed; the sheet and internal rows fit the narrower width. Native tab selection continues to control tint. This bottom-tab proportion change is preview-only pending approval and coordination with REC-453. The production changes in this PR remain limited to the circular list-detail header actions.
+
+## Current 22×26pt proposal
+
+The current SwiftUI preview uses the requested 22pt width and 26pt height, with three rows redistributed inside the slightly wider, shorter sheet. Only the preview glyph changes.
+
+| Dark | Light |
+| --- | --- |
+| ![22×26pt dark](22x26/dark.png) | ![22×26pt light](22x26/light.png) |
+
+These native iPhone 17 Pro / iOS 26.5 mockups supersede the 20×28pt proportion proposal above. Production tab-icon changes and squash merge remain pending approval.

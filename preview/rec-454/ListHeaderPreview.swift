@@ -133,20 +133,20 @@ struct ListHeaderPreview: View {
     }
 }
 
-// Preview proposal: 20pt wide rather than the current 24pt paper canvas.
-// Native tab selection supplies tint; the glyph keeps its 28pt height.
+// Preview proposal: 22×26pt paper canvas.
+// Native tab selection supplies tint.
 @MainActor
 private enum NarrowPaperTabIcon {
     static let image: UIImage = {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 28))
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 26))
         return renderer.image { context in
             UIColor.black.setFill()
-            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 18, height: 26), cornerRadius: 2.4).fill()
+            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 20, height: 24), cornerRadius: 2.4).fill()
             context.cgContext.setBlendMode(.clear)
-            for y: CGFloat in [7, 14, 21] {
-                UIBezierPath(ovalIn: CGRect(x: 3.4, y: y - 1, width: 2, height: 2)).fill()
+            for y: CGFloat in [6.5, 13, 19.5] {
+                UIBezierPath(ovalIn: CGRect(x: 3.6, y: y - 1, width: 2, height: 2)).fill()
                 UIBezierPath(
-                    roundedRect: CGRect(x: 7, y: y - 0.7, width: 9.2, height: 1.4),
+                    roundedRect: CGRect(x: 7.2, y: y - 0.7, width: 11.2, height: 1.4),
                     cornerRadius: 0.7
                 ).fill()
             }
