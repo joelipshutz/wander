@@ -1,8 +1,10 @@
 # Approved 56 Signal splash assets
 
-This native splash preview uses the exact approved round09 direction `56-signal-glimmer.png`. The warm statue, letter placement, restrained stationary letter glimmer, full-width Signal foundation, and ONENESS inscription are unchanged. No new image generation, photograph redraw, font substitution, or old-round edits were used.
+This native splash uses the exact approved round09 direction `56-signal-glimmer.png`. The warm statue, letter placement, restrained stationary letter glimmer, full-width Signal foundation, and ONENESS inscription are unchanged. No new image generation, photograph redraw, font substitution, or old-round edits were used.
 
-The preview remains subject to user review before opening or landing a splash PR. These assets do not change the existing launch-readiness timing.
+Joe approved the full-phone native 56 Signal preview on September 10, 2026 and authorized the splash implementation. The production view preserves the existing launch-readiness timing, loading message and spinner. It adds no OCEAN PARK subtitle. The glimmer is confined to STIR and is disabled for Reduce Motion, inactive scenes, disappearing views and hidden Map tabs.
+
+The approved native component capture is the visual reference. Full-app build and integration validation are recorded in the implementation PR; the component preview alone is not a full-app test result.
 
 ## Files and placement
 
