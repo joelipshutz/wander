@@ -207,7 +207,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private var reviewHeader: some View {
-        Text("\(displayItems.count) places matched and ready")
+        Text("\(displayItems.count) \(displayItems.count == 1 ? "place" : "places") matched and ready")
             .font(AstirTypography.sheetTitle)
             .foregroundStyle(brandMode.primaryText)
             .fixedSize(horizontal: false, vertical: true)

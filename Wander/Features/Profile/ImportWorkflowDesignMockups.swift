@@ -130,6 +130,7 @@ struct ImportImplementationCaptureRoot: View {
         .environmentObject(walkthroughs)
         .environmentObject(productUpsells)
         .astirAdaptiveBrandMode()
+        .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-WanderImportDarkAppearance") ? .dark : .light)
         .environment(\.restartPlaceImport, { showsImportEntry = true })
         .sheet(isPresented: $showsImportEntry) {
             NavigationStack {
