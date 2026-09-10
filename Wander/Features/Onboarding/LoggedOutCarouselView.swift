@@ -90,7 +90,7 @@ struct LoggedOutCarouselView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .accessibilityLabel("What you can do with rec.me")
+                .accessibilityLabel("What you can do with Astir")
 
                 HStack(spacing: 7) {
                     ForEach(OnboardingCarouselSlide.all) { slide in
@@ -259,6 +259,6 @@ struct OnboardingLaunchView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(message ?? "Opening rec.me")
+        .accessibilityLabel(message ?? "Opening Astir")
     }
 }

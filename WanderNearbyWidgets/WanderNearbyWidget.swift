@@ -14,7 +14,7 @@ struct WanderNearbyPlacesWidget: Widget {
             WanderNearbyWidgetView(entry: entry)
         }
         .configurationDisplayName("Nearby Rich Visit")
-        .description("Pick a nearby place and add a Rich Visit in rec.me.")
+        .description("Pick a nearby place and add a Rich Visit in Astir.")
         .supportedFamilies([.systemLarge])
         .contentMarginsDisabled()
     }
@@ -23,7 +23,7 @@ struct WanderNearbyPlacesWidget: Widget {
 struct WanderRefreshNearbyPlacesIntent: AppIntent {
     static let title: LocalizedStringResource = "Refresh nearby spots"
     static let description = IntentDescription(
-        "Updates the nearby spots shown in the rec.me widget."
+        "Updates the nearby spots shown in the Astir widget."
     )
     static let openAppWhenRun = false
 
@@ -781,7 +781,7 @@ private struct WanderNearbyWidgetView: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
 
-            Text("Open rec.me")
+            Text("Open Astir")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(WanderNearbyPalette.textOnAction)
                 .padding(.horizontal, 18)
@@ -820,11 +820,11 @@ private struct WanderNearbyWidgetView: View {
     private var unavailableMessage: String {
         switch entry.availability {
         case .locationAuthorizationRequired:
-            "Open rec.me and allow location while using the app, then approve location for this widget."
+            "Open Astir and allow location while using the app, then approve location for this widget."
         case .noPlaces:
-            "Open rec.me to search manually or try again after moving to a new area."
+            "Open Astir to search manually or try again after moving to a new area."
         case .ready, .locationTemporarilyUnavailable:
-            "WidgetKit will retry automatically. Opening rec.me can refresh it sooner."
+            "WidgetKit will retry automatically. Opening Astir can refresh it sooner."
         }
     }
 }

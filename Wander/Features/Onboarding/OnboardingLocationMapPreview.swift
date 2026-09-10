@@ -85,7 +85,7 @@ struct OnboardingLocationMapPreview: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "A rec.me map with nearby recommendations and Circuit Coffee selected. Maya and two friends rated it 4.7."
+            "An Astir map with nearby recommendations and Circuit Coffee selected. Maya and two friends rated it 4.7."
         )
     }
 }

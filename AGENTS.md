@@ -4,9 +4,9 @@ Repo guidance for Codex, Claude Code, OpenClaw, and any developer joining Wander
 
 ## Project Overview
 
-rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+Astir, formerly rec.me and Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
-North Star: when someone needs a place, rec.me shows where trusted people have actually been, what they thought, and whether it fits the moment.
+North Star: when someone needs a place, Astir shows where trusted people have actually been, what they thought, and whether it fits the moment.
 
 Current wedge: trusted people's place memories become a searchable map you can actually use.
 
@@ -363,19 +363,19 @@ Observability policy:
 
 ## Brand And App Icon
 
-- The canonical public app name is `rec.me`. Internal `Wander*` names, the
+- The canonical public app name is `Astir` (formerly `rec.me` and `Wander`). Internal `Wander*` names, the
   Xcode target/scheme/module, and bundle id `com.grayline.wander` remain stable
   unless a separate migration explicitly changes them.
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- The approved icon is the warm matte neighborhood map in
-  `Wander/Resources/AppIcon.icon/Assets/recme-warm-map-original.png`: cream and
-  peach raised buildings, a sage park with one orange-red tree pin, a blue
-  ocean edge, an irregular palm row contained within the coastal green strip,
-  and centered black-serif `rec.me`. Keep the selected full-frame composition
-  matte and do not crop, reframe, move trees, or add Liquid Glass effects
-  without explicit approval.
+- The approved icon is direction 55: a warm family statue on ink-black above a
+  full-width detached Signal coral foundation, with `ONENESS` at the right.
+  The canonical source is
+  `Wander/Resources/AppIcon.icon/Assets/astir-statue-55-signal.png`.
+  Keep the selected full-frame composition and original pixels matte; do not
+  crop, reframe, recolor, or add Liquid Glass effects without explicit approval.
+  The separately approved splash screen is not part of this icon change.
 - Regenerate the fallback master with `scripts/generate-app-icon-master.swift`;
   it validates and copies the approved Icon Composer source byte-for-byte.
 - Regenerate all platform renditions with
@@ -583,7 +583,7 @@ top-level release announcement to the dedicated rec.me Slack release channel:
 
 The Slack note must include:
 
-- App name `rec.me`, the build number, and whether the build is live/approved or still processing.
+- App name `Astir`, the build number, and whether the build is live/approved or still processing.
 - What changed, written for testers rather than engineers.
 - What needs testing, as a concrete checklist.
 - Known issues or intentionally deferred areas.

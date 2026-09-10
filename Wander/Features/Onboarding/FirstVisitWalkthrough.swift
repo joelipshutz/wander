@@ -278,8 +278,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .feed,
                 .feedInvite,
-                "rec.me gets better with your circle",
-                "Invite people whose taste you trust. The more people that join from your circle, the more useful your rec.me space becomes.",
+                "Astir gets better with your circle",
+                "Invite people whose taste you trust. The more people that join from your circle, the more useful your Astir space becomes.",
                 advance: .next,
                 coachTheme: .social
             )
@@ -345,7 +345,7 @@ enum FirstVisitWalkthroughContent {
                 .placeDetail,
                 .placeRatings,
                 "Three ratings, three jobs",
-                "Your rating is the average of your check-ins. rec.me rating averages your network's ratings. And fit score predicts how well this place matches your taste.",
+                "Your rating is the average of your check-ins. Astir rating averages your network's ratings. And fit score predicts how well this place matches your taste.",
                 advance: .next,
                 coachTheme: .rating
             ),
@@ -2052,7 +2052,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     .frame(width: 44, height: 44)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("rec.me, one press away")
+                        Text("Astir, one press away")
                             .font(AstirTypography.sectionTitle)
                             .foregroundStyle(brandMode.primaryText)
 
@@ -2074,7 +2074,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     DeviceFeatureInstruction(
                         systemImage: "button.programmable",
                         title: "Action Button + Controls",
-                        instruction: "Choose rec.me Check In for a one-press save",
+                        instruction: "Choose Astir Check In for a one-press save",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.actionButton"
                     )
 
