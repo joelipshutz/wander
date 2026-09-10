@@ -229,6 +229,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         selectFirstPin.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 3))
         XCTAssertTrue(activePin.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.alerts.firstMatch.exists, "The offscreen preloaded place page must not expose a modal alert")
+        XCTAssertFalse(app.scrollViews["place-profile.scroll"].isHittable, "The preloaded page must not intercept touches before it is opened")
 
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
         XCTAssertTrue(card.waitForNonExistence(timeout: 3))

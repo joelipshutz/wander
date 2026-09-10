@@ -348,6 +348,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
         addChild(hostingController)
         attachHostingViewIfNeeded()
+        hostingController.view.isHidden = !isPresented
         hostingController.didMove(toParent: self)
     }
 

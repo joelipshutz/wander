@@ -43,14 +43,14 @@ struct PlaceActivityMockupRoot: View {
                 ClassicPlaceDetailMockup(selectedSegment: "MY CHECK-INS", entries: ClassicActivityData.mine, mode: .owner)
             case .addVisit:
                 ClassicAddVisitMockup(
-                    title: "Check in again",
+                    title: "check in again",
                     placeSubtitle: "Existing save - new check-in",
                     showsMenu: false,
                     showsInvitedFriend: false
                 )
             case .visitFriendsEditor:
                 ClassicAddVisitMockup(
-                    title: "Save this place",
+                    title: "save this place",
                     placeSubtitle: "New place - check-in",
                     showsMenu: false,
                     showsInvitedFriend: true
@@ -59,7 +59,7 @@ struct PlaceActivityMockupRoot: View {
                 ClassicPlaceDetailMockup(selectedSegment: "ALL", entries: [ClassicActivityData.withFriend], mode: .owner)
             case .photoMenu:
                 ClassicAddVisitMockup(
-                    title: "Check in again",
+                    title: "check in again",
                     placeSubtitle: "Existing save - new check-in",
                     showsMenu: true,
                     showsInvitedFriend: false
@@ -783,7 +783,7 @@ private struct ClassicCompactCard: View {
                         Text("RVR")
                             .font(.system(size: 22, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        ClassicStatusPill(title: "Check-in", selected: true)
+                        ClassicStatusPill(title: "check-in", selected: true)
                     }
                     Text("Your rating 3.5/5 - 3 check-ins")
                         .font(.system(size: 13, weight: .semibold))

@@ -4017,7 +4017,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
         XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
         XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
@@ -4120,11 +4120,13 @@ final class NavigationContractTests: XCTestCase {
         }
 
         XCTAssertTrue(controller.view.accessibilityElementsHidden)
+        XCTAssertTrue(hostedView.isHidden)
         XCTAssertNotEqual(hostedView.transform, CGAffineTransform.identity)
 
         controller.setPresented(true, animated: false)
 
         XCTAssertTrue(controller.isPresented)
+        XCTAssertFalse(hostedView.isHidden)
         XCTAssertEqual(hostedView.transform, CGAffineTransform.identity)
         XCTAssertFalse(controller.view.accessibilityElementsHidden)
         XCTAssertEqual(completedStates, [true])
@@ -4132,6 +4134,7 @@ final class NavigationContractTests: XCTestCase {
         controller.setPresented(false, animated: false)
 
         XCTAssertFalse(controller.isPresented)
+        XCTAssertTrue(hostedView.isHidden)
         XCTAssertTrue(controller.view.accessibilityElementsHidden)
         XCTAssertNil(hostedView.superview)
         XCTAssertEqual(completedStates, [true, false])

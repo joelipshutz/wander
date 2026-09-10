@@ -3917,6 +3917,7 @@ struct MapScreen: View {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
+                .accessibilityHidden(!isPlaceProfilePresented)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
@@ -3935,7 +3936,7 @@ struct MapScreen: View {
             .ignoresSafeArea()
             .allowsHitTesting(isPlaceProfilePresented)
             .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(.isModal)
+            .accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
                 guard walkthroughs.activeSurface != .placeDetail else { return }

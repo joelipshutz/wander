@@ -1144,7 +1144,7 @@ struct WanderRootView: View {
             }
             presentDeferredProductUpsellIfPossible()
         }
-        .task {
+        .task(id: isSessionValidated) {
             requestForcedProductUpsellIfNeeded()
         }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
@@ -2095,7 +2095,8 @@ struct WanderRootView: View {
     }
 
     private func requestForcedProductUpsellIfNeeded() {
-        guard !didRequestForcedProductUpsell,
+        guard isSessionValidated,
+              !didRequestForcedProductUpsell,
               let trigger = ProductUpsellDebugPolicy.forcedTrigger()
         else { return }
         didRequestForcedProductUpsell = true
