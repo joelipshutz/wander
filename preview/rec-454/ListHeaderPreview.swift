@@ -14,13 +14,14 @@ struct ListHeaderPreviewApp: App {
 
 struct ListHeaderPreview: View {
     @Environment(\.astirBrandMode) private var mode
+    @State private var selectedTab = 2
     @State private var path = ["detail"]
     @State private var lastAction: String?
     private let owner = ProcessInfo.processInfo.arguments.contains("--owner")
     private let collaborator = ProcessInfo.processInfo.arguments.contains("--collaborator")
 
     var body: some View {
-        TabView(selection: .constant(2)) {
+        TabView(selection: $selectedTab) {
             Text("Map").tabItem { Label("Map", systemImage: "map.fill") }.tag(0)
             Text("Feed").tabItem { Label("Feed", systemImage: "newspaper.fill") }.tag(1)
             NavigationStack(path: $path) {
@@ -28,7 +29,7 @@ struct ListHeaderPreview: View {
                     .navigationDestination(for: String.self) { _ in detail }
             }
             .tabItem {
-                Label { Text("Lists") } icon: { Image(uiImage: NarrowPaperTabIcon.image) }
+                Label { Text("Lists") } icon: { Image(uiImage: PlaceListSymbol.paperTabImage(isSelected: selectedTab == 2, isDark: mode.prefersDarkInterface)) }
             }.tag(2)
             Text("Profile").tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }.tag(3)
         }
@@ -131,25 +132,4 @@ struct ListHeaderPreview: View {
             .background(mode.raisedBackground, in: RoundedRectangle(cornerRadius: 22))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(mode.border))
     }
-}
-
-// Preview proposal: 22×26pt paper canvas.
-// Native tab selection supplies tint.
-@MainActor
-private enum NarrowPaperTabIcon {
-    static let image: UIImage = {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 26))
-        return renderer.image { context in
-            UIColor.black.setFill()
-            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 20, height: 24), cornerRadius: 2.4).fill()
-            context.cgContext.setBlendMode(.clear)
-            for y: CGFloat in [6.5, 13, 19.5] {
-                UIBezierPath(ovalIn: CGRect(x: 3.6, y: y - 1, width: 2, height: 2)).fill()
-                UIBezierPath(
-                    roundedRect: CGRect(x: 7.2, y: y - 0.7, width: 11.2, height: 1.4),
-                    cornerRadius: 0.7
-                ).fill()
-            }
-        }.withRenderingMode(.alwaysTemplate)
-    }()
 }
