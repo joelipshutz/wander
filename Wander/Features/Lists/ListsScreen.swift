@@ -423,7 +423,7 @@ struct ListsScreen: View {
             )
             .accessibilityIdentifier("lists.home.scroll")
 
-            AstirFloatingHeaderSurface {
+            AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {
                 HStack(spacing: WanderTheme.spacing2) {
                     scopeSwitch
 
@@ -431,6 +431,7 @@ struct ListsScreen: View {
                         systemImage: "plus",
                         accessibilityLabel: "New list",
                         accessibilityIdentifier: "lists.headerAdd",
+                        isAddAction: true,
                         action: {
                             walkthroughs.perform(.listsCreate)
                             walkthroughs.activate(.listEditor)
@@ -492,7 +493,8 @@ struct ListsScreen: View {
                     }
                     selectedScopeID = newValue
                 }
-            )
+            ),
+            interactive: true
         )
         .accessibilityLabel("List type")
         .walkthroughTarget(.listsScope)
