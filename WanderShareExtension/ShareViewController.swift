@@ -128,7 +128,7 @@ final class ShareViewController: UIViewController {
         guard contentStack.superview == nil else { return }
 
         let appName = UILabel()
-        appName.text = "rec.me"
+        appName.text = "Astir"
         appName.font = scaledFont(size: 17, weight: .bold, textStyle: .headline)
         appName.textColor = Palette.ink
         appName.adjustsFontForContentSizeCategory = true
@@ -180,7 +180,7 @@ final class ShareViewController: UIViewController {
         headline.adjustsFontForContentSizeCategory = true
 
         let detail = UILabel()
-        detail.text = "Your shared link is ready. Matching begins the next time you open rec.me."
+        detail.text = "Your shared link is ready. Matching begins the next time you open Astir."
         detail.font = .preferredFont(forTextStyle: .body)
         detail.textColor = Palette.muted
         detail.numberOfLines = 0
@@ -361,7 +361,7 @@ final class ShareViewController: UIViewController {
                 case .failure(let error):
                     self.showError(
                         (error as? LocalizedError)?.errorDescription
-                            ?? "rec.me could not read this share. Try copying its public link instead."
+                            ?? "Astir could not read this share. Try copying its public link instead."
                     )
                 }
             }
@@ -410,7 +410,7 @@ final class ShareViewController: UIViewController {
             startButton.configuration?.showsActivityIndicator = false
             showError(
                 (error as? LocalizedError)?.errorDescription
-                    ?? "rec.me could not start this import. Try again."
+                    ?? "Astir could not start this import. Try again."
             )
         }
     }

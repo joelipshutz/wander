@@ -105,7 +105,7 @@ enum ProfileIdentitySubmissionError: Error, Equatable {
         case .unavailable:
             "We couldn’t save your profile. Check your connection and try again."
         case .contentNotAllowed:
-            "That text can’t be shared on rec.me. Please revise it and try again."
+            "That text can’t be shared on Astir. Please revise it and try again."
         }
     }
 }

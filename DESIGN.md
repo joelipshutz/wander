@@ -1,10 +1,10 @@
-# Design System - rec.me
+# Design System - Astir
 
 Status: Active, with a provisional Astir visual override
 Created: 2026-06-01
 Skill: design-consultation
 
-This is the project-level design source of truth for rec.me. Read it before making visual or UI decisions.
+This is the project-level design source of truth for Astir (formerly rec.me and Wander). Read it before making visual or UI decisions.
 
 ## Sources
 
@@ -20,10 +20,17 @@ This is the project-level design source of truth for rec.me. Read it before maki
 
 ## Provisional Astir Visual Override (REC-383 / REC-397)
 
-Joe explicitly requested an in-product Astir brand exploration before deciding
-whether to rename rec.me. This override is production-real visual styling for
-evaluation; it does not change the public product name, information architecture,
-copy, data model, analytics, or backend behavior.
+Joe approved Astir as the public product name and direction 55, the warm family
+statue over a full-width colored base, as the app-icon direction (REC-475).
+Joe selected the Signal base on September 10, 2026. The approved matte icon
+uses the warm family statue on ink-black above a full-width Signal foundation.
+Exports and provenance are preserved in `docs/brand/approved/astir-55/`;
+`docs/brand/recme-app-icon.md` is the canonical production icon contract.
+The separately approved splash screen is handled in its own change.
+The visual override below began as an exploration; its existing typography,
+adaptive palette, and layout remain in place. This naming and icon approval
+does not change the information architecture, data model, analytics, or backend.
+Historical references below may retain the former rec.me name.
 
 The handoff package remains useful for interaction structure, spacing, and
 functional coverage. Its cream/espresso/terracotta visual tokens are superseded

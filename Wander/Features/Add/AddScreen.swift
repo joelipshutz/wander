@@ -681,7 +681,7 @@ struct AddScreen: View {
         .allowsHitTesting(!isWalkthroughAutomatingPlace)
         .accessibilityHint(
             isWalkthroughAutomatingPlace
-                ? "rec.me is choosing a nearby park for this demonstration"
+                ? "Astir is choosing a nearby park for this demonstration"
                 : ""
         )
     }

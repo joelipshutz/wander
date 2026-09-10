@@ -943,7 +943,7 @@ private struct InCommonTasteReceipt: View {
         VStack(spacing: WanderTheme.spacing3) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("REC.ME / MATCH 018")
+                    Text("ASTIR / MATCH 018")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(WanderTheme.textMuted.color)
                     Text("\(score) / 100")

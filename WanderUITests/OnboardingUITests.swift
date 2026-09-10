@@ -10,7 +10,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "rec.me")).firstMatch
+        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
             let more = app.buttons["More"].firstMatch
             if more.exists { more.tap() }
@@ -19,7 +19,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         activity.tap()
         XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
         keepScreenshot("Share extension — countdown begins")
-        let sharedInboxUnavailable = app.staticTexts["rec.me could not access its shared inbox. Check the app and extension App Group signing."]
+        let sharedInboxUnavailable = app.staticTexts["Astir could not access its shared inbox. Check the app and extension App Group signing."]
         if sharedInboxUnavailable.waitForExistence(timeout: 6) {
             keepScreenshot("Share extension — appearance without Simulator App Group signing")
             throw XCTSkip("This Simulator build has no App Group container; durable extension capture requires a signed App Group build.")
@@ -477,7 +477,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let inviteEntry = app.buttons["invite people to rec.me"]
+        let inviteEntry = app.buttons["invite people to Astir"]
         XCTAssertTrue(inviteEntry.waitForExistence(timeout: 8))
         inviteEntry.tap()
 
@@ -2571,7 +2571,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 4))
 
         let firstPlaceResult = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "rec.me rating")
+            NSPredicate(format: "label CONTAINS[c] %@", "Astir rating")
         ).firstMatch
         XCTAssertTrue(firstPlaceResult.waitForExistence(timeout: 4))
         XCTAssertTrue(firstPlaceResult.isHittable)

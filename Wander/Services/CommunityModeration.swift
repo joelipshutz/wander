@@ -99,7 +99,7 @@ enum CommunityContentPolicyError: LocalizedError, Equatable {
     case prohibitedContent
 
     var errorDescription: String? {
-        "That text can’t be shared on rec.me. Please revise it and try again."
+        "That text can’t be shared on Astir. Please revise it and try again."
     }
 }
 

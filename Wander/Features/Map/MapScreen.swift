@@ -18,7 +18,7 @@ enum SharedVisitOutboxNotice {
         ownerUserID: String
     ) -> String? {
         pendingInvites.contains(where: { $0.ownerUserID == ownerUserID })
-            ? "Friend updates are still sending. rec.me will keep retrying."
+            ? "Friend updates are still sending. Astir will keep retrying."
             : nil
     }
 }
@@ -5640,7 +5640,7 @@ struct MapScreen: View {
                 }
             }
             if photoCopyFailed {
-                mapSearchMessage = "Checked in. One shared photo will retry when you reopen rec.me."
+                mapSearchMessage = "Checked in. One shared photo will retry when you reopen Astir."
             }
             await store.refreshSharedVisitInbox(backend: backend)
             await store.refreshRemoteVisiblePlaces(backend: backend)
@@ -9498,7 +9498,7 @@ private struct MapLocationEducationPrompt: View {
                 .accessibilityHidden(true)
 
                 VStack(spacing: WanderTheme.spacing2) {
-                    Text("rec.me works best with your location")
+                    Text("Astir works best with your location")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .multilineTextAlignment(.center)
@@ -13327,7 +13327,7 @@ struct MapPlaceSaveEditor: View {
                     .stroke(astirBrandMode.border)
             )
 
-            Text("If notifications are on, rec.me will remind you three days before.")
+            Text("If notifications are on, Astir will remind you three days before.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

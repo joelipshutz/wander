@@ -1000,7 +1000,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
         XCTAssertEqual(
             PlaceRatingExplanation.ratings.message,
-            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, rec.me rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
+            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
         )
         XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
     }
@@ -1442,7 +1442,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
         XCTAssertEqual(rating.source, .community)
-        XCTAssertEqual(rating.title, "rec.me rating")
+        XCTAssertEqual(rating.title, "Astir rating")
         XCTAssertEqual(rating.score, 4.2)
         XCTAssertEqual(rating.count, 12)
     }

@@ -426,7 +426,7 @@ struct NotificationSettingsSheet: View {
                         Text("notifications")
                             .font(AstirTypography.screenTitle)
                             .accessibilityAddTraits(.isHeader)
-                        Text("Choose the account activity rec.me can send to this phone.")
+                        Text("Choose the account activity Astir can send to this phone.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -586,7 +586,7 @@ struct NotificationSettingsSheet: View {
 
     private var statusSubtitle: String {
         if notificationsEnabled {
-            return "This device can receive every enabled rec.me activity type."
+            return "This device can receive every enabled Astir activity type."
         }
         switch pushNotifications.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -594,7 +594,7 @@ struct NotificationSettingsSheet: View {
         case .denied:
             return "Enable alerts in iOS Settings to receive pushes."
         case .notDetermined:
-            return "rec.me will ask only when you allow it here."
+            return "Astir will ask only when you allow it here."
         @unknown default:
             return "Notification status is unavailable."
         }
@@ -871,7 +871,7 @@ struct SettingsTrustSurface {
     static let sheetAccessibilityID = "settings.privacyTrust.sheet"
     static let factAccessibilityPrefix = "settings.privacyTrust.fact."
     static let sheetTitle = "privacy and trust"
-    static let sheetIntro = "quick answers for what rec.me shares, syncs, and keeps private."
+    static let sheetIntro = "quick answers for what Astir shares, syncs, and keeps private."
 
     static let facts: [TrustFact] = [
         TrustFact(
@@ -890,7 +890,7 @@ struct SettingsTrustSurface {
             id: "location",
             icon: "location",
             title: "Location is for finding places",
-            body: "rec.me uses location when you ask for nearby candidates. It does not broadcast live location."
+            body: "Astir uses location when you ask for nearby candidates. It does not broadcast live location."
         ),
         TrustFact(
             id: "extraction",
@@ -908,7 +908,7 @@ struct SettingsTrustSurface {
             id: "contacts",
             icon: "person.crop.rectangle.stack",
             title: "Contacts stay under your control",
-            body: "rec.me asks for Contacts access only to help find people you know. You can change access anytime in iOS Settings."
+            body: "Astir asks for Contacts access only to help find people you know. You can change access anytime in iOS Settings."
         )
     ]
 }

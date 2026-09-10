@@ -41,15 +41,15 @@ struct PlaceImportFinishedNotificationCopy: Equatable {
         let body: String
         switch (needsReviewCount > 0, sourceRetryCount > 0) {
         case (true, true):
-            body = "Open rec.me to verify what was saved, review \(needsReviewCount) more, and \(sourceRetryCopy)."
+            body = "Open Astir to verify what was saved, review \(needsReviewCount) more, and \(sourceRetryCopy)."
         case (true, false):
-            body = "Open rec.me to verify what was saved and review \(needsReviewCount) more."
+            body = "Open Astir to verify what was saved and review \(needsReviewCount) more."
         case (false, true):
             body = savedCount > 0
-                ? "Open rec.me to verify what was saved and \(sourceRetryCopy)."
-                : "Open rec.me to \(sourceRetryCopy)."
+                ? "Open Astir to verify what was saved and \(sourceRetryCopy)."
+                : "Open Astir to \(sourceRetryCopy)."
         case (false, false):
-            body = "Open rec.me to verify the places from your import."
+            body = "Open Astir to verify the places from your import."
         }
         return PlaceImportFinishedNotificationCopy(title: title, body: body)
     }

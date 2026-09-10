@@ -375,7 +375,7 @@ private struct PlacePhotoCarouselCardMockup: View {
             )
             PlacePhotoCarouselMetric(
                 icon: "person.2.fill",
-                label: "REC.ME",
+                label: "ASTIR",
                 value: "4.7 / 5",
                 tint: WanderTheme.pinSocial.color
             )
