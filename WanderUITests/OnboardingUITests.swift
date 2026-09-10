@@ -112,7 +112,10 @@ final class ImportFormRefinementUITests: XCTestCase {
 
     func testImportActionsShareCompactBottomRow() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReview"]
+        // This assertion covers the standard-text horizontal layout. At
+        // accessibility sizes, ViewThatFits intentionally stacks the actions.
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReview",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
         app.launch()
         let wanna = app.buttons["import.wanna.capture-instagram-0"]
         for _ in 0..<5 where !wanna.isHittable || wanna.frame.maxY > app.frame.height - 120 { app.swipeUp() }
