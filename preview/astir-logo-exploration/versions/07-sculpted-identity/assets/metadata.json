@@ -1,0 +1,1248 @@
+{
+  "round": 7,
+  "svgSize": [
+    2200,
+    1050
+  ],
+  "pngSize": [
+    1600,
+    764
+  ],
+  "palettes": {
+    "signal": "#F05A3C",
+    "mono": "#ADAEA7",
+    "oxide": "#A45B42"
+  },
+  "directions": [
+    {
+      "id": 46,
+      "title": "Warm stone / current serif",
+      "source": 34,
+      "type": "current",
+      "material": "flat",
+      "inspiredBy": 28,
+      "font": ".NewYork-Medium",
+      "letterBounds": [
+        42.65594482421875,
+        -712.2268676757812,
+        2033.8457136154175,
+        719.3756103515625
+      ],
+      "sourceCrop": [
+        188,
+        154,
+        380,
+        561
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "46-equal-signal.png",
+          "svg": "46-equal-signal.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "46-equal-signal-light.png",
+          "svg": "46-equal-signal-light.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "46-equal-mono.png",
+          "svg": "46-equal-mono.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "46-equal-mono-light.png",
+          "svg": "46-equal-mono-light.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "46-equal-oxide.png",
+          "svg": "46-equal-oxide.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "46-equal-oxide-light.png",
+          "svg": "46-equal-oxide-light.svg",
+          "wordWidth": 1505.93173529114,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "46-tall-signal.png",
+          "svg": "46-tall-signal.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "46-tall-signal-light.png",
+          "svg": "46-tall-signal-light.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "46-tall-mono.png",
+          "svg": "46-tall-mono.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "46-tall-mono-light.png",
+          "svg": "46-tall-mono-light.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "46-tall-oxide.png",
+          "svg": "46-tall-oxide.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "46-tall-oxide-light.png",
+          "svg": "46-tall-oxide-light.svg",
+          "wordWidth": 1577.0547299435466,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "title": "Ink and stone / current serif",
+      "source": 36,
+      "type": "current",
+      "material": "flat",
+      "inspiredBy": 30,
+      "font": ".NewYork-Medium",
+      "letterBounds": [
+        42.65594482421875,
+        -712.2268676757812,
+        2033.8457136154175,
+        719.3756103515625
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "47-equal-signal.png",
+          "svg": "47-equal-signal.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "47-equal-signal-light.png",
+          "svg": "47-equal-signal-light.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "47-equal-mono.png",
+          "svg": "47-equal-mono.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "47-equal-mono-light.png",
+          "svg": "47-equal-mono-light.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "47-equal-oxide.png",
+          "svg": "47-equal-oxide.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "47-equal-oxide-light.png",
+          "svg": "47-equal-oxide-light.svg",
+          "wordWidth": 1524.3534257462625,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "47-tall-signal.png",
+          "svg": "47-tall-signal.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "47-tall-signal-light.png",
+          "svg": "47-tall-signal-light.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "47-tall-mono.png",
+          "svg": "47-tall-mono.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "47-tall-mono-light.png",
+          "svg": "47-tall-mono-light.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "47-tall-oxide.png",
+          "svg": "47-tall-oxide.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "47-tall-oxide-light.png",
+          "svg": "47-tall-oxide-light.svg",
+          "wordWidth": 1600.0818430124496,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "title": "Natural stone serif",
+      "source": 36,
+      "type": "generated",
+      "material": "stone",
+      "inspiredBy": 30,
+      "font": "Sculpted raster letterforms",
+      "letterBounds": [
+        184,
+        155,
+        1421,
+        549
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "48-equal-signal.png",
+          "svg": "48-equal-signal.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "48-equal-signal-light.png",
+          "svg": "48-equal-signal-light.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "48-equal-mono.png",
+          "svg": "48-equal-mono.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "48-equal-mono-light.png",
+          "svg": "48-equal-mono-light.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "48-equal-oxide.png",
+          "svg": "48-equal-oxide.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "48-equal-oxide-light.png",
+          "svg": "48-equal-oxide-light.svg",
+          "wordWidth": 1424.01749420136,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "48-tall-signal.png",
+          "svg": "48-tall-signal.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "48-tall-signal-light.png",
+          "svg": "48-tall-signal-light.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "48-tall-mono.png",
+          "svg": "48-tall-mono.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "48-tall-mono-light.png",
+          "svg": "48-tall-mono-light.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "48-tall-oxide.png",
+          "svg": "48-tall-oxide.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "48-tall-oxide-light.png",
+          "svg": "48-tall-oxide-light.svg",
+          "wordWidth": 1499.745911467547,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "title": "Carved sans",
+      "source": 36,
+      "type": "generated",
+      "material": "stone",
+      "inspiredBy": 32,
+      "font": "Sculpted raster letterforms",
+      "letterBounds": [
+        291,
+        158,
+        1218,
+        567
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "49-equal-signal.png",
+          "svg": "49-equal-signal.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "49-equal-signal-light.png",
+          "svg": "49-equal-signal-light.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "49-equal-mono.png",
+          "svg": "49-equal-mono.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "49-equal-mono-light.png",
+          "svg": "49-equal-mono-light.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "49-equal-oxide.png",
+          "svg": "49-equal-oxide.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "49-equal-oxide-light.png",
+          "svg": "49-equal-oxide-light.svg",
+          "wordWidth": 1239.1358912869705,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "49-tall-signal.png",
+          "svg": "49-tall-signal.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "49-tall-signal-light.png",
+          "svg": "49-tall-signal-light.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "49-tall-mono.png",
+          "svg": "49-tall-mono.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "49-tall-mono-light.png",
+          "svg": "49-tall-mono-light.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "49-tall-oxide.png",
+          "svg": "49-tall-oxide.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "49-tall-oxide-light.png",
+          "svg": "49-tall-oxide-light.svg",
+          "wordWidth": 1314.8643085531573,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "title": "Current serif / tighter setting",
+      "source": 36,
+      "type": "narrow",
+      "material": "flat",
+      "font": ".NewYork-Medium",
+      "letterBounds": [
+        42.65594482421875,
+        -712.2268676757812,
+        1883.8457136154175,
+        719.3756103515625
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "50-equal-signal.png",
+          "svg": "50-equal-signal.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "50-equal-signal-light.png",
+          "svg": "50-equal-signal-light.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "50-equal-mono.png",
+          "svg": "50-equal-mono.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "50-equal-mono-light.png",
+          "svg": "50-equal-mono-light.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "50-equal-oxide.png",
+          "svg": "50-equal-oxide.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "50-equal-oxide-light.png",
+          "svg": "50-equal-oxide-light.svg",
+          "wordWidth": 1429.7774791983784,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "50-tall-signal.png",
+          "svg": "50-tall-signal.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "50-tall-signal-light.png",
+          "svg": "50-tall-signal-light.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "50-tall-mono.png",
+          "svg": "50-tall-mono.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "50-tall-mono-light.png",
+          "svg": "50-tall-mono-light.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "50-tall-oxide.png",
+          "svg": "50-tall-oxide.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "50-tall-oxide-light.png",
+          "svg": "50-tall-oxide-light.svg",
+          "wordWidth": 1505.5058964645655,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "title": "Bodoni 72 Book / refined",
+      "source": 36,
+      "type": "refined",
+      "material": "flat",
+      "font": "BodoniSvtyTwoITCTT-Book",
+      "letterBounds": [
+        49,
+        -709,
+        1943,
+        723
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "51-equal-signal.png",
+          "svg": "51-equal-signal.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "51-equal-signal-light.png",
+          "svg": "51-equal-signal-light.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "51-equal-mono.png",
+          "svg": "51-equal-mono.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "51-equal-mono-light.png",
+          "svg": "51-equal-mono-light.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "51-equal-oxide.png",
+          "svg": "51-equal-oxide.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "51-equal-oxide-light.png",
+          "svg": "51-equal-oxide-light.svg",
+          "wordWidth": 1465.6273620108063,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "51-tall-signal.png",
+          "svg": "51-tall-signal.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "51-tall-signal-light.png",
+          "svg": "51-tall-signal-light.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "51-tall-mono.png",
+          "svg": "51-tall-mono.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "51-tall-mono-light.png",
+          "svg": "51-tall-mono-light.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "51-tall-oxide.png",
+          "svg": "51-tall-oxide.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "51-tall-oxide-light.png",
+          "svg": "51-tall-oxide-light.svg",
+          "wordWidth": 1541.3557792769932,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "title": "Sculptor-made letters",
+      "source": 36,
+      "type": "generated",
+      "material": "sculpted",
+      "font": "Sculpted raster letterforms",
+      "letterBounds": [
+        51,
+        130,
+        1677,
+        655
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "52-equal-signal.png",
+          "svg": "52-equal-signal.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "52-equal-signal-light.png",
+          "svg": "52-equal-signal-light.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "52-equal-mono.png",
+          "svg": "52-equal-mono.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "52-equal-mono-light.png",
+          "svg": "52-equal-mono-light.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "52-equal-oxide.png",
+          "svg": "52-equal-oxide.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "52-equal-oxide-light.png",
+          "svg": "52-equal-oxide-light.svg",
+          "wordWidth": 1412.2419133395574,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "52-tall-signal.png",
+          "svg": "52-tall-signal.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "52-tall-signal-light.png",
+          "svg": "52-tall-signal-light.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "52-tall-mono.png",
+          "svg": "52-tall-mono.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "52-tall-mono-light.png",
+          "svg": "52-tall-mono-light.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "52-tall-oxide.png",
+          "svg": "52-tall-oxide.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "52-tall-oxide-light.png",
+          "svg": "52-tall-oxide-light.svg",
+          "wordWidth": 1487.9703306057443,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "title": "Imperfect sculpted letters",
+      "source": 36,
+      "type": "generated",
+      "material": "sculpted",
+      "font": "Sculpted raster letterforms",
+      "letterBounds": [
+        111,
+        150,
+        1580,
+        610
+      ],
+      "sourceCrop": [
+        111,
+        82,
+        401,
+        556
+      ],
+      "files": [
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "53-equal-signal.png",
+          "svg": "53-equal-signal.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "53-equal-signal-light.png",
+          "svg": "53-equal-signal-light.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "53-equal-mono.png",
+          "svg": "53-equal-mono.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "53-equal-mono-light.png",
+          "svg": "53-equal-mono-light.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "53-equal-oxide.png",
+          "svg": "53-equal-oxide.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "equal",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "53-equal-oxide-light.png",
+          "svg": "53-equal-oxide-light.svg",
+          "wordWidth": 1424.7825215237644,
+          "statueHeight": 420,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "ink",
+          "png": "53-tall-signal.png",
+          "svg": "53-tall-signal.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "signal",
+          "appearance": "light",
+          "png": "53-tall-signal-light.png",
+          "svg": "53-tall-signal-light.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "ink",
+          "png": "53-tall-mono.png",
+          "svg": "53-tall-mono.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "mono",
+          "appearance": "light",
+          "png": "53-tall-mono-light.png",
+          "svg": "53-tall-mono-light.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "ink",
+          "png": "53-tall-oxide.png",
+          "svg": "53-tall-oxide.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        },
+        {
+          "height": "tall",
+          "palette": "oxide",
+          "appearance": "light",
+          "png": "53-tall-oxide-light.png",
+          "svg": "53-tall-oxide-light.svg",
+          "wordWidth": 1500.5109387899515,
+          "statueHeight": 525,
+          "letterHeight": 420
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "source": 34,
+      "palette": "signal",
+      "icon": "icon-34-signal.png",
+      "social": "social-34-signal.png",
+      "svg": "icon-34-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue over continuous stone foundation with hand-traced ONENESS"
+    },
+    {
+      "source": 34,
+      "palette": "mono",
+      "icon": "icon-34-mono.png",
+      "social": "social-34-mono.png",
+      "svg": "icon-34-mono.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue over continuous stone foundation with hand-traced ONENESS"
+    },
+    {
+      "source": 34,
+      "palette": "none",
+      "icon": "icon-34-none.png",
+      "social": "social-34-none.png",
+      "svg": "icon-34-none.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue without foundation"
+    },
+    {
+      "source": 36,
+      "palette": "signal",
+      "icon": "icon-36-signal.png",
+      "social": "social-36-signal.png",
+      "svg": "icon-36-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue over continuous stone foundation with hand-traced ONENESS"
+    },
+    {
+      "source": 36,
+      "palette": "mono",
+      "icon": "icon-36-mono.png",
+      "social": "social-36-mono.png",
+      "svg": "icon-36-mono.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue over continuous stone foundation with hand-traced ONENESS"
+    },
+    {
+      "source": 36,
+      "palette": "none",
+      "icon": "icon-36-none.png",
+      "social": "social-36-none.png",
+      "svg": "icon-36-none.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "circleSafe": true,
+      "description": "Exact source statue without foundation"
+    }
+  ],
+  "inscription": "Hand-traced centerline recreation of the original ONENESS photo inscription; not a font or exact pixel extraction.",
+  "lightTreatment": "Native SVG tonal mapping darkens only statue and generated letters to weathered charcoal; flat glyphs use #141714. Source geometry and alpha are preserved.",
+  "rendering": "Sharp/librsvg native SVG rasterization; no browser/file URL navigation.",
+  "editableSVG": "SVG compositions reference adjacent local PNG sources. Use build/export-standalone.cjs to embed photos for standalone distribution."
+}
