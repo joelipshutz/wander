@@ -497,9 +497,12 @@ final class OnboardingUITests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let alert = springboard.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        XCTAssertTrue(alert.staticTexts[
-            "rec.me reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select."
-        ].exists)
+        XCTAssertTrue(alert.staticTexts.matching(
+            NSPredicate(
+                format: "label == %@",
+                "rec.me reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select."
+            )
+        ).firstMatch.exists)
 
         let systemPrompt = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         systemPrompt.name = "REC-469 Contacts system permission"
