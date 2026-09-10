@@ -1,0 +1,2647 @@
+{
+  "createdAt": "2026-09-10T06:09:00.465786+00:00",
+  "algorithm": "SHA-256",
+  "root": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-logo-exploration",
+  "scope": [
+    "versions/01-statue-roster",
+    "versions/02-wordmarks",
+    "versions/03-motion",
+    "versions/04-decision",
+    "versions/05-black-lockup",
+    "versions/06-stone-type",
+    "versions/07-sculpted-identity"
+  ],
+  "fileCount": 526,
+  "files": [
+    {
+      "path": "versions/01-statue-roster/ARCHIVE-MANIFEST.json",
+      "bytes": 13232,
+      "sha256": "7b82ebccd982a5882d51ba04e4fd81e4665c51c24a0a80e722b1296569bbb345"
+    },
+    {
+      "path": "versions/01-statue-roster/ARCHIVE-VALIDATION.json",
+      "bytes": 5123,
+      "sha256": "88394ef0b5e70b28daba18d05a6531d0b9cadae692f4de6f1f14fd7d1ed24d8b"
+    },
+    {
+      "path": "versions/01-statue-roster/ASTIR-transparent-concepts.zip",
+      "bytes": 26788760,
+      "sha256": "f9bd1c18884e4f7fe911852b7bb88014c407b6970b638cfb1e61272052e9dc5b"
+    },
+    {
+      "path": "versions/01-statue-roster/ONENESS-source-cutout.psd",
+      "bytes": 19162189,
+      "sha256": "8b3ec5efcf7cab03dc67b233a655e1fc16efc06ae60be7d5d9d65652380a4009"
+    },
+    {
+      "path": "versions/01-statue-roster/START-HERE.txt",
+      "bytes": 687,
+      "sha256": "4c60f8735a3f144dc6237a7af4cbdf7cd0e0f5aaf68f196d4dee1e0deee9439a"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/01-original-statue-final.png",
+      "bytes": 1416499,
+      "sha256": "a1cf95aed6632ced836c2eab836fb84e2336767d2c846e129d419d13df6a0104"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/01-original-statue.png",
+      "bytes": 1416499,
+      "sha256": "f39a806baaf6ae003b04be69bdb5c447623386c3f3b900465ef800c36555aa7b"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/02-family-only.png",
+      "bytes": 1526482,
+      "sha256": "217b2d21ed739d1f83f11ca026b7e58be23be655f97eff04f400037e103b31c4"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/03-red-foundation.png",
+      "bytes": 1680667,
+      "sha256": "1aa402e497827e4fcf532578caeed671c7ef71e62dadd468193f481b8aa8e533"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/04-warm-stone.png",
+      "bytes": 1681556,
+      "sha256": "0cef6b9ff771cd454e0001b16095f0080e3daceaa284b5179aa4860cbe3b536a"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/05-rounded-embrace.png",
+      "bytes": 1356635,
+      "sha256": "686c9770ab22ff349c9657790a036f85eecf709ea6e087e05c18f1f29fcb685b"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/06-floating-family.png",
+      "bytes": 1344689,
+      "sha256": "e8c0c36d00265946c4b9ccfe4369a293842378b6ceb2feacfb058b89445c8e10"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/07-ink-and-stone.png",
+      "bytes": 1648681,
+      "sha256": "71c6a3d3ee7d636f365d56408c9549052c78fd66d7592f6497af6f2c6b961fc2"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/08-sunlit-a.png",
+      "bytes": 1545008,
+      "sha256": "ad60e83261d2627d2aeb0190f269f4904ee53e9dc4faf824e8f6a6829ca9f7f0"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/09-carved-contrast.png",
+      "bytes": 1562066,
+      "sha256": "f38eea2e4078a37607ebbf4374d6ec7cbefa95df542b5add016a311d6e849c55"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/10-embrace-silhouette.png",
+      "bytes": 816825,
+      "sha256": "90bfa3cc53c2e7072af7724b82e2cefb01952b0f9edb98856d65a7b5d9688077"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/11-primary-marble.png",
+      "bytes": 1304564,
+      "sha256": "e1db3c8d17e480f4a5dc919a259bff70e5756a00a96ec526c515b4ff6bc0554c"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/12-oneness-vermilion.png",
+      "bytes": 1746990,
+      "sha256": "c268b1b84afe1ea369adbbff8802daf3ab743140bdbb6ec40bfafd4e615cf8df"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/13-scarlet-embrace.png",
+      "bytes": 1537655,
+      "sha256": "0309010d5f7c97083ca2a14862fa165b9c912586891d885000864d7084d9e9f2"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/14-golden-unity.png",
+      "bytes": 1487431,
+      "sha256": "8228d234debe8efd534717e98e6d1445312f52f9efd1c7cb721160ab688461ff"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/15-floating-cream.png",
+      "bytes": 1224247,
+      "sha256": "726377d5b9cd44d2ae89a71b376abf3e73eaa7022a77264f9a6ee168bb622e8e"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/16-red-crossbar.png",
+      "bytes": 1708682,
+      "sha256": "0c237154eb0969822fcaf4e79df9b4d55d1e9df02416f17fdb8048301cabd969"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/17-faceted-ultramarine.png",
+      "bytes": 1770149,
+      "sha256": "efb1f802b709237e9ea0ebae602fb5f1df6bd6297eb970d2dc098dcfd38565cd"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/18-black-family-monogram.png",
+      "bytes": 906619,
+      "sha256": "4dd87c4ca3b61852911af38990a81b3d658b40be680fc154cda207fcf07ba0e4"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/19-sloping-pale-marble.png",
+      "bytes": 1474397,
+      "sha256": "e30eb2fb01787700895a81a911672875b1564f5d3d0c2e0df91e94dd9f81c7c2"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/20-yellow-clay-red-child.png",
+      "bytes": 1530865,
+      "sha256": "31761df2f96df09b0828be82aab2157175e611733b42ffaea513f9a601936fb9"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/21-floating-family-plinth.png",
+      "bytes": 1392724,
+      "sha256": "40d38b23e7ac2aaa17453ae48a0ac3f966cd7862911df96272a845d83f211e12"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/22-fine-engraved-family.png",
+      "bytes": 1195591,
+      "sha256": "411a23d1a7800a170e50556e57a9e6f94f5c98951b45907f74199edd2ee7233d"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/23-three-stone-slices.png",
+      "bytes": 1367399,
+      "sha256": "7da7a72906b6eae2f9f7df8287e4bd932e90795cf464f6703d2e7de0e1f17ffe"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/24-vermilion-gold-embrace.png",
+      "bytes": 1458794,
+      "sha256": "84d53ec6dcd3459e31bbde0ad452aa23ff51e251ed41b19b21bcb0723a584a43"
+    },
+    {
+      "path": "versions/01-statue-roster/assets/source-DSCF2954.jpg",
+      "bytes": 761969,
+      "sha256": "a44b3174029daf3a670a5ec02588063258faaf1b7e80736255f6bfbc7beef183"
+    },
+    {
+      "path": "versions/01-statue-roster/concepts-data.js",
+      "bytes": 5966,
+      "sha256": "b7c1ece809780ff4b692ad4065fdae5451420180d0c60a6926c8e2d7800ab375"
+    },
+    {
+      "path": "versions/01-statue-roster/concepts.json",
+      "bytes": 6855,
+      "sha256": "0dea174977cad0a87643e787bef4250bc0df3d8281e4a96def5a5aa216769779"
+    },
+    {
+      "path": "versions/01-statue-roster/gallery-preview.js",
+      "bytes": 4724,
+      "sha256": "3b613b6a9e277ec1f4afd79fab7559c282c0d5d77ca036486e0f77ec66ffafb8"
+    },
+    {
+      "path": "versions/01-statue-roster/gallery.js",
+      "bytes": 4755,
+      "sha256": "666b3f9dbf3baf4d57025ab04f0dfc77688234089c4e1a330c0b0fba79692c45"
+    },
+    {
+      "path": "versions/01-statue-roster/index.html",
+      "bytes": 3783,
+      "sha256": "f3b9a90880b7718da374b466253dacd2ff67c07d38cebf22b3fe9fe59c41a45d"
+    },
+    {
+      "path": "versions/01-statue-roster/lookbook.html",
+      "bytes": 8364,
+      "sha256": "4509dd5273dfeb12bd5b2d3e465baa6b8ba8c87cc66b95f8bf2f60c53352b212"
+    },
+    {
+      "path": "versions/01-statue-roster/preview.html",
+      "bytes": 3737,
+      "sha256": "bd48296386ac58dc31916bddbfea720fcf8cc84027d99ac66293340f8f6fe3b5"
+    },
+    {
+      "path": "versions/01-statue-roster/prompts/PROMPTS.md",
+      "bytes": 34663,
+      "sha256": "7f6730619f4ff3b76d994b597ed73678a35ea018fcd218c2f775cb121cd099b3"
+    },
+    {
+      "path": "versions/01-statue-roster/prompts/astir-logo-generated-09-16.json",
+      "bytes": 17088,
+      "sha256": "b1e21e64797cc58ef319931d58ee54113d1ac15dc26d0d0302da3863d184169b"
+    },
+    {
+      "path": "versions/01-statue-roster/prompts/astir-logo-generated-17-24.json",
+      "bytes": 21427,
+      "sha256": "63d57842316dec16a21dd79ef177f4e869adb9484b0cd5607078cf22c83c9d1e"
+    },
+    {
+      "path": "versions/01-statue-roster/prompts/root-manifest.json",
+      "bytes": 10652,
+      "sha256": "26312a5160e77928a95a86dc8da998fc116c35d7cd4b152b9694eb1bbcdc5f2d"
+    },
+    {
+      "path": "versions/01-statue-roster/references/sources.json",
+      "bytes": 6314,
+      "sha256": "63711d3c631d2508224a289313690e6087d5efb2cbede70a5ad1d882a9a9e504"
+    },
+    {
+      "path": "versions/01-statue-roster/shortlist.json",
+      "bytes": 443,
+      "sha256": "ee67f6e487de4fedc1bfbdd84e6eead9f6d2750ba38487b2662b74c34c38bb51"
+    },
+    {
+      "path": "versions/01-statue-roster/styles.css",
+      "bytes": 7378,
+      "sha256": "ea0b478338b0ce7d943f754c2d5e134a278dc760fd6c6fd9504b9896e4392e13"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/02-family-only.png",
+      "bytes": 1215665,
+      "sha256": "eeafa6a55398db4305ca562ba37536fe0535a6c0cd572f714112821cbff2e0ef"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/03-red-foundation.png",
+      "bytes": 1261127,
+      "sha256": "97c73278f8fc3c4a6f4e57a176fd765ed58f28556e3493a126faaad1289c752f"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/04-warm-stone.png",
+      "bytes": 1318029,
+      "sha256": "4bc38a87d0d58fe3223bc798e96612fa7f6f8b95d2391010c393cda42294538e"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/05-rounded-embrace.png",
+      "bytes": 954262,
+      "sha256": "8e2fce7c75dd308f862b82fb1d5e087bc95d50826870910817a62691a06695ca"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/06-floating-family.png",
+      "bytes": 889030,
+      "sha256": "5bea0319f6cbdad8e32ef346221e23ee48e0e063ce50f55a2f0e7faccb2c188d"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/07-ink-and-stone.png",
+      "bytes": 1255660,
+      "sha256": "3120e59fa38ea8525fe7b0e99811196dcf20faef6f2259968ab12f46234e8004"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/08-sunlit-a.png",
+      "bytes": 1246550,
+      "sha256": "63a724c35dbdf9cb1c9f9724b1fbc415bfca3a3eb6211f17d3fbe3fd8781e623"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/09-carved-contrast.png",
+      "bytes": 1273812,
+      "sha256": "5af3895f3967a550c1ea283ca1e4d8287ed0765db31f5564d99703a8af11b961"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/10-embrace-silhouette.png",
+      "bytes": 368462,
+      "sha256": "42854b5da1d1b2a11560835770dba3a1bacfab20752f6cd517a1100d107d5ac2"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/11-primary-marble.png",
+      "bytes": 992380,
+      "sha256": "e33ec3f5478e55968cab317446a3a23f23eccd1d57388806d8a00c088e25a21e"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/12-oneness-vermilion.png",
+      "bytes": 1417773,
+      "sha256": "c677e8d9ed928633cba29f67282f938e72ecf9a58ef8a9a481dfceffd6efffbe"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/13-scarlet-embrace.png",
+      "bytes": 1362469,
+      "sha256": "1b3afe5f687c3bbc33b379cf125acf76eb1df1235d3ad73833460fedfafd0ee3"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/14-golden-unity.png",
+      "bytes": 1327325,
+      "sha256": "8d8f960bee48be05d7b7af11cc6661f27c2c0c9ba2ca0ffc64ece0653a1d067a"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/15-floating-cream.png",
+      "bytes": 960343,
+      "sha256": "f7dfe6ebef26a0aaf5c9d9be3968b11f8d9bd996b70c7c50ae43a89d4898aa5b"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/16-red-crossbar.png",
+      "bytes": 1438032,
+      "sha256": "d4e48feb4769b791817a7c2cebcaf5c05e78715ebd0e1e2c8d86cb9a6b473981"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/17-faceted-ultramarine.png",
+      "bytes": 1456835,
+      "sha256": "76ca9d91d54913b2fe2f52a0507593e4e9efd1201e5497eeb4508b7b22ffde20"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/18-black-family-monogram.png",
+      "bytes": 491782,
+      "sha256": "7acc66cd954c04efe81e98532ab74394a2e65a0cda3416766fb7bcfebfd12be3"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/19-sloping-pale-marble.png",
+      "bytes": 1187151,
+      "sha256": "4fa0406da0576f8d949365e631154859f31289d99a91727bbd680f62ab1071cb"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/20-yellow-clay-red-child.png",
+      "bytes": 1258224,
+      "sha256": "cd3580a277439fad5ff07d905ee55878c1251f516821d345a607bf4120518103"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/21-floating-family-plinth.png",
+      "bytes": 965967,
+      "sha256": "10f6058fde197d4c84152c516556cae61ef9259c3801424d1c871be58bab27d4"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/22-fine-engraved-family.png",
+      "bytes": 823171,
+      "sha256": "218cf7af83626fc521a9a450a13c4674be67818358e62ba31fb7070e08cccd9f"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/23-three-stone-slices.png",
+      "bytes": 925358,
+      "sha256": "d263b737f3cb2b6ed93a8f26ff6ab65ccb2e8a0dbf4346bd3e40884890fa992f"
+    },
+    {
+      "path": "versions/01-statue-roster/transparent/24-vermilion-gold-embrace.png",
+      "bytes": 1172139,
+      "sha256": "35d7b2751a55759f5a9345320c44bf815b7abe161064bfbf65bc4797a0f3c490"
+    },
+    {
+      "path": "versions/02-wordmarks/ARCHIVE-MANIFEST.json",
+      "bytes": 6668,
+      "sha256": "85ad949772a52fb423ff625f8be40e41965ca603197ed87e0a9c698b9608e9a7"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/25-fresh-coral.png",
+      "bytes": 1717174,
+      "sha256": "f11e3ba316bf9bb5372cdd1c55187f98856c31658d17b655c3b7e7acb5c4ad71"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/25-wordmark.svg",
+      "bytes": 1661598,
+      "sha256": "f933678aba017c6b41aefd86054fcae599cbba78149405d963c7f4badbcd0f90"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/26-solar-vermilion.png",
+      "bytes": 1810782,
+      "sha256": "e5452032285d5f3302727ab1c3666ce66b02bccfd8e2b5df25b38fabf56bc6a9"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/26-wordmark.svg",
+      "bytes": 1670196,
+      "sha256": "3eb17cdc6405cd818250340d47556ee3671c0aa4009d0ba85aa12c56024cbbf6"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/27-light-scarlet.png",
+      "bytes": 1728777,
+      "sha256": "a22725e4517c919930ba960f821aecc104796ee272462d76e8086c630170fc2a"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/27-wordmark.svg",
+      "bytes": 1693196,
+      "sha256": "40b69f0e5293b8b8b462d06130feeeb140a95b5627f8925635b61dc3b7cb2e5c"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/28-wordmark.svg",
+      "bytes": 1761505,
+      "sha256": "ee7dbaf011a588d25852473259c9603302df6b5ef08b897ce778254e67ba2df1"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/29-wordmark.svg",
+      "bytes": 1757803,
+      "sha256": "70b16ca52fc55b1de691daabc9193f6a3dc2f629e05346417f4850d3d528e478"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/30-wordmark.svg",
+      "bytes": 1678352,
+      "sha256": "a94e5091f3334af4017da2417c350513a39890dceb67141dbd4c47b112310a85"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/31-wordmark.svg",
+      "bytes": 1674650,
+      "sha256": "fa921c7ce345ffe702aad7fd8caa580e2dd271ef638d707b69b070d7effeff4b"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/32-carved-sans.png",
+      "bytes": 1468330,
+      "sha256": "ff5b4007608cc4b6d787cc8ec7365bceda55accce11b62e6c277a0dc92d351e7"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/33-stone-serif.png",
+      "bytes": 1564510,
+      "sha256": "52eb65bdc3ffe02abe825c9869a6fa8aee0e2c8922150b994560be5f871afe16"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/34-floating-white-foundation.png",
+      "bytes": 1897124,
+      "sha256": "07db47880b82e7145112852912aed20eb176574d9920f7a943f3c10dd256e4b0"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/35-coral-stone-foundation.png",
+      "bytes": 1735377,
+      "sha256": "64e0122547774efa4e8d58f84ad7df195e132f852f76e53dae319b5c828ccf06"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/36-monochrome-monument.png",
+      "bytes": 1572644,
+      "sha256": "d9ace8e8deda38a3d1023ac240ea5a9f14537b02d43772c581f8c7ff526a9b83"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/37-terracotta-current-serif.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "versions/02-wordmarks/assets/37-terracotta-current-serif.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "versions/02-wordmarks/index.html",
+      "bytes": 8853,
+      "sha256": "b54394e27d188718dd9681c0d51681a13a5d6aadf14c291464227d3f741daf54"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/25-27.json",
+      "bytes": 4576,
+      "sha256": "08a4875b3e37f9e4f4c3d3c7e27c5b8c71918d0c22a59e11f609688ef3409bc7"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/PROMPTS.md",
+      "bytes": 19299,
+      "sha256": "c4caba89465c112a12c6a8d964f1e962ea6b3042ede14208a1c70f328a2d79d4"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/drafts-32-36/34-floating-white-foundation.png",
+      "bytes": 1950751,
+      "sha256": "b67b258b6e594e79690f0af5524804c00aed58967c813c6277d2dd4d53c58188"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/drafts-32-36/35-coral-stone-foundation.png",
+      "bytes": 1568922,
+      "sha256": "71e53fca788d390afe1a3adf610cfa7b3d32ff8be5e674230d4492f2af3ee79b"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/drafts-32-36/36-monochrome-monument.png",
+      "bytes": 1579216,
+      "sha256": "77f7c54a2bdbc4732713c99b9cd2a9bc6a125a8f3d7687ec1b4cca73c17bb820"
+    },
+    {
+      "path": "versions/02-wordmarks/prompts/manifest-32-36.json",
+      "bytes": 20769,
+      "sha256": "0c65ba1af1997b8a807384d2292243e9c5aef30703929518f4f1045ff2b05425"
+    },
+    {
+      "path": "versions/02-wordmarks/styles.css",
+      "bytes": 7431,
+      "sha256": "e9e148bf4e619cf5c3d6484bae78088b5ed3d6156f3c29dfc13d0eb882fab020"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/04-warm-stone.png",
+      "bytes": 1318029,
+      "sha256": "4bc38a87d0d58fe3223bc798e96612fa7f6f8b95d2391010c393cda42294538e"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/07-ink-and-stone.png",
+      "bytes": 1255660,
+      "sha256": "3120e59fa38ea8525fe7b0e99811196dcf20faef6f2259968ab12f46234e8004"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/25-fresh-coral.png",
+      "bytes": 1243096,
+      "sha256": "557a0863d1198dc9d0787a4fdf6617811bfd64a87789b616b137395a7828ec57"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/26-solar-vermilion.png",
+      "bytes": 1252319,
+      "sha256": "b23f1581cd633e52eac5d4564f399c4762d7ac4d9dfe651052a736f8c0b85cc6"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/27-light-scarlet.png",
+      "bytes": 1266800,
+      "sha256": "2a8d68d60cff4f6a675c8676eaa591164c96aa2cbffc15a3e236f824bcd2baa1"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/32-carved-sans.png",
+      "bytes": 1164654,
+      "sha256": "913c55cf2e60b0ebfe4378cdc31daa78e9235536049dc372c66578307bdc80b2"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/33-stone-serif.png",
+      "bytes": 1026412,
+      "sha256": "f46519e2cabe20f70308c190b305f0d787aaa0b03e02f7f0a15f1ef5b4f0435c"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/34-floating-white-foundation.png",
+      "bytes": 1683764,
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/35-coral-stone-foundation.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/36-monochrome-monument.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/alpha-validation-32-36.json",
+      "bytes": 4320,
+      "sha256": "f7b8c96df3e84dd808e8ee7ffc2c1cdc71a433a1aeec381370e0a6413f8c71b2"
+    },
+    {
+      "path": "versions/02-wordmarks/transparent/alpha-validation.json",
+      "bytes": 1492,
+      "sha256": "c1a14903b7f0e18c151841ab11cd3298151eccbcfa73d4d6b34f97994c35af68"
+    },
+    {
+      "path": "versions/02-wordmarks/wordmarks-data.js",
+      "bytes": 3005,
+      "sha256": "2e7dae3b7a6c19174ba39558bbfeb853497def1c0054e27aca018926a0d25de5"
+    },
+    {
+      "path": "versions/02-wordmarks/wordmarks.json",
+      "bytes": 3379,
+      "sha256": "bb5dbaeea62de1703ea8b71a09245c8802e382745bf9717d4a8ec82bf708d76b"
+    },
+    {
+      "path": "versions/03-motion/ARCHIVE-MANIFEST.json",
+      "bytes": 1936,
+      "sha256": "2f8c2a18b793d62cc282fcefc989a4beb281724e73ab9e832074d906f737a52c"
+    },
+    {
+      "path": "versions/03-motion/README.md",
+      "bytes": 3514,
+      "sha256": "8d7795e79d25d06af7642abe00c4f490e9350d119ddac64edb262acef97d175d"
+    },
+    {
+      "path": "versions/03-motion/alpha-check.jpg",
+      "bytes": 117017,
+      "sha256": "f4a509bce0df9b1b5062ad32072eb4a4f7eec55dd8a1aecfcfe4a47e8c3e352a"
+    },
+    {
+      "path": "versions/03-motion/build.py",
+      "bytes": 1091,
+      "sha256": "a3cfb2653186726be8234fad670b5b43f93bbd2ff0d0fad8d6ff4ae6a0d97086"
+    },
+    {
+      "path": "versions/03-motion/index.html",
+      "bytes": 10575,
+      "sha256": "c6010148a062ca0fbc31585d2fe150d6cce3d4c0ffa1cab230e81318b692f1de"
+    },
+    {
+      "path": "versions/03-motion/motion.js",
+      "bytes": 7487,
+      "sha256": "d504a9bf5af9e86cc100ff62f8b954aca801948fa86559ee7158b80957576823"
+    },
+    {
+      "path": "versions/03-motion/qa-explosion.png",
+      "bytes": 164208,
+      "sha256": "e1bdd8fcfe3f5735420a2419b6343c697553e1e5dffb423cf02588ccb459f41b"
+    },
+    {
+      "path": "versions/03-motion/qa-mobile.png",
+      "bytes": 142307,
+      "sha256": "45d8a4b2cd3d10e6515699025eb3e3f1059cb099c2d2d9b51a2b8d8e7bae9849"
+    },
+    {
+      "path": "versions/03-motion/qa-rest.png",
+      "bytes": 178602,
+      "sha256": "0d192015e6d201053421a1f644a03fe64b7ec08ab257f590f62350a249357a0e"
+    },
+    {
+      "path": "versions/03-motion/qa-tornado.png",
+      "bytes": 162042,
+      "sha256": "17b35f329a7478c05149d45872ce77c66330565aa71c0942a7633f76b30cd266"
+    },
+    {
+      "path": "versions/03-motion/qa.cjs",
+      "bytes": 2176,
+      "sha256": "8cc3e1b939a7636b54eff5b8db6e06bba74f4b5dccf876984220a41579873918"
+    },
+    {
+      "path": "versions/03-motion/source-data.js",
+      "bytes": 1389417,
+      "sha256": "1bf9388b84eb1cfad99efdfb8fff6060b87dec3e18ee36c703225209653402fe"
+    },
+    {
+      "path": "versions/03-motion/statue.png",
+      "bytes": 1011134,
+      "sha256": "f8e13fdbd5094a9eed62bc0b8fc07174bb1e8bd0206df9bf213dbf06ba4acb76"
+    },
+    {
+      "path": "versions/04-decision/APP-ICON-CANDIDATES.zip",
+      "bytes": 7498202,
+      "sha256": "5e923f6e9e23d5b6fe5341c7f4fb24fc5621d9c1335eb000a81c61196f29375d"
+    },
+    {
+      "path": "versions/04-decision/ARCHIVE-MANIFEST.json",
+      "bytes": 8842,
+      "sha256": "92942877c69478681c401e6d5aef42d5a924a492c654d586c48dff23faae6e74"
+    },
+    {
+      "path": "versions/04-decision/DECISION-REPORT.md",
+      "bytes": 3050,
+      "sha256": "5c99ef5f6c5aaf2a3b12f95b40326b1d755e50ebb77f8ead08e327e751058fcf"
+    },
+    {
+      "path": "versions/04-decision/assets/37-terracotta-current-serif.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "versions/04-decision/assets/37-terracotta-current-serif.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "versions/04-decision/assets/a-current-dark.svg",
+      "bytes": 1673889,
+      "sha256": "b02538aaf3992b1aa90f2f0792207d0f7bfbf6a012a59b78350ca7063c389a02"
+    },
+    {
+      "path": "versions/04-decision/assets/a-current.svg",
+      "bytes": 1673889,
+      "sha256": "b87a447de444590881f922ad7f9483a631493ac7b0ffbc09fa2f0f1657c34785"
+    },
+    {
+      "path": "versions/04-decision/assets/a-sans-dark.svg",
+      "bytes": 1670196,
+      "sha256": "4d5fe1e45d4cb0693514f3c505ec615f241cee833d412299209d377c688fa59d"
+    },
+    {
+      "path": "versions/04-decision/assets/a-sans.svg",
+      "bytes": 1670196,
+      "sha256": "3eb17cdc6405cd818250340d47556ee3671c0aa4009d0ba85aa12c56024cbbf6"
+    },
+    {
+      "path": "versions/04-decision/assets/a-stone.png",
+      "bytes": 1164654,
+      "sha256": "913c55cf2e60b0ebfe4378cdc31daa78e9235536049dc372c66578307bdc80b2"
+    },
+    {
+      "path": "versions/04-decision/assets/b-current-dark.svg",
+      "bytes": 1761505,
+      "sha256": "afcca755c391f892275606a087c7a6a2d64b4e8dfd2bfc136e41a0a0b7583afe"
+    },
+    {
+      "path": "versions/04-decision/assets/b-current.svg",
+      "bytes": 1761505,
+      "sha256": "ee7dbaf011a588d25852473259c9603302df6b5ef08b897ce778254e67ba2df1"
+    },
+    {
+      "path": "versions/04-decision/assets/b-sans-dark.svg",
+      "bytes": 1757803,
+      "sha256": "064505499357a7772c136937decc62027f9182f440f33c5899083d8d2b23fc84"
+    },
+    {
+      "path": "versions/04-decision/assets/b-sans.svg",
+      "bytes": 1757803,
+      "sha256": "70b16ca52fc55b1de691daabc9193f6a3dc2f629e05346417f4850d3d528e478"
+    },
+    {
+      "path": "versions/04-decision/assets/b-stone.png",
+      "bytes": 1026412,
+      "sha256": "f46519e2cabe20f70308c190b305f0d787aaa0b03e02f7f0a15f1ef5b4f0435c"
+    },
+    {
+      "path": "versions/04-decision/assets/c-current-dark.svg",
+      "bytes": 3988223,
+      "sha256": "ff4e4197c2f70fe846badb634c6ef3c5948f8cb04f9d52c759d377bf6460a4fc"
+    },
+    {
+      "path": "versions/04-decision/assets/c-current.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "versions/04-decision/assets/c-current.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "versions/04-decision/assets/c-sans-dark.svg",
+      "bytes": 3987025,
+      "sha256": "68a9bf862a88944f8708983aa65be50e5bae1d82193631082c6bacb5d676ff14"
+    },
+    {
+      "path": "versions/04-decision/assets/c-sans.png",
+      "bytes": 564959,
+      "sha256": "c3fcff15a5809ca0e20b350406a423d97984c42c1985a0adf0121d11af910ac8"
+    },
+    {
+      "path": "versions/04-decision/assets/c-sans.svg",
+      "bytes": 3987025,
+      "sha256": "b345e14c6262239491d31f72e229d9e626a3add87fa79cd79416a05c5d6c6f22"
+    },
+    {
+      "path": "versions/04-decision/assets/c-stone.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "versions/04-decision/assets/d-current-dark.svg",
+      "bytes": 1678352,
+      "sha256": "a7557c15e0ac94764b9946a2677e0846aefa6d2477b7b52e54494496d9ba9497"
+    },
+    {
+      "path": "versions/04-decision/assets/d-current.svg",
+      "bytes": 1678352,
+      "sha256": "a94e5091f3334af4017da2417c350513a39890dceb67141dbd4c47b112310a85"
+    },
+    {
+      "path": "versions/04-decision/assets/d-sans-dark.svg",
+      "bytes": 1674650,
+      "sha256": "e2936f64abd78295a97974408d81ed06c97a5de0c6958e45b8e96e0dafe43102"
+    },
+    {
+      "path": "versions/04-decision/assets/d-sans.svg",
+      "bytes": 1674650,
+      "sha256": "fa921c7ce345ffe702aad7fd8caa580e2dd271ef638d707b69b070d7effeff4b"
+    },
+    {
+      "path": "versions/04-decision/assets/d-stone.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-a.png",
+      "bytes": 544365,
+      "sha256": "40809882fa76d6c7f0c891d2cd73e64fc1b91c4c621c3ee9c94d0fa79570ec33"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-a.svg",
+      "bytes": 1670211,
+      "sha256": "34407566dbbb74022feb69d9930fefc44809d4bb3b676ed52b5c06b068238b19"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-b.png",
+      "bytes": 620480,
+      "sha256": "c3c511d25873c8e083f64247dcc5de99f5f0fe09ee4bc580d787c5af62f8f806"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-b.svg",
+      "bytes": 1757835,
+      "sha256": "e3de87960143ef22ba2f577a2486a62acde3a0f6103ef4ffee9da55869ecd3ea"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-c.png",
+      "bytes": 627415,
+      "sha256": "4e99e74c2ba8da20b52d16ace2bd660e24207065b783acc106a76c354b92c7fb"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-c.svg",
+      "bytes": 1670224,
+      "sha256": "f45c981626be26c8fc693964daca79722eb38ff5853c8d8b91934f01ee5faf35"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-d.png",
+      "bytes": 622448,
+      "sha256": "0c0b62d5c9bb2655d836fe62a0922df3836ac70b9727c973aa645560564e8588"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-d.svg",
+      "bytes": 1674679,
+      "sha256": "e40faa63e75e9754cedc78db102294924803ef25f906a4fd24e97a234dc808ac"
+    },
+    {
+      "path": "versions/04-decision/assets/icon-manifest.json",
+      "bytes": 2406,
+      "sha256": "9f467bbc68f4c07661330cc5613c0dfbd967eff93c3b7a39ebdc5c3edf41ce09"
+    },
+    {
+      "path": "versions/04-decision/assets/place-photography.png",
+      "bytes": 2998799,
+      "sha256": "9101d6953abf6145fbdab5c8ab0384b4ebf08c550f6dea36b8c9808ba299ad3d"
+    },
+    {
+      "path": "versions/04-decision/decision.js",
+      "bytes": 4621,
+      "sha256": "d711dd67a1b6dd82c93aa27588b09826dde3904f4dd884ff6c574ac2be237117"
+    },
+    {
+      "path": "versions/04-decision/index.html",
+      "bytes": 5887,
+      "sha256": "4f7487076a1845b768f91c9983225c37d8463825748fa249957788e29ad659fa"
+    },
+    {
+      "path": "versions/04-decision/qa/asset-notes.md",
+      "bytes": 1551,
+      "sha256": "3844177071b68c19b4acc22ac51eb6a4775d1d527b7defb6bf46efbedbedcdf2"
+    },
+    {
+      "path": "versions/04-decision/qa/browser-validation.json",
+      "bytes": 430,
+      "sha256": "50531f6e0e94fe463249357fa913abbb432965402ca0eff8f15de2c3d9b2ea7d"
+    },
+    {
+      "path": "versions/04-decision/qa/build-assets.py",
+      "bytes": 2883,
+      "sha256": "8c7c9fd1c70d752202c4f2816ef3c73a972531f431fcc31210ca919f71d382f5"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/37-terracotta-current-serif-before-base-trim.png",
+      "bytes": 569340,
+      "sha256": "ba780fffb0cf8f2f180faa1e8f8fd5c97c4df02a204084209f67bccfc3aa0c84"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/37-terracotta-current-serif-before-base-trim.svg",
+      "bytes": 3988223,
+      "sha256": "7af7231d593e5746e2eef9163bb2a7b04ed7284b5894d7d4cb26c58f704e36cd"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/37-with-paper.svg",
+      "bytes": 3988271,
+      "sha256": "d53bb561c4d4e2fe4f27a80ede70b2c05659c5eec9dd610b7bd73b0b6b854bcd"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/c-sans-before-base-trim.png",
+      "bytes": 566679,
+      "sha256": "5a8ecab3b254f11c64a50df003a78be6751cb714df0ca2e9398b1ee1e53627a5"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/c-sans-before-base-trim.svg",
+      "bytes": 3987025,
+      "sha256": "866f0ef8fac5b139ec33145c3cb42437bf850543d2c8f0cbfcdd031afcb6c759"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/icon-c-before-base-trim.png",
+      "bytes": 633861,
+      "sha256": "133f26a0069183be74d3d4bcdfe6ecf2572761d4251475782f4404055b227729"
+    },
+    {
+      "path": "versions/04-decision/qa/first-drafts/icon-c-before-base-trim.svg",
+      "bytes": 1670224,
+      "sha256": "b594ea221be35ee7f5106e6368259ffbb00297091596b15c43a80dd3da41cc56"
+    },
+    {
+      "path": "versions/04-decision/qa/icon-small-sizes.png",
+      "bytes": 30756,
+      "sha256": "427203a8b50ee3f0f3efe204e0f58bb819ac3f6c6050b4feec5ee1b84fb2a1dc"
+    },
+    {
+      "path": "versions/04-decision/qa/render-assets.cjs",
+      "bytes": 2416,
+      "sha256": "c086cfdccf923b07b1ffdee21ae91c565f76107cb8fb6a5d1d01bf837a42120d"
+    },
+    {
+      "path": "versions/04-decision/qa/sans-path.json",
+      "bytes": 2811,
+      "sha256": "b0daa166e493ce5e02d3cc0b7b7ee52ac0f2b89093f57927297a483e1201c140"
+    },
+    {
+      "path": "versions/04-decision/qa/serif-path.json",
+      "bytes": 4021,
+      "sha256": "e4878e7b7c22e94033fcbe89485f3443bb6e1909e25491f95b8e7967476db7db"
+    },
+    {
+      "path": "versions/04-decision/qa/serif-path.swift",
+      "bytes": 1485,
+      "sha256": "e3cf2ba3880b684a69a3644c38fc80a928146fb30aa58c9ec358993e39092e7a"
+    },
+    {
+      "path": "versions/04-decision/styles.css",
+      "bytes": 12180,
+      "sha256": "64d0641e21ed986e96a697cf40e3010cf9441b623954a19e29967851f7a1f077"
+    },
+    {
+      "path": "versions/05-black-lockup/ARCHIVE-MANIFEST.json",
+      "bytes": 5829,
+      "sha256": "563e733ec0dbdf4a1e98506147db66ac4b4ece2f776b803fbe53cfcb773ed3bf"
+    },
+    {
+      "path": "versions/05-black-lockup/README.md",
+      "bytes": 1115,
+      "sha256": "41a9d3a5841fbe621d575aeff5f63b948b0d27027089fa8dc92ae9b05716fe3b"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/38-red-current.png",
+      "bytes": 429505,
+      "sha256": "43c1f59e9ae194621aabb6ed186754cbd009d68209bacd0a39f08382005d13bf"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/38-red-current.svg",
+      "bytes": 4225183,
+      "sha256": "ce0db0f2fb5a943641ff61da2de4e079bedb395a80c18c19be2c85d3f64c490b"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/39-red-bold.png",
+      "bytes": 428768,
+      "sha256": "e785ef6e51f54e7192771898fe889b8328da30cf9b5a76ca5264ed4920fd5142"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/39-red-bold.svg",
+      "bytes": 4225197,
+      "sha256": "ae731c4e05b682155cff36a0ba28a83417bfff927052848b004c361eabed5c21"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/40-terra-current.png",
+      "bytes": 441004,
+      "sha256": "aed7700f7276c8642552bbb5519447edd8ea43fe64f24467db6fe3167a8ca8dd"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/40-terra-current.svg",
+      "bytes": 4225184,
+      "sha256": "578836ee98cae085cbe6c82892980612ed0330a5b6b84315cdcf961c1fd8303c"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/41-terra-bold.png",
+      "bytes": 440014,
+      "sha256": "fb386b4a51bc5b331e65afb89abd80558a0c3d05996cc20341a5c1e00f57d8a6"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/41-terra-bold.svg",
+      "bytes": 4225198,
+      "sha256": "bbbc656502f299f9c82a9e9c5a9d1e197d2861bcbf4ae418c76cc7ca4aa4d175"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/icon-red.png",
+      "bytes": 455583,
+      "sha256": "9fccea0ce79e1c5b44ec61139110d3c4f49dadeb5550bd926dd16b3eeefd4ca2"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/icon-red.svg",
+      "bytes": 4211263,
+      "sha256": "8d55c9051a1609f46998e53226af1f69bc97f6258b93d132847cb69e60373e42"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/icon-terra.png",
+      "bytes": 458693,
+      "sha256": "bbfe0ce88476099cec8981d7286688e13eaaa7c36ac7698c748affd3c31f429c"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/icon-terra.svg",
+      "bytes": 4211264,
+      "sha256": "260898b08ae89aa23224d5f5f37dd2e8339de902b056e9c7901d797b7fb6aca6"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/red-bold.png",
+      "bytes": 428768,
+      "sha256": "e785ef6e51f54e7192771898fe889b8328da30cf9b5a76ca5264ed4920fd5142"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/red-bold.svg",
+      "bytes": 4225197,
+      "sha256": "ae731c4e05b682155cff36a0ba28a83417bfff927052848b004c361eabed5c21"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/red-current.png",
+      "bytes": 429505,
+      "sha256": "43c1f59e9ae194621aabb6ed186754cbd009d68209bacd0a39f08382005d13bf"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/red-current.svg",
+      "bytes": 4225183,
+      "sha256": "ce0db0f2fb5a943641ff61da2de4e079bedb395a80c18c19be2c85d3f64c490b"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/terra-bold.png",
+      "bytes": 440014,
+      "sha256": "fb386b4a51bc5b331e65afb89abd80558a0c3d05996cc20341a5c1e00f57d8a6"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/terra-bold.svg",
+      "bytes": 4225198,
+      "sha256": "bbbc656502f299f9c82a9e9c5a9d1e197d2861bcbf4ae418c76cc7ca4aa4d175"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/terra-current.png",
+      "bytes": 441004,
+      "sha256": "aed7700f7276c8642552bbb5519447edd8ea43fe64f24467db6fe3167a8ca8dd"
+    },
+    {
+      "path": "versions/05-black-lockup/assets/terra-current.svg",
+      "bytes": 4225184,
+      "sha256": "578836ee98cae085cbe6c82892980612ed0330a5b6b84315cdcf961c1fd8303c"
+    },
+    {
+      "path": "versions/05-black-lockup/index.html",
+      "bytes": 3811,
+      "sha256": "aecfde75ddded465155b3ed159f3971f94b69a29c6efb290196d881234249f1a"
+    },
+    {
+      "path": "versions/05-black-lockup/manifest.json",
+      "bytes": 3051,
+      "sha256": "dd89194825c5e97118fad30fee71855c3eb408af7edd12cde1173385f7af6b6e"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/build.py",
+      "bytes": 3428,
+      "sha256": "e0f945c4ae9dc41565f7e0390363f33ea614bf8136541a7da94f58babb8f471d"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/checks.json",
+      "bytes": 735,
+      "sha256": "7393ef94597352748d610106923b6f20e551a3dee1a2569c64070ff652ee5138"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/initial-icons/icon-red.png",
+      "bytes": 435308,
+      "sha256": "1e259cb6e02d2240d2b718b34caa250ea03579554daf6e1e3301539ffb3aa6d6"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/initial-icons/icon-red.svg",
+      "bytes": 4211236,
+      "sha256": "3268cc21aa63db4cf52a7b58a1e058580c0a5275d61363443951d76cd61cbe00"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/initial-icons/icon-terra.png",
+      "bytes": 437287,
+      "sha256": "68441631b3dac7ce6e5f8024e174eb50c34beae058025e0e220ad117440f53d5"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/initial-icons/icon-terra.svg",
+      "bytes": 4211237,
+      "sha256": "2134f88a01643b34798f1d273227efd24bddbd64aabfd28e3bca92ea31c46ad5"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/render.cjs",
+      "bytes": 2076,
+      "sha256": "7e897d9a13efe89604e735f0617fbc86cdb2acb23e272ab5c5ef75ac9053fd49"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/review-desktop.png",
+      "bytes": 404868,
+      "sha256": "a14b00f41dcb4a3620d16e68ecd1a0ee726af33db4f6805f2d26183f06d4d47d"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/review-mobile.png",
+      "bytes": 174780,
+      "sha256": "7e7a5a3874bafe06958ab66eb4422a43f6fc56055bf3ddefd1d79218269fa464"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/type-paths.json",
+      "bytes": 43106,
+      "sha256": "b5ddb2c8326570683769a414a6ffe2c7bd1778db0a3da9acace936d28442763b"
+    },
+    {
+      "path": "versions/05-black-lockup/qa/type-paths.swift",
+      "bytes": 1540,
+      "sha256": "5139002656f45eb215d38b413d004c7e65dcaf2164974d9165dc629167b1c6ee"
+    },
+    {
+      "path": "versions/05-black-lockup/review.js",
+      "bytes": 1797,
+      "sha256": "e8aa292d273974524fadd94d62b31306b3d637f53fa392020224b2e0d4d29439"
+    },
+    {
+      "path": "versions/05-black-lockup/styles.css",
+      "bytes": 6168,
+      "sha256": "598cba65ce58c15a01dc26ede582ac318df58fc9f8e07f2a00439875fd9e3e3f"
+    },
+    {
+      "path": "versions/06-stone-type/ARCHIVE-MANIFEST.json",
+      "bytes": 6275,
+      "sha256": "7307b36eb79f9c5572f08e24e307cd719a6d5d3bf793e7608f718f315720a824"
+    },
+    {
+      "path": "versions/06-stone-type/ASTIR-exploration-06.zip",
+      "bytes": 35227912,
+      "sha256": "ed77b7851d2b1fe182a4e1da56c1c72cb2db2a943e933094295af06be9c22184"
+    },
+    {
+      "path": "versions/06-stone-type/README.md",
+      "bytes": 4568,
+      "sha256": "76eb653a1a71ef3eda281c88260e3cfa4ccd8cd7e00092be8a39c9a55fcef047"
+    },
+    {
+      "path": "versions/06-stone-type/assets/42-wordmark.png",
+      "bytes": 1195467,
+      "sha256": "9abc8f9d9a87ff9995a87decf82525001959c62b421a16508368d4030129e19a"
+    },
+    {
+      "path": "versions/06-stone-type/assets/42-wordmark.svg",
+      "bytes": 4447043,
+      "sha256": "ed130a5a01b9a1c0356b4015ff9b8a5701df63d2ab5992922508b2f8f6b0705d"
+    },
+    {
+      "path": "versions/06-stone-type/assets/43-wordmark.png",
+      "bytes": 1255869,
+      "sha256": "0938509c1e8f14934f19ccfb5262f03f9ff36343f07b697c768d90c04eb89e90"
+    },
+    {
+      "path": "versions/06-stone-type/assets/43-wordmark.svg",
+      "bytes": 4266451,
+      "sha256": "2d15d03a65cce82a38c7c92d3702d5856e85344b4395d8f3db861a7d1f53e94a"
+    },
+    {
+      "path": "versions/06-stone-type/assets/44-wordmark.png",
+      "bytes": 1252429,
+      "sha256": "a1c05ea75ad067b02b1d5d7ca90f3eaf000a5f830f0ff1e9d73417b2ec618383"
+    },
+    {
+      "path": "versions/06-stone-type/assets/44-wordmark.svg",
+      "bytes": 4447099,
+      "sha256": "bffb5853ce3e720789d1499ee21bc302d359cf3b9324442ac78f1c5ba506e48b"
+    },
+    {
+      "path": "versions/06-stone-type/assets/45-wordmark.png",
+      "bytes": 1330341,
+      "sha256": "ceadaab011d1a456d7bab16997299fd48207edbb10730f8d8dcca504b3782893"
+    },
+    {
+      "path": "versions/06-stone-type/assets/45-wordmark.svg",
+      "bytes": 4266507,
+      "sha256": "f2e5cfea095f8e4685c989445d287df0660a1d8e0f5853305b5319c976e2730c"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon42.png",
+      "bytes": 507226,
+      "sha256": "2729fa5063a4a251647a5049a7be3f260909ad1cc42c4b65a6f7872f5a9e0f72"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon42.svg",
+      "bytes": 4427407,
+      "sha256": "75497b8195030242b6620d83040f3af0c469e2fa0eb2e888bc40fbe9bbaf19f1"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon43.png",
+      "bytes": 452498,
+      "sha256": "6781389d05b90bd28315b1cfed5ae2909f1928e208ef00c8d3a9586b45c35461"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon43.svg",
+      "bytes": 2066295,
+      "sha256": "6b1feeb29b9e234cbb7bbfaa944bcf0e5e2a144afcdd99c49d162c33d6c84842"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon44.png",
+      "bytes": 437397,
+      "sha256": "353ef4d92318bb6823bafba986ff3d89c1db529dbf9b06b1d99a98d0d03d6d13"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon44.svg",
+      "bytes": 2246887,
+      "sha256": "4b0d023e545be4c6e128384ce2fca2997c424ded4a55b1be074ed2b0d750aa9d"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon45.png",
+      "bytes": 478327,
+      "sha256": "00d4f5e17d6b1ccaab3eb39bce83093d0c2b3e7557e3ea784d1635f2d84dc44c"
+    },
+    {
+      "path": "versions/06-stone-type/assets/icon45.svg",
+      "bytes": 4246816,
+      "sha256": "c6e1e9380ac18c409977352f64665687aed698a8011eb3638921e319700c3c31"
+    },
+    {
+      "path": "versions/06-stone-type/assets/metadata.json",
+      "bytes": 3699,
+      "sha256": "382bf5727ff42cf7dd059a2e0df89331430f1919fcb97af5fab7814eb37fd00b"
+    },
+    {
+      "path": "versions/06-stone-type/assets/source34.png",
+      "bytes": 1683764,
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de"
+    },
+    {
+      "path": "versions/06-stone-type/assets/source35.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "versions/06-stone-type/assets/source36.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "versions/06-stone-type/build/README.md",
+      "bytes": 1227,
+      "sha256": "3c35c7b7232f91ffd07f18965192e58fc0d809a3b6a4e9e9228769501f2a6c0f"
+    },
+    {
+      "path": "versions/06-stone-type/build/__pycache__/svg_images.cpython-312.pyc",
+      "bytes": 3175,
+      "sha256": "2ff2d98f30a47221239a272fc01228215c1d59e2741e4d372ad9654254ae2ded"
+    },
+    {
+      "path": "versions/06-stone-type/build/alpha-validation.json",
+      "bytes": 1491,
+      "sha256": "baf40f60cc897557b713f8df324016de24750f852b58bf96d21a77bc75ef8c2d"
+    },
+    {
+      "path": "versions/06-stone-type/build/build.py",
+      "bytes": 5377,
+      "sha256": "c9430787fc4534dec1f2b3f0b4582e49d6597383138b49e8c5136d0c35b1237b"
+    },
+    {
+      "path": "versions/06-stone-type/build/contact.html",
+      "bytes": 2935,
+      "sha256": "828a219dc48816d84f33ce98b3f6d88492ea6bafa510d46ab9f58380768ea855"
+    },
+    {
+      "path": "versions/06-stone-type/build/contact.png",
+      "bytes": 620942,
+      "sha256": "6a9f3e662aafd21759e9c58cd91c4f85ab0d8e229521bd2fae79acbf655a0cc0"
+    },
+    {
+      "path": "versions/06-stone-type/build/package.py",
+      "bytes": 2148,
+      "sha256": "a1293a56c3a9db024bd0e721718c4849ad61e35a11b701b9281cfa2a0762ff76"
+    },
+    {
+      "path": "versions/06-stone-type/build/portable-start.html",
+      "bytes": 1247,
+      "sha256": "268824c3815e7a87216a37696f13d41b08f136492f8c1e6c05d028f926a77467"
+    },
+    {
+      "path": "versions/06-stone-type/build/render.cjs",
+      "bytes": 2170,
+      "sha256": "85331940fb246b9bfc88d6fe70ac9c98954af95b55819f6c822c7b4c2cbaab89"
+    },
+    {
+      "path": "versions/06-stone-type/build/source-validation.json",
+      "bytes": 857,
+      "sha256": "86bec33eaf6b71563cdffe8f32ed143cd413dcd8ed6f161db11e7cb7c45e6745"
+    },
+    {
+      "path": "versions/06-stone-type/build/svg-deduplication.json",
+      "bytes": 1463,
+      "sha256": "85954b502289171395560b0a6126e5bf1e96f1aeef468c857e76b7548f0d1a97"
+    },
+    {
+      "path": "versions/06-stone-type/build/svg_images.py",
+      "bytes": 1902,
+      "sha256": "f2022e128e8571fcd877d57592c3c61f0d242d07b6618089ff94c76cbac196ba"
+    },
+    {
+      "path": "versions/06-stone-type/build/type-paths.json",
+      "bytes": 43106,
+      "sha256": "b5ddb2c8326570683769a414a6ffe2c7bd1778db0a3da9acace936d28442763b"
+    },
+    {
+      "path": "versions/06-stone-type/index.html",
+      "bytes": 6174,
+      "sha256": "aa82b2e3a61f141b274a1ee8e1e055a5eaba9e8c8b641870e18119cec8271514"
+    },
+    {
+      "path": "versions/06-stone-type/qa/archive-validation.json",
+      "bytes": 13172,
+      "sha256": "01bf12ca9a8791071f18e270fd93ed6683a218ed505adc482f6f80ae909a8b08"
+    },
+    {
+      "path": "versions/06-stone-type/qa/prior-versions-before.json",
+      "bytes": 37901,
+      "sha256": "fb33596511a8ea9f5b7dd3113b2517045722656fcb0dab7695c8ce260f6926fc"
+    },
+    {
+      "path": "versions/06-stone-type/review.js",
+      "bytes": 5509,
+      "sha256": "245ce7aba85c9ef6175cb356e27b1867f6896fb600294c64f5ecbcf3dac9f8ee"
+    },
+    {
+      "path": "versions/06-stone-type/shortlist.json",
+      "bytes": 214,
+      "sha256": "9700c14e05ad74e2cb90475283bd4d363669ac8b987dcbc5dae0220d5fda5782"
+    },
+    {
+      "path": "versions/06-stone-type/source-prompts.json",
+      "bytes": 14103,
+      "sha256": "465cf263aef71af18d4b87674ac2c941fc78ef5d2b96a313104c329ff3691aa2"
+    },
+    {
+      "path": "versions/06-stone-type/styles.css",
+      "bytes": 11385,
+      "sha256": "ecc3ba29191457df87c40728dadc2b54dd69d35cb51d695ab26d0b42cdcdf8be"
+    },
+    {
+      "path": "versions/07-sculpted-identity/ARCHIVE-MANIFEST.json",
+      "bytes": 43440,
+      "sha256": "32d10d8c7f445bd2187305aeebb3f8e572c32ea8f41c60ed57676b609e4e2563"
+    },
+    {
+      "path": "versions/07-sculpted-identity/ASTIR-exploration-07.zip",
+      "bytes": 71216860,
+      "sha256": "e8dca96b32cdf4bc0c4ddf3596deeea07d00497a1a4a5c258c699cce761abeb2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/README.md",
+      "bytes": 5584,
+      "sha256": "62ca60200d3886e148407ffa76c7e558a29a7141359a4279ba16b86d9e891846"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-mono-light.png",
+      "bytes": 205574,
+      "sha256": "f80a248dc2d7bd84ee15ab8d9dd1adbb51ff57e85c2de19c20bed19300733b67"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-mono-light.svg",
+      "bytes": 6858,
+      "sha256": "5bd44909a35ab42f3f71d4503b8c28cad31bf7532c914b5522b2ccf35e96c709"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-mono.png",
+      "bytes": 261644,
+      "sha256": "46aef60896aeccdf45f7b1fb02763dd6ce2cccbaedb8fb7d78ef390b054429c4"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-mono.svg",
+      "bytes": 6831,
+      "sha256": "67073cb83c6edb37cba1f638e10b526620b8345f38a2d63098c7f3384bd864c4"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-oxide-light.png",
+      "bytes": 206955,
+      "sha256": "bf62d1f1de27152e5d70d77b0344f6ed258c9d0d26a7ff6f0b297a5c3611bf4b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-oxide-light.svg",
+      "bytes": 6861,
+      "sha256": "c6adce66b81d44e7ecfe691a2a48d7ba18f4f74a7f842e85a3ebf6bf0ef31d38"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-oxide.png",
+      "bytes": 263008,
+      "sha256": "758a5ba1f4da45d2c0aae85e824113e825c18e5afc2f63c76be4fed507deef16"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-oxide.svg",
+      "bytes": 6834,
+      "sha256": "634e99decb9087bd0bdcb62a1465d5a04297921e3bc4af147560356f2001b636"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-signal-light.png",
+      "bytes": 207065,
+      "sha256": "9be93d03f435c2e0cffa7f9b91ac184897a5ebffeb32ada3566687f22191a06e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-signal-light.svg",
+      "bytes": 6862,
+      "sha256": "c6827b1d002891996a154c60725ac746871d243f213b952cdb57937c61230b4b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-signal.png",
+      "bytes": 263218,
+      "sha256": "4f8c552b96ebac0438c4c0fa99de776baa9a587617fd79a1d274efd36e5b4c71"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-equal-signal.svg",
+      "bytes": 6835,
+      "sha256": "8e0b39355ccf900f4261464385102fb157f1da5955c88fcfcb2c8f8e40a531b0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-mono-light.png",
+      "bytes": 246248,
+      "sha256": "d3b572df78987c9f2ed4f4cc7e5d0c7bcee9b2910cb59f32ae8238fb69bccc32"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-mono-light.svg",
+      "bytes": 6857,
+      "sha256": "cfa4d7f209f864e439d9d9948c009c6172fc3f46257ea7b54347de2ab8af3e12"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-mono.png",
+      "bytes": 334311,
+      "sha256": "0ff9bf1b45bde370735a8ce294a2b3d5a479c7476ce1619159290183c30a5184"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-mono.svg",
+      "bytes": 6830,
+      "sha256": "70e3f685ecea05662b3d6c6de80ade80426346e8ce21e810c6b213c90ca60aae"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-oxide-light.png",
+      "bytes": 247499,
+      "sha256": "3c535d84fb5ff92d5075f30dbe3199cc12ce18b3d33d41bf6470cadcc62e90fe"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-oxide-light.svg",
+      "bytes": 6860,
+      "sha256": "c5685bf345a302a6ee1d90c6ff05249167d7487fecad8ae272ecff42fae6e96a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-oxide.png",
+      "bytes": 335358,
+      "sha256": "1c14bfaedf7b371b525f05c1082a5151585ff895d73f4f9ae802dd037007aa51"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-oxide.svg",
+      "bytes": 6833,
+      "sha256": "750c035c7b98ba3a79e7d96c24a42017dcfba34c9f45f8a190e452190a00ef7c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-signal-light.png",
+      "bytes": 247627,
+      "sha256": "d7256a1a99b276716fb08ba834032776669301153946aa9883cca0236f662aae"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-signal-light.svg",
+      "bytes": 6861,
+      "sha256": "c703cf5e96307f6b5d9bf25216fabe6ded13b6cd996ec5f6479b7f5dee4adb25"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-signal.png",
+      "bytes": 335524,
+      "sha256": "39d16676895cbff23a73cdadf173aa233b4eb36bd24e1f4245a7269ba9e4dedd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/46-tall-signal.svg",
+      "bytes": 6834,
+      "sha256": "b472d14e2235a79975d6b769a90a10ab93bab4ec83349d427556d9340922c597"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-mono-light.png",
+      "bytes": 211666,
+      "sha256": "530f7d113586d26b1e553d11c44c7bdd31cbba8cae1e79c57a48add29ccfef24"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-mono-light.svg",
+      "bytes": 6862,
+      "sha256": "16cf5d64516b1497235176dd2dfdec182ba9de65ac75cfcb7a98ed01aa6e0ce1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-mono.png",
+      "bytes": 265662,
+      "sha256": "107a4bafe416014b3ed222222a4bc27f3feb6e6fcd9e1a2d3224204d36076844"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-mono.svg",
+      "bytes": 6835,
+      "sha256": "94b3f7946b15c75dc1ef831c32a2980a06ac7b7ab742ff8cb217d94d97bf1de3"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-oxide-light.png",
+      "bytes": 212984,
+      "sha256": "3e9d988d4c8eb393087760e506f747ef2fdee006b91d1ce6b3921b6ce326bd31"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-oxide-light.svg",
+      "bytes": 6865,
+      "sha256": "031576b8622c4051c761341f4cb9d90d3e7c438921e4c9791a5fb57e5884bfa9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-oxide.png",
+      "bytes": 266623,
+      "sha256": "4239107ea45033f62c9e796a5348be08d1febc56a555bb9d5803c76d550ea854"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-oxide.svg",
+      "bytes": 6838,
+      "sha256": "38d07ad4b382eeeed9af6cd6e9ecc1d31d8e878193a88878f919ff2c446efae3"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-signal-light.png",
+      "bytes": 213121,
+      "sha256": "43c8cebbe6962ca0f6747d565eeba01ef6399d9fb37ef40cb7c218004ab69d6d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-signal-light.svg",
+      "bytes": 6866,
+      "sha256": "7e14bb865bfcd67a0b874970dd0aa45d2506d0990ff92799e5daf25f4585ab2b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-signal.png",
+      "bytes": 266698,
+      "sha256": "20d234218e0c893e9249ce9ae85a0fa9bf36c1131a8bf56a414b916d89d45ce7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-equal-signal.svg",
+      "bytes": 6839,
+      "sha256": "f0b44d44a86de9b14c503693e32d2f9ea0ccc435fdc82231ce963f9dcba9b796"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-mono-light.png",
+      "bytes": 251505,
+      "sha256": "7461d193bee49f349a0646ce70603fa5e2cfea895ab78e070f1ad682fd14c1f3"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-mono-light.svg",
+      "bytes": 6861,
+      "sha256": "8cdbd21527b543245fba60e8e3437b1d6495526600a080a03bf1c371cc2f79a6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-mono.png",
+      "bytes": 338662,
+      "sha256": "08293331b4cbfc2459928ceea7c2ef4dd74eb2db949bdde4694946847882c2f7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-mono.svg",
+      "bytes": 6834,
+      "sha256": "a5545db6a8ca520f422f22a99fb6a69787de6db0c18fb50adfe46944e2e82935"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-oxide-light.png",
+      "bytes": 252410,
+      "sha256": "4f1e192ebba5ae794b1952a0c348b425afaa215edfd19e14b9e2b21f334a584f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-oxide-light.svg",
+      "bytes": 6864,
+      "sha256": "d2b252f1d463424d2b1d667bb30750e20eb31e5fd5cc4d75a667a4cf09b639fd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-oxide.png",
+      "bytes": 339799,
+      "sha256": "d7d4d26841de78bc42ecbed48ff797d35ba67f10aae9c75ca34e28a9284196dc"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-oxide.svg",
+      "bytes": 6837,
+      "sha256": "5f40c00053204aa7ca64d549442fd22b93de75f468528dc4bb1b84bcde7be6e6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-signal-light.png",
+      "bytes": 252539,
+      "sha256": "a314db1cde468aee6587b0be3d4f418e48ebf48a3b16ba9d75bc79cfabcb1a08"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-signal-light.svg",
+      "bytes": 6865,
+      "sha256": "d0af615829fcf1dc1cbfa7ebb01129d73bf0300058f13f21ed38284c70dfe993"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-signal.png",
+      "bytes": 339987,
+      "sha256": "cbbba3331eedd3344b63c0e0f1e6afd31aaaad9ac5b3e5c4ee3e8489820b2ce1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/47-tall-signal.svg",
+      "bytes": 6838,
+      "sha256": "58d5c54e4f579e947f0f1fb38a83a29dfcc8f8562b2e2116e76d1d55149ca584"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-mono-light.png",
+      "bytes": 353285,
+      "sha256": "08a6c2b0807de1c64d70e39cac0be41887af5a241bb34797e77a42e61ab923f5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-mono-light.svg",
+      "bytes": 3166,
+      "sha256": "e425355d3a1b1f552d8936056a264a8e5e7368032d0215948c1a91371060db05"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-mono.png",
+      "bytes": 555691,
+      "sha256": "35ebb524379a6ddb2d1edf0b682e7d1494286208747fcc53d94d9b6497d4696e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-mono.svg",
+      "bytes": 3115,
+      "sha256": "7a2602b56bc0600e683638bca6ccf5e3a58b34bb442d9bda089dbf76ad07f848"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-oxide-light.png",
+      "bytes": 354713,
+      "sha256": "809cf11c7ab0983eb725a39af16c0c1e226b97588e625c2cedfe2a5fe00bf766"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-oxide-light.svg",
+      "bytes": 3169,
+      "sha256": "deba9c2036359e11cbdf4b0c3d19561c9fee4e54a40354858dfadd7cd6998be4"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-oxide.png",
+      "bytes": 557003,
+      "sha256": "e08a744efbcd3d75c69285b428490fe9b08953d5411ff6d179d0f2ad68b4ea2d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-oxide.svg",
+      "bytes": 3118,
+      "sha256": "bc3fb32287940a6445b7445d77f8742df011f19b367eaf9cb638d42502ffe3b5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-signal-light.png",
+      "bytes": 354767,
+      "sha256": "e8dbef5ac13099a80613a36811e5ddf97ddff07c7c807ec394e6e53ead16259b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-signal-light.svg",
+      "bytes": 3170,
+      "sha256": "0f1617969cbe23da5da974b40ea1a508f246874ee554032463e40d42771c4f2c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-signal.png",
+      "bytes": 557014,
+      "sha256": "0e940cdeec95a69b09b0508423e71ed9db7d85ba74ddea61090282b61a89e698"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-equal-signal.svg",
+      "bytes": 3119,
+      "sha256": "6b7a71d255f50166ed03002023811b1acf64eca0d7c4016ea24df27e600aaced"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-letters.png",
+      "bytes": 1542567,
+      "sha256": "c09c587f476b496c25f07da96e443e348f661b57906d1f0a67367fd27181102c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-mono-light.png",
+      "bytes": 392535,
+      "sha256": "950087349e208609974fd94c971311dd43df57cfb32b15882719e3c7f21d41ac"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-mono-light.svg",
+      "bytes": 3175,
+      "sha256": "4277dcd0e26f269ce42cb05ddde6be221d2da078b3ecc6284ec84243a483df89"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-mono.png",
+      "bytes": 629909,
+      "sha256": "192f87ac8254377cd5194ed3d935262f1dfb7d4d1ae780d7f7d8ea8a7d7c0012"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-mono.svg",
+      "bytes": 3124,
+      "sha256": "ad74166620cfb5b873a3e85e11c9c7604315b64a486f4b73c17bee768c2e3d98"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-oxide-light.png",
+      "bytes": 394126,
+      "sha256": "a11019fd8fd1d1f13c51e4d1338a81dc99692a8c837b94680fe343fe46e8cc76"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-oxide-light.svg",
+      "bytes": 3178,
+      "sha256": "c2d2caf98a3fb202aa5626d90667fa1f1e0658bf385a1a4432e9909635b7a036"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-oxide.png",
+      "bytes": 631709,
+      "sha256": "f0fdbd90061c41ccfd5855fa3e19fe29d6ce9d9e48b33528c5c667d786f28d51"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-oxide.svg",
+      "bytes": 3127,
+      "sha256": "ea43dc8e5cff41c6bf4141c31c564fa44cffda84451be177a83f2c6d449e307a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-signal-light.png",
+      "bytes": 394174,
+      "sha256": "a5431c8bbf490363b6edb730365bfb0ca728b44b648e9a94e353377bf2766b74"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-signal-light.svg",
+      "bytes": 3179,
+      "sha256": "056dfa0e5ea838e6a499c31185d26c0a534a907642fff9b3cdaff9ad8d13851f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-signal.png",
+      "bytes": 631738,
+      "sha256": "370c6d76df739c8c32ef7724b785893f96af81b3981fdbcf97c5749411285e39"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/48-tall-signal.svg",
+      "bytes": 3128,
+      "sha256": "71044779cd70776df48ae353f187909a96a3d35086885b9f11ed95c59c47a109"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-mono-light.png",
+      "bytes": 333840,
+      "sha256": "a1ce4036a94d8b3bf01c28f515264139e449d9f0f2c8552d5dd9e6df09de1c14"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-mono-light.svg",
+      "bytes": 3167,
+      "sha256": "410cd7fc687f9a1178a3d820bc843fc8b3a703717e7ac43ebdb2dab658448f71"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-mono.png",
+      "bytes": 525326,
+      "sha256": "99eab5cf5ca6b67bb69f8e9c6e3deacd3f1d0d6b189010f56ed88969b0b0d53f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-mono.svg",
+      "bytes": 3116,
+      "sha256": "1dc63e7c9ee407194baa5f6c0f794eea5108417d717d89df7a1c14a8b511cfa5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-oxide-light.png",
+      "bytes": 334986,
+      "sha256": "42c4827017cc21d16ddf1034e45b79be3bd88d1c0cb400498f091f91fd06431b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-oxide-light.svg",
+      "bytes": 3170,
+      "sha256": "2ddbb524beda2a832ea17e0cd4e57bedcd628a2074269c3c0b1a34ea56de1130"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-oxide.png",
+      "bytes": 526171,
+      "sha256": "2aa91368c95f518e9d08aa0f9600f04b3f4f3e022dc5d0981e97776aaa96d7cf"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-oxide.svg",
+      "bytes": 3119,
+      "sha256": "6ec23af9661400662d3ea4e4b02ffa4a31d5f6f17d3a580b61c54260be925e7e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-signal-light.png",
+      "bytes": 334882,
+      "sha256": "6361570841678c6dafcdb289da9479425999712e8dbffd17735907677e20bd72"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-signal-light.svg",
+      "bytes": 3171,
+      "sha256": "0fee9f1af101be721f3d917a7a5a98d766a43df11d4d6f2672803622d8e5e142"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-signal.png",
+      "bytes": 526102,
+      "sha256": "a5e1ee47a9f25d040cfc1a1d4eb1f019011bbe6c97c9668ce2eb40c116e3045d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-equal-signal.svg",
+      "bytes": 3120,
+      "sha256": "6f96e2e455b12166b305b6f03ab22d54a6fbbac12a597acbcafc50db5b90dbd7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-letters.png",
+      "bytes": 1334378,
+      "sha256": "6c8748b01bebb32c9a33e4d76e1e34678ea035df9d4ca787ae9b9f8acc9ad9c0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-mono-light.png",
+      "bytes": 372851,
+      "sha256": "56b827200ab8ae1bbba353fb2d80341dcf86aca249d5dda90246a794fc131fef"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-mono-light.svg",
+      "bytes": 3166,
+      "sha256": "f2f59f9e8388d0ef6a5411017d1fa15558331045ceb06eb3562ecbd71d8c872a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-mono.png",
+      "bytes": 599275,
+      "sha256": "2b1d6f89fd895b58ff638e02281e2324bbb959305a0e48a34bf19dad199ec5ed"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-mono.svg",
+      "bytes": 3115,
+      "sha256": "05f21aef5794e313d9813d7c86d18d6052b7ddbd87258e3d4c97ed3dd23a5d2e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-oxide-light.png",
+      "bytes": 373769,
+      "sha256": "4892cafe17d2f33814d8e5c469998b2d7f128a75eb29d6117d1d375f157bc6da"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-oxide-light.svg",
+      "bytes": 3169,
+      "sha256": "73b6858c6c7f262b62eb6c4d62279d80c49ad9170a524006c9bbdd69ece14fd6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-oxide.png",
+      "bytes": 600235,
+      "sha256": "326aba939504e2652c24c17ed228710504ff5c6f818d959c64287f88a19a4e16"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-oxide.svg",
+      "bytes": 3118,
+      "sha256": "c7299253f539144bdae41c31c3efe79c16decdf5249e739548f3208bb2caaefc"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-signal-light.png",
+      "bytes": 373881,
+      "sha256": "137d1e97923c033534b08014e2f83f58357549ebebf6be4eef111ac4fdf0d699"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-signal-light.svg",
+      "bytes": 3170,
+      "sha256": "1cb2ffd8f976b29a89b0d863f936095cf65c77f244a990f1a09ee1cd22169699"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-signal.png",
+      "bytes": 600373,
+      "sha256": "0e4014d4384f189804911cf9fa8a615de4b3b5fbcfb215f8c4d04dbd74a63d79"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/49-tall-signal.svg",
+      "bytes": 3119,
+      "sha256": "bd6537e5227750c4a6bb6faa712ce383ea9a407d93e28a1e3af0217618ba16ea"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-mono-light.png",
+      "bytes": 206946,
+      "sha256": "0ec08d2b184eac21f82ef9a11b1371bf0cbe7c780338003afbbd86173591bc41"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-mono-light.svg",
+      "bytes": 6860,
+      "sha256": "90bb0b276ba680972e7d7383d967740ca4e10406305f1c144ba5c777c57e73d5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-mono.png",
+      "bytes": 261530,
+      "sha256": "0a9923d3b5639ae8a1fb1a9babe42964d878abaa008cd1b8e3afb11919611cfc"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-mono.svg",
+      "bytes": 6833,
+      "sha256": "d3f7159eea5b49955bfdb9500d6429a1a84d10030d4f51ab98aeec79b16adcea"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-oxide-light.png",
+      "bytes": 208053,
+      "sha256": "816439dd01a06a4c9018026d186d8d80581fc6510389ba237acb4a6e2035c8d2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-oxide-light.svg",
+      "bytes": 6863,
+      "sha256": "d85cb32d05ed6d31ce90e6f96085130a2b26d2b78ad25a3a6ad1ee84f0bb9c79"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-oxide.png",
+      "bytes": 262725,
+      "sha256": "ea34be39e686caa9dd0349925dafda003f5286f52aa185eaf9374002509af982"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-oxide.svg",
+      "bytes": 6836,
+      "sha256": "85cd0cfda23a97b8a66a0125f39b166c79c6fb81c2d75741f0fc9a737fdb4cb9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-signal-light.png",
+      "bytes": 208148,
+      "sha256": "945727fa181eca54a579fcba2d3675af40a4cd06beaa44542b74061c7a42de8a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-signal-light.svg",
+      "bytes": 6864,
+      "sha256": "22002ee26b49f068e4c2facd2c4325d21a0f6a3f9284f008f32c5052a3456444"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-signal.png",
+      "bytes": 262864,
+      "sha256": "3cfa1bc283750eb389eb826e563b81c8d7b28da9f803a70f7b6d9e730c2438a0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-equal-signal.svg",
+      "bytes": 6837,
+      "sha256": "d63f66e3a8ff40b6fec111ad4654f32a00b0b4140891e2c1683ff2895aedfefa"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-mono-light.png",
+      "bytes": 248487,
+      "sha256": "4a7a17b982b49b501e3c2716801a35a812e3793e2b57952a1e32ba7972132ce3"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-mono-light.svg",
+      "bytes": 6862,
+      "sha256": "8552c0f4681f8b0f40d8cb54277d4614239dea6ce16adf966071c14c72ac2fb7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-mono.png",
+      "bytes": 336081,
+      "sha256": "ad44f5e8f80b96df79ee08ece735582f305417018bc6cd4a28f0a1381a9d9b78"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-mono.svg",
+      "bytes": 6835,
+      "sha256": "c21a448698d5c1b75fa43f8c33968d0729691d3a58e0e4b9df443ea4bf9bdf95"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-oxide-light.png",
+      "bytes": 249068,
+      "sha256": "151ed8429f4a7ed2948084d5ada8b9837a19724112a95c94cfdb95ea52fe1d7e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-oxide-light.svg",
+      "bytes": 6865,
+      "sha256": "2394ec4ff8636b07820afd9479c4d954d1dcbe942789f99b47004b1d3c4978ef"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-oxide.png",
+      "bytes": 336986,
+      "sha256": "90a54129679dff47487dec839f0861e56b032da1d383f633cda17c5b32409858"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-oxide.svg",
+      "bytes": 6838,
+      "sha256": "0f21452f7f6f56fd55448862601654a5db99591f3c3c35954caafcd7d8492446"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-signal-light.png",
+      "bytes": 249014,
+      "sha256": "55dde48e4ab41c652786c8130aa332719b3a6b1b153b711806172031906585e5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-signal-light.svg",
+      "bytes": 6866,
+      "sha256": "b9cce27c71a99b01e3f7362f79ebf2763bee98f20d565c7e79f27bf0cc759e06"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-signal.png",
+      "bytes": 337109,
+      "sha256": "16ed62746ed4f5780a81bba4a6548250873438e613f9c220fcfac3140676a8a9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/50-tall-signal.svg",
+      "bytes": 6839,
+      "sha256": "165a812b64d1c495200ca2901edd63e3032b9af6e5cdbce0ba2ab669e85d61e1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-mono-light.png",
+      "bytes": 210276,
+      "sha256": "9e3a883e50d1a1c71171dd48627f76a7c57282e37bbfe8080b372f1adcf5c47b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-mono-light.svg",
+      "bytes": 8576,
+      "sha256": "4b8bd8c90b75489acee59bae765b42ffcf3fe55a775f19aee58a4bd66c6fcec8"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-mono.png",
+      "bytes": 264345,
+      "sha256": "5e257a2d11b0d1f2d6326edd84792a55df33a5d9339b2d877e9e4c9f9c41e618"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-mono.svg",
+      "bytes": 8549,
+      "sha256": "3561528a4443e956954952ec5a509feb89b7deebfce20de9c13c91f04a96f934"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-oxide-light.png",
+      "bytes": 211155,
+      "sha256": "1eba3517f08b13ce8f91227aad128526ab872e03b63298405d59b73502f508fe"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-oxide-light.svg",
+      "bytes": 8579,
+      "sha256": "a9d2c3af10062e8a5276a105e1299bdbf60ce06eed52af6a9154dc8f33168765"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-oxide.png",
+      "bytes": 265049,
+      "sha256": "6c99ce34f87d9ee22ace1aea86e7c2a18dc213a59b84cf81c2a6e4165865ee66"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-oxide.svg",
+      "bytes": 8552,
+      "sha256": "d0c8fb3b020f1e9830bef9a6a9998d4f61890f6e0198db53f8ee9d3937b693ea"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-signal-light.png",
+      "bytes": 211381,
+      "sha256": "546cdbf42ca3980d72164ba17334b6b51dc4d376231dd442d18b0fc078af667a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-signal-light.svg",
+      "bytes": 8580,
+      "sha256": "1e5b5183df795e536f52f4a9ef6a009e6e75c324cb5deac31a4a32ccdefd4457"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-signal.png",
+      "bytes": 265135,
+      "sha256": "db7c1bf9743bd4d66a577e7417893f76f286ec426f02945636c46947930ca9c6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-equal-signal.svg",
+      "bytes": 8553,
+      "sha256": "4d43b633d9e5715d50d417522411cb6c8ee9cdc3900a747c915c9e40a9318227"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-mono-light.png",
+      "bytes": 250354,
+      "sha256": "4d616b93b06c5f26e5d63462764496083bd6639dde13296f34650e88b347cd64"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-mono-light.svg",
+      "bytes": 8574,
+      "sha256": "8420df064e88c7a1e9f7ef296a231f4ddb5534659468e870eba49c1b93867ebd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-mono.png",
+      "bytes": 337602,
+      "sha256": "35628515543936b3c160c2dde37b84a0395bf4688533fdf498c16473070beb25"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-mono.svg",
+      "bytes": 8547,
+      "sha256": "ad4a4dad3bbf0c0a61e97b65b6df2a07a13c53d71898332a16487635689f77cf"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-oxide-light.png",
+      "bytes": 251483,
+      "sha256": "43cb2e3e2f298f773c895660e14ee88074df2e137774ae2781666717bad31918"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-oxide-light.svg",
+      "bytes": 8577,
+      "sha256": "874cc78ed109988c06c67dae8727bd3abb8397bfbf122413f89307ef0263385e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-oxide.png",
+      "bytes": 338859,
+      "sha256": "0da9d152b1fc529eee92e8dc2e5e307a64f24bdf207a8e85caa5f68a358ad03e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-oxide.svg",
+      "bytes": 8550,
+      "sha256": "d7892fe781e68324fe88b27e0e2e8f4ab46c9a17f0a266df51f4146c3eb6a69d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-signal-light.png",
+      "bytes": 251614,
+      "sha256": "79a17c10baf50118b473c8134828fb0fe9709e7a6787e069e6dd030b2c7c1195"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-signal-light.svg",
+      "bytes": 8578,
+      "sha256": "0e7e252bd64dc47e7d45a562ed58f723bc883254823fc8d48f988ac2ac604afc"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-signal.png",
+      "bytes": 339110,
+      "sha256": "10a4615ee03bc6305aee9a9c82bbe9111050ed25a4e757750a1745a069e21543"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/51-tall-signal.svg",
+      "bytes": 8551,
+      "sha256": "768ecfe686458b682c9ddd3fd5328c1eed9012f3d3f261d0e81843f21a5fcee6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-mono-light.png",
+      "bytes": 355605,
+      "sha256": "7665d34c0d694c7f6158a2d50c54a4aaa86fa5976a0a2c313ba2d8ab2f880480"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-mono-light.svg",
+      "bytes": 3175,
+      "sha256": "9c03a01afddc57eb79337435d44d65860da9c12b183a60649352a4070e08e996"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-mono.png",
+      "bytes": 585145,
+      "sha256": "0137c4ea7dde02f8974f4333c053eebad7e32e471d62be1948a4e29c87604efb"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-mono.svg",
+      "bytes": 3124,
+      "sha256": "3c26d0f1cc818953bffa88563bd0f9685a5b497690257039160e8ee7a67cd76f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-oxide-light.png",
+      "bytes": 356521,
+      "sha256": "67ce66ea798e1ba1b1ce5a4009c61ce3472f795dbd30562672d20bce56295513"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-oxide-light.svg",
+      "bytes": 3178,
+      "sha256": "edfa21bdbc18ee6ea22aae3d41ed95a06081116970a9280246e9e75c8afd4739"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-oxide.png",
+      "bytes": 586308,
+      "sha256": "fddf46c4a711fdbf07a16a16b8f0fb8a691a657c5f1ed1c1023c653904302ab1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-oxide.svg",
+      "bytes": 3127,
+      "sha256": "5228af8830a980917de24377caf0a9676ecea042865f7be29b0bda1e100f5742"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-signal-light.png",
+      "bytes": 356465,
+      "sha256": "b289a10710ccad71c635dc9125a318fe0be2ee5beed44c4ef44a8c386bb218d2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-signal-light.svg",
+      "bytes": 3179,
+      "sha256": "82110e06933f2ebfc7978d9baac71d4f16d6ca7b6c94be3fd9cadeb22543bead"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-signal.png",
+      "bytes": 586337,
+      "sha256": "90a00545af03e7ffb7bb2149b0a5f04e67cdfdea5f167ced977ff98070f5f9f6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-equal-signal.svg",
+      "bytes": 3128,
+      "sha256": "506bfa97bf48c1c57beed6a42bbadfc5631a02f86b53dec93918e17e840873fc"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-letters.png",
+      "bytes": 2071038,
+      "sha256": "a1a7012021ca7dee1c5ebf9316fac87680a4e61fb1bf4f7a56cdb412732d5a11"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-mono-light.png",
+      "bytes": 393369,
+      "sha256": "640d04e74fbff92f3015322b2c71000b9786d691b37a64444291c01adbc73576"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-mono-light.svg",
+      "bytes": 3177,
+      "sha256": "e9002d6374c6f4e85db73b50723d0d2f66f09078494388590da2c5a1875b773c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-mono.png",
+      "bytes": 659435,
+      "sha256": "2a6b5da47159f3db50403cb29eb4a5fc851594597f69ba06c395d4b97ba94da6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-mono.svg",
+      "bytes": 3126,
+      "sha256": "b6961d18efa41f63060b2f775197e7cbb4e005df0ec5b9aaff64d46bb8680c40"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-oxide-light.png",
+      "bytes": 395030,
+      "sha256": "e51f280d220d016ead68d7e2168ad54be5b3c6c7d02813abafec2e602bd244ec"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-oxide-light.svg",
+      "bytes": 3180,
+      "sha256": "3a1fbc2345b27ff643660e10df8ef6da94f1f1a6850118b89007b5289f58254c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-oxide.png",
+      "bytes": 660607,
+      "sha256": "ace9972bd5348740879e2ecb34610cef7be7463c790cd4cb2a2f45aaf2623c75"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-oxide.svg",
+      "bytes": 3129,
+      "sha256": "87286fb7d536c263d0180e773ca9d0fa12ec64092f999bc484b24da68605ed25"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-signal-light.png",
+      "bytes": 395310,
+      "sha256": "59e17bd796facb225e413069a925c9fbb8078dee586eafbe65c89e0e44d74e20"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-signal-light.svg",
+      "bytes": 3181,
+      "sha256": "eab7ff05588b9d236b0f27d8210d1afd0a57078cd480c8b19f82c39915e9b0e2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-signal.png",
+      "bytes": 660815,
+      "sha256": "c7ab892801bcc0ba37477c3327fc46439b380e1ab2879e2abadf6c115d21aa19"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/52-tall-signal.svg",
+      "bytes": 3130,
+      "sha256": "9cbbf8876d3c209aa4e0b4a067e1fd7146cc65e94098e67f97060c7be9f4a499"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-mono-light.png",
+      "bytes": 374143,
+      "sha256": "f7d3f1fd9a31c3e672e8dba26f890613ed2ffd5465d8e7f2aa95a882bb747ca6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-mono-light.svg",
+      "bytes": 3181,
+      "sha256": "f46d60376796af3b8f866704ab875882cb827bf665208d57085f3a084ef0b269"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-mono.png",
+      "bytes": 608125,
+      "sha256": "99b6fdd5db2e9c55088afc6e506eb0df7a7782165aa7ecc140bb44f2a8487c4b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-mono.svg",
+      "bytes": 3130,
+      "sha256": "c4aa3a2597e6403c68716eb5c31f7e985af993e8fbe086721f7fad0f14362420"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-oxide-light.png",
+      "bytes": 375240,
+      "sha256": "7602e57305bca1567518261556f0114f226bdce82cc60a5e6f29ac9004014a61"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-oxide-light.svg",
+      "bytes": 3184,
+      "sha256": "5f14a27427f80f0a68a9076c83221eff85f8dbaa1dc252b8f12ceab8d862482d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-oxide.png",
+      "bytes": 609179,
+      "sha256": "1951c87af45f69652c7ffaf634d67e14490ad350dc8e5c76889f585f53af6e78"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-oxide.svg",
+      "bytes": 3133,
+      "sha256": "3edf7da1c35b09b41e0fa81cc88068af0634c363d5fe6cc894be218271a0eeaa"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-signal-light.png",
+      "bytes": 375302,
+      "sha256": "55a011f46159df9a688e8004d2be6d9dff01aea8d962d49efc647d5a92749491"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-signal-light.svg",
+      "bytes": 3185,
+      "sha256": "707e30ab9005e4301759d6405ee2072cb260c5c5c2e26d0e46b32eb0a57690f3"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-signal.png",
+      "bytes": 609170,
+      "sha256": "1867b040912720c00c2754bc8efe789c1b1ad91989e37c39d518246bc3bc977f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-equal-signal.svg",
+      "bytes": 3134,
+      "sha256": "f0243afa5f8e50f74a6c6dfd049a7301ccd6f67802d37110c4e07cc2fa91e7cb"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-letters.png",
+      "bytes": 1766996,
+      "sha256": "147a4f9bfd57f3e1a243cf596eb538b5c3c6d64ba466b131c5c28f4b6ae6fc71"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-mono-light.png",
+      "bytes": 412316,
+      "sha256": "ae89c0eae64b930669216c9efb388ae63f279226d2e6179d26a9b6b6889d1d84"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-mono-light.svg",
+      "bytes": 3184,
+      "sha256": "7e7aaef45709260221d131593ee013eb6f326a1afc8de84f13de81514e0654dd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-mono.png",
+      "bytes": 680956,
+      "sha256": "70821566a890b23d6ee5700748c92938d9f0a55eac496c31e642c889c54570cd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-mono.svg",
+      "bytes": 3133,
+      "sha256": "181817a1cbbbe51e43e10912812d3e4b58acc15ffaddcd1409c5bc791a0672e9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-oxide-light.png",
+      "bytes": 413180,
+      "sha256": "a061233a6b1eef26de175677a26a67b8e5f7b9be53d9e44506c47e232434fb6e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-oxide-light.svg",
+      "bytes": 3187,
+      "sha256": "c069bb27113f56d593be2a2717072ae016a76a00031f2cf140fcff0ea28120fe"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-oxide.png",
+      "bytes": 682053,
+      "sha256": "ea6867ac00a150039dd6f99dba7bf34c73e41bc2edf92f76ab420941b37df385"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-oxide.svg",
+      "bytes": 3136,
+      "sha256": "0bfa4da2f47f88132aacfe2e2a717c61969e124b4977ff5055ca25a3a5da6b2c"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-signal-light.png",
+      "bytes": 413181,
+      "sha256": "c6c6ac0188ee9e0d52d645aa58119396226993f217e97cfb21ffbbf6208ec931"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-signal-light.svg",
+      "bytes": 3188,
+      "sha256": "308654c53a2efe8e0547d419bf836b3b237556a9f3f7ae922a601e226b844ac0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-signal.png",
+      "bytes": 682028,
+      "sha256": "3b0ab571732dab8bc68bb3ca8f65cff21103d7dadc749376534473c13299439d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/53-tall-signal.svg",
+      "bytes": 3137,
+      "sha256": "c49820b62b00c5697c8ab002b31f1ca2bc10974bbf15a49e9a54d82d7d6a3c49"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-mono.png",
+      "bytes": 535871,
+      "sha256": "2d6550d241f675f3fc0e462e7cbf9b11c63ae7a419ad7a2cd781d5575e0926a8"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-mono.svg",
+      "bytes": 2949,
+      "sha256": "239a3453aef770a9f1266bf77cd1eee35de08ee8670eef4adfd5233e656e94be"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-none.png",
+      "bytes": 595747,
+      "sha256": "bdb0da46dcd85e7ddfeb6e345e39f368f947dd97eacd2e4f7c005a6192a809a9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-none.svg",
+      "bytes": 1083,
+      "sha256": "8f8ca4916b3540e7f2154dc4d86af0ad27b801c616fdf4367ac69b0bb37b1a40"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-signal.png",
+      "bytes": 537648,
+      "sha256": "6c0d93434a22cfe6d31c4bb83cf05d5af1976526122c7ab698f692687fc11f7b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-34-signal.svg",
+      "bytes": 2953,
+      "sha256": "1ac3349711a8155efb72562d132d4af48a749373f80147e898a92da705db4835"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-mono.png",
+      "bytes": 542308,
+      "sha256": "15f9b63c79468986391b78b21f8d3ff4e64b641ca9000a533eae59c131d47a3b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-mono.svg",
+      "bytes": 2948,
+      "sha256": "9af0508d26ab0a050692ba870eb8a893ccd65b302304320dde77af9aa60cc351"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-none.png",
+      "bytes": 602334,
+      "sha256": "be664699c1d63a695db53ab48eef6ed6f9a767841173307ea02ce36df8dea90e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-none.svg",
+      "bytes": 1081,
+      "sha256": "8d0ad05aa3fdcde729282cfdb0db816098bca6a87afb584e5f2f681fd6e63f9f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-signal.png",
+      "bytes": 544799,
+      "sha256": "4b2e5a4bb9c10a504e76a860abd8c15b4072b9975e7c639537361e700d7879fa"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/icon-36-signal.svg",
+      "bytes": 2952,
+      "sha256": "247eef842ef0a700cb9c7c4fb1cb7083b98c0e13e9f593199454bffcef826318"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/metadata.json",
+      "bytes": 34846,
+      "sha256": "3384bd6ad0d22b7d1827255f6e76e7a335a0f9b659aa69e114c69dc34d9c9d27"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-mono.png",
+      "bytes": 535871,
+      "sha256": "2d6550d241f675f3fc0e462e7cbf9b11c63ae7a419ad7a2cd781d5575e0926a8"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-mono.svg",
+      "bytes": 2949,
+      "sha256": "239a3453aef770a9f1266bf77cd1eee35de08ee8670eef4adfd5233e656e94be"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-none.png",
+      "bytes": 595747,
+      "sha256": "bdb0da46dcd85e7ddfeb6e345e39f368f947dd97eacd2e4f7c005a6192a809a9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-none.svg",
+      "bytes": 1083,
+      "sha256": "8f8ca4916b3540e7f2154dc4d86af0ad27b801c616fdf4367ac69b0bb37b1a40"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-signal.png",
+      "bytes": 537648,
+      "sha256": "6c0d93434a22cfe6d31c4bb83cf05d5af1976526122c7ab698f692687fc11f7b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-34-signal.svg",
+      "bytes": 2953,
+      "sha256": "1ac3349711a8155efb72562d132d4af48a749373f80147e898a92da705db4835"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-mono.png",
+      "bytes": 542308,
+      "sha256": "15f9b63c79468986391b78b21f8d3ff4e64b641ca9000a533eae59c131d47a3b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-mono.svg",
+      "bytes": 2948,
+      "sha256": "9af0508d26ab0a050692ba870eb8a893ccd65b302304320dde77af9aa60cc351"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-none.png",
+      "bytes": 602334,
+      "sha256": "be664699c1d63a695db53ab48eef6ed6f9a767841173307ea02ce36df8dea90e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-none.svg",
+      "bytes": 1081,
+      "sha256": "8d0ad05aa3fdcde729282cfdb0db816098bca6a87afb584e5f2f681fd6e63f9f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-signal.png",
+      "bytes": 544799,
+      "sha256": "4b2e5a4bb9c10a504e76a860abd8c15b4072b9975e7c639537361e700d7879fa"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/social-36-signal.svg",
+      "bytes": 2952,
+      "sha256": "247eef842ef0a700cb9c7c4fb1cb7083b98c0e13e9f593199454bffcef826318"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/source34.png",
+      "bytes": 1683764,
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/source35.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "versions/07-sculpted-identity/assets/source36.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/README.md",
+      "bytes": 2778,
+      "sha256": "e4ee69f1482c5ad540d9f6e62385dee750a34915c1bf1ee6146fceeba10d8636"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/asset-validation.json",
+      "bytes": 44921,
+      "sha256": "afb222eef0999094018945bd0333ef03f32555c58bb5863527da52f984886d29"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/assets-contact.png",
+      "bytes": 991185,
+      "sha256": "5a3e943f9aa3de28bf1bef866e9df01832de449c6e3552645f27253c5af99656"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/compose.cjs",
+      "bytes": 8928,
+      "sha256": "c71ebb2b63cd43d4e47d7b62670d8f981bc0941e11ee3ebea7fbc28729535ec2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/contact.cjs",
+      "bytes": 2105,
+      "sha256": "d5d9514d84185ef333ef6dd542f38536e7c4882c36dadb1f5e7432fda84b4e6a"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/export-standalone.cjs",
+      "bytes": 472,
+      "sha256": "a467a178dd5aadaa7e69ada267caca6294a9f6e625709fa186c6284ab6b1f319"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/flat-contact.png",
+      "bytes": 379748,
+      "sha256": "4d5e17a2337428726671002900d9dbfcba0186f7cde6159d75069824e551df3d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/icons-contact.png",
+      "bytes": 172045,
+      "sha256": "74fab695879127bab62ced994a01f9ac37330be211156c35beed36a3ff36ab68"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/letter-alpha-validation.json",
+      "bytes": 3552,
+      "sha256": "f675bf4db5ea27b2fe40932ab7b048dc53b668b383cbf349e28520e555c59b5e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/make-review-sheets.cjs",
+      "bytes": 2932,
+      "sha256": "807c2cba08a89ce68c1f1d295ff829a3bfbcba7caf0f0c19ef2873f07ba281b7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/oneness-original-paths.json",
+      "bytes": 1094,
+      "sha256": "f2d1c825e0f05a725c308b1c4bcebcd175e0130ac270a7d076c8f1111e141610"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/oneness-original-paths.svg",
+      "bytes": 930,
+      "sha256": "75a57eca865b70b343b6ed0635148d8718c0606b477d5046bb82415e82b8a2c7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/oneness-photo-detail.png",
+      "bytes": 556946,
+      "sha256": "c514010a1589c09760dcf03472c36515c7c7170648f686d9d170d73c99314589"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/oneness-photo-detail.svg",
+      "bytes": 1888831,
+      "sha256": "e3a246cc64e60d2df3742bdc6a1c89dc45d3dbb9d2c3824fe9fb10e8d0f25f4f"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/package.py",
+      "bytes": 2744,
+      "sha256": "b574f9b5c7d1be36f43235e1322b3ffff97024beac4f069b112c3e4220488189"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/portable-start.html",
+      "bytes": 1254,
+      "sha256": "dfb38eee657d40ea7d0b6ad2075f26d41bca2015c3c6d544d5f99c214c62e4c7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/social-circle-validation.json",
+      "bytes": 1053,
+      "sha256": "babba202be1a2d9b5268eff928faece116a8cce340283b50bf89ed581b8534d0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/social-contact.png",
+      "bytes": 321602,
+      "sha256": "d1c3b738f6faae67285f300d665915e718751c06fe46bbccb79569b10c8abfff"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/type-paths.json",
+      "bytes": 13809,
+      "sha256": "1205c93b916dcc7fa75151572d360edc0e29fb89b8fb4a38a3e78144e64f74ce"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/type-paths.swift",
+      "bytes": 1636,
+      "sha256": "6de3694fe0ca227efc7e3606dd643145bc562dbd35e023f0dd84b961d644192d"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/validate-assets.cjs",
+      "bytes": 2826,
+      "sha256": "cce804a5bf53b3c5465413c31e434f5d4b352596fa24a7cc6c57f4eba72520a1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/validate-letter-alpha.cjs",
+      "bytes": 2131,
+      "sha256": "eacf2a5bb658561f50a1539583354fbfe333e40aa8332f54db0e219c2e1a495b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/build/validate-page.py",
+      "bytes": 2776,
+      "sha256": "63d0bd30918099f9cf3be4565a50996e92f63c6eae7c4530e9be55528ce597d7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/generated/48-real-stone-serif.png",
+      "bytes": 2447067,
+      "sha256": "a97bd1fa7ea227a9e72169bf50000c52f060f0ec3c446a41dd81976f2d4f4171"
+    },
+    {
+      "path": "versions/07-sculpted-identity/generated/49-carved-sans.png",
+      "bytes": 2153471,
+      "sha256": "781102ce681f3240ac049805952a87ef43c678fb9258cc635b757c54bc4ad8f9"
+    },
+    {
+      "path": "versions/07-sculpted-identity/generated/52-sculptor-letters.png",
+      "bytes": 2535307,
+      "sha256": "39285ccda136dfffc57132a809f95542b66830ada76bc445a22bf009133092a0"
+    },
+    {
+      "path": "versions/07-sculpted-identity/generated/53-imperfect-letters.png",
+      "bytes": 2224006,
+      "sha256": "5aa34324c803dae17c083468a4d6d322ad77d6eb3a84c9b7795c8dc069c93794"
+    },
+    {
+      "path": "versions/07-sculpted-identity/index.html",
+      "bytes": 8410,
+      "sha256": "fce6840824116cbe3ad63155bd55ec3143ae285e983e3128cc9171b477727c78"
+    },
+    {
+      "path": "versions/07-sculpted-identity/prompts/48-49-prompts.json",
+      "bytes": 5843,
+      "sha256": "c7f28a550091b1f372516a2787f39d637c4c0c0a2b494e5df2a313fc09ba868e"
+    },
+    {
+      "path": "versions/07-sculpted-identity/prompts/48-49-results.json",
+      "bytes": 8598,
+      "sha256": "1bb60d10803649f0d51e11dd691d1a0299b795516699a451c7541620a5548357"
+    },
+    {
+      "path": "versions/07-sculpted-identity/prompts/52.json",
+      "bytes": 4464,
+      "sha256": "f31a497297b088bc6ed7994b168f97dae94f483eabd67ecbaf7471bcc0bea1b8"
+    },
+    {
+      "path": "versions/07-sculpted-identity/prompts/53.json",
+      "bytes": 4536,
+      "sha256": "01bef37e996e24f913d007eb0298944f6956da47d2183c96c648724e4f9fc2a7"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/package-validation.json",
+      "bytes": 170,
+      "sha256": "1044b3330770d52abb222883f47abe62ee04d543587e5f2ddff01ef7bf5eceb6"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/page-validation.json",
+      "bytes": 438,
+      "sha256": "ac17c58d505e2fbcd66ac7930340020df3f4a3f7d5da0c419e5f29559a788dbd"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/prior-versions-before.json",
+      "bytes": 41341,
+      "sha256": "986e5939e5257985c3293c4591cdad2e9b1f343359ace3321d81416771b4b591"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/splash-grid-ink.png",
+      "bytes": 276131,
+      "sha256": "f0c48456ff6fa77437ee60620ba963137834141400148acb19d65a8faefa3774"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/splash-grid-light.png",
+      "bytes": 242583,
+      "sha256": "fe90c526a8e51f4d5470ce96f34a672895c31ce2fdd989aa45359241ba45d4a5"
+    },
+    {
+      "path": "versions/07-sculpted-identity/qa/visual-review.json",
+      "bytes": 768,
+      "sha256": "185cded052276e255b69190983b59d00254a6ccb9c840b0528ee909c5c20eb9b"
+    },
+    {
+      "path": "versions/07-sculpted-identity/references/28-wordmark.svg",
+      "bytes": 1761505,
+      "sha256": "ee7dbaf011a588d25852473259c9603302df6b5ef08b897ce778254e67ba2df1"
+    },
+    {
+      "path": "versions/07-sculpted-identity/references/30-wordmark.svg",
+      "bytes": 1678352,
+      "sha256": "a94e5091f3334af4017da2417c350513a39890dceb67141dbd4c47b112310a85"
+    },
+    {
+      "path": "versions/07-sculpted-identity/references/32-carved-sans.png",
+      "bytes": 1164654,
+      "sha256": "913c55cf2e60b0ebfe4378cdc31daa78e9235536049dc372c66578307bdc80b2"
+    },
+    {
+      "path": "versions/07-sculpted-identity/review.js",
+      "bytes": 7682,
+      "sha256": "63142fdf9b156e2720f702bc4becd39ac7c3f58d5394fa6f1573a6205b8cf871"
+    },
+    {
+      "path": "versions/07-sculpted-identity/styles.css",
+      "bytes": 14977,
+      "sha256": "486099061e5e1afff707f0194c4b7fdfcb3becb6e096db9ba3d99693b1837958"
+    }
+  ]
+}
