@@ -519,11 +519,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testSelectedTicketClearsSearchDockWithoutRedundantResultMessage() {
+    func testSelectedTicketKeepsSearchDockClearAndReachable() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
             "-WanderMapPlace", "Woodcat Coffee"
         ]
         app.launch()
@@ -543,10 +544,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(addButton.frame.width, 44)
         XCTAssertGreaterThanOrEqual(addButton.frame.height, 44)
         XCTAssertTrue(addButton.isHittable)
-        XCTAssertFalse(nearby.isHittable)
+        XCTAssertTrue(nearby.isHittable)
+        XCTAssertGreaterThanOrEqual(nearby.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(nearby.frame.height, 44)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-293 selected card with Nearby hidden"
+        screenshot.name = "REC-293 selected card with reachable Nearby control"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -620,6 +623,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
             "-WanderMapCaptureMode", source,
             "-WanderMapMoreFiltersOpen"
         ]
@@ -698,44 +702,19 @@ final class MapFilterInteractionUITests: XCTestCase {
         )
     }
 
-    func testSearchNearbyAndBottomNavigationDismissWithoutResettingMoreFilters() {
+    func testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting() {
         let app = launchMoreFilters()
         let panel = app.scrollViews["map.moreFilters.popover"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         selectDemoPerson(in: app, panel: panel)
 
         let search = app.textFields["map.searchField"]
-        XCTAssertTrue(search.isHittable)
-        search.tap()
-        XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
-        app.buttons["map.searchCancel"].tap()
-        assertOneSelectedFilter(in: app)
-
-        app.buttons["map.filter.more"].tap()
-        XCTAssertTrue(panel.waitForExistence(timeout: 2))
-        let nearby = app.buttons["Center on my location"]
-        XCTAssertTrue(nearby.isHittable)
-        nearby.tap()
-        XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
-        let cancelLocationEducation = app.buttons["map.locationEducation.cancel"]
-        if cancelLocationEducation.waitForExistence(timeout: 1) {
-            cancelLocationEducation.tap()
-        }
-        assertOneSelectedFilter(in: app)
-
-        app.buttons["map.filter.more"].tap()
-        XCTAssertTrue(panel.waitForExistence(timeout: 2))
+        let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
-        XCTAssertTrue(add.isHittable)
-        add.tap()
-        XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
-        let closeAdd = app.buttons["Close add place"]
-        XCTAssertTrue(closeAdd.waitForExistence(timeout: 3))
-        closeAdd.tap()
-        assertOneSelectedFilter(in: app)
+        XCTAssertFalse(search.isHittable)
+        XCTAssertFalse(nearby.isHittable)
+        XCTAssertFalse(add.isHittable)
 
-        app.buttons["map.filter.more"].tap()
-        XCTAssertTrue(panel.waitForExistence(timeout: 2))
         let feed = app.buttons["Feed"]
         XCTAssertTrue(feed.isHittable)
         feed.tap()

@@ -1908,6 +1908,7 @@ private struct AddSearchField: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit(submit)
+                .accessibilityIdentifier("add.searchField")
 
             if !query.isEmpty {
                 Button {
