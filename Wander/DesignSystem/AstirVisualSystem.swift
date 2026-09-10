@@ -282,6 +282,8 @@ private struct AstirGlassSurface: ViewModifier {
     let cornerRadius: CGFloat
     let selected: Bool
     let castsShadow: Bool
+    let interactive: Bool
+    let accentAction: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -290,7 +292,7 @@ private struct AstirGlassSurface: ViewModifier {
         if reduceTransparency {
             content
                 .background(
-                    selected ? brandMode.accent : brandMode.raisedBackground,
+                    selected || accentAction ? brandMode.accent : brandMode.raisedBackground,
                     in: shape
                 )
                 .overlay {
@@ -305,7 +307,9 @@ private struct AstirGlassSurface: ViewModifier {
                     y: castsShadow ? 5 : 0
                 )
         } else if #available(iOS 26.0, *) {
-            let glass = selected
+            let glass = accentAction
+                ? Glass.regular.tint(brandMode.accent)
+                : selected
                 ? Glass.regular.tint(brandMode.accent.opacity(0.24))
                 : Glass.regular.tint(
                     brandMode.prefersDarkInterface
@@ -315,7 +319,7 @@ private struct AstirGlassSurface: ViewModifier {
 
             content
                 .glassEffect(
-                    glass,
+                    glass.interactive(interactive),
                     in: shape
                 )
                 .overlay {
@@ -328,10 +332,16 @@ private struct AstirGlassSurface: ViewModifier {
                 )
         } else {
             content
-                .background(.ultraThinMaterial, in: shape)
+                .background {
+                    if accentAction {
+                        shape.fill(brandMode.accent)
+                    } else {
+                        shape.fill(.ultraThinMaterial)
+                    }
+                }
                 .background(
-                    (selected ? brandMode.accent : brandMode.background)
-                        .opacity(selected ? 0.16 : 0.48),
+                    (selected || accentAction ? brandMode.accent : brandMode.background)
+                        .opacity(accentAction ? 1 : selected ? 0.16 : 0.48),
                     in: shape
                 )
                 .overlay {
@@ -369,31 +379,46 @@ extension View {
     func astirGlassSurface(
         cornerRadius: CGFloat,
         selected: Bool = false,
-        castsShadow: Bool = false
+        castsShadow: Bool = false,
+        interactive: Bool = false,
+        accentAction: Bool = false
     ) -> some View {
         modifier(
             AstirGlassSurface(
                 cornerRadius: cornerRadius,
                 selected: selected,
-                castsShadow: castsShadow
+                castsShadow: castsShadow,
+                interactive: interactive,
+                accentAction: accentAction
             )
         )
     }
 }
 
 /// Positions independently floating controls without adding a shared material
-/// slab. Each child owns the smallest glass or localized blur it needs.
+/// slab. Each child owns its material; the container lets nearby glass surfaces
+/// bridge during a press without changing layout or button hit areas.
 struct AstirFloatingHeaderSurface<Content: View>: View {
+    private let mergeSpacing: CGFloat?
     private let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(mergeSpacing: CGFloat? = nil, @ViewBuilder content: () -> Content) {
+        self.mergeSpacing = mergeSpacing
         self.content = content()
     }
 
     var body: some View {
-        content
-            .padding(.horizontal, WanderTheme.spacing2)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+        Group {
+            if let mergeSpacing {
+                WanderGlassButtonCluster(mergeSpacing: mergeSpacing) {
+                    content
+                }
+            } else {
+                content
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
@@ -472,15 +497,21 @@ struct AstirIconActionButton: View {
     let systemImage: String
     let accessibilityLabel: String
     var accessibilityIdentifier: String?
+    var isAddAction = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(brandMode.primaryText)
+                .foregroundStyle(isAddAction ? brandMode.accentForeground : brandMode.primaryText)
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2, castsShadow: true)
+                .astirGlassSurface(
+                    cornerRadius: WanderTheme.tapMinimum / 2,
+                    castsShadow: true,
+                    interactive: isAddAction,
+                    accentAction: isAddAction
+                )
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -496,6 +527,7 @@ struct AstirEditorialSegmentedSwitch: View {
     @Environment(\.astirBrandMode) private var brandMode
     let options: [WanderSegmentOption]
     @Binding var selection: String
+    var interactive = false
 
     var body: some View {
         Group {
@@ -509,7 +541,7 @@ struct AstirEditorialSegmentedSwitch: View {
             }
         }
         .padding(4)
-        .astirGlassSurface(cornerRadius: 17, castsShadow: true)
+        .astirGlassSurface(cornerRadius: 17, castsShadow: true, interactive: interactive)
     }
 
     private func optionsRow(usesAccessibilityWidths: Bool) -> some View {
@@ -555,13 +587,15 @@ struct AstirOutlinedSurface: ViewModifier {
     @Environment(\.astirBrandMode) private var brandMode
     var selected = false
     var castsShadow = false
+    var interactive = false
 
     func body(content: Content) -> some View {
         content
             .astirGlassSurface(
                 cornerRadius: 16,
                 selected: selected,
-                castsShadow: castsShadow
+                castsShadow: castsShadow,
+                interactive: interactive
             )
     }
 }
@@ -569,12 +603,14 @@ struct AstirOutlinedSurface: ViewModifier {
 extension View {
     func astirOutlinedSurface(
         selected: Bool = false,
-        castsShadow: Bool = false
+        castsShadow: Bool = false,
+        interactive: Bool = false
     ) -> some View {
         modifier(
             AstirOutlinedSurface(
                 selected: selected,
-                castsShadow: castsShadow
+                castsShadow: castsShadow,
+                interactive: interactive
             )
         )
     }
