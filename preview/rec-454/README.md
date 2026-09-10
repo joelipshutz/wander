@@ -19,3 +19,12 @@ Visual approval and the full iOS test gate are required before squash merge.
 - Native preview app compiles against the iOS Simulator SDK using production header/glass definitions.
 - `swiftc -frontend -parse` succeeds for the edited production source; XcodeGen regenerates with no project diff.
 - The required full `xcodebuild test` command stops before running tests: iPhone 16 Plus / iOS 18.6 is not installed. The available runtime is iOS 26.5. This is a pending gate, not a test pass.
+
+## Captures
+
+| Appearance / role | iPhone 17 Pro | iPhone 17e |
+| --- | --- | --- |
+| Dark / viewer | ![Dark viewer, large](viewer-dark-large.png) | ![Dark viewer, compact](viewer-dark-compact.png) |
+| Light / owner | ![Light owner, large](owner-light-large.png) | ![Light owner, compact](owner-light-compact.png) |
+
+Screenshots use iOS 26.5. The large and compact native renders show standalone circular actions with no shared capsule, preserved back-button placement, and no header clipping. Full-app navigation/action QA and visual approval remain pending.
