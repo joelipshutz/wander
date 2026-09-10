@@ -28,3 +28,7 @@ Visual approval and the full iOS test gate are required before squash merge.
 | Light / owner | ![Light owner, large](owner-light-large.png) | ![Light owner, compact](owner-light-compact.png) |
 
 Screenshots use iOS 26.5. The large and compact native renders show standalone circular actions with no shared capsule, preserved back-button placement, and no header clipping. Full-app navigation/action QA and visual approval remain pending.
+
+## Narrower Lists tab proposal
+
+The approval preview now replaces its wide system-placeholder Lists symbol with a filled portrait paper glyph: a 20×28pt canvas versus the production paper icon's current 24×28pt canvas. Its height stays fixed; the sheet and internal rows fit the narrower width. Native tab selection continues to control tint. This bottom-tab proportion change is preview-only pending approval and coordination with REC-453. The production changes in this PR remain limited to the circular list-detail header actions.

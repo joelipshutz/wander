@@ -27,7 +27,9 @@ struct ListHeaderPreview: View {
                 Button("Open list") { path = ["detail"] }
                     .navigationDestination(for: String.self) { _ in detail }
             }
-            .tabItem { Label("Lists", systemImage: "list.bullet.rectangle") }.tag(2)
+            .tabItem {
+                Label { Text("Lists") } icon: { Image(uiImage: NarrowPaperTabIcon.image) }
+            }.tag(2)
             Text("Profile").tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }.tag(3)
         }
         .tint(mode.accent)
@@ -129,4 +131,25 @@ struct ListHeaderPreview: View {
             .background(mode.raisedBackground, in: RoundedRectangle(cornerRadius: 22))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(mode.border))
     }
+}
+
+// Preview proposal: 20pt wide rather than the current 24pt paper canvas.
+// Native tab selection supplies tint; the glyph keeps its 28pt height.
+@MainActor
+private enum NarrowPaperTabIcon {
+    static let image: UIImage = {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 28))
+        return renderer.image { context in
+            UIColor.black.setFill()
+            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 18, height: 26), cornerRadius: 2.4).fill()
+            context.cgContext.setBlendMode(.clear)
+            for y: CGFloat in [7, 14, 21] {
+                UIBezierPath(ovalIn: CGRect(x: 3.4, y: y - 1, width: 2, height: 2)).fill()
+                UIBezierPath(
+                    roundedRect: CGRect(x: 7, y: y - 0.7, width: 9.2, height: 1.4),
+                    cornerRadius: 0.7
+                ).fill()
+            }
+        }.withRenderingMode(.alwaysTemplate)
+    }()
 }
