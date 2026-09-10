@@ -245,6 +245,13 @@ struct ActivitySharePreviewScreen: View {
                     .ignoresSafeArea(edges: .bottom)
             }
         }
+        .fullPageBackSwipe(
+            isEnabled: systemSharePresentation == nil && messagePresentation == nil
+                && instagramPostPresentation == nil && instagramPhotoAccessGuidance == nil
+                && !isMessagePresentationPending,
+            onBack: { dismiss() }
+        )
+        .presentationBackground(.clear)
         .sheet(item: $systemSharePresentation) { presentation in
             WanderShareSheet(content: presentation.content) { completed in
                 trackShareCompleted(

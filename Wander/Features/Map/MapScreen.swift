@@ -3931,6 +3931,11 @@ struct MapScreen: View {
             }
             .ignoresSafeArea()
             .allowsHitTesting(isPlaceProfilePresented)
+            .fullPageBackSwipe(
+                isEnabled: isPlaceProfilePresented && attachedMapSaveFlow == nil
+                    && walkthroughs.activeSurface != .placeDetail,
+                onBack: { collapseSelectedPlaceProfile() }
+            )
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isModal)
             .accessibilityHidden(!isPlaceProfilePresented)

@@ -1138,6 +1138,8 @@ private struct ActivityCommentsPhotoViewer: View {
             .padding(.top, WanderTheme.spacing3)
         }
         .preferredColorScheme(.dark)
+        .fullPageBackSwipe(isEnabled: reportSubject == nil, onBack: { dismiss() })
+        .presentationBackground(.clear)
         .onChange(of: media.map(\.id)) { _, ids in
             guard !ids.isEmpty else {
                 dismiss()

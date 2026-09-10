@@ -27,7 +27,7 @@ struct OnboardingCommentsCaptureView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
-        .frame(width: 342)
+        .frame(width: ProcessInfo.processInfo.arguments.contains("-WanderFullPageBackSwipeUITest") ? nil : 342)
         .frame(maxWidth: .infinity)
         .background(Color(uiColor: .systemBackground))
         .environmentObject(store)
@@ -80,7 +80,12 @@ private final class OnboardingCommentsRepository: ActivityEngagementRepository {
             activityID: activityID, actor: person("Mina"), placeName: "Marigold Table",
             placeServerID: nil, placeDetail: "Santa Monica · Restaurant", status: .been,
             occurredAt: Date().addingTimeInterval(-7200),
-            note: "The patio at golden hour. Get the focaccia!", rating: 5
+            note: "The patio at golden hour. Get the focaccia!", rating: 5,
+            media: ProcessInfo.processInfo.arguments.contains("-WanderFullPageBackSwipeUITest")
+                ? [
+                    ActivityEngagementMedia(id: "fixture-photo-1", accessibilityLabel: "First test photo"),
+                    ActivityEngagementMedia(id: "fixture-photo-2", accessibilityLabel: "Second test photo")
+                ] : []
         )
     }
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {

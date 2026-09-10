@@ -2626,6 +2626,12 @@ private struct SavedPlacesListScreen: View {
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
+        .fullPageBackSwipe(
+            isEnabled: usesInlineNavigationHeader && selectedPlace == nil
+                && !showsInCommonMap && placeSaveFlow == nil,
+            usesNativeNavigation: true,
+            onBack: { dismiss() }
+        )
     }
 
     private var navigationTitle: String {
