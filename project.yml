@@ -94,9 +94,9 @@ targets:
           - tiktoksharesdk
           - snssdk1180
           - snssdk1233
-        NSCameraUsageDescription: rec.me uses the camera only when you choose to take a photo in the app.
+        NSCameraUsageDescription: rec.me uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.
         NSCalendarsFullAccessUsageDescription: rec.me reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.
-        NSContactsUsageDescription: rec.me uses contacts only to help you find people you already know. It never messages anyone.
+        NSContactsUsageDescription: rec.me reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.
         NSLocationWhenInUseUsageDescription: rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.
         NSPhotoLibraryAddUsageDescription: rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.
         UILaunchScreen: {}

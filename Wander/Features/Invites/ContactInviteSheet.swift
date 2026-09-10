@@ -699,9 +699,9 @@ struct ContactInviteSheet: View {
             }
 
             VStack(spacing: WanderTheme.spacing2) {
-                permissionPromise(icon: "checkmark.shield.fill", text: "You choose who gets an invite")
-                permissionPromise(icon: "paperplane.fill", text: "rec.me never messages contacts for you")
-                permissionPromise(icon: "lock.fill", text: "Contact details stay out of analytics")
+                permissionPromise(icon: "checkmark.shield.fill", text: "You choose each person you invite")
+                permissionPromise(icon: "paperplane.fill", text: "Invites open in Messages for you to send")
+                permissionPromise(icon: "lock.fill", text: "Your address book stays on this device")
             }
             .padding(WanderTheme.spacing3)
             .background(brandMode.recessedBackground)
