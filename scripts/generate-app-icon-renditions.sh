@@ -16,7 +16,11 @@ if [ "$source_master" != "$canonical_master" ]; then
   cp "$source_master" "$canonical_master"
 fi
 
-sips -z 1024 1024 "$canonical_master" --out "$canonical_master" >/dev/null
+# Keep the approved 1024 px master byte-for-byte; resize only platform renditions.
+metadata=$(sips -g pixelWidth -g pixelHeight -g hasAlpha "$canonical_master")
+echo "$metadata" | grep -q "pixelWidth: 1024"
+echo "$metadata" | grep -q "pixelHeight: 1024"
+echo "$metadata" | grep -q "hasAlpha: no"
 
 for rendition in \
   "Icon-20@2x.png:40" \
@@ -52,4 +56,4 @@ do
   echo "$metadata" | grep -q "hasAlpha: no"
 done
 
-echo "Generated and validated rec.me app icon renditions."
+echo "Generated and validated Astir app icon renditions."

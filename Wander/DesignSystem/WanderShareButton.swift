@@ -19,7 +19,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             subject: displayName,
-            message: "See @\(handle) on rec.me"
+            message: "See @\(handle) on Astir"
         )
     }
 
@@ -41,8 +41,8 @@ struct WanderShareContent: Equatable {
             item: item,
             additionalItems: [imageFileURL],
             subject: normalizedFilterTitle.map { "\(displayName)'s \($0) map" } ?? "\(displayName)'s map",
-            message: normalizedFilterTitle.map { "Explore \($0) on @\(handle)'s rec.me map" }
-                ?? "Explore @\(handle)'s saved places on rec.me"
+            message: normalizedFilterTitle.map { "Explore \($0) on @\(handle)'s Astir map" }
+                ?? "Explore @\(handle)'s saved places on Astir"
         )
     }
 
@@ -82,7 +82,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             subject: name,
-            message: "See \(name) on rec.me"
+            message: "See \(name) on Astir"
         )
     }
 
@@ -91,7 +91,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             subject: "Join \(name)",
-            message: "You’re invited to build \(name) together on rec.me"
+            message: "You’re invited to build \(name) together on Astir"
         )
     }
 
@@ -103,7 +103,7 @@ struct WanderShareContent: Equatable {
         let profileURL = senderProfileID.flatMap {
             WanderDeepLinkRoute.sharedProfile(profileID: $0).url
         }
-        let opening = contextMessage ?? "Join me on rec.me."
+        let opening = contextMessage ?? "Join me on Astir."
         let message: String
         if includeInstallPrompt {
             message = profileURL == nil
@@ -115,7 +115,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: publicTestFlightURL,
             additionalItems: [profileURL].compactMap { $0 },
-            subject: "Join me on rec.me",
+            subject: "Join me on Astir",
             message: message
         )
     }

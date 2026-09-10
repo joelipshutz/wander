@@ -1,17 +1,17 @@
 {
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.94510,0.91373,0.87059,1.00000"
+    "automatic-gradient" : "extended-srgb:0.03137,0.03922,0.03529,1.00000"
   },
   "groups" : [
     {
       "blur-material" : 0,
       "layers" : [
         {
-          "image-name" : "recme-warm-map-original.png",
-          "name" : "recme-warm-map-original"
+          "image-name" : "astir-statue-55-signal.png",
+          "name" : "astir-statue-55-signal"
         }
       ],
-      "name" : "Warm Map Original",
+      "name" : "Astir Statue 55 Signal",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0

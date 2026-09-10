@@ -79,7 +79,7 @@ struct ProfileSocialGraphScreen: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Find friends")
                                         .font(AstirTypography.cardTitle)
-                                    Text("Search rec.me members")
+                                    Text("Search Astir members")
                                         .font(AstirTypography.caption)
                                         .foregroundStyle(brandMode.secondaryText)
                                 }

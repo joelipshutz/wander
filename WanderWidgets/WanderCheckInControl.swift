@@ -22,6 +22,6 @@ struct WanderCheckInControl: ControlWidget {
             )
         }
         .displayName("Check-in")
-        .description("Open rec.me to check in at the place where you are.")
+        .description("Open Astir to check in at the place where you are.")
     }
 }

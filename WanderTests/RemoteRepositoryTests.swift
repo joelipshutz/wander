@@ -405,7 +405,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 pendingInvites: pending,
                 ownerUserID: "user_joe"
             ),
-            "Friend updates are still sending. rec.me will keep retrying."
+            "Friend updates are still sending. Astir will keep retrying."
         )
         XCTAssertNil(SharedVisitOutboxNotice.message(
             pendingInvites: pending,
