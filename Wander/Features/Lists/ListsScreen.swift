@@ -4351,9 +4351,6 @@ private struct ListEditorDraft {
 }
 
 private struct ListEditorSheet: View {
-    @EnvironmentObject private var backend: WanderBackend
-    @State private var isAddingPlaces = false
-    @State private var removingPlaceIDs = Set<String>()
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -4446,7 +4443,7 @@ private struct ListEditorSheet: View {
                     }
 
                     if let sourceList {
-                        snapshotPlacesBlock(list: sourceList)
+                        snapshotCoverBlock(list: sourceList)
                     }
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
@@ -4524,18 +4521,6 @@ private struct ListEditorSheet: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
-        .sheet(isPresented: $isAddingPlaces) {
-            if let sourceList {
-                NavigationStack {
-                    ListAddPlacesScreen(list: sourceList) { _ in }
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { isAddingPlaces = false }
-                            }
-                        }
-                }
-            }
-        }
     }
 
     private var newListBackButton: some View {
@@ -4557,7 +4542,7 @@ private struct ListEditorSheet: View {
         return store.placeLists.first { ($0.id == id || $0.localID == id || $0.serverID == id) && $0.deletedAt == nil }
     }
 
-    private func snapshotPlacesBlock(list: LocalPlaceList) -> some View {
+    private func snapshotCoverBlock(list: LocalPlaceList) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             if list.snapshotCoverData != nil || list.snapshotCoverPath != nil {
                 ListSnapshotCover(data: list.snapshotCoverData, path: list.snapshotCoverPath)
@@ -4566,38 +4551,6 @@ private struct ListEditorSheet: View {
                 Text("Snapshot cover stays as captured.")
                     .font(.footnote)
                     .foregroundStyle(WanderTheme.textMuted.color)
-            }
-            HStack {
-                Text("places").font(.headline)
-                Spacer()
-                Button("Add places") { isAddingPlaces = true }
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityIdentifier("listEditor.addPlaces")
-            }
-            Text("Place changes save immediately.")
-                .font(.footnote)
-                .foregroundStyle(WanderTheme.textMuted.color)
-            ForEach(store.visiblePlaces(in: list)) { place in
-                HStack {
-                    Text(place.place.canonicalName)
-                    Spacer()
-                    Button {
-                        removingPlaceIDs.insert(place.id)
-                        Task {
-                            let removed = await store.removePlace(
-                                placeID: place.place.id, visiblePlaceID: place.id,
-                                from: list, backend: backend
-                            )
-                            removingPlaceIDs.remove(place.id)
-                            if !removed { contentErrorMessage = "Couldn’t remove this place. Try again." }
-                        }
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    }
-                    .disabled(!store.canManage(list) || removingPlaceIDs.contains(place.id))
-                    .accessibilityLabel("Remove \(place.place.canonicalName) from list")
-                }
             }
         }
     }
