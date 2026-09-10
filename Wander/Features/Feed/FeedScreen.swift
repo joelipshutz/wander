@@ -209,7 +209,7 @@ struct FeedScreen: View {
     }
 
     private var floatingHeader: some View {
-        AstirFloatingHeaderSurface {
+        AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {
             floatingHeaderContent
         }
     }
@@ -249,6 +249,7 @@ struct FeedScreen: View {
                     systemImage: "plus",
                     accessibilityLabel: "Add a place",
                     accessibilityIdentifier: "feed.headerAdd",
+                    isAddAction: true,
                     action: {
                         peopleSearchFieldFocused = false
                         onAdd()
@@ -785,7 +786,8 @@ private struct FeedSurfaceTabs: View {
             selection: Binding(
                 get: { selectedSurface.rawValue },
                 set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
-            )
+            ),
+            interactive: true
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Feed section")
@@ -1081,7 +1083,7 @@ private struct FeedPeopleSearchField: View {
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
         .contentShape(Rectangle())
-        .astirOutlinedSurface(castsShadow: true)
+        .astirOutlinedSurface(castsShadow: true, interactive: true)
         .accessibilityLabel("Search people")
     }
 }
@@ -1354,7 +1356,7 @@ private struct FeedSearchLauncher: View {
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
             .contentShape(Rectangle())
-            .astirOutlinedSurface(castsShadow: true)
+            .astirOutlinedSurface(castsShadow: true, interactive: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search trusted places")
