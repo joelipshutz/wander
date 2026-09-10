@@ -398,6 +398,106 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
     }
 }
 
+final class PlaceImportReportCoverageTests: XCTestCase {
+    func testSeventeenMatchedPlacesAndSourceRetryDoNotShowFailure() {
+        var items = (0..<17).map { item($0, candidates: $0 < 13 ? 1 : 4) }
+        items.append(retry())
+        let result = coverage(items)
+        XCTAssertEqual(result.matchedCount, 17)
+        XCTAssertEqual(result.totalCount, 17)
+        XCTAssertEqual(result.footer, .none)
+    }
+
+    func testLowCoverageAndStrictFiftyPercentBoundary() {
+        for (matched, total, expected) in [(0, 17, PlaceImportReportCoverage.Footer.failed),
+                                           (1, 17, .partial), (8, 17, .partial),
+                                           (9, 17, .none), (1, 2, .none), (17, 17, .none)] {
+            let items = (0..<total).map { item($0, candidates: $0 < matched ? 1 : 0) }
+            XCTAssertEqual(coverage(items).footer, expected, "\(matched)/\(total)")
+        }
+    }
+
+    func testAlternativeCandidatesAndDeselectionDoNotInflateOrEraseCoverage() {
+        var match = item(0, candidates: 5)
+        match.selectedCandidateID = nil
+        match.selectedCandidateIDsRaw = []
+        let result = coverage([match, item(1, candidates: 0), item(2, candidates: 0)])
+        XCTAssertEqual(result.matchedCount, 1)
+        XCTAssertEqual(result.footer, .partial)
+    }
+
+    func testSavedAndReceiptRowsRemainSuccessWithoutDoubleCounting() {
+        var saved = item(0, candidates: 0)
+        saved.state = .saved
+        var batch = batch()
+        batch.receipt = PlaceImportReceipt(batchID: batch.id, sourceName: nil, entries: [
+            PlaceImportReceiptEntry(itemID: saved.id, displayName: "Saved", displayArea: nil,
+                status: .wannaGo, outcome: .added, userPlaceID: "saved-id"),
+            PlaceImportReceiptEntry(itemID: "receipt-only", displayName: "Saved earlier", displayArea: nil,
+                status: .wannaGo, outcome: .added, userPlaceID: "earlier-id")
+        ], destinationListID: nil)
+        let result = PlaceImportReportCoverage(batch: batch, items: [saved, retry()])
+        XCTAssertEqual(result.matchedCount, 2)
+        XCTAssertEqual(result.totalCount, 2)
+        XCTAssertEqual(result.footer, .none)
+    }
+
+    func testCoverageIsPerPostAndExcludesSourceMarkers() {
+        var otherPost = item(1, candidates: 1)
+        otherPost = PlaceImportItem(batchID: "another-post", source: .instagram,
+            seed: otherPost.seed, state: .ready, candidates: otherPost.candidates)
+        let result = coverage([item(0, candidates: 0), otherPost, retry()])
+        XCTAssertEqual(result.totalCount, 1)
+        XCTAssertEqual(result.footer, .failed)
+        XCTAssertEqual(coverage([retry()]).footer, .failed)
+    }
+
+    func testFailedReceiptWithoutAMatchDoesNotInflateCoverage() {
+        var batch = batch()
+        let unresolved = item(1, candidates: 0)
+        batch.receipt = PlaceImportReceipt(batchID: batch.id, sourceName: nil, entries: [
+            PlaceImportReceiptEntry(itemID: unresolved.id, displayName: "Unresolved", displayArea: nil,
+                status: nil, outcome: .failed, userPlaceID: nil)
+        ], destinationListID: nil)
+        let result = PlaceImportReportCoverage(batch: batch, items: [item(0, candidates: 1), unresolved, item(2, candidates: 0)])
+        XCTAssertEqual(result.matchedCount, 1)
+        XCTAssertEqual(result.footer, .partial)
+    }
+
+    func testProcessingCancelledAndEmptyReportsDoNotShowFailurePrematurely() {
+        var pending = item(0, candidates: 0)
+        pending.state = .resolving
+        XCTAssertEqual(coverage([pending]).footer, .none)
+        var cancelled = batch()
+        cancelled.state = .cancelled
+        XCTAssertEqual(PlaceImportReportCoverage(batch: cancelled, items: [retry()]).footer, .none)
+        XCTAssertEqual(coverage([]).footer, .none)
+    }
+
+    private func batch() -> PlaceImportBatch {
+        PlaceImportBatch(id: "coverage", source: .instagram, sourceName: nil, state: .ready, totalCount: 0)
+    }
+
+    private func coverage(_ items: [PlaceImportItem]) -> PlaceImportReportCoverage {
+        PlaceImportReportCoverage(batch: batch(), items: items)
+    }
+
+    private func item(_ index: Int, candidates count: Int) -> PlaceImportItem {
+        let candidates = (0..<count).map { placeImportCandidate(name: "Place \(index) option \($0)") }
+        return PlaceImportItem(id: "coverage-\(index)", batchID: "coverage", source: .instagram,
+            seed: PlaceImportSeed(rawText: "Place \(index)", nameHint: "Place \(index)", areaHint: nil,
+                sourceURLString: "https://example.com/post", sourceLine: index),
+            state: count > 1 ? .ambiguous : count == 1 ? .ready : .needsHelp,
+            candidates: candidates, selectedCandidateID: candidates.first?.id)
+    }
+
+    private func retry() -> PlaceImportItem {
+        var result = item(99, candidates: 0)
+        result.kind = .sourceRetry
+        return result
+    }
+}
+
 final class PlaceImportMatchingProgressTests: XCTestCase {
     func testSourceURLIsNotMisrepresentedAsOnePlace() {
         let progress = PlaceImportMatchingProgress.summarize(items: [item(name: nil, state: .resolving)])

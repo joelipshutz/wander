@@ -81,6 +81,61 @@ final class ImportFormRefinementUITests: XCTestCase {
         keepScreenshot("Import report — inline review")
     }
 
+    func testSuccessfulReportDoesNotShowSourceRetryFooter() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Saved (1)"].waitForExistence(timeout: 15))
+        for _ in 0..<12 { app.swipeUp() }
+        XCTAssertFalse(app.buttons["import.retry"].exists)
+        XCTAssertFalse(app.staticTexts["Oops that link didn't work"].exists)
+        XCTAssertFalse(app.buttons["import.try-again"].exists)
+        keepScreenshot("Import report — successful partial scan has no failure footer")
+    }
+
+    func testLowCoverageReturnsToImportEntryWithCopiedLink() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationPartial"]
+        app.launch()
+        let tryAgain = app.buttons["import.try-again"]
+        for _ in 0..<5 where !tryAgain.isHittable { app.swipeUp() }
+        XCTAssertTrue(tryAgain.isHittable)
+        XCTAssertTrue(app.staticTexts["We weren't able to resolve all places"].exists)
+        XCTAssertFalse(app.buttons["import.retry"].exists)
+        keepScreenshot("Import report — low coverage warning")
+        tryAgain.tap()
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 5))
+        app.buttons["Paste from clipboard"].tap()
+        XCTAssertEqual(app.textFields["import.input"].value as? String, "https://example.com/recme-import-ui-fixture")
+        keepScreenshot("Import report — try again returns to entry with source copied")
+    }
+
+    func testImportActionsShareCompactBottomRow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReview"]
+        app.launch()
+        let wanna = app.buttons["import.wanna.capture-instagram-0"]
+        for _ in 0..<5 where !wanna.isHittable || wanna.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        let details = app.buttons["import.details.capture-instagram-0"]
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertTrue(details.isHittable)
+        XCTAssertEqual(wanna.frame.midY, details.frame.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(wanna.frame.height, 44)
+        XCTAssertLessThan(details.frame.maxX, wanna.frame.minX)
+        keepScreenshot("Import report — compact bottom actions")
+    }
+
+    func testPlinthProgressStagesInLightAndDark() {
+        let app = XCUIApplication()
+        for appearance in ["Dark", "Light"] {
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationProgress", "-AppleInterfaceStyle", appearance]
+            app.launch()
+            XCTAssertTrue(app.staticTexts["Resolved 17 out of 17 places"].waitForExistence(timeout: 15))
+            keepScreenshot("Import plinth — \(appearance) — zero, partial, and complete")
+            app.terminate()
+        }
+    }
+
     func testSingleInlineSaveLeavesOtherMatchesAvailable() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
