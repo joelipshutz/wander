@@ -23,11 +23,14 @@ struct DiscoverScreen: View {
     @State private var externalPlaceSearchTask: Task<Void, Never>?
     @State private var activePlaceSearchSubmissionID: UUID?
     @State private var activeExternalSearchRequestID: UUID?
+    @State private var pendingSearchAttribution: DiscoverSearchAttribution?
     @State private var didTrackPlaceSearchOpen = false
     @State private var memberQuery = ""
     @State private var placeResults = DiscoverResults(places: [], profiles: [])
     @State private var communityPlaceCandidates: [PlaceCandidate] = []
     @State private var externalPlaceCandidates: [PlaceCandidate] = []
+    @State private var communityProviderProvenanceByCandidateID: [String: String] = [:]
+    @State private var communityPlaceSearchResultStage = "none"
     @State private var isCommunityPlaceSearchLoading = false
     @State private var isExternalPlaceSearchLoading = false
     @State private var communityPlaceSearchFailed = false
@@ -357,6 +360,7 @@ struct DiscoverScreen: View {
                     if let submissionID = activePlaceSearchSubmissionID {
                         startCommunityPlaceSearch(
                             query: placesQuery,
+                            filters: placeResults.filters,
                             submissionID: submissionID
                         )
                     }
@@ -371,6 +375,7 @@ struct DiscoverScreen: View {
                 guard let submittedPlacesQuery,
                       normalizedSearchQuery(newValue) != normalizedSearchQuery(submittedPlacesQuery)
                 else { return }
+                trackSearchReformulation()
                 cancelPlaceSearchWork()
                 self.submittedPlacesQuery = nil
                 selectedOwnerCandidateID = nil
@@ -530,6 +535,9 @@ struct DiscoverScreen: View {
         externalPlaceCandidates = []
         communityPlaceSearchFailed = false
         externalPlaceSearchFailed = false
+        communityProviderProvenanceByCandidateID = [:]
+        communityPlaceSearchResultStage = "none"
+        pendingSearchAttribution = nil
         searchFieldFocused = false
     }
 
@@ -543,6 +551,9 @@ struct DiscoverScreen: View {
         externalPlaceCandidates = []
         communityPlaceSearchFailed = false
         externalPlaceSearchFailed = false
+        communityProviderProvenanceByCandidateID = [:]
+        communityPlaceSearchResultStage = "none"
+        pendingSearchAttribution = nil
         isPlaceSearchLoading = false
         isPlaceSearchRefining = false
         searchFieldFocused = focusField
@@ -574,11 +585,14 @@ struct DiscoverScreen: View {
         cancelPlaceSearchWork()
         let submissionID = UUID()
         activePlaceSearchSubmissionID = submissionID
+        pendingSearchAttribution = nil
         placesQuery = query
         submittedPlacesQuery = query
         selectedOwnerCandidateID = nil
         communityPlaceCandidates = []
         externalPlaceCandidates = []
+        communityProviderProvenanceByCandidateID = [:]
+        communityPlaceSearchResultStage = "none"
         communityPlaceSearchFailed = false
         externalPlaceSearchFailed = false
         searchFieldFocused = false
@@ -587,13 +601,18 @@ struct DiscoverScreen: View {
             properties: [
                 "query_length": discoverQueryLengthBucket(query.count),
                 "source": source,
-                "schema_version": "2"
+                "schema_version": "3",
+                "search_request_id": searchRequestID(submissionID)
             ]
         )
 
         let localClock = ContinuousClock()
         let localStart = localClock.now
         let localResults = store.searchTrustedPlaces(query: query, scope: .everyone)
+        let initialCommunityRequest = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+            query: query,
+            filters: localResults.filters
+        )
         let initialExternalInput = DiscoverExternalPlaceSearchPlanner.input(
             query: query,
             filters: localResults.filters
@@ -609,11 +628,20 @@ struct DiscoverScreen: View {
             properties: [
                 "surface": "discover",
                 "result_count": discoverResultCountBucket(localResults.places.count),
-                "latency": trustedSearchLatencyBucket(localLatency)
+                "latency": trustedSearchLatencyBucket(localLatency),
+                "latency_ms": trustedSearchLatencyMilliseconds(localLatency),
+                "search_request_id": searchRequestID(submissionID)
             ]
         )
+        trackTrustedPlaceSearchStage(
+            "local",
+            submissionID: submissionID,
+            duration: localLatency,
+            resultCount: localResults.places.count,
+            outcome: "succeeded"
+        )
 
-        startCommunityPlaceSearch(query: query, submissionID: submissionID)
+        startCommunityPlaceSearch(query: query, filters: localResults.filters, submissionID: submissionID)
         startExternalPlaceSearch(
             query: query,
             filters: localResults.filters,
@@ -640,6 +668,17 @@ struct DiscoverScreen: View {
             isPlaceSearchLoading = false
             isPlaceSearchRefining = false
             placeSearchTask = nil
+            let refinedCommunityRequest = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+                query: query,
+                filters: results.filters
+            )
+            if refinedCommunityRequest != initialCommunityRequest {
+                startCommunityPlaceSearch(
+                    query: query,
+                    filters: results.filters,
+                    submissionID: submissionID
+                )
+            }
             let refinedExternalInput = DiscoverExternalPlaceSearchPlanner.input(
                 query: query,
                 filters: results.filters
@@ -658,15 +697,25 @@ struct DiscoverScreen: View {
                     "surface": "discover",
                     "result_count": discoverResultCountBucket(results.places.count),
                     "latency": trustedSearchLatencyBucket(refinementStart.duration(to: refinementClock.now)),
-                    "parse_source": results.parseSource.rawValue
+                    "latency_ms": trustedSearchLatencyMilliseconds(refinementStart.duration(to: refinementClock.now)),
+                    "parse_source": results.parseSource.rawValue,
+                    "search_request_id": searchRequestID(submissionID)
                 ]
+            )
+            trackTrustedPlaceSearchStage(
+                "parser",
+                submissionID: submissionID,
+                duration: refinementStart.duration(to: refinementClock.now),
+                resultCount: results.places.count,
+                outcome: results.parseSource.rawValue
             )
             store.trackDiscoverSearchEvent(
                 WanderAnalyticsEvents.discoverSearchResults,
                 properties: [
                     "result_count": discoverResultCountBucket(results.places.count),
                     "exact_zero": results.places.isEmpty ? "true" : "false",
-                    "parse_source": results.parseSource.rawValue
+                    "parse_source": results.parseSource.rawValue,
+                    "search_request_id": searchRequestID(submissionID)
                 ]
             )
         }
@@ -684,26 +733,47 @@ struct DiscoverScreen: View {
         submitPlaceSearch(source: "walkthrough_resume")
     }
 
-    private func startCommunityPlaceSearch(query: String, submissionID: UUID) {
+    private func startCommunityPlaceSearch(
+        query: String,
+        filters: DiscoverFilters,
+        submissionID: UUID
+    ) {
         communityPlaceSearchTask?.cancel()
+        communityPlaceCandidates = []
+        communityProviderProvenanceByCandidateID = [:]
+        communityPlaceSearchResultStage = "none"
+        communityPlaceSearchFailed = false
         isCommunityPlaceSearchLoading = auth.isSignedIn
         guard auth.isSignedIn else {
-            communityPlaceCandidates = []
-            communityPlaceSearchFailed = false
             communityPlaceSearchTask = nil
             return
         }
 
         communityPlaceSearchTask = Task { @MainActor in
-            guard let request = await store.recmePlaceSearchRequest(query: query) else {
+            let remoteClock = ContinuousClock()
+            let remoteStart = remoteClock.now
+            let planStart = remoteClock.now
+            guard let request = DiscoverRecmePlaceSearchPlanner.eligibleRequest(
+                query: query,
+                filters: filters
+            ) else {
+                guard isActivePlaceSearch(query: query, submissionID: submissionID) else { return }
                 isCommunityPlaceSearchLoading = false
                 communityPlaceSearchTask = nil
                 return
             }
+            let planLatency = planStart.duration(to: remoteClock.now)
+            guard isActivePlaceSearch(query: query, submissionID: submissionID) else { return }
+            trackTrustedPlaceSearchStage(
+                "request_plan",
+                submissionID: submissionID,
+                duration: planLatency,
+                resultCount: nil,
+                outcome: "succeeded"
+            )
 
+            var didPublishLexical = false
             do {
-                let remoteClock = ContinuousClock()
-                let remoteStart = remoteClock.now
                 let semanticServerFlag = auth.state.session.flatMap { session in
                     backend.featureFlag(.semanticPlaceSearchV1, for: session.userID)
                 }
@@ -712,19 +782,63 @@ struct DiscoverScreen: View {
                 )
                 let outcome = try await backend.searchRecmePlaces(
                     request,
-                    includesSemanticProvider: semanticEnabled
+                    includesSemanticProvider: semanticEnabled,
+                    onLexicalResults: { lexicalOutcome in
+                        guard isActivePlaceSearch(query: query, submissionID: submissionID) else {
+                            return
+                        }
+                        didPublishLexical = true
+                        applyCommunityPlaceSearchOutcome(lexicalOutcome, isFinal: false)
+                        if let latency = lexicalOutcome.timings.lexical {
+                            trackTrustedPlaceSearchStage(
+                                "lexical",
+                                submissionID: submissionID,
+                                duration: latency,
+                                resultCount: lexicalOutcome.lexicalCount,
+                                outcome: "succeeded"
+                            )
+                        }
+                    }
                 )
-                guard !Task.isCancelled,
-                      isPlaceSearchPresented,
-                      activePlaceSearchSubmissionID == submissionID,
-                      submittedPlacesQuery == query,
-                      normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
-                else { return }
-                communityPlaceCandidates = outcome.candidates
-                communityPlaceSearchFailed = false
-                isPlaceSearchLoading = false
-                isCommunityPlaceSearchLoading = false
-                communityPlaceSearchTask = nil
+                guard isActivePlaceSearch(query: query, submissionID: submissionID) else { return }
+                applyCommunityPlaceSearchOutcome(outcome, isFinal: true)
+                if !didPublishLexical,
+                   let latency = outcome.timings.lexical {
+                    trackTrustedPlaceSearchStage(
+                        "lexical",
+                        submissionID: submissionID,
+                        duration: latency,
+                        resultCount: outcome.lexicalCount,
+                        outcome: outcome.deliveryStage == .semanticRecovery ? "failed" : "succeeded"
+                    )
+                }
+                if let latency = outcome.timings.semantic,
+                   outcome.semanticStatus != .disabled {
+                    trackTrustedPlaceSearchStage(
+                        "semantic",
+                        submissionID: submissionID,
+                        duration: latency,
+                        resultCount: outcome.semanticCount,
+                        outcome: outcome.semanticStatus.rawValue
+                    )
+                }
+                if let latency = outcome.timings.fusion {
+                    trackTrustedPlaceSearchStage(
+                        "fusion",
+                        submissionID: submissionID,
+                        duration: latency,
+                        resultCount: outcome.candidates.count,
+                        outcome: outcome.deliveryStage.rawValue
+                    )
+                }
+                let totalLatency = remoteStart.duration(to: remoteClock.now)
+                trackTrustedPlaceSearchStage(
+                    "total",
+                    submissionID: submissionID,
+                    duration: totalLatency,
+                    resultCount: outcome.candidates.count,
+                    outcome: outcome.deliveryStage.rawValue
+                )
                 store.trackDiscoverSearchEvent(
                     WanderAnalyticsEvents.trustedPlaceSearchRemoteResults,
                     properties: [
@@ -735,19 +849,27 @@ struct DiscoverScreen: View {
                         "semantic_count": discoverResultCountBucket(outcome.semanticCount),
                         "provider_overlap": discoverResultCountBucket(outcome.overlapCount),
                         "semantic_status": outcome.semanticStatus.rawValue,
+                        "delivery_stage": outcome.deliveryStage.rawValue,
                         "ranking_policy": RecmePlaceSearchOutcome.rankingPolicyVersion,
-                        "latency": trustedSearchLatencyBucket(remoteStart.duration(to: remoteClock.now))
+                        "latency": trustedSearchLatencyBucket(totalLatency),
+                        "latency_ms": trustedSearchLatencyMilliseconds(totalLatency),
+                        "search_request_id": searchRequestID(submissionID)
                     ]
                 )
             } catch is CancellationError {
                 return
             } catch {
-                guard !Task.isCancelled,
-                      activePlaceSearchSubmissionID == submissionID
-                else { return }
+                guard isActivePlaceSearch(query: query, submissionID: submissionID) else { return }
                 communityPlaceSearchFailed = true
                 isCommunityPlaceSearchLoading = false
                 communityPlaceSearchTask = nil
+                trackTrustedPlaceSearchStage(
+                    "total",
+                    submissionID: submissionID,
+                    duration: remoteStart.duration(to: remoteClock.now),
+                    resultCount: communityPlaceCandidates.count,
+                    outcome: "failed"
+                )
                 if !placeResults.places.isEmpty {
                     isPlaceSearchLoading = false
                 }
@@ -805,7 +927,9 @@ struct DiscoverScreen: View {
                         "provider": "mapkit",
                         "result_count": discoverResultCountBucket(candidates.count),
                         "ranking_policy": DiscoverPlaceSearchRankingPolicy.version,
-                        "latency": trustedSearchLatencyBucket(remoteStart.duration(to: remoteClock.now))
+                        "latency": trustedSearchLatencyBucket(remoteStart.duration(to: remoteClock.now)),
+                        "latency_ms": trustedSearchLatencyMilliseconds(remoteStart.duration(to: remoteClock.now)),
+                        "search_request_id": searchRequestID(submissionID)
                     ]
                 )
             } catch is CancellationError {
@@ -841,6 +965,34 @@ struct DiscoverScreen: View {
         }
     }
 
+    private func isActivePlaceSearch(query: String, submissionID: UUID) -> Bool {
+        !Task.isCancelled
+            && isPlaceSearchPresented
+            && activePlaceSearchSubmissionID == submissionID
+            && submittedPlacesQuery == query
+            && normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+    }
+
+    private func applyCommunityPlaceSearchOutcome(
+        _ outcome: RecmePlaceSearchOutcome,
+        isFinal: Bool
+    ) {
+        communityPlaceCandidates = outcome.candidates
+        communityProviderProvenanceByCandidateID = Dictionary(
+            uniqueKeysWithValues: outcome.matches.map { match in
+                (match.candidate.id, searchProviderLabel(match.providers))
+            }
+        )
+        communityPlaceSearchResultStage = outcome.deliveryStage.rawValue
+        communityPlaceSearchFailed = false
+        isPlaceSearchLoading = !isFinal && placeResults.places.isEmpty
+            && outcome.candidates.isEmpty && externalPlaceCandidates.isEmpty
+        isCommunityPlaceSearchLoading = !isFinal
+        if isFinal {
+            communityPlaceSearchTask = nil
+        }
+    }
+
     private func discoverQueryLengthBucket(_ count: Int) -> String {
         switch count {
         case 0...20: "0_20"
@@ -861,16 +1013,80 @@ struct DiscoverScreen: View {
     }
 
     private func trustedSearchLatencyBucket(_ duration: Duration) -> String {
-        let components = duration.components
-        let milliseconds = (Double(components.seconds) * 1_000)
-            + (Double(components.attoseconds) / 1_000_000_000_000_000)
+        let milliseconds = trustedSearchLatencyMillisecondsValue(duration)
         return switch milliseconds {
         case ..<10: "under_10ms"
         case ..<25: "10_24ms"
         case ..<50: "25_49ms"
         case ..<100: "50_99ms"
-        default: "100ms_plus"
+        case ..<250: "100_249ms"
+        case ..<500: "250_499ms"
+        case ..<1_000: "500_999ms"
+        case ..<2_000: "1_1_9s"
+        case ..<4_000: "2_3_9s"
+        default: "4s_plus"
         }
+    }
+
+    private func trustedSearchLatencyMilliseconds(_ duration: Duration) -> String {
+        String(Int(min(max(trustedSearchLatencyMillisecondsValue(duration), 0), 30_000).rounded()))
+    }
+
+    private func trustedSearchLatencyMillisecondsValue(_ duration: Duration) -> Double {
+        let components = duration.components
+        return (Double(components.seconds) * 1_000)
+            + (Double(components.attoseconds) / 1_000_000_000_000_000)
+    }
+
+    private func trackTrustedPlaceSearchStage(
+        _ stage: String,
+        submissionID: UUID,
+        duration: Duration,
+        resultCount: Int?,
+        outcome: String
+    ) {
+        var properties = [
+            "surface": "discover",
+            "search_request_id": searchRequestID(submissionID),
+            "stage": stage,
+            "outcome": outcome,
+            "latency": trustedSearchLatencyBucket(duration),
+            "latency_ms": trustedSearchLatencyMilliseconds(duration)
+        ]
+        if let resultCount {
+            properties["result_count"] = discoverResultCountBucket(resultCount)
+        }
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchStageCompleted,
+            properties: properties
+        )
+    }
+
+    private func trackSearchReformulation() {
+        guard let submissionID = activePlaceSearchSubmissionID else { return }
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchReformulated,
+            properties: [
+                "surface": "discover",
+                "search_request_id": searchRequestID(submissionID),
+                "result_stage": placeSearchResultStage,
+                "result_count": discoverResultCountBucket(
+                    rankedPlaceCandidates.count
+                )
+            ]
+        )
+        pendingSearchAttribution = nil
+    }
+
+    private func searchRequestID(_ submissionID: UUID) -> String {
+        submissionID.uuidString.lowercased()
+    }
+
+    private func searchProviderLabel(_ providers: Set<RecmePlaceSearchProvider>) -> String {
+        if providers == [.lexical, .semantic] { return "lexical_semantic" }
+        if providers.contains(.semantic) { return "semantic" }
+        if providers.contains(.lexical) { return "lexical" }
+        return "unknown"
     }
 
     private func cancelPlaceSearchWork() {
@@ -1303,6 +1519,7 @@ struct DiscoverScreen: View {
                 trackPlaceSearchSelection(result, in: candidates)
                 selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
             } addToWanna: {
+                trackPlaceSearchSelection(result, in: candidates)
                 addDiscoverPlaceToWanna(primary)
             } addToList: {
                 listSelectionPlace = primary
@@ -1595,6 +1812,7 @@ struct DiscoverScreen: View {
     }
 
     private func addDiscoverPlaceToWanna(_ visiblePlace: VisiblePlace) {
+        let attribution = pendingSearchAttribution
         auth.requireSignIn(for: .socialSave) {
             Task { @MainActor in
                 guard currentUserSave(matching: visiblePlace) == nil else { return }
@@ -1603,6 +1821,7 @@ struct DiscoverScreen: View {
                     status: .wannaGo,
                     backend: auth.isSignedIn ? backend : nil
                 )
+                trackSearchConversion(action: "wanna", attribution: attribution)
                 await refreshPlaces(query: placesQuery)
                 await refreshMembers(query: memberQuery)
                 savedMessage = result.syncState == .synced
@@ -1640,6 +1859,7 @@ struct DiscoverScreen: View {
 
     @MainActor
     private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let attribution = pendingSearchAttribution
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .sharedVisit:
@@ -1662,6 +1882,7 @@ struct DiscoverScreen: View {
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
+            trackSearchConversion(action: submission.status == .been ? "check_in" : "wanna", attribution: attribution)
             return result
         case .addVisit, .editVisit, .editWant:
             let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
@@ -1681,6 +1902,9 @@ struct DiscoverScreen: View {
             savedMessage = scopedDiscoverMessage(for: submission.context, syncState: result.syncState)
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
+            }
+            if case .addVisit = submission.context.mode {
+                trackSearchConversion(action: "check_in", attribution: attribution)
             }
             return result
         }
@@ -1822,22 +2046,64 @@ struct DiscoverScreen: View {
         _ result: DiscoverPlaceSearchCandidate,
         in candidates: [DiscoverPlaceSearchCandidate]
     ) {
+        guard let submissionID = activePlaceSearchSubmissionID else { return }
         let index = candidates.firstIndex { $0.id == result.id } ?? 0
-        let rankBucket: String
-        switch index {
-        case 0: rankBucket = "1"
-        case 1...2: rankBucket = "2_3"
-        default: rankBucket = "4_plus"
+        let provider: String
+        let stage: String
+        switch result {
+        case .trusted:
+            provider = "trusted_memory"
+            stage = placeSearchResultStage
+        case .recme(let candidate):
+            provider = communityProviderProvenanceByCandidateID[candidate.id] ?? "unknown"
+            stage = communityPlaceSearchResultStage
+        case .external:
+            provider = "mapkit"
+            stage = "external_final"
         }
+        let attribution = DiscoverSearchAttribution(
+            requestID: searchRequestID(submissionID),
+            provider: provider,
+            stage: stage,
+            rank: searchRankBucket(index)
+        )
+        pendingSearchAttribution = attribution
         store.trackDiscoverSearchEvent(
             WanderAnalyticsEvents.trustedPlaceSearchResultSelected,
             properties: [
                 "surface": "discover",
-                "provider": result.analyticsProvider,
-                "stage": placeSearchResultStage,
-                "rank": rankBucket
+                "search_request_id": attribution.requestID,
+                "provider": attribution.provider,
+                "stage": attribution.stage,
+                "rank": attribution.rank
             ]
         )
+    }
+
+    private func searchRankBucket(_ zeroBasedIndex: Int) -> String {
+        switch zeroBasedIndex {
+        case 0: "1"
+        case 1...2: "2_3"
+        default: "4_plus"
+        }
+    }
+
+    private func trackSearchConversion(action: String, attribution: DiscoverSearchAttribution?) {
+        guard let attribution else { return }
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchConverted,
+            properties: [
+                "surface": "discover",
+                "search_request_id": attribution.requestID,
+                "provider": attribution.provider,
+                "stage": attribution.stage,
+                "rank": attribution.rank,
+                "action": action
+            ]
+        )
+        if pendingSearchAttribution == attribution {
+            pendingSearchAttribution = nil
+        }
     }
 
     private func refreshMembers(query: String, debounce: Bool = false) async {
@@ -1988,6 +2254,13 @@ private struct SelectedDiscoverPlace: Identifiable {
     var id: String {
         visiblePlace.id
     }
+}
+
+private struct DiscoverSearchAttribution: Equatable {
+    let requestID: String
+    let provider: String
+    let stage: String
+    let rank: String
 }
 
 private struct SectionTitle: View {

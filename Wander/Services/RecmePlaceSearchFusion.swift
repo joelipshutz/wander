@@ -13,7 +13,9 @@ enum RecmePlaceSearchFusion {
         lexical: [PlaceCandidate],
         semantic: [PlaceCandidate],
         semanticStatus: RecmeSemanticSearchStatus,
-        limit: Int
+        limit: Int,
+        deliveryStage: RecmePlaceSearchDeliveryStage,
+        timings: RecmePlaceSearchTimings = .empty
     ) -> RecmePlaceSearchOutcome {
         let lexicalRanks = uniqueRanks(lexical)
         let semanticRanks = uniqueRanks(semantic)
@@ -55,7 +57,9 @@ enum RecmePlaceSearchFusion {
             lexicalCount: lexicalRanks.count,
             semanticCount: semanticRanks.count,
             overlapCount: Set(lexicalRanks.keys).intersection(semanticRanks.keys).count,
-            semanticStatus: semanticStatus
+            semanticStatus: semanticStatus,
+            deliveryStage: deliveryStage,
+            timings: timings
         )
     }
 

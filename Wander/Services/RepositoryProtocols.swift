@@ -147,8 +147,37 @@ enum RecmePlaceSearchProvider: String, Equatable, Hashable, Sendable {
 
 enum RecmeSemanticSearchStatus: String, Equatable, Sendable {
     case disabled
+    case pending
     case succeeded
     case failed
+}
+
+enum RecmePlaceSearchDeliveryStage: String, Equatable, Sendable {
+    case lexical
+    case lexicalFinal = "lexical_final"
+    case fused
+    case semanticRecovery = "semantic_recovery"
+}
+
+struct RecmePlaceSearchTimings: Equatable, Sendable {
+    static let empty = RecmePlaceSearchTimings()
+
+    let lexical: Duration?
+    let semantic: Duration?
+    let fusion: Duration?
+    let total: Duration?
+
+    init(
+        lexical: Duration? = nil,
+        semantic: Duration? = nil,
+        fusion: Duration? = nil,
+        total: Duration? = nil
+    ) {
+        self.lexical = lexical
+        self.semantic = semantic
+        self.fusion = fusion
+        self.total = total
+    }
 }
 
 struct RecmePlaceSearchMatch: Equatable, Sendable {
@@ -164,6 +193,8 @@ struct RecmePlaceSearchOutcome: Equatable, Sendable {
     let semanticCount: Int
     let overlapCount: Int
     let semanticStatus: RecmeSemanticSearchStatus
+    let deliveryStage: RecmePlaceSearchDeliveryStage
+    let timings: RecmePlaceSearchTimings
 
     var candidates: [PlaceCandidate] {
         matches.map(\.candidate)

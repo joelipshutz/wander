@@ -29,6 +29,8 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 | Retention | Do activated users come back? | Exact D1, D7, D14, and D30 `app_session_started` return after `onboarding_completed`. |
 | Referrals | Are users inviting others? | Invite sheet open → delivery start → successful Messages/share-sheet handoff. |
 | Monetization | What is the revenue loop? | Intentionally blank until the product has a monetization decision and event contract. |
+| Search Retrieval | Does useful search arrive quickly? | Request-correlated local, parser, request-plan, lexical, semantic, fusion, and total stage latency with coarse status/failure buckets. |
+| Search Retrieval | Do results help people act? | Submitted requests → selected results → check-in/Wanna actions, plus reformulations. Selection analysis uses provider, delivery stage, and a coarse 1-based rank bucket only. |
 | Notification Operations | Are remote notifications healthy? | APNs-accepted volume, terminal notification acceptance rate, final device-token disposition, and aggregate remote taps. APNs acceptance is not proof of display. |
 | Notification Operations | Are users being over- or under-notified? | Latest 30-day average, p50, p90, maximum, and histogram across notification-eligible recipients, including the zero-notification bucket. |
 
@@ -91,6 +93,10 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
+| `trusted_place_search_stage_completed` | A submitted place-search request completes one retrieval stage | opaque `search_request_id`; allowlisted `stage` and coarse `outcome`; integer `latency_ms`; coarse latency bucket; result count |
+| `trusted_place_search_result_selected` | A user selects a result from a submitted place-search request | opaque `search_request_id`; `provider`; delivery stage; coarse 1-based rank bucket |
+| `trusted_place_search_converted` | A selected result leads to a successful check-in or Wanna action | opaque `search_request_id`; `provider`; delivery stage; selected rank; allowlisted action (`check_in` or `wanna`) |
+| `trusted_place_search_reformulated` | A user changes a submitted query before selecting a result | opaque `search_request_id`; prior result count; prior delivery stage |
 
 The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search
@@ -119,8 +125,11 @@ Discover place search keeps query text out of analytics. `trusted_place_search_r
 may include `surface`, the allowlisted `provider` (`recme` or `mapkit`), aggregate
 result-count and latency buckets, a versioned ranking policy, and rec.me provider
 overlap/status counts. `trusted_place_search_result_selected` may include only
-`surface`, allowlisted `provider` (`trusted`, `recme`, or `mapkit`), result stage,
-and a coarse rank bucket. It must never include the query, place name, provider
+`surface`, opaque `search_request_id`, allowlisted `provider` (`trusted_memory`,
+`lexical`, `semantic`, `lexical_semantic`, `mapkit`, or `unknown`), result stage,
+and a coarse rank bucket from the combined displayed order. Apple Maps latency
+remains on the remote-results event with bounded `latency_ms` and the same
+submission ID; `total` stage measures rec.me including request planning. It must never include the query, place name, provider
 place ID, address, coordinates, or contributor identity.
 
 ## Privacy rules
@@ -136,6 +145,8 @@ Prefer enums, booleans, counts, lengths, coarse error categories, internal build
 Apple Calendar analytics is aggregate-only. It must never include calendar event
 identifiers, titles, notes, attendees, URLs, addresses, place names, provider
 place IDs, reservation IDs, timestamps, or time zones.
+
+Search correlation IDs are random per submission and must not be reused as user, place, candidate, query, or session identifiers. Search analytics may record stages, latency, provider provenance, result counts, rank, and coarse outcomes; they must not record the query text, result IDs, result names, profiles, or candidate lists.
 
 Notification operations are stricter: never export recipient IDs, event IDs,
 actor IDs, APNs IDs, device tokens, notification title/body, deep links, or
@@ -162,7 +173,7 @@ npm run analytics:apply
 
 Optional: set `WANDER_POSTHOG_API_HOST`; the management API defaults to `https://us.posthog.com`. The ingestion host in the iOS app remains `https://us.i.posthog.com`.
 
-The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes seven visibly ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, and bottom-of-dashboard Notification Operations.
+The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes eight visibly ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, Search Retrieval, and bottom-of-dashboard Notification Operations.
 
 ## Validation checklist
 
