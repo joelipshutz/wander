@@ -16,7 +16,7 @@ extension PlaceResolutionError: LocalizedError {
         case .locationDenied:
             "Location is off for \(AppBrand.displayName). Turn it on or add the place manually."
         case .locationUnavailable:
-            "Could not find where you are right now. Try adding the place manually."
+            "Couldn’t get your location. Tap to retry"
         case .noCandidates:
             "No matching places found. Try a more specific name or nearby area."
         case .shortLinkNeedsExtraction:
@@ -768,99 +768,147 @@ protocol CurrentLocationProviding {
     func currentLocation() async throws -> CLLocation
 }
 
+/// The small manager boundary lets tests deliver callbacks without using device location.
 @MainActor
-final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcurrency CLLocationManagerDelegate {
-    private static let maximumLocationAge: TimeInterval = 120
-    private static let maximumHorizontalAccuracy: CLLocationAccuracy = 300
-    private static let requestTimeout: Duration = .seconds(6)
-    private let manager = CLLocationManager()
-    private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
-    private var locationContinuation: CheckedContinuation<CLLocation, Error>?
-    private var locationTimeoutTask: Task<Void, Never>?
+protocol CurrentLocationManaging: AnyObject {
+    var delegate: (any CLLocationManagerDelegate)? { get set }
+    var authorizationStatus: CLAuthorizationStatus { get }
+    var desiredAccuracy: CLLocationAccuracy { get set }
+    func requestWhenInUseAuthorization()
+    func requestLocation()
+    func stopUpdatingLocation()
+}
 
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+extension CLLocationManager: CurrentLocationManaging {}
+
+@MainActor
+final class CoreLocationProvider: CurrentLocationProviding {
+    private let makeManager: () -> any CurrentLocationManaging
+    private let sleep: @MainActor (Duration) async throws -> Void
+
+    init(
+        makeManager: @escaping () -> any CurrentLocationManaging = { CLLocationManager() },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        self.makeManager = makeManager
+        self.sleep = sleep
     }
 
     func currentLocation() async throws -> CLLocation {
-        let status = manager.authorizationStatus
-        let authorizedStatus: CLAuthorizationStatus
+        try Task.checkCancellation()
+        // Separate ownership prevents overlapping callers from replacing continuations.
+        let request = CurrentLocationRequest(manager: makeManager(), sleep: sleep)
+        return try await request.location()
+    }
+}
 
-        switch status {
-        case .notDetermined:
-            authorizedStatus = await requestAuthorization()
-        default:
-            authorizedStatus = status
-        }
+@MainActor
+private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocationManagerDelegate {
+    private static let maximumLocationAge: TimeInterval = 120
+    private static let maximumHorizontalAccuracy: CLLocationAccuracy = 300
+    private static let attemptTimeout: Duration = .seconds(6)
+    private let manager: any CurrentLocationManaging
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private var continuation: CheckedContinuation<CLLocation, Error>?
+    private var timeoutTask: Task<Void, Never>?
+    private var hasStartedAcquisition = false
 
-        guard authorizedStatus == .authorizedWhenInUse || authorizedStatus == .authorizedAlways else {
-            throw PlaceResolutionError.locationDenied
-        }
-
-        return try await requestLocation()
+    init(manager: any CurrentLocationManaging, sleep: @escaping @MainActor (Duration) async throws -> Void) {
+        self.manager = manager
+        self.sleep = sleep
+        super.init()
     }
 
-    private func requestAuthorization() async -> CLAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            authorizationContinuation = continuation
-            manager.requestWhenInUseAuthorization()
-        }
-    }
-
-    private func requestLocation() async throws -> CLLocation {
-        try await withCheckedThrowingContinuation { continuation in
-            locationTimeoutTask?.cancel()
-            locationContinuation = continuation
-            manager.requestLocation()
-            locationTimeoutTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: Self.requestTimeout)
-                guard !Task.isCancelled else { return }
-                self?.finishLocationRequest(
-                    with: .failure(PlaceResolutionError.locationUnavailable)
-                )
+    func location() async throws -> CLLocation {
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                manager.delegate = self
+                manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                if manager.authorizationStatus == .notDetermined {
+                    manager.requestWhenInUseAuthorization()
+                } else {
+                    handleAuthorization()
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in
+                self.finish(with: .failure(CancellationError()))
             }
         }
     }
 
+    private func handleAuthorization() {
+        guard continuation != nil else { return }
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            return // The initial delegate callback is not a permission decision.
+        case .authorizedAlways, .authorizedWhenInUse:
+            guard !hasStartedAcquisition else { return }
+            hasStartedAcquisition = true
+            // First request: 0–6s. Retry: 6–12s. Only a usable fix ends early.
+            timeoutTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await sleep(Self.attemptTimeout)
+                    try Task.checkCancellation()
+                    guard continuation != nil else { return }
+                    manager.stopUpdatingLocation()
+                    manager.requestLocation()
+                    try await sleep(Self.attemptTimeout)
+                    try Task.checkCancellation()
+                    finish(with: .failure(PlaceResolutionError.locationUnavailable))
+                } catch {
+                    // Completion or caller cancellation already cleans up the request.
+                }
+            }
+            manager.requestLocation()
+        case .denied, .restricted:
+            finish(with: .failure(PlaceResolutionError.locationDenied))
+        @unknown default:
+            finish(with: .failure(PlaceResolutionError.locationDenied))
+        }
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        guard let continuation = authorizationContinuation else { return }
-        authorizationContinuation = nil
-        continuation.resume(returning: manager.authorizationStatus)
+        handleAuthorization()
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations
-            .sorted(by: { $0.timestamp > $1.timestamp })
-            .first(where: { Self.isUsableLocation($0) })
+        guard hasStartedAcquisition,
+              let location = locations
+                .filter({ Self.isUsableLocation($0) })
+                .max(by: { $0.timestamp < $1.timestamp })
         else {
-            finishLocationRequest(with: .failure(PlaceResolutionError.locationUnavailable))
+            // A one-shot request may return stale/coarse data. Keep the deadline
+            // alive so it receives the same second attempt as a missing fix.
             return
         }
-
-        finishLocationRequest(with: .success(location))
+        finish(with: .success(location))
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        finishLocationRequest(with: .failure(PlaceResolutionError.locationUnavailable))
+        if (error as? CLError)?.code == .denied {
+            finish(with: .failure(PlaceResolutionError.locationDenied))
+        }
+        // Other acquisition failures wait for the scheduled retry/final deadline.
     }
 
-    private func finishLocationRequest(with result: Result<CLLocation, Error>) {
-        guard let continuation = locationContinuation else { return }
-        locationContinuation = nil
-        locationTimeoutTask?.cancel()
-        locationTimeoutTask = nil
+    private func finish(with result: Result<CLLocation, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        manager.stopUpdatingLocation()
+        manager.delegate = nil
         continuation.resume(with: result)
     }
 
     private static func isUsableLocation(_ location: CLLocation) -> Bool {
         guard location.horizontalAccuracy >= 0,
               location.horizontalAccuracy <= maximumHorizontalAccuracy
-        else {
-            return false
-        }
-
+        else { return false }
         return abs(location.timestamp.timeIntervalSinceNow) <= maximumLocationAge
     }
 }
