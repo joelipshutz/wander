@@ -592,7 +592,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(deny.exists)
         deny.tap()
         XCTAssertTrue(app.staticTexts["contacts are off"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["share an invite link"].exists)
+        XCTAssertTrue(app.buttons["Share an invite link"].exists)
     }
 
     func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
