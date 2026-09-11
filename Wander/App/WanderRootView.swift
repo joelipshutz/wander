@@ -301,6 +301,7 @@ struct WanderRootView: View {
     @State private var isPresentingImportHub: Bool
     @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
     @State private var importHubPresentationID = UUID()
+    @State private var opensImportHubAfterReportDismissal = false
     @State private var addSheetDetent: PresentationDetent
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
@@ -467,6 +468,7 @@ struct WanderRootView: View {
     var body: some View {
         stateObservedRoot
             .environment(\.astirBrandMode, astirBrandMode)
+            .environment(\.restartPlaceImport, restartImportFromReport)
             .environment(
                 \.placeProfileFloatingActionVariant,
                 placeProfileFloatingActionVariant
@@ -651,7 +653,10 @@ struct WanderRootView: View {
             Label {
                 Text(tab.title)
             } icon: {
-                Image(uiImage: PlaceListSymbol.paperTabImage)
+                Image(uiImage: PlaceListSymbol.paperTabImage(
+                    isSelected: selectedTab == .lists,
+                    isDark: systemColorScheme == .dark
+                ))
             }
         } else {
             Label(tab.title, systemImage: tab.systemImage)
@@ -799,6 +804,7 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
             }
         }
     }
@@ -1141,7 +1147,7 @@ struct WanderRootView: View {
             }
             presentDeferredProductUpsellIfPossible()
         }
-        .task {
+        .task(id: isSessionValidated) {
             requestForcedProductUpsellIfNeeded()
         }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
@@ -1994,6 +2000,11 @@ struct WanderRootView: View {
     private func handleAddSheetDismissal() {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
+        if opensImportHubAfterReportDismissal {
+            opensImportHubAfterReportDismissal = false
+            if isSessionValidated { presentImportHub() }
+            return
+        }
         Task { @MainActor in
             await Task.yield()
             presentPendingImportVerificationIfPossible()
@@ -2092,7 +2103,8 @@ struct WanderRootView: View {
     }
 
     private func requestForcedProductUpsellIfNeeded() {
-        guard !didRequestForcedProductUpsell,
+        guard isSessionValidated,
+              !didRequestForcedProductUpsell,
               let trigger = ProductUpsellDebugPolicy.forcedTrigger()
         else { return }
         didRequestForcedProductUpsell = true
@@ -2298,6 +2310,19 @@ struct WanderRootView: View {
         importHubRestingHeight = AddSheetLayout.importEntryHeight
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.24)) {
             isPresentingImportHub = true
+        }
+    }
+
+    private func restartImportFromReport() {
+        guard isSessionValidated else { return }
+        // Wait for the report sheet to dismiss before opening the entry sheet.
+        // Reuse the normal entry flow so allowances, matching, and analytics
+        // follow the same path as any other explicitly submitted import.
+        if isPresentingAdd {
+            opensImportHubAfterReportDismissal = true
+            isPresentingAdd = false
+        } else {
+            presentImportHub()
         }
     }
 

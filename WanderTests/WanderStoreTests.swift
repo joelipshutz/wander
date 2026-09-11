@@ -10258,7 +10258,7 @@ final class WanderStoreTests: XCTestCase {
         )
         let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
         XCTAssertEqual(toast.message, "We also saved this to your Wanna Go")
-        XCTAssertEqual(toast.actionTitle, "edit")
+        XCTAssertEqual(toast.actionTitle, "Edit")
         let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
         guard case .add = context.mode else {
             return XCTFail("A newly-created Wanna should reopen the Check In/Wanna landing step")
@@ -10302,7 +10302,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(result.shouldExplainAutoSave)
         let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
         XCTAssertEqual(toast.message, "This is already saved to your Wanna Go")
-        XCTAssertEqual(toast.actionTitle, "edit")
+        XCTAssertEqual(toast.actionTitle, "Edit")
         let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
         guard case .editWant(let visiblePlace) = context.mode else {
             return XCTFail("An existing Wanna should open its editor directly")

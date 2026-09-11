@@ -16,6 +16,86 @@ const hint: PlaceHint = {
   end_ms: null,
 };
 
+Deno.test("Google neighborhood evidence survives resolution without becoming a street or country alias", async () => {
+  const dependencies = runtime(async () =>
+    Response.json({
+      places: [{
+        ...(googlePlace({
+          id: "bookstore",
+          name: "Fixture Bookstore",
+        }) as Record<string, unknown>),
+        addressComponents: [
+          {
+            longText: "Downtown Example City",
+            shortText: "DEC",
+            types: ["neighborhood", "political"],
+          },
+          {
+            longText: "Central District",
+            types: ["sublocality_level_1", "political"],
+          },
+          {
+            longText: "Downtown Example City",
+            types: ["sublocality", "political"],
+          },
+          { longText: "Wrong Neighborhood Street", types: ["route"] },
+          { longText: "United States", shortText: "US", types: ["country"] },
+        ],
+      }],
+    })
+  );
+  const resolved = await resolvePlaceHintsWithGoogle(
+    [{ ...hint, name: "Fixture Bookstore", area: "Downtown Example City" }],
+    "google-key",
+    new Deadline(10_000, dependencies.now),
+    dependencies,
+    new AbortController().signal,
+  );
+  assertEquals(
+    Reflect.get(resolved[0].resolved_places![0], "area_components"),
+    [
+      "Downtown Example City",
+      "Central District",
+    ],
+  );
+});
+
+Deno.test("Google neighborhood evidence is bounded and ignores malformed components", async () => {
+  const dependencies = runtime(async () =>
+    Response.json({
+      places: [{
+        ...(googlePlace({ id: "bounded", name: "Fixture Bookstore" }) as Record<
+          string,
+          unknown
+        >),
+        addressComponents: [
+          null,
+          42,
+          {},
+          { longText: "x".repeat(161), types: ["neighborhood"] },
+          { longText: "Wrong", types: "neighborhood" },
+          { shortText: "LA", types: ["neighborhood"] },
+          ...Array.from({ length: 12 }, (_, i) => ({
+            longText: `District ${i}`,
+            types: ["neighborhood"],
+          })),
+        ],
+      }],
+    })
+  );
+  const resolved = await resolvePlaceHintsWithGoogle(
+    [{ ...hint, name: "Fixture Bookstore", area: null }],
+    "google-key",
+    new Deadline(10_000, dependencies.now),
+    dependencies,
+    new AbortController().signal,
+  );
+  assertEquals(
+    resolved[0].resolved_places![0].area_components,
+    Array.from({ length: 8 }, (_, i) => `District ${i}`),
+  );
+});
+
 Deno.test("Google resolution keeps real POIs and rejects a matching locality", async () => {
   const dependencies = runtime(async (url, init) => {
     assertEquals(url, "https://places.googleapis.com/v1/places:searchText");
@@ -56,11 +136,54 @@ Deno.test("Google resolution keeps real POIs and rejects a matching locality", a
     locality: "Bocas del Toro",
     region: "BT",
     country: "PA",
+    area_components: ["Bocas del Toro Province"],
     latitude: 9.35,
     longitude: -82.25,
     primary_type: "resort_hotel",
     types: ["resort_hotel", "lodging", "point_of_interest"],
   }]);
+});
+
+Deno.test("Google resolution preserves exact spacing variants and full province evidence", async () => {
+  const dependencies = runtime(async () =>
+    Response.json({
+      places: [
+        {
+          ...(googlePlace({ id: "exact", name: "Moon Beam" }) as Record<
+            string,
+            unknown
+          >),
+          addressComponents: [
+            {
+              longText: "British Columbia",
+              shortText: "BC",
+              types: ["administrative_area_level_1", "political"],
+            },
+            {
+              longText: "Canada",
+              shortText: "CA",
+              types: ["country", "political"],
+            },
+          ],
+        },
+        googlePlace({ id: "different-business", name: "Moon Beam Bakehouse" }),
+      ],
+    })
+  );
+  const resolved = await resolvePlaceHintsWithGoogle(
+    [{ ...hint, name: "Moonbeam", area: "Vancouver, British Columbia" }],
+    "google-key",
+    new Deadline(10_000, dependencies.now),
+    dependencies,
+    new AbortController().signal,
+  );
+  assertEquals(
+    resolved[0].resolved_places?.map((place) => place.provider_place_id),
+    ["exact"],
+  );
+  assertEquals(resolved[0].resolved_places?.[0].area_components, [
+    "British Columbia",
+  ]);
 });
 
 Deno.test("Google resolution keeps strong official-name variants and caps alternatives", async () => {

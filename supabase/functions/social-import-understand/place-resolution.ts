@@ -168,6 +168,7 @@ function parseGooglePlace(value: unknown): ParsedGooglePlace | null {
       (type): type is string => type !== null,
     ).slice(0, 32)
     : [];
+  const areaComponents = additionalAreaComponents(components);
 
   return {
     resolved: {
@@ -186,6 +187,7 @@ function parseGooglePlace(value: unknown): ParsedGooglePlace | null {
         true,
       ),
       country: addressComponent(components, ["country"], true),
+      ...(areaComponents.length > 0 ? { area_components: areaComponents } : {}),
       latitude,
       longitude,
       primary_type: primaryType,
@@ -205,11 +207,53 @@ function parseGooglePlace(value: unknown): ParsedGooglePlace | null {
   };
 }
 
+function additionalAreaComponents(
+  components: Record<string, unknown>[],
+): string[] {
+  const allowedTypes = new Set([
+    "neighborhood",
+    "sublocality",
+    "sublocality_level_1",
+    "sublocality_level_2",
+    "sublocality_level_3",
+    "sublocality_level_4",
+    "sublocality_level_5",
+    "administrative_area_level_1",
+    "administrative_area_level_2",
+    "administrative_area_level_3",
+    "administrative_area_level_4",
+    "administrative_area_level_5",
+    "administrative_area_level_6",
+    "administrative_area_level_7",
+  ]);
+  const values = new Map<string, string>();
+  for (const component of components) {
+    if (
+      !Array.isArray(component.types) ||
+      !component.types.some((type) =>
+        typeof type === "string" && allowedTypes.has(type)
+      )
+    ) continue;
+    // Long names only: a provider's two-letter district abbreviation must not
+    // be interpreted as a state or country alias by a downstream consumer.
+    const name = cleanString(component.longText, 161);
+    // Reject oversized evidence rather than silently turning a truncated
+    // geographic name into a different matching constraint.
+    if (name && name.length > 160) continue;
+    if (name) values.set(normalize(name), name);
+    if (values.size >= 8) break;
+  }
+  return [...values.values()];
+}
+
 function candidateScore(place: ParsedGooglePlace, hint: PlaceHint): number {
   if (administrativePrimaryTypes.has(place.primaryType)) return -1;
   const requestedName = normalize(hint.name);
   if (!requestedName) return -1;
-  const exactName = place.normalizedName === requestedName;
+  // Match the iOS canonical-name contract: spacing alone must not discard
+  // an exact brand. This is full-name equality, never substring matching.
+  const exactName = place.normalizedName.replaceAll(" ", "") ===
+    requestedName.replaceAll(" ", "");
   const requestedTokens = tokens(requestedName);
   if (
     naturalFeaturePrimaryTypes.has(place.primaryType) &&

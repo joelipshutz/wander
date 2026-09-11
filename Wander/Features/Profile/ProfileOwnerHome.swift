@@ -345,7 +345,11 @@ struct ProfileOwnerHome: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing12)
+            // Keep the vertical scroll content within its viewport even when a
+            // child proposes a wider ideal size (for example, the calendar).
+            .containerRelativeFrame(.horizontal)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollIndicators(.hidden)
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
         .task(id: calendarScrollRequestID) {
@@ -1463,10 +1467,9 @@ struct ProfileCalendarDayCell: View {
                 if isToday {
                     Text("NOW")
                         .font(AstirTypography.metadata)
-                        // The badge is decorative and the accessibility label
-                        // already announces "today". Keep oversized text from
-                        // spilling into and obscuring the date marker below it.
-                        .dynamicTypeSize(.large)
+                        // This decorative badge shares a fixed-size date cell.
+                        // VoiceOver announces "today" through the cell's label.
+                        .dynamicTypeSize(...DynamicTypeSize.large)
                         .foregroundStyle(brandMode.accentText)
                         .padding(.horizontal, 5)
                         .frame(height: 13)
