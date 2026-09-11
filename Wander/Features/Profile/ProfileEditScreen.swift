@@ -92,12 +92,12 @@ struct ProfileEditScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("cancel") { dismiss() }
+                    Button("Cancel") { dismiss() }
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.secondaryText)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSaving ? "saving..." : "save") {
+                    Button(isSaving ? "Saving..." : "Save") {
                         Task { await save() }
                     }
                     .font(AstirTypography.control)

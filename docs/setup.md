@@ -363,10 +363,11 @@ REC-120 adds a feature-flagged production path for Instagram and TikTok import
 understanding. A signed-in iOS client sends only the supported social URL,
 platform, schema version, and stable client request id to the authenticated
 `social-import-understand` Edge Function. The function acquires bounded source
-evidence through Apify, sends only that evidence and bounded media to Gemini,
-and returns grounded place-name hints. For each grounded hint, the function
-also performs a bounded Google Places Text Search and returns up to three real
-POI candidates with a Google Place ID, structured address, and coordinates.
+evidence through Bright Data and Apify, sends only that evidence and bounded
+media to Gemini, and returns grounded place-name hints. For each grounded hint,
+the function also performs a bounded Google Places Text Search and returns up
+to three real POI candidates with a Google Place ID, structured address, and
+coordinates.
 The app ranks those candidates and keeps alternatives for review; MapKit is a
 fallback only when Google returns no usable candidate. Provider output is never
 saved until the normal import review and commit path accepts a coordinate-backed
@@ -385,12 +386,22 @@ the operational kill switch. On Apify's free plan as of 2026-08-30, the profile
 actor is $2.60 per 1,000 profiles, so the bounded 20-handle maximum is about
 $0.052 before any plan discount.
 
+Instagram acquisition is content-aware. Reels use Bright Data first and fall
+back to Apify. `/p/` posts start both providers in parallel, use Bright caption,
+slide-scoped tag, and accessibility metadata, prefer Apify image media, and
+continue with whichever provider succeeds if the other fails. Set
+`WANDER_INSTAGRAM_ACQUISITION_MODE=apify` for an immediate server-side rollback;
+the default `brightdata_hybrid` mode remains account-gated by the existing
+social-import feature flag. TikTok remains on Apify.
+
 Keep all paid-provider credentials server-side. Never add any value to an
 xcconfig, the app bundle, logs, fixtures, PR text, or tracked evaluator runs:
 
 ```bash
 npx supabase secrets set \
   WANDER_APIFY_TOKEN=<server-token> \
+  WANDER_BRIGHTDATA_API_TOKEN=<server-token> \
+  WANDER_INSTAGRAM_ACQUISITION_MODE=brightdata_hybrid \
   WANDER_GEMINI_API_KEY=<server-key> \
   WANDER_GEMINI_MODEL=gemini-3.5-flash \
   WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> \

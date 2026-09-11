@@ -237,27 +237,30 @@ struct OnboardingLaunchView: View {
 
     var body: some View {
         ZStack {
-            WanderTheme.canvasWarm.color.ignoresSafeArea()
-            VStack(spacing: message == nil ? WanderTheme.spacing2 : WanderTheme.spacing3) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                Text("ASTIR")
-                    .font(AstirTheme.wordmark(42))
-                    .tracking(6)
+            AstirLaunchArtwork.background.ignoresSafeArea()
+            GeometryReader { proxy in
+                VStack(spacing: WanderTheme.spacing4) {
+                    // Keep the approved splash still while a quicker STIR glint is explored.
+                    AstirLaunchLockup(animationsEnabled: false)
+                        .frame(width: AstirLaunchArtwork.width(availableWidth: proxy.size.width))
 
-                if let message {
-                    VStack(spacing: WanderTheme.spacing2) {
-                        ProgressView()
-                            .tint(WanderTheme.terracotta.color)
-                        Text(message)
-                            .font(AstirTypography.bodySmall)
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                    if let message {
+                        VStack(spacing: WanderTheme.spacing2) {
+                            ProgressView()
+                                .tint(AstirTheme.signal.color)
+                            Text(message)
+                                .font(AstirTypography.bodySmall)
+                                .foregroundStyle(AstirLaunchArtwork.text)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: max(0, proxy.size.width - 48))
                     }
-                    .padding(.top, WanderTheme.spacing1)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(message ?? "Opening Astir")
     }

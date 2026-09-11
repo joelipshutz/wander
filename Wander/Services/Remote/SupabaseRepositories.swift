@@ -2094,6 +2094,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
             let locality: String?
             let region: String?
             let country: String?
+            let areaComponents: [String]?
             let latitude: Double
             let longitude: Double
             let primaryType: String?
@@ -2107,6 +2108,7 @@ private struct SocialImportUnderstandingFunctionResponse: Decodable {
                 case locality
                 case region
                 case country
+                case areaComponents = "area_components"
                 case latitude
                 case longitude
                 case primaryType = "primary_type"
@@ -2196,7 +2198,8 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
         }
 
         let providerPath = Self.providerPath(response.providerPath)
-        let serverReasoningIsAuthoritative = providerPath == "apify_gemini"
+        let serverReasoningIsAuthoritative = Self.authoritativeProviderPaths
+            .contains(providerPath)
         var seen = Set<String>()
         let hints = response.hints.prefix(Self.maximumHints).compactMap { hint -> SocialPlaceSearchHint? in
             guard ["destination", "itinerary"].contains(hint.classification),
@@ -2259,12 +2262,20 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
 
     private static func providerPath(_ value: String?) -> String {
         switch value {
-        case "apify_gemini", "apify_deterministic":
+        case "apify_gemini", "apify_deterministic",
+             "brightdata_gemini", "brightdata_deterministic",
+             "brightdata_apify_gemini", "brightdata_apify_deterministic":
             value ?? "unknown"
         default:
             "unknown"
         }
     }
+
+    private static let authoritativeProviderPaths: Set<String> = [
+        "apify_gemini",
+        "brightdata_gemini",
+        "brightdata_apify_gemini"
+    ]
 
     private static func resolvedCandidates(
         from values: [SocialImportUnderstandingFunctionResponse.Hint.ResolvedPlace]?
@@ -2291,6 +2302,9 @@ struct SupabaseSocialImportUnderstandingRepository: SocialImportUnderstandingRep
                 locality: cleaned(value.locality, maximumLength: 160),
                 region: cleaned(value.region, maximumLength: 160),
                 country: cleaned(value.country, maximumLength: 160),
+                areaComponents: value.areaComponents.map {
+                    Array($0.prefix(8)).compactMap { cleaned($0, maximumLength: 160) }
+                },
                 latitude: value.latitude,
                 longitude: value.longitude,
                 sourceProvider: "google_places",

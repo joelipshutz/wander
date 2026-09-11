@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { deterministicFallbackHints } from "../../supabase/functions/social-import-understand/evidence.ts";
+import {
+  deterministicFallbackHints,
+  groundedHints,
+} from "../../supabase/functions/social-import-understand/evidence.ts";
+import type { ModelCandidate } from "../../supabase/functions/social-import-understand/types.ts";
 import {
   type RuntimeDependencies,
   SocialImportError,
@@ -12,6 +16,175 @@ import {
   parseDiagnosticArguments,
   runProductionParityDiagnostic,
 } from "./production-parity.ts";
+
+test("an uncounted hike list folds a same-item route qualifier into its destination in either order", () => {
+  const base: ModelCandidate = {
+    name: "Multnomah Falls",
+    sourceMention: "Multnomah Falls",
+    area: "Oregon",
+    entityType: "poi",
+    itemIndex: 5,
+    classification: "destination",
+    modality: "caption",
+    evidenceIds: ["caption:0"],
+    confidence: .99,
+    startMs: -1,
+    endMs: -1,
+  };
+  const route: ModelCandidate = {
+    ...base,
+    name: "Multnomah Falls via Larch Mountain Trail",
+    sourceMention: "Multnomah Falls via Larch Mountain",
+    entityType: "route",
+    modality: "image_text",
+    evidenceIds: ["media:6"],
+  };
+  const catalog = {
+    texts: [{
+      id: "caption:0",
+      modality: "caption" as const,
+      text: "My favorite hikes in Oregon: Multnomah Falls",
+      area: null,
+      mediaID: null,
+    }],
+    media: [{
+      id: "media:6",
+      index: 6,
+      kind: "image" as const,
+      url: "https://example.com/hike.jpg",
+      thumbnailURL: null,
+      altText: null,
+    }],
+  };
+  const ingestions = [{
+    mediaID: "media:6",
+    kind: "image" as const,
+    status: "ok" as const,
+    byteCount: 1,
+    mimeType: "image/jpeg",
+    errorCode: null,
+  }];
+  const context = {
+    intent: "place_list" as const,
+    declaredCount: -1,
+    declaredCountEvidenceIds: [],
+    globalArea: "Oregon",
+    globalAreaEvidenceIds: ["caption:0"],
+  };
+  for (const candidates of [[base, route], [route, base]]) {
+    const result = groundedHints(candidates, catalog, ingestions, 150, context);
+    assert.equal(result.hints.length, 1);
+    assert.equal(result.hints[0].name, "Multnomah Falls");
+    assert.ok(result.hints[0].evidence_ids.includes("caption:0"));
+    assert.ok(result.hints[0].evidence_ids.includes("media:6"));
+  }
+  for (
+    const different of [
+      { ...route, itemIndex: 6 },
+      { ...route, area: "Washington" },
+      {
+        ...route,
+        name: "Multnomah Falls Trailhead",
+        sourceMention: "Multnomah Falls Trailhead",
+      },
+      {
+        ...route,
+        name: "Multnomah Falls Cafe",
+        sourceMention: "Multnomah Falls Cafe",
+        entityType: "poi" as const,
+      },
+    ]
+  ) {
+    assert.equal(
+      groundedHints([base, different], catalog, ingestions, 150, context).hints
+        .length,
+      2,
+    );
+  }
+  const otherRoute = {
+    ...route,
+    name: "Multnomah Falls via Wahkeena Trail",
+    sourceMention: "Multnomah Falls via Wahkeena Trail",
+  };
+  assert.equal(
+    groundedHints([route, otherRoute], catalog, ingestions, 150, context).hints
+      .length,
+    2,
+  );
+  assert.equal(
+    groundedHints([base, route, otherRoute], catalog, ingestions, 150, context)
+      .hints.length,
+    3,
+  );
+  assert.equal(
+    groundedHints([base, route], catalog, ingestions, 150).hints.length,
+    2,
+  );
+});
+
+test("production grounding combines caption and slide names with expanded city labels without conflating venues", () => {
+  const candidate = (
+    name: string,
+    area: string,
+    itemIndex: number,
+    mediaID: string,
+  ): ModelCandidate => ({
+    name,
+    area,
+    itemIndex,
+    sourceMention: name,
+    entityType: "poi",
+    classification: "destination",
+    modality: "image_text",
+    evidenceIds: [mediaID],
+    confidence: .99,
+    startMs: -1,
+    endMs: -1,
+  });
+  const candidates = [
+    candidate("Annabelle's", "Vancouver", 0, "media:0"),
+    candidate("Annabelle’s", "Vancouver, British Columbia", 0, "media:1"),
+    candidate("Rory's Place", "Ojai", 1, "media:2"),
+    candidate("Rory's Other Place", "Ojai", 1, "media:3"),
+    candidate("Sample Cafe", "Springfield, Illinois", 2, "media:4"),
+    candidate("Sample Cafe", "Springfield, Massachusetts", 2, "media:5"),
+  ];
+  const media = candidates.map((_, index) => ({
+    id: `media:${index}`,
+    index,
+    kind: "image" as const,
+    url: "https://example.com/image.jpg",
+    thumbnailURL: null,
+    altText: null,
+  }));
+  const ingestions = media.map((item) => ({
+    mediaID: item.id,
+    kind: item.kind,
+    status: "ok" as const,
+    byteCount: 1,
+    mimeType: "image/jpeg",
+    errorCode: null,
+  }));
+  const result = groundedHints(
+    candidates,
+    { texts: [], media },
+    ingestions,
+    150,
+  );
+  assert.equal(result.hints.length, 5);
+  assert.equal(
+    result.hints.filter((hint) => hint.name.startsWith("Annabelle")).length,
+    1,
+  );
+  assert.equal(
+    result.hints.filter((hint) => hint.name.startsWith("Rory")).length,
+    2,
+  );
+  assert.equal(
+    result.hints.filter((hint) => hint.name === "Sample Cafe").length,
+    2,
+  );
+});
 
 test("production-parity arguments require explicit corpus and output paths", () => {
   assert.deepEqual(
@@ -25,6 +198,11 @@ test("production-parity arguments require explicit corpus and output paths", () 
       corpusPath: "/private/corpus.json",
       outputDirectory: "/private/run",
       fixtureDirectory: null,
+      geminiModel: null,
+      initialThinkingLevel: "LOW",
+      reconciliationThinkingLevel: "MEDIUM",
+      maxOutputTokens: 16_384,
+      profileAliasesPath: null,
       help: false,
     },
   );
@@ -46,6 +224,43 @@ test("production-parity arguments require explicit corpus and output paths", () 
       "/private/acquisition",
     ]).fixtureDirectory,
     "/private/acquisition",
+  );
+  assert.deepEqual(
+    parseDiagnosticArguments([
+      "--corpus",
+      "/private/corpus.json",
+      "--out",
+      "/private/run",
+      "--model",
+      "gemini-3.8-flash",
+      "--thinking",
+      "medium",
+      "--reconciliation-thinking",
+      "high",
+    ]),
+    {
+      corpusPath: "/private/corpus.json",
+      outputDirectory: "/private/run",
+      fixtureDirectory: null,
+      geminiModel: "gemini-3.8-flash",
+      initialThinkingLevel: "MEDIUM",
+      reconciliationThinkingLevel: "HIGH",
+      maxOutputTokens: 16_384,
+      profileAliasesPath: null,
+      help: false,
+    },
+  );
+  assert.throws(
+    () =>
+      parseDiagnosticArguments([
+        "--corpus",
+        "/private/corpus.json",
+        "--out",
+        "/private/run",
+        "--thinking",
+        "maximum",
+      ]),
+    /invalid_thinking_level/,
   );
 });
 
@@ -166,6 +381,10 @@ test("production-parity output is bounded and omits tokens, captions, bytes, and
       calls.push("profile_candidates");
       return [];
     },
+    taggedProfileCandidates: () => {
+      calls.push("tagged_candidates");
+      return [];
+    },
     groundedHints: () => {
       calls.push("grounding");
       return {
@@ -211,6 +430,7 @@ test("production-parity output is bounded and omits tokens, captions, bytes, and
     "media",
     "gemini",
     "profile_candidates",
+    "tagged_candidates",
     "grounding",
   ]);
   assert.equal(run.results[0].status, "completed");
@@ -256,8 +476,15 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
     status: "ok",
     raw: { items: [{ fixtureRecord: true }] },
   });
+  const frozenAliases = [{
+    username: "fixture_cafe",
+    fullName: "Fixture Cafe",
+  }];
   const fileSystem: DiagnosticFileSystem = {
-    readTextFile: async () => corpus,
+    readTextFile: async (path) =>
+      path === "/private/aliases.json"
+        ? JSON.stringify({ "fixture-case": frozenAliases })
+        : corpus,
     readOptionalTextFile: async (path) => {
       fixturePaths.push(path);
       return path.endsWith("/raw/fixture-case/apify.json") ? fixture : null;
@@ -313,10 +540,10 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
       mentions: [],
       handleMentions: [],
       listItems: [],
-      profileUsernames: [],
+      profileUsernames: ["fixture_cafe"],
     }),
     acquireInstagramProfileAliases: async () => {
-      throw new Error("profile acquisition should be skipped without handles");
+      throw new Error("profile acquisition must not run with frozen aliases");
     },
     ingestAcquiredMedia: async (
       media: Array<{ url: string }>,
@@ -335,23 +562,31 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
         errorCode: null,
       }];
     },
-    understandWithGemini: async () => ({
-      candidates: [{
-        name: "Fixture Cafe",
-        sourceMention: "Fixture Cafe",
-        area: "",
-        entityType: "poi",
-        itemIndex: 0,
-        classification: "destination",
-        modality: "caption",
-        evidenceIds: ["caption:0"],
-        confidence: 0.9,
-        startMs: -1,
-        endMs: -1,
-      }],
-      attemptCount: 1,
-    }),
+    understandWithGemini: async (...args: unknown[]) => {
+      assert.deepEqual(args[8], frozenAliases);
+      assert.equal(
+        (args[10] as { maxOutputTokens: number }).maxOutputTokens,
+        32_768,
+      );
+      return {
+        candidates: [{
+          name: "Fixture Cafe",
+          sourceMention: "Fixture Cafe",
+          area: "",
+          entityType: "poi",
+          itemIndex: 0,
+          classification: "destination",
+          modality: "caption",
+          evidenceIds: ["caption:0"],
+          confidence: 0.9,
+          startMs: -1,
+          endMs: -1,
+        }],
+        attemptCount: 1,
+      };
+    },
     profileAliasCandidates: () => [],
+    taggedProfileCandidates: () => [],
     groundedHints: () => ({
       hints: [{
         name: "Fixture Cafe",
@@ -381,6 +616,8 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
       corpusPath: "/private/corpus.json",
       outputDirectory: "/private/output",
       fixtureDirectory: "/private/saved-run",
+      profileAliasesPath: "/private/aliases.json",
+      maxOutputTokens: 32_768,
       apifyToken,
       geminiAPIKey,
     },
@@ -393,6 +630,7 @@ test("production-parity reuses a saved evaluator acquisition without starting Ap
     "/private/saved-run/raw/fixture-case/apify.json",
   ]);
   assert.equal(run.manifest.acquisitionMode, "saved_apify_fixture");
+  assert.equal(typeof run.manifest.aliasFixtureSHA256, "string");
   assert.equal(run.results[0].acquisition?.mode, "saved_apify_fixture");
   assert.equal(run.results[0].grounding?.hints[0].name, "Fixture Cafe");
   const persisted = [...writes.values()].join("\n");
@@ -466,7 +704,9 @@ for (const failureStage of ["media", "understanding"] as const) {
         profileUsernames: [],
       }),
       acquireInstagramProfileAliases: async () => {
-        throw new Error("profile acquisition should be skipped without handles");
+        throw new Error(
+          "profile acquisition should be skipped without handles",
+        );
       },
       ingestAcquiredMedia: async () => {
         if (failureStage === "media") {

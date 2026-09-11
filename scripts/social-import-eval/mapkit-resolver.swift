@@ -37,6 +37,7 @@ fileprivate struct GeographyProbeResult: Encodable {
     let stateCode: String?
     let hasSearchRegion: Bool
     let localityText: String?
+    let interpretedCountryCode: String?
     let queryVariants: [String]?
     let candidateSelection: CandidateSelectionProbeResult?
 }
@@ -595,6 +596,11 @@ private enum Resolver {
 
     private static func countryCode(for value: String) -> String? {
         let key = normalizedCountryKey(value)
+        // Mirrors SocialImportCountry.isoCode(forAreaText:). This input is
+        // free-text geography, never the provider's structured country field.
+        guard !Locale.Region.isoRegions.contains(where: {
+            normalizedCountryKey($0.identifier) == key
+        }) else { return nil }
         if let alias = countryAliases[key] { return alias }
         let locale = Locale(identifier: "en_US_POSIX")
         return Locale.Region.isoRegions.first { region in
@@ -602,7 +608,6 @@ private enum Resolver {
                 return false
             }
             return normalizedCountryKey(name) == key
-                || normalizedCountryKey(region.identifier) == key
         }?.identifier
     }
 
@@ -1040,6 +1045,7 @@ private enum Resolver {
             stateCode: areaStateCode(in: probe.area),
             hasSearchRegion: searchRegion(for: probe.area) != nil,
             localityText: localityText(in: probe.area),
+            interpretedCountryCode: countryCode(for: probe.area),
             queryVariants: probe.searchPlanName.map {
                 SearchPlan(name: $0, areaHint: probe.area).queries
             },

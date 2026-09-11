@@ -3914,6 +3914,7 @@ struct MapScreen: View {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
+                .accessibilityHidden(!isPlaceProfilePresented)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
@@ -3937,7 +3938,7 @@ struct MapScreen: View {
                 onBack: { collapseSelectedPlaceProfile() }
             )
             .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(.isModal)
+            .accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
@@ -13051,7 +13052,7 @@ struct MapPlaceSaveEditor: View {
 
     private var checkInStatusChoice: some View {
         MapSaveChoiceButton(
-            title: CheckInCopy.verb,
+            title: CheckInCopy.action,
             isSelected: presentedHasSelectedStatus && selectedStatus == .been
         ) {
             selectStatus(.been)
@@ -13062,7 +13063,7 @@ struct MapPlaceSaveEditor: View {
     private var wannaGoStatusChoice: some View {
         if sourceContext.allowsWannaGoSelection {
             MapSaveChoiceButton(
-                title: "wanna go",
+                title: "Wanna go",
                 isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
             ) {
                 selectStatus(.wannaGo)
@@ -13263,7 +13264,7 @@ struct MapPlaceSaveEditor: View {
                                     .minimumScaleFactor(0.82)
                             }
                         } else {
-                            Text("add a date")
+                            Text("Add a date")
                                 .font(AstirTypography.control)
                                 .foregroundStyle(astirBrandMode.primaryText)
                                 .lineLimit(1)
@@ -13316,7 +13317,7 @@ struct MapPlaceSaveEditor: View {
                         Spacer()
 
                         if plannedDate != nil {
-                            Button("clear") {
+                            Button("Clear") {
                                 plannedDate = nil
                                 isShowingPlannedDatePicker = false
                             }
@@ -13418,7 +13419,7 @@ struct MapPlaceSaveEditor: View {
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text("more options")
+                    Text("More options")
                         .font(AstirTypography.control)
                         .foregroundStyle(astirBrandMode.primaryText)
 
@@ -13493,8 +13494,8 @@ struct MapPlaceSaveEditor: View {
 
     private var removeSaveSection: some View {
         MapSaveDestructiveButton(
-            title: isRemoving ? "removing..." : "delete",
-            accessibilityLabel: isRemoving ? "removing..." : context.removeTitle,
+            title: isRemoving ? "Removing..." : "Delete",
+            accessibilityLabel: isRemoving ? "Removing..." : context.removeTitle,
             systemImage: "trash",
             isDisabled: isSaving || isRemoving
         ) {
@@ -13549,7 +13550,7 @@ struct MapPlaceSaveEditor: View {
                     placeTypePickerMode = .category
                     isChoosingPlaceType = true
                 } label: {
-                    PlaceTypeRow(title: "category", value: categoryValue)
+                    PlaceTypeRow(title: "Category", value: categoryValue)
                 }
                 .buttonStyle(.plain)
 
@@ -13561,7 +13562,7 @@ struct MapPlaceSaveEditor: View {
                         isChoosingPlaceType = true
                     } label: {
                         PlaceTypeRow(
-                            title: "food type",
+                            title: "Food type",
                             value: selectedCuisine ?? "optional",
                             isPlaceholderValue: selectedCuisine == nil
                         )
@@ -13572,7 +13573,7 @@ struct MapPlaceSaveEditor: View {
                         placeTypePickerMode = .subcategory
                         isChoosingPlaceType = true
                     } label: {
-                        PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
+                        PlaceTypeRow(title: "Subcategory", value: display.subcategory ?? "Choose one")
                     }
                     .buttonStyle(.plain)
                 }
@@ -14586,7 +14587,7 @@ private struct MapSaveVisitPhotoSection: View {
 
                     Spacer()
 
-                    Text(photoCount == 0 ? "add" : "\(photoCount) added")
+                    Text(photoCount == 0 ? "Add" : "\(photoCount) added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -15215,7 +15216,7 @@ struct PlaceTypePickerSheet: View {
                 query = ""
                 mode = .category
             } label: {
-                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
+                CategoryPickerModePill(title: "Change", systemImage: "square.grid.2x2", isSelected: false)
             }
             .buttonStyle(.plain)
             Spacer()
@@ -15622,7 +15623,7 @@ private struct PlaceTypeSelectionFooter: View {
 
             Spacer(minLength: 0)
 
-            Button("done", action: onDone)
+            Button("Done", action: onDone)
                 .font(AstirTypography.control)
                 .padding(.horizontal, WanderTheme.spacing4)
                 .frame(minHeight: 48)
@@ -16159,7 +16160,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(option)
+                Text(option.prefix(1).uppercased() + option.dropFirst())
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
@@ -16193,7 +16194,8 @@ private struct MapSaveQuestionOptions: View {
         if block.kind == .multiTag {
             return "\(isSelected ? "Remove" : "Add") \(option)"
         }
-        return isSelected ? "\(option), selected" : option
+        let title = option.prefix(1).uppercased() + option.dropFirst()
+        return isSelected ? "\(title), selected" : title
     }
 
     @ViewBuilder
@@ -16240,7 +16242,7 @@ private struct MapSaveQuestionOptions: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .black))
-                    Text("add your own")
+                    Text("Add your own")
                         .font(AstirTypography.label)
                     Spacer()
                 }
@@ -16463,7 +16465,7 @@ private struct MapSaveUnifiedTagsSection: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .black))
-                    Text("add your own")
+                    Text("Add your own")
                         .font(AstirTypography.label)
                     Spacer()
                 }

@@ -102,7 +102,7 @@ struct SaveStreakCelebrationView: View {
                     Spacer(minLength: WanderTheme.spacing6)
 
                     Button(action: onDismiss) {
-                        Text("got it")
+                        Text("Got it")
                             .font(AstirTypography.control)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 54)

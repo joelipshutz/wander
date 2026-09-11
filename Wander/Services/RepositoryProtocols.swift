@@ -183,6 +183,9 @@ struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
     var locality: String? = nil
     var region: String? = nil
     var country: String? = nil
+    /// Provider-attested neighborhood/district evidence used only for matching.
+    /// Optional preserves decoding of previously stored candidate payloads.
+    var areaComponents: [String]? = nil
     let latitude: Double?
     let longitude: Double?
     var sourceProvider: String = "mapkit"
@@ -207,6 +210,7 @@ struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
         locality: String? = nil,
         region: String? = nil,
         country: String? = nil,
+        areaComponents: [String]? = nil,
         latitude: Double?,
         longitude: Double?,
         sourceProvider: String = "mapkit",
@@ -249,6 +253,7 @@ struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
         self.locality = locality
         self.region = region
         self.country = country
+        self.areaComponents = areaComponents
         self.latitude = latitude
         self.longitude = longitude
         self.sourceProvider = sourceProvider
