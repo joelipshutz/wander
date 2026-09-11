@@ -348,6 +348,11 @@ struct ProfileOwnerHome: View {
         }
         .scrollIndicators(.hidden)
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
+        .profileHeaderMotionOverlay(
+            avatar: profileAvatar,
+            name: profile.displayName,
+            navigation: profileNavigationRow
+        )
         .task(id: calendarScrollRequestID) {
             guard let calendarScrollRequestID else { return }
 
@@ -391,7 +396,7 @@ struct ProfileOwnerHome: View {
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            profileNavigationRow
+            profileNavigationRow.profileMotionSource(.navigation)
             profileIdentityBlock
         }
     }
@@ -480,6 +485,7 @@ struct ProfileOwnerHome: View {
                             .accessibilityLabel("\(profile.displayName)'s profile photo")
                     }
                 }
+                .profileMotionSource(.avatar)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(profile.displayName)
@@ -487,6 +493,7 @@ struct ProfileOwnerHome: View {
                         .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .profileMotionSource(.name)
 
                     HStack(spacing: 0) {
                         ProfileGraphCountButton(value: followerCount, label: "Followers") {
