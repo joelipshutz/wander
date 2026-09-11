@@ -83,7 +83,7 @@ struct ProfileHeaderMotionPreview: View {
     }
 }
 
-/// A fixed scroll gesture timeline makes the six recordings directly comparable.
+/// A fixed scroll gesture timeline makes every option and appearance directly comparable.
 /// Without -ProfileMotionAutoplay the same native ScrollView is fully interactive.
 private struct ProfileMotionScrollDriver: UIViewRepresentable {
     func makeUIView(context: Context) -> Driver { Driver() }

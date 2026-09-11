@@ -1,71 +1,74 @@
 # Profile header motion exploration · REC-482
 
-Three native SwiftUI motion options run on the current shared `ProfileOwnerHome` component. They use the same content, original identity geometry, 172pt final avatar, 1.4× display name, pinned navigation actions, and automated scroll path.
+Four native SwiftUI previews run on the current shared `ProfileOwnerHome` component. Each MP4 compares your profile and another person's profile in both light and dark mode, using the same automated down/hold/up scroll sequence.
 
-| Option | Motion |
-| --- | --- |
-| Glide | Photo and name move together with a 0.62-second ease in/out. |
-| Soft spring | Photo and name move together with a 0.78-second spring and restrained overshoot. |
-| Staged arc | Photo follows a shallow upward arc over 0.8 seconds; name rises and fades into place 0.2 seconds later. |
+| Option | Expanded layout | Surface |
+| --- | --- | --- |
+| [1 · Staged arc](option-1.mp4) | Centered 103.2pt photo; name below at 55% of the previous render's size | Black in light mode; standard beige in dark mode |
+| [2 · Blurred arc](option-2.mp4) | Same geometry and timing as option 1 | Contrasting native blur |
+| [3 · Name beside photo](option-3.mp4) | Same sizes; name aligned left, to the left of the portrait | Same solid contrast as option 1 |
+| [4 · Inline blur](option-4.mp4) | Original 86pt photo stays left; original-size name settles vertically alongside it | Contrasting native blur |
 
-The regular app is unchanged unless the explicit DEBUG preview entry point is launched. Release builds compile the profile hooks to no-ops. This is a design exploration; select and review the production behavior before enabling it in normal profiles.
+The username sits immediately above the city/state at the same font size in all four previews. Navigation buttons stay in their original top row. Options 1–3 occupy 208pt below the safe area, down from 294pt in the first exploration. Option 4 occupies 166pt.
 
-## Recordings
+## Pinned states
 
-Your profile:
+![Option 1](option-1-pinned.png)
+![Option 2](option-2-pinned.png)
+![Option 3](option-3-pinned.png)
+![Option 4](option-4-pinned.png)
 
-![Your profile — Glide, Soft spring, Staged arc](your-profile.gif)
+## Motion behavior
 
-Other person's profile:
+- The photo begins moving when its original midpoint crosses the bottom of the pinned navigation row.
+- Options 1–3 follow the staged arc: the portrait leads over 0.8 seconds, followed by a fading name that rises into position after a 0.2-second delay. The portrait is 40% smaller than the previous 172pt render; the name is 55% of the previous 1.4× name, or 0.77× the original sheet-title size (about 17pt at default type size).
+- The identity holds still while the activity, map, and calendar continue scrolling underneath. On upward scrolling, options 1–3 restore when the original photo's lower edge returns to the pinned toolbar boundary.
+- Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
+- The original layout reserves its space throughout, so changing motion state never changes scroll content height. A stationary scroll offset does not retrigger animation.
+- Reduce Motion removes animation. Long names shrink to one line. Accessibility text sizes and interrupted gestures still need production design review before adopting a variant.
 
-![Other profile — Glide, Soft spring, Staged arc](other-profile.gif)
+## Scope
 
-These are recordings of the native Simulator UI with demo data, including the return transition. Full-resolution individual MP4s can be regenerated with the capture script below.
-
-## Review notes
-
-- Reuses the existing avatar, profile typography, floating action controls, activity, map, calendar, and owner/member layouts.
-- Scroll trigger: the original photo midpoint crosses the bottom of the pinned navigation row. On upward scrolling, restore when the original photo's lower edge returns to that same visible boundary. A stationary offset never retriggers the animation.
-- The identity remains fixed while the content continues below it. The original layout continues to reserve its space, so changing animation state cannot change scroll content height.
-- The glide and spring route the name around the portrait to avoid crossing it. The staged arc reveals the name underneath after the photo starts moving.
-- The original photo is 86pt. A 172pt photo, the top action row, and an enlarged name require about 294pt below the safe area. This exceeds the approximate 20% target; the captures intentionally show the requested photo size so the tradeoff can be judged visually.
-- Existing brand colors respond to system appearance. Reduce Motion removes animation. Long names retain one-line shrinking; larger accessibility sizes need a production layout decision because a fixed 294pt header cannot accommodate every text size.
-- Bundled demo portraits and an in-memory seeded store provide repeatable content without account data. Profile actions in the demonstration are inert; production destinations remain on their existing paths.
-- No persistence, analytics event, auth, follow, visibility, or backend contract changes.
+The regular app is unchanged unless the explicit DEBUG preview entry point is launched. Release builds compile the motion hooks to no-ops. These recordings use bundled demo portraits and an in-memory seeded store; preview actions are inert. No persistence, analytics, auth, follow, visibility, or backend contracts change.
 
 ## Run interactively
 
-Build the `Wander` scheme for a Simulator, install the app, then launch it with:
+Build the `Wander` scheme for a Simulator, install the app, then launch:
 
 ```sh
 xcrun simctl launch <simulator-id> com.grayline.wander \
-  -WanderAuthenticatedUITest -ProfileHeaderMotion spring
+  -WanderAuthenticatedUITest -ProfileHeaderMotion solid
 ```
 
-Use `glide`, `spring`, or `arc`. Add `-ProfileMotionMember` for the other-person profile and `-ProfileMotionAutoplay` for the same 15-second scroll sequence used in recordings.
+Variants are `solid`, `blur`, `leading`, and `compact`. Add `-ProfileMotionMember` for the other-person profile. Add `-ProfileMotionAutoplay` for the 15-second automated scroll sequence. Set the Simulator's system appearance to compare light and dark modes.
 
 ## Reproduce recordings
 
-Use a dedicated Simulator to avoid interrupting another session. The capture command records each option for both profile roles, plus original/pinned/restored PNGs:
+Use a dedicated Simulator. Capture all options and roles once per appearance:
 
 ```sh
 python3 preview/profile-header-motion/capture.py \
-  <simulator-id> <built-Wander.app> <output-directory>
+  <simulator-id> <built-Wander.app> <output-directory> --appearance light
+python3 preview/profile-header-motion/capture.py \
+  <simulator-id> <built-Wander.app> <output-directory> --appearance dark
 ```
 
-Add `--compact` to record the spring on a smaller Simulator. The rendering tool uses native macOS media frameworks to generate a three-column MP4, a looping GIF, and a pinned-state PNG:
+Each capture also creates original/pinned/restored PNGs. Use `--variants solid compact`, `--roles owner`, or `--compact` to limit the run or label a smaller-phone capture. The recording waits for native layout readiness before starting the shared timeline.
+
+Render a four-column MP4 and pinned-state PNG with Apple's native media frameworks:
 
 ```sh
 swiftc -parse-as-library preview/profile-header-motion/render-comparison.swift \
   -o /tmp/profile-motion-render
-/tmp/profile-motion-render <output-prefix> 'Your profile' \
-  <owner-glide.mp4> <owner-spring.mp4> <owner-arc.mp4>
+/tmp/profile-motion-render <output-prefix> 'Option 1 · Staged arc' \
+  <owner-solid-light.mp4> <member-solid-light.mp4> \
+  <owner-solid-dark.mp4> <member-solid-dark.mp4>
 ```
 
-Repeat with member recordings and the title `Other profile`.
+Repeat with the other three variants. Add `--gif` only when a looping GIF is needed.
 
 ## Validation
 
-`ProfileHeaderMotionStateTests` covers midpoint entry, continued-scroll hold, directional lower-edge restoration, stationary offsets, and explicit preview argument parsing. Native captures verify the shared view on large and compact iPhones. The final PR records build/test results and remaining gaps.
+`ProfileHeaderMotionStateTests` covers midpoint entry, continued-scroll hold, directional photo/bio boundary restoration, stationary offsets, and explicit preview argument parsing. The final PR records the native build, unit-test results, and large/compact phone visual checks. The repository's prescribed iPhone 16 Plus / iOS 18.6 destination is unavailable on this machine; installed iOS 26.5 Simulators are used instead.
 
-Validated on iPhone 17 and iPhone 17e Simulators running iOS 26.5. The final native build passed, and all 1,895 Wander unit tests passed (zero failures or skips). The prescribed iPhone 16 Plus / iOS 18.6 destination is not installed; that required command could not run. No UI automation suite was run.
+The final native build and all seven profile-motion tests passed. An earlier full unit run passed all 1,896 tests. The final run after the entrance refinement passed 1,895 tests with one remaining failure: the unchanged high-data fixture benchmark took 1.707s for list suggestions against a 0.75s budget. Recording and export were stopped for that run. This validation gap remains documented in the draft PR; the benchmark and its underlying data code were not changed.

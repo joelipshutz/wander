@@ -48,6 +48,16 @@ final class ProfileHeaderMotionStateTests: XCTestCase {
         XCTAssertFalse(state.expanded)
     }
 
+    func testInlineOptionRestoresAtBioBottomOnUpwardScroll() {
+        var state = ProfileHeaderMotionState()
+        let bioBottom: CGFloat = 240
+        XCTAssertTrue(state.update(offset: 111, originalAvatar: avatar, restoreBoundary: bioBottom))
+        XCTAssertFalse(state.update(offset: 300, originalAvatar: avatar, restoreBoundary: bioBottom))
+        XCTAssertFalse(state.update(offset: 250, originalAvatar: avatar, restoreBoundary: bioBottom))
+        XCTAssertTrue(state.update(offset: 240, originalAvatar: avatar, restoreBoundary: bioBottom))
+        XCTAssertFalse(state.expanded)
+    }
+
     func testPreviewRequiresExplicitKnownVariant() {
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: []))
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: ["-ProfileHeaderMotion"]))

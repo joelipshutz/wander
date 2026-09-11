@@ -286,6 +286,17 @@ struct ProfileOwnerHome: View {
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
+    #if DEBUG
+    @Environment(\.profileHeaderMotion) private var profileHeaderMotion
+    #endif
+    private var isProfileMotionPreview: Bool {
+        #if DEBUG
+        profileHeaderMotion != nil
+        #else
+        false
+        #endif
+    }
+
     private let profileAvatarSize: CGFloat = 86
 
     var body: some View {
@@ -408,11 +419,13 @@ struct ProfileOwnerHome: View {
                     ProfileBackButton(action: backAction)
                 }
 
-                Text("@\(profile.handle)")
-                    .font(AstirTypography.sectionTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                if !isProfileMotionPreview {
+                    Text("@\(profile.handle)")
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
 
                 Spacer(minLength: 0)
 
@@ -514,6 +527,11 @@ struct ProfileOwnerHome: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
+                if isProfileMotionPreview {
+                    Text("@\(profile.handle)")
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
+                }
                 if let homeArea = normalized(profile.homeArea) {
                     Text(homeArea)
                         .font(AstirTypography.control)
@@ -525,6 +543,7 @@ struct ProfileOwnerHome: View {
                         .font(AstirTypography.body)
                         .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                        .profileMotionSource(.bio)
                 }
 
                 Text(memberSinceText)

@@ -4,22 +4,22 @@ import ImageIO
 import UniformTypeIdentifiers
 import CoreText
 
-// Usage: swift render-comparison.swift OUTPUT_PREFIX ROLE GLIDE.mp4 SPRING.mp4 ARC.mp4
+// Usage: swift render-comparison.swift OUTPUT_PREFIX TITLE OWNER_LIGHT.mp4 MEMBER_LIGHT.mp4 OWNER_DARK.mp4 MEMBER_DARK.mp4 [--gif]
 // Uses Apple's media frameworks; no encoder downloads or external services.
 @main
 struct MotionComparison {
     static func main() async throws {
         let args = CommandLine.arguments
-        guard args.count == 6 else {
-            print("Usage: render-comparison OUTPUT_PREFIX ROLE GLIDE.mp4 SPRING.mp4 ARC.mp4")
+        guard args.count >= 7 else {
+            print("Usage: render-comparison OUTPUT_PREFIX TITLE OWNER_LIGHT.mp4 MEMBER_LIGHT.mp4 OWNER_DARK.mp4 MEMBER_DARK.mp4 [--gif]")
             return
         }
         let output = URL(fileURLWithPath: args[1] + ".mp4")
-        let assets = args[3...5].map { AVURLAsset(url: URL(fileURLWithPath: $0)) }
+        let assets = args[3...6].map { AVURLAsset(url: URL(fileURLWithPath: $0)) }
         let composition = AVMutableComposition()
         var layers: [AVMutableVideoCompositionLayerInstruction] = []
         var duration = CMTime(seconds: 17.0, preferredTimescale: 600)
-        let board = CGSize(width: 1320, height: 1080)
+        let board = CGSize(width: 1760, height: 1080)
         for (index, asset) in assets.enumerated() {
             guard let source = try await asset.loadTracks(withMediaType: .video).first,
                   let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
@@ -66,11 +66,11 @@ struct MotionComparison {
             bitmap.textPosition = CGPoint(x: x + (width - textWidth) / 2, y: y + size * 0.2)
             CTLineDraw(line, bitmap)
         }
-        label("PROFILE MOTION  /  " + args[2].uppercased(), x: 0, y: 1031, width: 1320, size: 18, bold: true)
-        for (index, title) in ["01  Glide", "02  Soft spring", "03  Staged arc"].enumerated() {
-            label(title, x: CGFloat(index) * 440, y: 978, width: 440, size: 27, bold: true)
+        label(args[2].uppercased(), x: 0, y: 1031, width: 1760, size: 18, bold: true)
+        for (index, title) in ["Your profile · Light", "Other profile · Light", "Your profile · Dark", "Other profile · Dark"].enumerated() {
+            label(title, x: CGFloat(index) * 440, y: 978, width: 440, size: 24, bold: true)
         }
-        label("Scroll down → transform → hold while content scrolls → scroll back to restore", x: 0, y: 18, width: 1320, size: 18)
+        label("Scroll down → transform → hold while content scrolls → scroll back to restore", x: 0, y: 18, width: 1760, size: 18)
         let annotations = CALayer()
         annotations.frame = parent.frame
         annotations.contents = bitmap.makeImage()
@@ -84,9 +84,16 @@ struct MotionComparison {
         let asset = AVURLAsset(url: output)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 990, height: 810)
+        generator.maximumSize = CGSize(width: 1320, height: 810)
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
+        let pinned = try await generator.image(at: CMTime(seconds: 5.5, preferredTimescale: 600)).image
+        let stillURL = URL(fileURLWithPath: args[1] + "-pinned.png")
+        if let still = CGImageDestinationCreateWithURL(stillURL as CFURL, UTType.png.identifier as CFString, 1, nil) {
+            CGImageDestinationAddImage(still, pinned, nil)
+            CGImageDestinationFinalize(still)
+        }
+        guard args.contains("--gif") else { return }
         let gifURL = URL(fileURLWithPath: args[1] + ".gif")
         let count = Int(duration.seconds * 10)
         guard let gif = CGImageDestinationCreateWithURL(gifURL as CFURL, UTType.gif.identifier as CFString, count, nil) else { return }
@@ -95,13 +102,7 @@ struct MotionComparison {
             let time = CMTime(seconds: Double(index) / 10, preferredTimescale: 600)
             let image = try await generator.image(at: time).image
             CGImageDestinationAddImage(gif, image, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]] as CFDictionary)
-            if index == 48 {
-                let stillURL = URL(fileURLWithPath: args[1] + "-pinned.png")
-                if let still = CGImageDestinationCreateWithURL(stillURL as CFURL, UTType.png.identifier as CFString, 1, nil) {
-                    CGImageDestinationAddImage(still, image, nil)
-                    CGImageDestinationFinalize(still)
-                }
-            }
+
         }
         guard CGImageDestinationFinalize(gif) else { throw CocoaError(.fileWriteUnknown) }
         print("Created \(gifURL.lastPathComponent)")

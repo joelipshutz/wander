@@ -2,7 +2,7 @@ import SwiftUI
 
 // The release build keeps the original profile layout. These hooks only enable
 // the review prototype when its explicit DEBUG preview environment is present.
-enum ProfileMotionSource: Hashable { case avatar, name, navigation }
+enum ProfileMotionSource: Hashable { case avatar, name, navigation, bio }
 
 extension View {
     @ViewBuilder
@@ -28,15 +28,18 @@ extension View {
 import UIKit
 
 enum ProfileHeaderMotionVariant: String, CaseIterable {
-    case glide, spring, arc
+    case solid, blur, leading, compact
 
     var title: String {
         switch self {
-        case .glide: "01 · Glide"
-        case .spring: "02 · Soft spring"
-        case .arc: "03 · Staged arc"
+        case .solid: "01 · Compact arc"
+        case .blur: "02 · Blurred arc"
+        case .leading: "03 · Name beside photo"
+        case .compact: "04 · Inline blur"
         }
     }
+
+    var usesBlur: Bool { self == .blur || self == .compact }
 
     static func resolved(arguments: [String] = ProcessInfo.processInfo.arguments) -> Self? {
         guard let index = arguments.firstIndex(of: "-ProfileHeaderMotion"),
@@ -44,26 +47,20 @@ enum ProfileHeaderMotionVariant: String, CaseIterable {
         return Self(rawValue: arguments[index + 1])
     }
 
-    var animation: Animation {
-        switch self {
-        case .glide: .easeInOut(duration: 0.62)
-        case .spring: .spring(duration: 0.78, bounce: 0.24)
-        case .arc: .easeInOut(duration: 0.8)
-        }
-    }
+    var animation: Animation { .easeInOut(duration: self == .compact ? 0.55 : 0.8) }
 }
 
 struct ProfileHeaderMotionState {
     private(set) var expanded = false
     private(set) var previousOffset: CGFloat = 0
 
-    mutating func update(offset: CGFloat, originalAvatar: CGRect) -> Bool {
+    mutating func update(offset: CGFloat, originalAvatar: CGRect, restoreBoundary: CGFloat? = nil) -> Bool {
         let wasExpanded = expanded
         // The midpoint / lower edge are measured in the visible viewport.
         // The overlay subtracts the pinned control row before passing this rect.
         if offset > previousOffset, offset >= originalAvatar.midY {
             expanded = true
-        } else if offset < previousOffset, offset <= originalAvatar.maxY {
+        } else if offset < previousOffset, offset <= (restoreBoundary ?? originalAvatar.maxY) {
             expanded = false
         }
         previousOffset = offset
@@ -95,8 +92,8 @@ private struct ProfileMotionSourceModifier: ViewModifier {
     func body(content: Content) -> some View {
         if variant != nil {
             content
-                .opacity(0)
-                .accessibilityHidden(true)
+                .opacity(source == .bio ? 1 : 0)
+                .accessibilityHidden(source != .bio)
                 .anchorPreference(key: ProfileMotionAnchors.self, value: .bounds) { [source: $0] }
         } else {
             content
@@ -118,7 +115,7 @@ private struct ProfileMotionOverlayModifier<A: View, N: View>: ViewModifier {
                         ProfileMotionOverlay(
                             variant: variant, avatar: avatar, name: name, navigation: navigation,
                             avatarRect: proxy[a], nameRect: proxy[n], navigationRect: proxy[bar],
-                            width: proxy.size.width
+                            bioRect: anchors[.bio].map { proxy[$0] }, width: proxy.size.width
                         )
                     }
                 }
@@ -139,92 +136,136 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
     let avatarRect: CGRect
     let nameRect: CGRect
     let navigationRect: CGRect
+    let bioRect: CGRect?
     let width: CGFloat
     @State private var initialAvatar: CGRect?
+    @State private var initialName: CGRect?
     @State private var initialNavigation: CGRect?
+    @State private var initialBio: CGRect?
+    @State private var entryAvatar: CGRect?
+    @State private var entryName: CGRect?
     @State private var motion = ProfileHeaderMotionState()
     @State private var photoProgress: CGFloat = 0
     @State private var nameProgress: CGFloat = 0
     @State private var surfaceProgress: CGFloat = 0
 
-    private var displayName: some View {
+    private var toolbarBottom: CGFloat { (initialNavigation ?? navigationRect).maxY + 8 }
+    private var surfaceBottom: CGFloat { variant == .compact ? 166 : 208 }
+    private var contrastingBackground: Color {
+        brandMode == .editorialLight ? .black : AstirBrandMode.editorialLight.background
+    }
+    private var contrastingText: Color {
+        brandMode == .editorialLight ? AstirTheme.paper.color : AstirTheme.ink.color
+    }
+    private var destination: CGPoint {
+        switch variant {
+        case .solid, .blur: CGPoint(x: width / 2, y: 122)
+        case .leading: CGPoint(x: width - 24 - 51.6, y: 122)
+        case .compact: CGPoint(x: (initialAvatar ?? avatarRect).midX, y: 111)
+        }
+    }
+
+    private func displayName(color: Color) -> some View {
         Text(name)
             .font(AstirTypography.sheetTitle)
-            .foregroundStyle(brandMode.primaryText)
+            .foregroundStyle(color)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .frame(width: nameRect.width, height: nameRect.height)
             .allowsHitTesting(false)
     }
 
+    private var expandedName: some View {
+        Text(name)
+            // 1.4× in the previous render, now 55% of that size: 0.77×.
+            .font(AstirTypography.sheetTitle)
+            .foregroundStyle(contrastingText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .scaleEffect(0.77, anchor: variant == .leading ? .leading : .center)
+            .frame(width: variant == .leading ? width - 168 : width - 32,
+                   height: 28, alignment: variant == .leading ? .leading : .center)
+            .position(x: variant == .leading ? 24 + (width - 168) / 2 : width / 2,
+                      y: (variant == .leading ? 122 : 191) + 12 * (1 - nameProgress))
+            .opacity(nameProgress)
+            .allowsHitTesting(false)
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            VStack(spacing: 0) {
-                brandMode.background.frame(height: 294)
-                LinearGradient(colors: [brandMode.background, brandMode.background.opacity(0)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 22)
+            Group {
+                if variant.usesBlur {
+                    Rectangle().fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, brandMode == .editorialLight ? .dark : .light)
+                } else {
+                    contrastingBackground
+                }
             }
+            .frame(height: surfaceBottom - toolbarBottom)
+            .offset(y: toolbarBottom)
             .opacity(surfaceProgress)
             .allowsHitTesting(false)
 
             avatar
                 .modifier(ProfileMotionTransform(
-                    progress: photoProgress, source: avatarRect,
-                    destination: CGPoint(x: width / 2, y: 150), scale: 2,
-                    arc: variant == .arc ? 34 : 0
+                    progress: photoProgress, source: motion.expanded ? (entryAvatar ?? avatarRect) : avatarRect,
+                    destination: destination, scale: variant == .compact ? 1 : 1.2,
+                    arc: variant == .compact ? 0 : -16
                 ))
                 .allowsHitTesting(false)
                 .accessibilityLabel("\(name)'s profile photo")
 
-            if variant == .arc {
-                // In this option the name leaves with the inline identity and
-                // rises into its final position after the portrait leads.
-                displayName
+            if variant == .compact {
+                displayName(color: brandMode.primaryText)
                     .position(x: nameRect.midX, y: nameRect.midY)
-                    .opacity(1 - surfaceProgress)
-                displayName
-                    .scaleEffect(1 + 0.4 * nameProgress)
-                    .position(x: width / 2, y: 265 + 20 * (1 - nameProgress))
+                    .opacity(1 - nameProgress)
+                displayName(color: contrastingText)
+                    .modifier(ProfileMotionTransform(
+                        progress: nameProgress, source: motion.expanded ? (entryName ?? nameRect) : nameRect,
+                        destination: CGPoint(x: (initialName ?? nameRect).midX, y: 111),
+                        scale: 1, arc: 0
+                    ))
                     .opacity(nameProgress)
             } else {
-                displayName
-                    .modifier(ProfileMotionTransform(
-                        progress: nameProgress, source: nameRect,
-                        destination: CGPoint(x: width / 2, y: 265), scale: 1.4,
-                        arc: 0, horizontalArc: 90, easesVertically: true, containerWidth: width
-                    ))
+                displayName(color: brandMode.primaryText)
+                    .position(x: nameRect.midX, y: nameRect.midY)
+                    .opacity(1 - surfaceProgress)
+                expandedName
             }
 
-            // Moving identity/content passes underneath the fixed controls.
-            // Keep this opaque cover above the moving layers, including the
-            // portion outside the safe area, so neither can cross the clock.
-            brandMode.background
-                .frame(height: (initialNavigation ?? navigationRect).maxY + 8)
-                .allowsHitTesting(false)
-            brandMode.background.frame(height: 100).offset(y: -100)
-                .allowsHitTesting(false)
+            // The moving identity and scroll content pass underneath the fixed
+            // controls. The contrasting identity panel begins below this row.
+            brandMode.background.frame(height: toolbarBottom).allowsHitTesting(false)
+            brandMode.background.frame(height: 100).offset(y: -100).allowsHitTesting(false)
             navigation
                 .frame(width: navigationRect.width, height: navigationRect.height)
                 .position(x: width / 2, y: (initialNavigation ?? navigationRect).midY)
         }
         .onAppear {
             initialAvatar = avatarRect
+            initialName = nameRect
             initialNavigation = navigationRect
+            initialBio = bioRect
         }
         .onChange(of: avatarRect.minY) { _, _ in
             guard let initialAvatar else { return }
             let offset = initialAvatar.minY - avatarRect.minY
-            let viewportAvatar = initialAvatar.offsetBy(dx: 0, dy: -(initialNavigation?.maxY ?? 0))
-            guard motion.update(offset: offset, originalAvatar: viewportAvatar) else { return }
-            let target: CGFloat = motion.expanded ? 1 : 0
-            let animation = reduceMotion ? nil : variant.animation
-            withAnimation(animation) {
-                photoProgress = target
+            let viewportTop = initialNavigation?.maxY ?? 0
+            let viewportAvatar = initialAvatar.offsetBy(dx: 0, dy: -viewportTop)
+            let restoreBoundary = variant == .compact ? initialBio.map { $0.maxY - viewportTop } : nil
+            guard motion.update(offset: offset, originalAvatar: viewportAvatar, restoreBoundary: restoreBoundary) else { return }
+            // Freeze the entry geometry while the content continues to scroll.
+            // A downward curve keeps the portrait clear of the pinned toolbar.
+            if motion.expanded {
+                entryAvatar = avatarRect
+                entryName = nameRect
             }
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18).delay(motion.expanded ? 0 : 0.4)) {
+            let target: CGFloat = motion.expanded ? 1 : 0
+            withAnimation(reduceMotion ? nil : variant.animation) { photoProgress = target }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24).delay(motion.expanded ? 0 : 0.3)) {
                 surfaceProgress = target
             }
-            withAnimation(reduceMotion ? nil : (variant == .arc ? .easeInOut(duration: 0.56).delay(0.20) : animation)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.56).delay(variant == .compact ? 0 : 0.2)) {
                 nameProgress = target
             }
         }
@@ -237,23 +278,16 @@ private struct ProfileMotionTransform: AnimatableModifier {
     let destination: CGPoint
     let scale: CGFloat
     let arc: CGFloat
-    var horizontalArc: CGFloat = 0
-    var easesVertically = false
-    var containerWidth: CGFloat? = nil
     nonisolated var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
     }
     func body(content: Content) -> some View {
-        let verticalProgress = easesVertically ? sin(progress * .pi / 2) : progress
-        let rawX = source.midX + (destination.x - source.midX) * progress + sin(progress * .pi) * horizontalArc
-        let halfWidth = source.width * (1 + (scale - 1) * progress) / 2
-        let x = containerWidth.map { min($0 - halfWidth - 12, max(halfWidth + 12, rawX)) } ?? rawX
         content
             .scaleEffect(1 + (scale - 1) * progress)
             .position(
-                x: x,
-                y: source.midY + (destination.y - source.midY) * verticalProgress - sin(progress * .pi) * arc
+                x: source.midX + (destination.x - source.midX) * progress,
+                y: source.midY + (destination.y - source.midY) * progress - sin(progress * .pi) * arc
             )
     }
 }
