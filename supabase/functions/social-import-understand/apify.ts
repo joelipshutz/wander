@@ -713,6 +713,7 @@ function topLevelMediaForRecord(
       url: item.url ?? item.video_url ?? item.image_url,
       thumbnailURL: null,
       altText: item.alt_text ?? item.altText,
+      taggedProfiles: instagramTaggedProfiles(item),
     });
   }
 
@@ -861,6 +862,18 @@ function taggedLocations(record: Record<string, unknown>): TaggedLocation[] {
       ? [{ name, area: cleanString(metadata?.address ?? record.address, 300) }]
       : [];
   }
+  if (Array.isArray(value)) {
+    const components = value
+      .map((component) => cleanString(component, 200))
+      .filter((component): component is string => component !== null)
+      .slice(0, 4);
+    return components.length > 0
+      ? [{
+        name: components[0],
+        area: components.length > 1 ? components.slice(1).join(", ") : null,
+      }]
+      : [];
+  }
   const location = asRecord(value);
   const name = cleanString(location?.name, 200);
   return name
@@ -925,7 +938,8 @@ function instagramTaggedProfiles(
     const profile = asRecord(value);
     const user = asRecord(profile?.user);
     const username = normalizedInstagramUsername(
-      profile?.username ?? profile?.userName ?? profile?.user_name ??
+      (typeof value === "string" ? value : null) ?? profile?.username ??
+        profile?.userName ?? profile?.user_name ??
         user?.username ?? user?.userName ?? user?.user_name,
     );
     if (!username) continue;

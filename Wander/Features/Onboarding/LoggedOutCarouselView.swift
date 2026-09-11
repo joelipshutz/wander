@@ -230,11 +230,9 @@ private struct OnboardingCarouselSlideView: View {
 
 struct OnboardingLaunchView: View {
     let message: String?
-    let isAnimationEnabled: Bool
 
-    init(message: String? = nil, isAnimationEnabled: Bool = true) {
+    init(message: String? = nil) {
         self.message = message
-        self.isAnimationEnabled = isAnimationEnabled
     }
 
     var body: some View {
@@ -242,7 +240,8 @@ struct OnboardingLaunchView: View {
             AstirLaunchArtwork.background.ignoresSafeArea()
             GeometryReader { proxy in
                 VStack(spacing: WanderTheme.spacing4) {
-                    AstirLaunchLockup(animationsEnabled: isAnimationEnabled)
+                    // Keep the approved splash still while a quicker STIR glint is explored.
+                    AstirLaunchLockup(animationsEnabled: false)
                         .frame(width: AstirLaunchArtwork.width(availableWidth: proxy.size.width))
 
                     if let message {

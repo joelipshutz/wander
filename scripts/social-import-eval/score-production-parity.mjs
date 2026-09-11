@@ -79,23 +79,22 @@ export function buildProductionParityScore({
   const scoredCases = cases.map((testCase) => {
     const result = resultsByCaseID.get(testCase.id);
     const predictions = finalPredictionNames(result);
-    const score = scorePredictions(testCase.labels, predictions);
-    if (!score.scorable) throw new ScoreError("unscorable_case_labels");
+    const score = scoreReviewRows(testCase.labels, predictions);
     return {
       caseID: testCase.id,
       pipelineStatus: result.status,
       failedStage: safeOptionalCode(result.failedStage),
       errorCode: safeOptionalCode(result.errorCode),
       fallback: fallbackSummary(result),
-      score: boundedScore(score),
+      score,
     };
   });
 
   const metrics = aggregateScores(scoredCases.map((item) => item.score));
   return {
     schemaVersion: 1,
-    scorer: "production-parity-score-v1",
-    scoringContract: "score-contract-v4",
+    scorer: "production-parity-score-v2",
+    scoringContract: "score-contract-v5-review-rows",
     corpus: {
       sha256: corpusSHA256,
       caseCount: cases.length,
@@ -275,7 +274,18 @@ function fallbackSummary(result) {
   };
 }
 
-function boundedScore(score) {
+export function scoreReviewRows(labels, predictions) {
+  const score = scorePredictions(labels, predictions);
+  if (!score.scorable) throw new ScoreError("unscorable_case_labels");
+  const returnedRowCount = predictions.length;
+  // The extraction scorer deduplicates names for mention recall. The import
+  // review displays rows: repeated names must not disappear from its quality
+  // denominator or pass an exact-set gate (e.g. 14 rows for nine cafes).
+  const duplicateNameRowCount = returnedRowCount - score.predictionCount;
+  const correctPredictionCount = score.predictionCount - score.falsePredictions.length;
+  const precision = returnedRowCount === 0
+    ? score.precision
+    : correctPredictionCount / returnedRowCount;
   return {
     scorable: true,
     labelStatus: "labeled",
@@ -283,14 +293,15 @@ function boundedScore(score) {
     requiredHitCount: score.requiredHitCount,
     acceptableHitCount: score.acceptableHitCount,
     forbiddenHitCount: score.forbiddenHitCount,
-    predictionCount: score.predictionCount,
-    correctPredictionCount: score.predictionCount - score.falsePredictions.length,
-    falsePredictionCount: score.falsePredictions.length,
-    precision: score.precision,
+    predictionCount: returnedRowCount,
+    duplicateNameRowCount,
+    correctPredictionCount,
+    falsePredictionCount: returnedRowCount - correctPredictionCount,
+    precision,
     recall: score.recall,
-    f1: score.f1,
+    f1: f1(precision, score.recall),
     postSuccess: score.postSuccess,
-    exactRequiredSet: score.exactRequiredSet,
+    exactRequiredSet: score.exactRequiredSet && duplicateNameRowCount === 0,
     requiredMisses: score.requiredMisses.map(cleanText),
     forbiddenHits: score.forbiddenHits.map(cleanText),
   };
@@ -301,6 +312,7 @@ function aggregateScores(scores) {
     output.requiredCount += score.requiredCount;
     output.requiredHitCount += score.requiredHitCount;
     output.predictionCount += score.predictionCount;
+    output.duplicateNameRowCount += score.duplicateNameRowCount;
     output.correctPredictionCount += score.correctPredictionCount;
     output.falsePredictionCount += score.falsePredictionCount;
     output.forbiddenHitCount += score.forbiddenHitCount;
@@ -311,6 +323,7 @@ function aggregateScores(scores) {
     requiredCount: 0,
     requiredHitCount: 0,
     predictionCount: 0,
+    duplicateNameRowCount: 0,
     correctPredictionCount: 0,
     falsePredictionCount: 0,
     forbiddenHitCount: 0,
