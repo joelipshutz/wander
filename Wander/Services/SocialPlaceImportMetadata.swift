@@ -507,6 +507,20 @@ enum SocialImportCountry {
         return countryCodesByName[normalized(value)]
     }
 
+    /// An area is unstructured creator/model text, not a provider country field.
+    /// Bare ISO codes overlap local abbreviations (LA, CA, etc.); only explicit
+    /// country names and named aliases can impose a country constraint here.
+    static func isoCode(forAreaText value: String?) -> String? {
+        guard let value,
+              !bareCountryCodes.contains(normalized(value))
+        else { return nil }
+        return isoCode(for: value)
+    }
+
+    private static let bareCountryCodes = Set(
+        Locale.Region.isoRegions.map { normalized($0.identifier) }
+    )
+
     static func candidatesCompatibleWithExactCountry(
         _ candidates: [PlaceCandidate],
         areaHint: String?
@@ -515,7 +529,7 @@ enum SocialImportCountry {
               !areaHint.contains(","),
               PlaceImportGeography.stateCode(in: areaHint) == nil,
               normalized(areaHint) != "georgia",
-              let expectedCode = isoCode(for: areaHint)
+              let expectedCode = isoCode(forAreaText: areaHint)
         else { return candidates }
 
         return candidates.filter { candidate in
@@ -578,7 +592,7 @@ enum SocialGuideTextParser {
 
     static func components(from line: String) -> (name: String, area: String)? {
         guard let components = rawComponents(from: line),
-              SocialImportCountry.isoCode(for: components.area) != nil
+              SocialImportCountry.isoCode(forAreaText: components.area) != nil
         else { return nil }
         return components
     }
@@ -654,7 +668,7 @@ enum SocialGuideTextParser {
         }
 
         return workingRows.compactMap { row in
-            guard SocialImportCountry.isoCode(for: row.area) != nil else { return nil }
+            guard SocialImportCountry.isoCode(forAreaText: row.area) != nil else { return nil }
             return "\(row.name) / \(row.area)"
         }
     }
@@ -716,7 +730,7 @@ enum SocialGuideTextParser {
         area: String,
         continuations: [String]
     ) -> Set<Int> {
-        if SocialImportCountry.isoCode(for: area) != nil {
+        if SocialImportCountry.isoCode(forAreaText: area) != nil {
             return []
         }
         let searchableCount = min(continuations.count, 8)
@@ -732,7 +746,7 @@ enum SocialGuideTextParser {
             let candidate = indices.reduce(area) { partial, index in
                 joined(partial, continuations[index])
             }
-            if SocialImportCountry.isoCode(for: candidate) != nil {
+            if SocialImportCountry.isoCode(forAreaText: candidate) != nil {
                 return Set(indices)
             }
         }

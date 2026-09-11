@@ -271,6 +271,13 @@ enum PlaceImportGeography {
             .compactMap { $0 }
             .joined(separator: " ")
         var result = areaTokens(structuredArea)
+        // Google often omits the neighborhood from formattedAddress even
+        // though addressComponents explicitly attest it. Preserve that
+        // evidence instead of dropping neighborhood constraints or guessing
+        // that every same-city branch fits the creator's intended area.
+        for component in (candidate.areaComponents ?? []).prefix(8) {
+            result.formUnion(normalizedWords(component))
+        }
         if let country = candidate.country {
             // A provider country code such as CA means Canada, not the U.S.
             // state of California. Preserve it as raw evidence without passing
@@ -340,7 +347,7 @@ enum PlaceImportGeography {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard let country = components.last,
-              let countryCode = SocialImportCountry.isoCode(for: country)
+              let countryCode = SocialImportCountry.isoCode(forAreaText: country)
         else { return nil }
         return (countryCode, Array(components.dropLast()))
     }
@@ -613,6 +620,7 @@ enum PlaceImportCandidateMatcher {
                     areaHint: areaHint,
                     latitude: latitude,
                     longitude: longitude,
+                    selectionPolicy: selectionPolicy,
                     maximumNearSpellingEdits: allowNearSpellingMatch
                         ? max(1, min(2, maximumNearSpellingEdits))
                         : 0
@@ -828,6 +836,7 @@ enum PlaceImportCandidateMatcher {
         areaHint: String?,
         latitude: Double?,
         longitude: Double?,
+        selectionPolicy: PlaceImportCandidateSelectionPolicy,
         maximumNearSpellingEdits: Int
     ) -> Double {
         let hintKey = canonicalNameKey(nameHint)
@@ -843,6 +852,11 @@ enum PlaceImportCandidateMatcher {
         } else if hintCore == candidateCore, !hintCore.isEmpty {
             score = 0.8
         } else if creatorQualifiedVenueNamesMatch(candidate.name, nameHint) {
+            score = 0.8
+        } else if selectionPolicy == .socialGroundedArea,
+                  socialVenueDescriptorVariantsMatch(candidate.name, nameHint, areaHint: areaHint) {
+            // Rank using the same name equivalence that selection accepts.
+            // Otherwise a short brand plus "café" ties unrelated businesses.
             score = 0.8
         } else if maximumNearSpellingEdits > 0,
                   isNearSpellingMatch(
@@ -864,7 +878,11 @@ enum PlaceImportCandidateMatcher {
             let areaTokens = PlaceImportGeography.areaTokens(areaHint)
             let candidateAreaTokens = PlaceImportGeography.candidateAreaTokens(candidate)
             let overlapCount = areaTokens.intersection(candidateAreaTokens).count
-            if overlapCount > 0 {
+            if PlaceImportGeography.candidateStronglyMatchesArea(candidate, areaHint: areaHint) {
+                // Use the same normalized geography proof as selection. Raw
+                // token overlap must not under-score an accepted locality alias.
+                score += 0.1
+            } else if overlapCount > 0 {
                 let denominator = max(1, min(areaTokens.count, candidateAreaTokens.count))
                 score += min(0.1, Double(overlapCount) / Double(denominator) * 0.1)
             }
@@ -1020,7 +1038,7 @@ enum PlaceImportCandidateMatcher {
         "pub", "resort", "restaurant", "tavern"
     ]
     private static let socialVenueDescriptorTokens: Set<String> = [
-        "a", "an", "and", "at", "by", "camp", "chateau", "chateaux", "hotel",
+        "a", "an", "and", "at", "by", "cafe", "coffee", "camp", "chateau", "chateaux", "hotel",
         "in", "island", "lodge", "of", "on", "private", "relais", "reserve",
         "resort", "spa", "suite", "suites", "the", "treehouse", "treehouses",
         "wilderness"
