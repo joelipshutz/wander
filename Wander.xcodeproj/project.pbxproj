@@ -35,6 +35,7 @@
 		10758BA557EF6D1DF76EDE1A /* rec-303-map-pin-entrance-bounce-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = F4773A8786B641C4B1B2AD5E /* rec-303-map-pin-entrance-bounce-pre.png */; };
 		10B127160E9ED82B0012BD01 /* PlacePhotoGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */; };
 		11CAC84A6F513A131FA36181 /* WanderDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E635EA909370EB6D597D27AC /* WanderDebugLog.swift */; };
+		127463F7AF39E57A7D6EE9C7 /* AstirLaunchLockupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */; };
 		12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */; };
 		13E38F0F2359AD89CE1F8C7D /* VisibilityPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AFBD6D06D23BC0C007F77C /* VisibilityPolicyTests.swift */; };
 		13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090198414BF253FB326D960 /* SettingsScreen.swift */; };
@@ -271,6 +272,7 @@
 		EAAA2737ACAAE2C8F6FF4491 /* FeatureFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */; };
 		EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */; };
 		ECDD1D96B99E5D8E77B6D14C /* PlaceCardPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1989A2162AE02769ADE7449 /* PlaceCardPresentation.swift */; };
+		EDB83B1727C9B8248A3652E3 /* AstirLaunchLockup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */; };
 		EEB58DFCAF0DD4CEDFC84D27 /* PlaceProfileSaveActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA187646A3EFB882E7D3689 /* PlaceProfileSaveActionPolicy.swift */; };
 		EF1D7162C9D93C6958A30166 /* WanderWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */; };
 		EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */; };
@@ -358,6 +360,7 @@
 		07464EC1C300B7DE2D4DF937 /* ProductUpsellScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductUpsellScreen.swift; sourceTree = "<group>"; };
 		0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInboxDrainer.swift; sourceTree = "<group>"; };
 		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
+		0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockupTests.swift; sourceTree = "<group>"; };
 		0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInbox.swift; sourceTree = "<group>"; };
 		0B82E95F99088884DF1C0C97 /* rec-303-map-pin-entrance-bounce-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-303-map-pin-entrance-bounce-post.png"; sourceTree = "<group>"; };
 		0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-191-map-search-menu-pre.json"; sourceTree = "<group>"; };
@@ -432,6 +435,7 @@
 		466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRedesignMockups.swift; sourceTree = "<group>"; };
 		46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgets.swift; sourceTree = "<group>"; };
 		46D41FCF4E7F12CF268B7533 /* MapSnapshotCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotCapture.swift; sourceTree = "<group>"; };
+		484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockup.swift; sourceTree = "<group>"; };
 		4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceCardActionInteractionUITests.swift; sourceTree = "<group>"; };
 		4F8BE1B23A944FEF54533C0A /* PlaceBusinessMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBusinessMetadata.swift; sourceTree = "<group>"; };
 		50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateSheet.swift; sourceTree = "<group>"; };
@@ -878,6 +882,7 @@
 				3EA6591C2750C3AB8B3E33C6 /* ActivityEngagementTests.swift */,
 				04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */,
 				282B94AF8B29C08A7B59F929 /* AstirBrandShellTests.swift */,
+				0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */,
 				34977B260344994771BCC93E /* AuthSessionTests.swift */,
 				D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */,
 				C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */,
@@ -974,6 +979,7 @@
 		74079079D5E95AD2E796B1E8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */,
 				7AA0880B16173B7E854FA11E /* AstirVisualSystem.swift */,
 				81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
@@ -1505,6 +1511,7 @@
 				001422F87FC100BC18C54CAA /* AppBrand.swift in Sources */,
 				E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */,
 				A29F9C684AFE8EA7FC8F456A /* AstirBrandShell.swift in Sources */,
+				EDB83B1727C9B8248A3652E3 /* AstirLaunchLockup.swift in Sources */,
 				95E8C5A077108A9A3EFD24DC /* AstirVisualSystem.swift in Sources */,
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
@@ -1672,6 +1679,7 @@
 				BA257D07059164E47F1CF145 /* ActivityEngagementTests.swift in Sources */,
 				9323D4075F400D6C36E1DBA8 /* AddCameraPresentationTests.swift in Sources */,
 				F3AAA2E6D7CD55A49779385B /* AstirBrandShellTests.swift in Sources */,
+				127463F7AF39E57A7D6EE9C7 /* AstirLaunchLockupTests.swift in Sources */,
 				C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */,
 				0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */,
 				940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */,
