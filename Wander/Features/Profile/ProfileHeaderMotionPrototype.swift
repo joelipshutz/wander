@@ -196,26 +196,26 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             .allowsHitTesting(false)
     }
 
-    /// Shares the neutral ultra-thin material, desaturation, and soft edge used
-    /// by the other tabs' localized header blur. Only this review option expands
-    /// it into one continuous field. The upper field is always present.
+    /// A clear starting state reveals the native backdrop from the screen's top
+    /// in sync with the name. Keep backdrop colors visible through the lighter
+    /// material and feather the moving lower edge into the scrolling content.
     private var continuousHeaderBlur: some View {
         Group {
             if reduceTransparency {
                 brandMode.background
             } else {
                 ProfileMotionBackdropBlur(isDark: brandMode.prefersDarkInterface)
-                    .saturation(0)
             }
         }
-        .frame(width: width,
-               height: topInset + toolbarBottom + (surfaceBottom - toolbarBottom) * surfaceProgress)
-        .mask(alignment: .bottom) {
+        .frame(width: width, height: topInset + surfaceBottom)
+        .mask(alignment: .top) {
             VStack(spacing: 0) {
                 Color.white
                 LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 16)
+                    .frame(height: 32)
             }
+            .frame(height: (topInset + surfaceBottom) * surfaceProgress)
+            .clipped()
         }
         .offset(y: -topInset)
         .allowsHitTesting(false)
@@ -367,7 +367,7 @@ private struct ProfileMotionBackdropBlur: UIViewRepresentable {
                 self?.effect = UIBlurEffect(style: .systemUltraThinMaterial)
             }
             self.animator = animator
-            animator.fractionComplete = 0.65
+            animator.fractionComplete = 0.25
         }
     }
 }

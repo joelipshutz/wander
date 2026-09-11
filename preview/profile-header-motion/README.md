@@ -1,16 +1,20 @@
 # Profile header motion exploration · REC-482
 
-## Current review: option 4 with continuous transparent blur
+## Current review: option 4 with a clear start and lighter blur reveal
 
-[Play the updated MP4](option-4-continuous-blur.mp4)
+[Play the updated MP4](option-4-reveal-blur.mp4)
 
-![Updated option 4](option-4-continuous-blur-pinned.png)
+![Updated option 4](option-4-reveal-blur-pinned.png)
 
-Option 4 is the current direction. The toolbar and status-bar area always have a light, theme-matched blur. As the original name begins passing beneath the toolbar, the same field extends down behind the original-size photo and the vertically aligned name. The complete surface reaches the top of the screen, with a soft lower edge and no opaque toolbar band. It uses the same neutral, desaturated ultra-thin material family as the other tabs' localized blur, at a reduced material intensity, without lowering the blur layer's opacity and leaking sharp background text. Text follows the normal light/dark theme for readability. Reduce Transparency uses the app background instead.
+The profile starts with no header blur. As the original name begins passing beneath the toolbar, a light native blur reveals downward from the top of the screen while the original-size name settles beside the photo. The lower edge is feathered, and the material retains softened backdrop shapes and colors instead of imposing a desaturated gray field. Its intensity is substantially lower than the previous review.
 
-The photo remains 86pt. Scrolling back up to the bio's lower edge restores the original identity and retracts the lower blur while keeping the toolbar/status-bar blur active. This remains a DEBUG-only review route; normal profiles are unchanged.
+The photo remains 86pt and the name keeps the preceding iteration's size, destination, and timing. Scrolling back up to the bio's lower edge restores the original identity and retracts the entire blur, returning to a clear header. Reduce Transparency substitutes the app background during the same reveal. This remains a DEBUG-only review route.
 
-The updated video includes both profile roles in light and dark mode. Capture the `compact` variant with the commands below, then render the four files with the output prefix `option-4-continuous-blur`.
+The updated video includes both profile roles in light and dark mode. Capture the `compact` variant with the commands below, then render the four files with the output prefix `option-4-reveal-blur`.
+
+### Previous continuous-blur review
+
+[Earlier option 4 MP4](option-4-continuous-blur.mp4) preserves the preceding always-blurred toolbar and stronger, desaturated material for comparison.
 
 ## Previous four-option comparison
 
@@ -37,7 +41,7 @@ The username sits immediately above the city/state at the same font size in all 
 - Options 1–3 begin moving when the original photo midpoint crosses the bottom of the pinned navigation row. The current option 4 begins when the original name's top edge reaches that boundary.
 - Options 1–3 follow the staged arc: the portrait leads over 0.8 seconds, followed by a fading name that rises into position after a 0.2-second delay. The portrait is 40% smaller than the previous 172pt render; the name is 55% of the previous 1.4× name, or 0.77× the original sheet-title size (about 17pt at default type size).
 - The identity holds still while the activity, map, and calendar continue scrolling underneath. On upward scrolling, options 1–3 restore when the original photo's lower edge returns to the pinned toolbar boundary.
-- Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. Its latest continuous blur is shown in the current-review MP4 above; the older option-4.mp4 preserves the earlier appearance. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
+- Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. Its latest clear-start blur reveal is shown in the current-review MP4 above; the older option-4.mp4 preserves the earlier appearance. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
 - The original layout reserves its space throughout, so changing motion state never changes scroll content height. A stationary scroll offset does not retrigger animation.
 - Reduce Motion removes animation. Long names shrink to one line. Accessibility text sizes and interrupted gestures still need production design review before adopting a variant.
 
