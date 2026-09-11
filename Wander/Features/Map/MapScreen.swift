@@ -1384,6 +1384,7 @@ struct MapScreen: View {
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var mapActivityEditFlow: PlaceActivityEditPresentation?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
+    @State private var placeProfileBackSwipeOffset: CGFloat = 0
     @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
@@ -3913,6 +3914,14 @@ struct MapScreen: View {
             ) {
                 NavigationStack {
                     selectedPlaceProfileDestination
+                        .fullPageBackSwipe(
+                            isEnabled: isPlaceProfilePresented && attachedMapSaveFlow == nil
+                                && mapSaveFlow == nil && mapActivityEditFlow == nil
+                                && mapPlaceListTarget == nil
+                                && walkthroughs.activeSurface != .placeDetail,
+                            containerOffset: $placeProfileBackSwipeOffset,
+                            onBack: { collapseSelectedPlaceProfile() }
+                        )
                 }
                 .accessibilityHidden(!isPlaceProfilePresented)
                 .environmentObject(store)
@@ -3932,6 +3941,7 @@ struct MapScreen: View {
             }
             .ignoresSafeArea()
             .allowsHitTesting(isPlaceProfilePresented)
+            .offset(x: placeProfileBackSwipeOffset)
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
