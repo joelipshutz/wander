@@ -2184,6 +2184,24 @@ final class MapSelectionMotionTests: XCTestCase {
         )
     }
 
+    func testPinBitmapReusesAppearanceAcrossBounceButPreservesSelectionUpdates() {
+        func descriptor(bounce: UInt64, selected: Bool = true, title: String = "Place") -> NativeMapAnnotationDescriptor {
+            NativeMapAnnotationDescriptor(
+                id: "pin", kind: .saved("pin"), title: title, emoji: "🍕",
+                coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+                outlines: [], isSearchResult: false, isSelected: selected,
+                opacity: 1, animatesEntrance: false, entranceDelay: 0,
+                accessibilityLabel: title, bounceRevision: bounce
+            )
+        }
+        let original = descriptor(bounce: 1)
+        let bounced = descriptor(bounce: 2)
+        XCTAssertEqual(original.renderSignature, bounced.renderSignature)
+        XCTAssertNotEqual(original, bounced, "The native view must still receive the new bounce.")
+        XCTAssertNotEqual(original.renderSignature, descriptor(bounce: 1, selected: false).renderSignature)
+        XCTAssertNotEqual(original.renderSignature, descriptor(bounce: 1, title: "Updated place").renderSignature)
+    }
+
     func testCameraRegionTrackerClassifiesAContinuousPanWithoutPublishingViewState() {
         let start = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
