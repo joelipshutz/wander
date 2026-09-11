@@ -12,7 +12,7 @@ final class ProfileAlignmentUITests: XCTestCase {
         app.launch()
         let back = app.buttons["Back"].firstMatch
         XCTAssertTrue(back.waitForExistence(timeout: 15))
-        let activity = app.otherElements["profile.walkthrough.activitySection"]
+        let activity = app.otherElements.matching(identifier: "profile.walkthrough.activitySection").firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         let screen = app.frame
         assertFits(activity, in: screen)

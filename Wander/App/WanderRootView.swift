@@ -802,6 +802,7 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
             }
         }
     }

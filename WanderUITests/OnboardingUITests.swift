@@ -2819,6 +2819,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(disclosure.isHittable)
 
         note.tap()
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 2) {
+            note.tap()
+        }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         note.typeText("Discard this draft")
         app.buttons["save.close"].tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
