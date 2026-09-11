@@ -9,6 +9,7 @@ struct ProfileHeaderMotionPreview: View {
     @StateObject private var walkthroughs = FirstVisitWalkthroughCoordinator(isEnabled: false)
     @State private var selectedMonth = Date(timeIntervalSince1970: 1_788_998_400)
     @State private var tab = WanderTab.profile
+    @State private var showsPhoto = false
     private let member: Bool
     private let profile: LocalProfile
 
@@ -43,6 +44,9 @@ struct ProfileHeaderMotionPreview: View {
         .environmentObject(store)
         .environmentObject(walkthroughs)
         .environment(\.profileHeaderMotion, variant)
+        .fullScreenCover(isPresented: $showsPhoto) {
+            ProfilePhotoFullScreenViewer(avatarURL: profile.avatarURL, displayName: profile.displayName)
+        }
         .astirAdaptiveBrandMode()
         .tint(AstirBrandMode.editorialLight.accent)
     }
@@ -59,7 +63,7 @@ struct ProfileHeaderMotionPreview: View {
             stats: presentation.stats, saveStreak: nil,
             followerCount: 128, followingCount: 96, sharedVisitInvitationCount: 0,
             insights: insights, selectedMonth: $selectedMonth,
-            avatarAction: {}, editAction: {}, settingsAction: {}, shareAction: {}, relationshipAction: {},
+            avatarAction: { showsPhoto = true }, editAction: {}, settingsAction: {}, shareAction: {}, relationshipAction: {},
             backAction: member ? {} : nil,
             memberActions: member ? ProfileMemberActions(canUnfollow: true, isMuted: false, unfollowAction: {}, toggleMuteAction: {}, reportAction: {}, blockAction: {}) : nil,
             graphAction: { _ in }, sharedVisitInvitationsAction: {}, recentActivity: presentation.activityItems,

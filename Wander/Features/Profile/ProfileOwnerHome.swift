@@ -286,16 +286,8 @@ struct ProfileOwnerHome: View {
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
-    #if DEBUG
-    @Environment(\.profileHeaderMotion) private var profileHeaderMotion
-    #endif
-    private var isProfileMotionPreview: Bool {
-        #if DEBUG
-        profileHeaderMotion != nil
-        #else
-        false
-        #endif
-    }
+    @Environment(\.resolvedProfileHeaderMotion) private var profileHeaderMotion
+    private var isProfileMotionActive: Bool { profileHeaderMotion != nil }
 
     private let profileAvatarSize: CGFloat = 86
 
@@ -364,7 +356,7 @@ struct ProfileOwnerHome: View {
         .scrollIndicators(.hidden)
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
         .profileHeaderMotionOverlay(
-            avatar: profileAvatar,
+            avatar: profileAvatarControl,
             name: profile.displayName,
             navigation: profileNavigationRow
         )
@@ -411,7 +403,15 @@ struct ProfileOwnerHome: View {
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            profileNavigationRow.profileMotionSource(.navigation)
+            if isProfileMotionActive {
+                // Reserve the original toolbar space without duplicating live
+                // buttons or their sheet/popover presentation bindings.
+                Color.clear
+                    .frame(height: WanderTheme.tapMinimum)
+                    .profileMotionSource(.navigation)
+            } else {
+                profileNavigationRow
+            }
             profileIdentityBlock
         }
     }
@@ -423,7 +423,7 @@ struct ProfileOwnerHome: View {
                     ProfileBackButton(action: backAction)
                 }
 
-                if !isProfileMotionPreview {
+                if !isProfileMotionActive {
                     Text("@\(profile.handle)")
                         .font(AstirTypography.sectionTitle)
                         .foregroundStyle(brandMode.primaryText)
@@ -488,20 +488,7 @@ struct ProfileOwnerHome: View {
     private var profileIdentityBlock: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                Group {
-                    if mode.isOwner {
-                        Button(action: avatarAction) {
-                            profileAvatar
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!hasProfilePhoto)
-                        .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
-                        .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
-                    } else {
-                        profileAvatar
-                            .accessibilityLabel("\(profile.displayName)'s profile photo")
-                    }
-                }
+                profileAvatarControl
                 .profileMotionSource(.avatar)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -531,7 +518,7 @@ struct ProfileOwnerHome: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                if isProfileMotionPreview {
+                if isProfileMotionActive {
                     Text("@\(profile.handle)")
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.primaryText)
@@ -553,6 +540,7 @@ struct ProfileOwnerHome: View {
                 Text(memberSinceText)
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
+                    .profileMotionSource(normalized(profile.bio) == nil ? .bio : nil)
             }
 
             if let relationship = mode.relationship {
@@ -573,6 +561,22 @@ struct ProfileOwnerHome: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var profileAvatarControl: some View {
+        if mode.isOwner {
+            Button(action: avatarAction) { profileAvatar }
+                .buttonStyle(.plain)
+                .disabled(!hasProfilePhoto)
+                .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
+                .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
+                .accessibilityIdentifier("profile.header.photo")
+        } else {
+            profileAvatar
+                .accessibilityLabel("\(profile.displayName)'s profile photo")
+                .accessibilityIdentifier("profile.header.photo")
         }
     }
 

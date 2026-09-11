@@ -1,4 +1,4 @@
-#if DEBUG
+import SwiftUI
 import XCTest
 @testable import Wander
 
@@ -69,6 +69,7 @@ final class ProfileHeaderMotionStateTests: XCTestCase {
         XCTAssertFalse(state.update(offset: 300, originalAvatar: visibleAvatar, entryBoundary: nameTop))
     }
 
+    #if DEBUG
     func testPreviewRequiresExplicitKnownVariant() {
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: []))
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: ["-ProfileHeaderMotion"]))
@@ -77,5 +78,18 @@ final class ProfileHeaderMotionStateTests: XCTestCase {
             XCTAssertEqual(ProfileHeaderMotionVariant.resolved(arguments: ["-ProfileHeaderMotion", variant.rawValue]), variant)
         }
     }
+    #endif
+
+    func testApprovedMotionIsTheDefaultForNormalProfiles() {
+        XCTAssertEqual(EnvironmentValues().resolvedProfileHeaderMotion, .compact)
+    }
+
+    func testAccessibilityTextSizesKeepTheOriginalReadingLayout() {
+        var environment = EnvironmentValues()
+        environment.dynamicTypeSize = .accessibility3
+        XCTAssertNil(environment.resolvedProfileHeaderMotion)
+        environment.dynamicTypeSize = .xxxLarge
+        XCTAssertEqual(environment.resolvedProfileHeaderMotion, .compact)
+    }
+
 }
-#endif

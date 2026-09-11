@@ -1,6 +1,6 @@
 # Profile header motion exploration · REC-482
 
-## Current review: option 4 with a clear start and lighter blur reveal
+## Approved option 4: clear start and lighter blur reveal
 
 [Play the updated MP4](option-4-reveal-blur.mp4)
 
@@ -8,7 +8,7 @@
 
 The profile starts with no header blur. As the original name begins passing beneath the toolbar, a light native blur reveals downward from the top of the screen while the original-size name settles beside the photo. The lower edge is feathered, and the material retains softened backdrop shapes and colors instead of imposing a desaturated gray field. Its intensity is substantially lower than the previous review.
 
-The photo remains 86pt and the name keeps the preceding iteration's size, destination, and timing. Scrolling back up to the bio's lower edge restores the original identity and retracts the entire blur, returning to a clear header. Reduce Transparency substitutes the app background during the same reveal. This remains a DEBUG-only review route.
+The photo remains 86pt and the name keeps the preceding iteration's size, destination, and timing. Scrolling back up to the bio's lower edge restores the original identity and retracts the entire blur, returning to a clear header. Reduce Transparency substitutes the app background during the same reveal. This is the default transition on normal owner and member profiles. Accessibility text sizes retain the original reading layout.
 
 The updated video includes both profile roles in light and dark mode. Capture the `compact` variant with the commands below, then render the four files with the output prefix `option-4-reveal-blur`.
 
@@ -43,11 +43,11 @@ The username sits immediately above the city/state at the same font size in all 
 - The identity holds still while the activity, map, and calendar continue scrolling underneath. On upward scrolling, options 1–3 restore when the original photo's lower edge returns to the pinned toolbar boundary.
 - Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. Its latest clear-start blur reveal is shown in the current-review MP4 above; the older option-4.mp4 preserves the earlier appearance. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
 - The original layout reserves its space throughout, so changing motion state never changes scroll content height. A stationary scroll offset does not retrigger animation.
-- Reduce Motion removes animation. Long names shrink to one line. Accessibility text sizes and interrupted gestures still need production design review before adopting a variant.
+- Reduce Motion removes animation. Long names shrink to one line. Accessibility text sizes retain the original reading layout. The selected motion preserves live photo and navigation actions.
 
 ## Scope
 
-The regular app is unchanged unless the explicit DEBUG preview entry point is launched. Release builds compile the motion hooks to no-ops. These recordings use bundled demo portraits and an in-memory seeded store; preview actions are inert. No persistence, analytics, auth, follow, visibility, or backend contracts change.
+Normal Debug and Release profiles use the selected inline transition through the shared ProfileOwnerHome component. Earlier alternatives and the automated capture route require an explicit DEBUG launch argument. The recordings use bundled demo portraits and an in-memory seeded store. The preview photo opens its native viewer; other preview actions remain inert. Production actions retain their normal behavior. No persistence, analytics, auth, follow, visibility, or backend contracts change.
 
 ## Run interactively
 
@@ -89,4 +89,4 @@ Repeat with the other three variants. Add `--gif` only when a looping GIF is nee
 
 `ProfileHeaderMotionStateTests` covers midpoint entry, continued-scroll hold, directional photo/bio boundary restoration, stationary offsets, and explicit preview argument parsing. The final PR records the native build, unit-test results, and large/compact phone visual checks. The repository's prescribed iPhone 16 Plus / iOS 18.6 destination is unavailable on this machine; installed iOS 26.5 Simulators are used instead.
 
-The latest native build and full unit run passed all 1,897 tests, including eight profile-motion tests. There were no failures or skips. Tests and recordings ran separately. Native captures check the updated header on iPhone 17 and the smaller iPhone 17e, both on iOS 26.5.
+The visual-selection run passed all 1,897 unit tests. Production integration additionally covers the default animation, accessibility fallback, normal owner/member navigation while pinned, photo-viewer return, tab return, and the existing profile-width regression. The PR records the final integrated unit/UI test counts, Release build, and native screenshots on iPhone 17 and iPhone 17e.

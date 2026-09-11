@@ -1,31 +1,25 @@
 import SwiftUI
+import UIKit
 
-// The release build keeps the original profile layout. These hooks only enable
-// the review prototype when its explicit DEBUG preview environment is present.
+// The approved inline transition is shared by owner and member profiles.
+// DEBUG previews can still select the earlier review variants.
 enum ProfileMotionSource: Hashable { case avatar, name, navigation, bio }
 
 extension View {
     @ViewBuilder
-    func profileMotionSource(_ source: ProfileMotionSource) -> some View {
-        #if DEBUG
-        modifier(ProfileMotionSourceModifier(source: source))
-        #else
-        self
-        #endif
+    func profileMotionSource(_ source: ProfileMotionSource?) -> some View {
+        if let source {
+            modifier(ProfileMotionSourceModifier(source: source))
+        } else {
+            self
+        }
     }
 
     @ViewBuilder
     func profileHeaderMotionOverlay<A: View, N: View>(avatar: A, name: String, navigation: N) -> some View {
-        #if DEBUG
         modifier(ProfileMotionOverlayModifier(avatar: avatar, name: name, navigation: navigation))
-        #else
-        self
-        #endif
     }
 }
-
-#if DEBUG
-import UIKit
 
 enum ProfileHeaderMotionVariant: String, CaseIterable {
     case solid, blur, leading, compact
@@ -41,11 +35,14 @@ enum ProfileHeaderMotionVariant: String, CaseIterable {
 
     var usesBlur: Bool { self == .blur || self == .compact }
 
+    #if DEBUG
     static func resolved(arguments: [String] = ProcessInfo.processInfo.arguments) -> Self? {
         guard let index = arguments.firstIndex(of: "-ProfileHeaderMotion"),
               arguments.indices.contains(index + 1) else { return nil }
         return Self(rawValue: arguments[index + 1])
     }
+
+    #endif
 
     var animation: Animation { .easeInOut(duration: self == .compact ? 0.55 : 0.8) }
 }
@@ -69,9 +66,14 @@ struct ProfileHeaderMotionState {
 }
 
 private struct ProfileHeaderMotionKey: EnvironmentKey {
-    static let defaultValue: ProfileHeaderMotionVariant? = nil
+    static let defaultValue: ProfileHeaderMotionVariant? = .compact
 }
 extension EnvironmentValues {
+    // Preserve the original reading layout at accessibility text sizes.
+    var resolvedProfileHeaderMotion: ProfileHeaderMotionVariant? {
+        dynamicTypeSize.isAccessibilitySize ? nil : profileHeaderMotion
+    }
+
     var profileHeaderMotion: ProfileHeaderMotionVariant? {
         get { self[ProfileHeaderMotionKey.self] }
         set { self[ProfileHeaderMotionKey.self] = newValue }
@@ -86,7 +88,7 @@ private struct ProfileMotionAnchors: PreferenceKey {
 }
 
 private struct ProfileMotionSourceModifier: ViewModifier {
-    @Environment(\.profileHeaderMotion) private var variant
+    @Environment(\.resolvedProfileHeaderMotion) private var variant
     let source: ProfileMotionSource
 
     func body(content: Content) -> some View {
@@ -94,6 +96,7 @@ private struct ProfileMotionSourceModifier: ViewModifier {
             content
                 .opacity(source == .bio ? 1 : 0)
                 .accessibilityHidden(source != .bio)
+                .allowsHitTesting(source == .bio)
                 .anchorPreference(key: ProfileMotionAnchors.self, value: .bounds) { [source: $0] }
         } else {
             content
@@ -102,7 +105,7 @@ private struct ProfileMotionSourceModifier: ViewModifier {
 }
 
 private struct ProfileMotionOverlayModifier<A: View, N: View>: ViewModifier {
-    @Environment(\.profileHeaderMotion) private var variant
+    @Environment(\.resolvedProfileHeaderMotion) private var variant
     let avatar: A
     let name: String
     let navigation: N
@@ -144,9 +147,7 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
     let height: CGFloat
     let topInset: CGFloat
     @State private var initialAvatar: CGRect?
-    @State private var initialName: CGRect?
     @State private var initialNavigation: CGRect?
-    @State private var initialBio: CGRect?
     @State private var entryAvatar: CGRect?
     @State private var entryName: CGRect?
     @State private var motion = ProfileHeaderMotionState()
@@ -166,7 +167,7 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
         switch variant {
         case .solid, .blur: CGPoint(x: width / 2, y: 122)
         case .leading: CGPoint(x: width - 24 - 51.6, y: 122)
-        case .compact: CGPoint(x: (initialAvatar ?? avatarRect).midX, y: 111)
+        case .compact: CGPoint(x: avatarRect.midX, y: 111)
         }
     }
 
@@ -218,7 +219,9 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             .clipped()
         }
         .offset(y: -topInset)
-        .allowsHitTesting(false)
+        .contentShape(Rectangle())
+        .onTapGesture { /* Keep obscured scroll content from receiving taps. */ }
+        .allowsHitTesting(motion.expanded)
         .accessibilityHidden(true)
     }
 
@@ -230,20 +233,22 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
                     destination: destination, scale: variant == .compact ? 1 : 1.2,
                     arc: variant == .compact ? 0 : -16
                 ))
-                .allowsHitTesting(false)
-                .accessibilityLabel("\(name)'s profile photo")
+
 
             if variant == .compact {
                 displayName(color: brandMode.primaryText)
                     .position(x: nameRect.midX, y: nameRect.midY)
                     .opacity(1 - nameProgress)
+                    .accessibilityHidden(true)
                 displayName(color: brandMode.primaryText)
                     .modifier(ProfileMotionTransform(
                         progress: nameProgress, source: motion.expanded ? (entryName ?? nameRect) : nameRect,
-                        destination: CGPoint(x: (initialName ?? nameRect).midX, y: 111),
+                        destination: CGPoint(x: nameRect.midX, y: 111),
                         scale: 1, arc: 0
                     ))
                     .opacity(nameProgress)
+                    .accessibilityHidden(false)
+                    .accessibilityIdentifier("profile.header.name")
             } else {
                 displayName(color: brandMode.primaryText)
                     .position(x: nameRect.midX, y: nameRect.midY)
@@ -286,36 +291,43 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
                 .position(x: width / 2, y: (initialNavigation ?? navigationRect).midY)
         }
         .onAppear {
-            initialAvatar = avatarRect
-            initialName = nameRect
-            initialNavigation = navigationRect
-            initialBio = bioRect
+            if initialAvatar == nil {
+                // A tab or overlay can first appear with a restored scroll
+                // position. Recover the content origin from its toolbar spacer.
+                let offset = WanderTheme.spacing3 - navigationRect.minY
+                initialAvatar = avatarRect.offsetBy(dx: 0, dy: offset)
+                initialNavigation = navigationRect.offsetBy(dx: 0, dy: offset)
+            }
+            updateMotion()
         }
-        .onChange(of: avatarRect.minY) { _, _ in
-            guard let initialAvatar else { return }
-            let offset = initialAvatar.minY - avatarRect.minY
-            let viewportTop = initialNavigation?.maxY ?? 0
-            let viewportAvatar = initialAvatar.offsetBy(dx: 0, dy: -viewportTop)
-            let restoreBoundary = variant == .compact ? initialBio.map { $0.maxY - viewportTop } : nil
-            let entryBoundary = variant == .compact ? initialName.map { max(0, $0.minY - viewportTop) } : nil
-            guard motion.update(offset: offset, originalAvatar: viewportAvatar,
-                                entryBoundary: entryBoundary, restoreBoundary: restoreBoundary) else { return }
-            // Freeze the entry geometry while the content continues to scroll.
-            // A downward curve keeps the portrait clear of the pinned toolbar.
-            if motion.expanded {
-                entryAvatar = avatarRect
-                entryName = nameRect
-            }
-            let target: CGFloat = motion.expanded ? 1 : 0
-            withAnimation(reduceMotion ? nil : variant.animation) { photoProgress = target }
-            withAnimation(reduceMotion ? nil : (variant == .compact ? .easeInOut(duration: 0.55) : .easeOut(duration: 0.24).delay(motion.expanded ? 0 : 0.3))) {
-                surfaceProgress = target
-            }
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.56).delay(variant == .compact ? 0 : 0.2)) {
-                nameProgress = target
-            }
+        .onChange(of: avatarRect.minY) { _, _ in updateMotion() }
+    }
+
+    private func updateMotion() {
+        guard let initialAvatar else { return }
+        let offset = initialAvatar.minY - avatarRect.minY
+        let viewportTop = initialNavigation?.maxY ?? 0
+        let viewportAvatar = initialAvatar.offsetBy(dx: 0, dy: -viewportTop)
+        // Normalize current geometry instead of caching the bio/name. Editing
+        // the profile or relayout must immediately use the new boundaries.
+        let restoreBoundary = variant == .compact ? bioRect.map { $0.maxY + offset - viewportTop } : nil
+        let entryBoundary = variant == .compact ? max(0, nameRect.minY + offset - viewportTop) : nil
+        guard motion.update(offset: offset, originalAvatar: viewportAvatar,
+                            entryBoundary: entryBoundary, restoreBoundary: restoreBoundary) else { return }
+        if motion.expanded {
+            entryAvatar = avatarRect
+            entryName = nameRect
+        }
+        let target: CGFloat = motion.expanded ? 1 : 0
+        withAnimation(reduceMotion ? nil : variant.animation) { photoProgress = target }
+        withAnimation(reduceMotion ? nil : (variant == .compact ? .easeInOut(duration: 0.55) : .easeOut(duration: 0.24).delay(motion.expanded ? 0 : 0.3))) {
+            surfaceProgress = target
+        }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.56).delay(variant == .compact ? 0 : 0.2)) {
+            nameProgress = target
         }
     }
+
 }
 
 /// Keep the blur layer opaque as a compositor while reducing the material's
@@ -391,4 +403,3 @@ private struct ProfileMotionTransform: AnimatableModifier {
             )
     }
 }
-#endif

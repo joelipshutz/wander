@@ -19,6 +19,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | No gamified check-ins | Locked | Avoid mayorships, streaks, leaderboards, and public check-in framing. |
 | Four bottom tabs | Locked | Map, Add, Discover, Profile. |
 | Settings from Profile gear | Locked | Do not add Settings as a fifth tab. |
+| Profile scroll header | Locked for REC-482 | Use the approved inline option for owner/member profiles: no initial header blur; reveal a light native blur from the screen top as the name reaches the toolbar, aligning the original-size name beside the 86pt photo. Keep navigation pinned and preserve its actions. On upward scrolling to the bio boundary, restore the original identity and remove the blur. Retain the original reading layout at accessibility text sizes. |
 | Profile merges self memory and social profile | Locked | Owner and other-user profile states share the same conceptual surface. |
 | Follow graph, not friend requests | Locked | One-way follows; mutual follows are friends. |
 | Public/private copy | Locked | UI says Everyone/Friends/Self; data stores `followers`/`mutuals`/`self`. |
