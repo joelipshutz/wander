@@ -1,0 +1,44 @@
+{
+  "complete": true,
+  "method": "Sharp native SVG rasterization and raw RGBA comparison; no browser or device capture",
+  "sharpVersion": "0.35.4",
+  "librsvgVersion": "2.62.91",
+  "vipsVersion": "8.18.6",
+  "size": [
+    1600,
+    764
+  ],
+  "stillByteIdenticalToApprovedSource": true,
+  "stillSha256": "ca42b250579fcd9571ba05520a4940ef8148a199e97aa6aeb16e918ec67e9ae8",
+  "maskSha256": "d4ae1b2de60931de5f1531d76cdbab05b94ad1df8c98a5b49a11ed655f821900",
+  "maskSvgSha256": "ff6d28538e1f6ff21e2161bf9d1e1a7ad6252f3636ffd42148c843a310d0a481",
+  "glyphPathsSha256": "765bfc599ffa8635f00578f07df8d62d5dfad8cd7885bd0180243e6952004f9d",
+  "maskBounds": {
+    "x": 518,
+    "y": 225,
+    "width": 864,
+    "height": 307,
+    "nonzeroPixels": 88761
+  },
+  "comparisonRegion": {
+    "x": 510,
+    "y": 215,
+    "width": 890,
+    "height": 330
+  },
+  "alphaDifferencesWithinSTIR": 0,
+  "nonzeroMaskPixelsOutsideSTIRRegion": 0,
+  "nonWhiteMaskPixels": 0,
+  "transparentPixels": 1133639,
+  "nonzeroComponents": 4,
+  "componentPixelCounts": [
+    31964,
+    20881,
+    19321,
+    16595
+  ],
+  "enclosedTransparentCounters": 1,
+  "counterPixelCounts": [
+    12319
+  ]
+}

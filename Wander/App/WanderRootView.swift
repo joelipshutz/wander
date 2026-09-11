@@ -651,7 +651,10 @@ struct WanderRootView: View {
             Label {
                 Text(tab.title)
             } icon: {
-                Image(uiImage: PlaceListSymbol.paperTabImage)
+                Image(uiImage: PlaceListSymbol.paperTabImage(
+                    isSelected: selectedTab == .lists,
+                    isDark: systemColorScheme == .dark
+                ))
             }
         } else {
             Label(tab.title, systemImage: tab.systemImage)
