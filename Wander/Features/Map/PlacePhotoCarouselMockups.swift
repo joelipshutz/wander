@@ -819,7 +819,7 @@ private struct PlacePhotoCarouselProfileMockup: View {
                 }
 
                 Button(action: {}) {
-                    Text("following")
+                    Text("Following")
                         .font(.system(size: 15, weight: .black))
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .background(WanderTheme.textInk.color)

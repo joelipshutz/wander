@@ -678,7 +678,7 @@ private struct InCommonDestinationMockup: View {
                 Spacer()
 
                 if hasActiveOverlapFilters {
-                    Button("clear") {
+                    Button("Clear") {
                         withAnimation(.easeOut(duration: reduceMotion ? 0 : 0.18)) {
                             searchText = ""
                             selectedType = .all

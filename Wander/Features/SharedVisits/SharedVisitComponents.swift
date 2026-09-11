@@ -34,7 +34,7 @@ struct SharedVisitInviteSection: View {
 
                     Spacer()
 
-                    Text(selectedFriends.isEmpty ? "add" : "\(selectedFriends.count) added")
+                    Text(selectedFriends.isEmpty ? "Add" : "\(selectedFriends.count) added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(brandMode.secondaryText)
 

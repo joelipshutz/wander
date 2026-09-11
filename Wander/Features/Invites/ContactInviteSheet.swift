@@ -774,7 +774,7 @@ struct ContactInviteSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button("open settings") {
+            Button("Open settings") {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(url)
             }
@@ -793,7 +793,7 @@ struct ContactInviteSheet: View {
                 trackInviteDeliveryStarted(mode: "share_sheet", recipientCount: 0)
                 sharePresentation = InviteSharePresentation(content: inviteShareContent)
             } label: {
-                Label("share an invite link", systemImage: "square.and.arrow.up")
+                Label("Share an invite link", systemImage: "square.and.arrow.up")
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.primaryText)
                     .frame(maxWidth: .infinity, minHeight: 50)
@@ -858,7 +858,7 @@ struct ContactInviteSheet: View {
             Text("contacts couldn’t load")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Button("try again") {
+            Button("Try again") {
                 Task { await loadContacts() }
             }
             .font(AstirTypography.control)
@@ -917,7 +917,7 @@ struct ContactInviteSheet: View {
             Button {
                 if canDismiss { dismiss() }
             } label: {
-                Text("done")
+                Text("Done")
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)

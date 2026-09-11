@@ -389,7 +389,7 @@ private struct ClassicAddVisitMockup: View {
                     ClassicSegmented(options: ["FRIENDS", "MUTUALS", "ONLY ME"], selected: "FRIENDS")
                 }
 
-                ClassicPrimaryButton(title: "save check-in", systemImage: "checkmark")
+                ClassicPrimaryButton(title: "Save check-in", systemImage: "checkmark")
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, 14)

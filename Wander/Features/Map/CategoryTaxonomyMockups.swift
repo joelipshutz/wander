@@ -81,8 +81,8 @@ private struct RemoveSaveEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "check-in", isSelected: true)
-                    MockupChoicePill(title: "wanna go", isSelected: false)
+                    MockupChoicePill(title: "Check-in", isSelected: true)
+                    MockupChoicePill(title: "Wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
             }
@@ -145,7 +145,7 @@ private struct RemoveSaveEditMockup: View {
 
     private var actionButtons: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            WanderPrimaryButton(title: "save changes", systemImage: "checkmark") {}
+            WanderPrimaryButton(title: "Save changes", systemImage: "checkmark") {}
             MockupDestructiveButton(title: "Remove save", systemImage: "trash") {
                 isShowingRemoveConfirmation = true
             }
@@ -260,8 +260,8 @@ private struct CategoryTaxonomyEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "check-in", isSelected: true)
-                    MockupChoicePill(title: "wanna go", isSelected: false)
+                    MockupChoicePill(title: "Check-in", isSelected: true)
+                    MockupChoicePill(title: "Wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
             }
@@ -363,7 +363,7 @@ private struct CategoryTaxonomyCuisinePickerMockup: View {
 
             HStack(spacing: WanderTheme.spacing2) {
                 CategoryPickerModePill(title: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood, isSelected: true)
-                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
+                CategoryPickerModePill(title: "Change", systemImage: "square.grid.2x2", isSelected: false)
                 Spacer(minLength: 0)
             }
 
@@ -738,7 +738,7 @@ private struct CuisineSelectionFooter: View {
 
             Spacer(minLength: 0)
 
-            Text("done")
+            Text("Done")
                 .font(.system(size: 16, weight: .black))
                 .padding(.horizontal, WanderTheme.spacing4)
                 .frame(minHeight: 48)

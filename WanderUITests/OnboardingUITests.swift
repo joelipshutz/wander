@@ -1503,8 +1503,8 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(app.staticTexts["Hotchkiss Park"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.buttons["check in"]
-        let wannaGoChoice = app.buttons["wanna go"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
+        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertEqual(checkInChoice.value as? String, "not selected")
         XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
         XCTAssertFalse(app.buttons["continue to details"].exists)
@@ -1566,7 +1566,11 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
                 .waitForExistence(timeout: 16)
         )
-        XCTAssertFalse(app.buttons["Check in"].isEnabled)
+        XCTAssertFalse(
+            app.buttons.matching(NSPredicate(
+                format: "label == %@ AND identifier != %@", "Check in", "save.statusSelector"
+            )).element.isEnabled
+        )
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
@@ -1639,8 +1643,8 @@ final class OnboardingUITests: XCTestCase {
                 .waitForExistence(timeout: 14)
         )
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.buttons["check in"]
-        let wannaGoChoice = app.buttons["wanna go"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
+        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertEqual(checkInChoice.value as? String, "not selected")
         XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
         XCTAssertFalse(app.buttons["continue to details"].exists)
@@ -2859,12 +2863,14 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
         saveButton.tap()
 
-        let checkInChoice = app.buttons["check in"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
         let statusSelector = app.staticTexts["save.statusSelector"]
         XCTAssertTrue(statusSelector.exists)
         XCTAssertTrue(checkInChoice.isSelected)
-        let finalCheckIn = app.buttons["Check in"]
+        let finalCheckIn = app.buttons.matching(NSPredicate(
+            format: "label == %@ AND identifier != %@", "Check in", "save.statusSelector"
+        )).element
         XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["continue to details"].exists)
         XCTAssertFalse(app.buttons["back"].exists)
@@ -2883,6 +2889,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(disclosure.isHittable)
 
         note.tap()
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 2) {
+            note.tap()
+        }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         note.typeText("Discard this draft")
         app.buttons["save.close"].tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
@@ -2893,7 +2903,7 @@ final class OnboardingUITests: XCTestCase {
 
         app.textFields["save.note"].tap()
         app.textFields["save.note"].typeText("Check-in mode draft")
-        let wannaChoice = app.buttons["wanna go"]
+        let wannaChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)
         wannaChoice.tap()
