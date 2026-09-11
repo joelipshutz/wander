@@ -930,6 +930,103 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     @MainActor
+    func testPeopleCountsDistinctBeenAndWannaPlacesPerOwner() {
+        let viewer = LocalProfile(localID: "viewer", handle: "viewer", displayName: "Viewer")
+        let owner = LocalProfile(localID: "owner", handle: "owner", displayName: "Owner")
+        let other = LocalProfile(localID: "other", handle: "other", displayName: "Other")
+        let cafe = LocalPlace(
+            localID: "cafe", canonicalName: "Neighborhood Cafe", category: "coffee",
+            latitude: 34, longitude: -118
+        )
+        let duplicateCafe = LocalPlace(
+            localID: "duplicate-cafe", canonicalName: "Neighborhood Cafe", category: "coffee",
+            latitude: 34.00001, longitude: -118.00001
+        )
+        let otherBranch = LocalPlace(
+            localID: "other-branch", canonicalName: "Neighborhood Cafe", category: "coffee",
+            latitude: 35, longitude: -119
+        )
+        let park = LocalPlace(
+            localID: "park", canonicalName: "Neighborhood Park", category: "park",
+            latitude: 34.1, longitude: -118.1
+        )
+        func save(_ id: String, ownerID: String, place: LocalPlace, status: PlaceStatus) -> LocalUserPlace {
+            LocalUserPlace(
+                localID: id, userID: ownerID, placeID: place.id,
+                status: status, visibility: .followers, sourceType: "manual"
+            )
+        }
+        let been = save("been", ownerID: owner.id, place: cafe, status: .been)
+        let saves = [
+            been,
+            save("duplicate-been", ownerID: owner.id, place: duplicateCafe, status: .been),
+            save("same-place-wanna", ownerID: owner.id, place: cafe, status: .wannaGo),
+            save("other-branch", ownerID: owner.id, place: otherBranch, status: .been),
+            save("park-wanna", ownerID: owner.id, place: park, status: .wannaGo),
+            save("other-owner", ownerID: other.id, place: cafe, status: .wannaGo)
+        ]
+        let visits = (1...3).map { index in
+            LocalPlaceVisit(localID: "repeat-\(index)", userPlaceID: been.id, visitedAt: .now)
+        }
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: viewer, profiles: [viewer, owner, other],
+            places: [cafe, duplicateCafe, otherBranch, park], userPlaces: saves,
+            placeAttributes: [], placeVisits: visits,
+            follows: [owner, other].map { profile in
+                LocalFollow(
+                    localID: "follow-\(profile.id)", followerUserID: viewer.id,
+                    followedUserID: profile.id, source: .profile
+                )
+            },
+            blocks: [], placeLists: [], placeListMembers: [], placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+
+        XCTAssertEqual(store.visiblePlaces(for: owner.id).count, 5)
+        XCTAssertEqual(store.visiblePlaceCountsByOwnerID(), [owner.id: 3, other.id: 1])
+
+        // Cached counts must stop including an owner immediately after a block.
+        store.block(userID: owner.id)
+        XCTAssertEqual(store.visiblePlaceCountsByOwnerID(), [other.id: 1])
+        store.block(userID: other.id)
+        XCTAssertTrue(store.visiblePlaceCountsByOwnerID().isEmpty)
+    }
+
+    @MainActor
+    func testPeopleCountsExcludeHiddenAndDeletedSavesBeforeGrouping() {
+        let viewer = LocalProfile(localID: "viewer", handle: "viewer", displayName: "Viewer")
+        let owner = LocalProfile(localID: "owner", handle: "owner", displayName: "Owner")
+        let places = (0..<4).map { index in
+            LocalPlace(
+                localID: "place-\(index)", canonicalName: "Place \(index)", category: "coffee",
+                latitude: 34, longitude: -118
+            )
+        }
+        let visibilities: [PlaceVisibility] = [.followers, .selfOnly, .mutuals, .followers]
+        let saves = places.enumerated().map { index, place in
+            LocalUserPlace(
+                localID: "save-\(index)", userID: owner.id, placeID: place.id,
+                status: .wannaGo, visibility: visibilities[index], sourceType: "manual",
+                deletedAt: index == 3 ? .now : nil
+            )
+        }
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: viewer, profiles: [viewer, owner], places: places, userPlaces: saves,
+            placeAttributes: [],
+            follows: [LocalFollow(
+                localID: "follow", followerUserID: viewer.id,
+                followedUserID: owner.id, source: .profile
+            )],
+            blocks: [], placeLists: [], placeListMembers: [], placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+
+        XCTAssertEqual(store.visiblePlaceCountsByOwnerID(), [owner.id: 1])
+        store.unfollow(userID: owner.id)
+        XCTAssertTrue(store.visiblePlaceCountsByOwnerID().isEmpty)
+    }
+
+    @MainActor
     func testVisiblePlaceProjectionPreservesFirstMatchForDuplicateEffectiveIDs() {
         let firstOwner = LocalProfile(
             localID: "first-owner",
