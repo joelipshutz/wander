@@ -134,6 +134,9 @@ export type ResolvedPlace = {
   locality: string | null;
   region: string | null;
   country: string | null;
+  // Additional provider-attested neighborhood/district names. Optional so
+  // older clients and cached responses keep the existing wire contract.
+  area_components?: string[];
   latitude: number;
   longitude: number;
   primary_type: string | null;
@@ -159,7 +162,13 @@ export type PublicFallbackReason =
 export type UnderstandResponse = {
   schema_version: 1;
   outcome: "ok" | "partial" | "no_places" | "fallback";
-  provider_path: "apify_gemini" | "apify_deterministic";
+  provider_path:
+    | "apify_gemini"
+    | "apify_deterministic"
+    | "brightdata_gemini"
+    | "brightdata_deterministic"
+    | "brightdata_apify_gemini"
+    | "brightdata_apify_deterministic";
   hints: PlaceHint[];
   media_count: number;
   model_attempt_count: number;

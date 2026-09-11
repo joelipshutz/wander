@@ -618,7 +618,18 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["map.locationEducation.allow"].tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+        let permissionAlert = springboard.alerts.firstMatch
+        XCTAssertTrue(permissionAlert.waitForExistence(timeout: 5))
+
+        // Complete the native request before teardown resets authorization.
+        // Terminating with an unanswered request can leave the next iteration
+        // in the denied state instead of exercising the first-request primer.
+        let deny = permissionAlert.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")
+        ).firstMatch
+        XCTAssertTrue(deny.waitForExistence(timeout: 2))
+        deny.tap()
+        XCTAssertTrue(permissionAlert.waitForNonExistence(timeout: 3))
     }
 
     private func launchMoreFilters(source: String = "friends", resetSeconds: String? = nil) -> XCUIApplication {

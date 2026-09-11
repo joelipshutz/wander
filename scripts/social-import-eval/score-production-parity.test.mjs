@@ -131,7 +131,7 @@ test("score-production-parity arguments require every explicit input and output"
 test("scores final hints by case ID with aliases, forbidden labels, and fallback cases", () => {
   const summary = buildProductionParityScore(fixture());
 
-  assert.equal(summary.scoringContract, "score-contract-v4");
+  assert.equal(summary.scoringContract, "score-contract-v5-review-rows");
   assert.deepEqual(summary.corpus, {
     sha256: stableHash(fixture().corpusText),
     caseCount: 2,
@@ -175,6 +175,26 @@ test("scores final hints by case ID with aliases, forbidden labels, and fallback
     "evidence_ids",
     "falsePredictions",
   ]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+test("duplicate review rows reduce precision and cannot pass the exact-set gate", () => {
+  const valid = fixture();
+  const results = JSON.parse(valid.resultsText);
+  results[0].grounding.hints.push({ name: "bart books" });
+  const summary = buildProductionParityScore({ ...valid, resultsText: JSON.stringify(results) });
+  const books = summary.cases.find((item) => item.caseID === "books-case");
+  assert.equal(books.score.requiredHitCount, 1);
+  assert.equal(books.score.predictionCount, 2);
+  assert.equal(books.score.duplicateNameRowCount, 1);
+  assert.equal(books.score.correctPredictionCount, 1);
+  assert.equal(books.score.falsePredictionCount, 1);
+  assert.equal(books.score.precision, 0.5);
+  assert.equal(books.score.recall, 1);
+  assert.equal(books.score.exactRequiredSet, false);
+  assert.equal(summary.metrics.duplicateNameRowCount, 1);
+  assert.equal(summary.metrics.predictionCount, 5);
+  assert.equal(summary.metrics.microPrecision, 0.6);
+  assert.equal(summary.metrics.exactSetRate, 0);
 });
 
 test("fails closed on corpus hash, manifest completion, result IDs, and old missing fallbacks", () => {
