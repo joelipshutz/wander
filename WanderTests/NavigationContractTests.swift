@@ -2674,6 +2674,37 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testMemberProfileScrollContentFitsViewport() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let host = UIHostingController(rootView:
+            ProfileDetailView(profileID: "user_maya")
+                .environmentObject(store)
+                .environmentObject(WanderBackend())
+                .environmentObject(AuthSessionStore(provider: PreviewAuthSessionProvider()))
+                .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 375, height: 812))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(500))
+        host.view.layoutIfNeeded()
+
+        func scrollViews(in view: UIView) -> [UIScrollView] {
+            (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+        }
+        let scrollView = try XCTUnwrap(scrollViews(in: host.view).first {
+            $0.contentSize.height > $0.bounds.height
+        })
+        XCTAssertLessThanOrEqual(scrollView.contentSize.width, scrollView.bounds.width,
+            "Vertical profile content must not create a horizontal scroll range")
+        XCTAssertFalse(scrollView.alwaysBounceHorizontal,
+            "A vertical profile must not enable horizontal rubber-banding")
+    }
+
+    @MainActor
     func testMemberProfileEntryPathsShareInteractiveEdgeBackNavigation() throws {
         let profileScreen = try String(
             contentsOf: projectRoot.appendingPathComponent(
