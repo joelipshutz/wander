@@ -1599,7 +1599,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(glassSurface.contains("shape.fill(.ultraThinMaterial)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
         XCTAssertTrue(glassSurface.contains("if reduceTransparency"))
-        XCTAssertTrue(glassSurface.contains("selected || accentAction ? brandMode.accent : brandMode.raisedBackground"))
+        XCTAssertTrue(glassSurface.contains("accentAction ? brandMode.accent : brandMode.raisedBackground"))
         XCTAssertTrue(glassSurface.contains("brandMode.prefersDarkInterface"))
         XCTAssertTrue(glassSurface.contains("brandMode.raisedBackground.opacity(0.82)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.colorSchemeContrast)"))
@@ -2671,6 +2671,37 @@ final class NavigationContractTests: XCTestCase {
             XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
             XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
         }
+    }
+
+    @MainActor
+    func testMemberProfileScrollContentFitsViewport() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let host = UIHostingController(rootView:
+            ProfileDetailView(profileID: "user_maya")
+                .environmentObject(store)
+                .environmentObject(WanderBackend())
+                .environmentObject(AuthSessionStore(provider: PreviewAuthSessionProvider()))
+                .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 375, height: 812))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(500))
+        host.view.layoutIfNeeded()
+
+        func scrollViews(in view: UIView) -> [UIScrollView] {
+            (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+        }
+        let scrollView = try XCTUnwrap(scrollViews(in: host.view).first {
+            $0.contentSize.height > $0.bounds.height
+        })
+        XCTAssertLessThanOrEqual(scrollView.contentSize.width, scrollView.bounds.width,
+            "Vertical profile content must not create a horizontal scroll range")
+        XCTAssertFalse(scrollView.alwaysBounceHorizontal,
+            "A vertical profile must not enable horizontal rubber-banding")
     }
 
     @MainActor
