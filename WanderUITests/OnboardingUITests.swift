@@ -400,7 +400,14 @@ final class OnboardingUITests: XCTestCase {
 
         locationContinue.tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+        let locationAlert = springboard.alerts.firstMatch
+        XCTAssertTrue(locationAlert.waitForExistence(timeout: 5))
+        let denyLocation = locationAlert.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Don’t Allow", "Don't Allow"])
+        ).firstMatch
+        XCTAssertTrue(denyLocation.exists)
+        denyLocation.tap()
+        XCTAssertTrue(locationAlert.waitForNonExistence(timeout: 5))
 
         app.terminate()
         app.resetAuthorizationStatus(for: .location)

@@ -5,7 +5,7 @@ import Foundation
 /// Prevents App Store screenshot capture from depending on device location,
 /// MapKit search results, or any signed-in account data.
 @MainActor
-final class StorefrontPlaceResolver: PlaceCandidateResolving {
+final class StorefrontPlaceResolver: PlaceCandidateResolving, PlaceRepository {
     static let candidates: [PlaceCandidate] = [
         PlaceCandidate(
             id: "storefront-place-sparrow-bakery",
@@ -80,5 +80,15 @@ final class StorefrontPlaceResolver: PlaceCandidateResolving {
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] {
         []
     }
+
+    // The fictional graph already lives in the local store. A successful empty
+    // remote response keeps captures offline without pretending a server failed.
+    func places(in viewport: MapViewport) async throws -> [VisiblePlace] { [] }
+
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] { [] }
+
+    func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] { [] }
+
+    func sharedPlace(id: String) async throws -> PlaceCandidate? { nil }
 }
 #endif

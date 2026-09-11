@@ -1,4 +1,4 @@
-Astir (formerly rec.me and Wander) is a trusted-people social map for remembering places and discovering them through people the user trusts. Use the dedicated review credentials supplied above; they must open a populated, fictional review account and must not require access to an external inbox, phone, or one-time code.
+Astir (formerly rec.me and Wander) is a trusted-people social map for remembering places and discovering them through people the user trusts. On the welcome screen, choose Log in, then Use a password. Enter the dedicated review credentials supplied above. This account opens a populated map without requiring access to an external inbox, phone, or one-time code.
 
 Core walkthrough:
 1. Map shows the review account's saved places and places shared by its trusted graph. Every pin represents a place, never another person's current location. The blue user-location marker is Apple's on-device MapKit marker for the signed-in user only. Select a place pin to open its profile.

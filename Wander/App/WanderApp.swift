@@ -251,7 +251,11 @@ struct WanderApp: App {
 
     @MainActor
     static func makeMapCaptureBackend() -> WanderBackend {
-        WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())
+        WanderBackend(
+            placeRepository: WanderRootView.resolvedFixtureMode() == .storefront
+                ? StorefrontPlaceResolver() : nil,
+            placePhotoRepository: MapCapturePlacePhotoRepository()
+        )
     }
     #endif
 
