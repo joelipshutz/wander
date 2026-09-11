@@ -2245,10 +2245,7 @@ struct MapScreen: View {
                     .accessibilityHidden(compactCardPhase == .hidden)
 
                 if !hasRevealedInitialMap {
-                    OnboardingLaunchView(
-                        message: "Loading your map…",
-                        isAnimationEnabled: isMapTabActive
-                    )
+                    OnboardingLaunchView(message: "Loading your map…")
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
