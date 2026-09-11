@@ -175,7 +175,7 @@ struct DiscoverScreen: View {
     private var successfulSearchSourceSummary: String {
         var sources = ["your people"]
         if canSearchRecmeCorpus, !communityPlaceSearchFailed {
-            sources.append("rec.me")
+            sources.append("Astir")
         }
         if canSearchExternalCorpus, !externalPlaceSearchFailed {
             sources.append("Apple Maps")
@@ -1311,7 +1311,7 @@ struct DiscoverScreen: View {
             DiscoverCommunityPlaceCard(
                 candidate: candidate,
                 source: .recme,
-                sourceLabel: "Saved on rec.me"
+                sourceLabel: "Saved on Astir"
             ) {
                 trackPlaceSearchSelection(result, in: candidates)
                 presentCandidateSaveFlow(candidate, sourceType: .socialSave)
@@ -1374,11 +1374,11 @@ struct DiscoverScreen: View {
 
     private var searchLoadingMessage: String {
         if isCommunityPlaceSearchLoading, isExternalPlaceSearchLoading {
-            return "Searching rec.me and Apple Maps…"
+            return "Searching Astir and Apple Maps…"
         }
         return isCommunityPlaceSearchLoading
-            ? "Searching all rec.me saves…"
-            : "Searching beyond rec.me on Apple Maps…"
+            ? "Searching all Astir saves…"
+            : "Searching beyond Astir on Apple Maps…"
     }
 
     private var searchFailureMessage: String {
@@ -1388,7 +1388,7 @@ struct DiscoverScreen: View {
     private var failedSearchSourceSummary: String {
         var sources: [String] = []
         if communityPlaceSearchFailed {
-            sources.append("rec.me")
+            sources.append("Astir")
         }
         if externalPlaceSearchFailed {
             sources.append("Apple Maps")
@@ -2502,9 +2502,9 @@ private struct DiscoverPlaceResultCard: View {
 
     private var recMeRating: String {
         guard let score = evidence.ratingScore ?? group.recommendedScore else {
-            return "rec.me rating · Not rated yet"
+            return "Astir rating · Not rated yet"
         }
-        return "rec.me rating · \(PlaceRating.averageDisplay(score))"
+        return "Astir rating · \(PlaceRating.averageDisplay(score))"
     }
 
     private var wannaActionTitle: String {
@@ -2848,14 +2848,14 @@ private enum DiscoverCommunityPlaceSource {
 
     var title: String {
         switch self {
-        case .recme: "Saved on rec.me"
+        case .recme: "Saved on Astir"
         case .appleMaps: "From Apple Maps"
         }
     }
 
     var accessibilitySource: String {
         switch self {
-        case .recme: "rec.me"
+        case .recme: "Astir"
         case .appleMaps: "Apple Maps"
         }
     }

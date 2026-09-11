@@ -173,7 +173,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
-        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
+        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage("))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -435,6 +435,18 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(theme.contains("GlassEffectContainer(spacing: mergeSpacing)"))
         XCTAssertTrue(astir.contains("struct AstirFloatingHeaderSurface<Content: View>"))
         XCTAssertTrue(astir.contains("struct AstirIconActionButton: View"))
+        let addControl = try sourceSection(astir, after: "struct AstirIconActionButton: View", before: "struct AstirEditorialSegmentedSwitch")
+        XCTAssertTrue(addControl.contains("var isAddAction = false"))
+        XCTAssertTrue(addControl.contains("accentAction: isAddAction"))
+        XCTAssertTrue(addControl.contains("interactive: isAddAction"))
+        let floatingSurface = try sourceSection(astir, after: "struct AstirFloatingHeaderSurface<Content: View>", before: "enum AstirFloatingHeaderBehavior")
+        XCTAssertTrue(floatingSurface.contains("mergeSpacing: CGFloat? = nil"))
+        XCTAssertTrue(floatingSurface.contains("if let mergeSpacing"))
+        XCTAssertFalse(floatingSurface.contains(".background("))
+        XCTAssertEqual(map.components(separatedBy: "isAddAction: true").count - 1, 1)
+        XCTAssertEqual(feed.components(separatedBy: "isAddAction: true").count - 1, 1)
+        XCTAssertEqual(lists.components(separatedBy: "isAddAction: true").count - 1, 1)
+
         XCTAssertTrue(astir.contains("struct AstirEditorialSegmentedSwitch: View"))
         XCTAssertTrue(astir.contains(".saturation(0)"))
         XCTAssertTrue(astir.contains("if dynamicTypeSize.isAccessibilitySize"))
@@ -442,7 +454,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(astir.contains("optionsRow(usesAccessibilityWidths: true)"))
         XCTAssertTrue(astir.contains("HStack(spacing: usesAccessibilityWidths ? 6 : 0)"))
         XCTAssertTrue(astir.contains("minWidth: usesAccessibilityWidths ? 148 : nil"))
-        XCTAssertTrue(astir.contains(".astirGlassSurface(cornerRadius: 17, castsShadow: true)"))
+        XCTAssertTrue(astir.contains(".astirGlassSurface(cornerRadius: 17, castsShadow: true, interactive: interactive)"))
 
         XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
@@ -538,13 +550,13 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
                 .components(separatedBy: "private struct FeedSectionHeading: View").first
         )
-        XCTAssertTrue(feedSearch.contains(".astirOutlinedSurface(castsShadow: true)"))
+        XCTAssertTrue(feedSearch.contains(".astirOutlinedSurface(castsShadow: true, interactive: true)"))
         XCTAssertFalse(feedSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
         let peopleSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedPeopleSearchField: View").last?
                 .components(separatedBy: "private struct FeedPeopleLoadingPanel: View").first
         )
-        XCTAssertTrue(peopleSearch.contains(".astirOutlinedSurface(castsShadow: true)"))
+        XCTAssertTrue(peopleSearch.contains(".astirOutlinedSurface(castsShadow: true, interactive: true)"))
         XCTAssertFalse(peopleSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
         XCTAssertFalse(lists.contains("WanderGlassHeader("))
@@ -554,7 +566,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(lists.contains("AstirEditorialSegmentedSwitch("))
     }
 
-    func testPrimaryFloatingGlassControlsStayIndependentWhileTrueGroupsKeepClusters() throws {
+    func testApprovedAddControlsShareGlassWhileOtherGroupsStayUnchanged() throws {
         let theme = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
         )
@@ -576,7 +588,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(theme.contains("GlassEffectContainer(spacing: mergeSpacing)"))
         XCTAssertTrue(theme.contains("if #available(iOS 26.0, *)"))
 
-        XCTAssertEqual(map.components(separatedBy: "WanderGlassButtonCluster").count - 1, 0)
+        XCTAssertEqual(map.components(separatedBy: "WanderGlassButtonCluster").count - 1, 1)
         XCTAssertTrue(map.contains("MapGlassAddButton"))
         XCTAssertTrue(map.contains("SearchBar("))
         XCTAssertTrue(map.contains("RecenterButton("))
@@ -974,7 +986,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.subject, "Joe Example")
-        XCTAssertEqual(content.message, "See @joe on rec.me")
+        XCTAssertEqual(content.message, "See @joe on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
         XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
         XCTAssertNil(WanderShareContent.profile(serverID: "   ", displayName: "Guest", handle: "you"))
@@ -1065,7 +1077,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20maya")
         XCTAssertEqual(content.items, [content.item, imageFileURL])
         XCTAssertEqual(content.subject, "Maya Chen's map")
-        XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user maya"))
     }
 
@@ -1126,7 +1138,7 @@ final class NavigationContractTests: XCTestCase {
             imageFileURL
         ])
         XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
-        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's rec.me map")
+        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's Astir map")
     }
 
     @MainActor
@@ -1136,17 +1148,17 @@ final class NavigationContractTests: XCTestCase {
             applicationActivities: nil
         )
         let source = WanderShareActivityItemSource(
-            message: "Explore Santa Monica on @maya's rec.me map",
+            message: "Explore Santa Monica on @maya's Astir map",
             subject: "Maya Chen's Santa Monica map"
         )
 
         XCTAssertEqual(
             source.activityViewControllerPlaceholderItem(controller) as? String,
-            "Explore Santa Monica on @maya's rec.me map"
+            "Explore Santa Monica on @maya's Astir map"
         )
         XCTAssertEqual(
             source.activityViewController(controller, itemForActivityType: nil) as? String,
-            "Explore Santa Monica on @maya's rec.me map"
+            "Explore Santa Monica on @maya's Astir map"
         )
         XCTAssertEqual(
             source.activityViewController(controller, subjectForActivityType: nil),
@@ -1584,10 +1596,10 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(glassSurface.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(glassSurface.contains(".glassEffect("))
-        XCTAssertTrue(glassSurface.contains(".background(.ultraThinMaterial, in: shape)"))
+        XCTAssertTrue(glassSurface.contains("shape.fill(.ultraThinMaterial)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
         XCTAssertTrue(glassSurface.contains("if reduceTransparency"))
-        XCTAssertTrue(glassSurface.contains("selected ? brandMode.accent : brandMode.raisedBackground"))
+        XCTAssertTrue(glassSurface.contains("accentAction ? brandMode.accent : brandMode.raisedBackground"))
         XCTAssertTrue(glassSurface.contains("brandMode.prefersDarkInterface"))
         XCTAssertTrue(glassSurface.contains("brandMode.raisedBackground.opacity(0.82)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.colorSchemeContrast)"))
@@ -1722,7 +1734,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("sectionTitle = Font.system(.title3, design: .serif).weight(.semibold)"))
         XCTAssertTrue(typography.contains("cardTitle = Font.custom(\"AvenirNext-DemiBold\", size: 16, relativeTo: .body)"))
 
-        XCTAssertTrue(lists.contains("AstirFloatingHeaderSurface {"))
+        XCTAssertTrue(lists.contains("AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {"))
         XCTAssertTrue(lists.contains(".font(AstirTypography.cardTitle)"))
         XCTAssertTrue(lists.contains(".font(AstirTypography.caption)"))
         XCTAssertFalse(lists.contains("WanderTypography.editorial"))
@@ -1932,7 +1944,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
         XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
         XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
-        XCTAssertTrue(profileSettings.contains("Restart rec.me to apply these changes"))
+        XCTAssertTrue(profileSettings.contains("Restart Astir to apply these changes"))
         XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
         XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
@@ -2621,7 +2633,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(plannedDateSection.contains("isShowingPlannedDatePicker = false"))
         XCTAssertTrue(
             plannedDateSection.contains(
-                "If notifications are on, rec.me will remind you three days before."
+                "If notifications are on, Astir will remind you three days before."
             )
         )
         XCTAssertFalse(plannedDateSection.contains("Someday is okay"))
@@ -4173,7 +4185,7 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct DiscoverPlaceResultCard: View",
             before: "private struct DiscoverResultActionButton: View"
         )
-        XCTAssertTrue(resultCard.contains("rec.me rating"))
+        XCTAssertTrue(resultCard.contains("Astir rating"))
         XCTAssertTrue(resultCard.contains("case nil:\n            \"Wanna go\""))
         XCTAssertTrue(resultCard.contains("case .wannaGo:\n            \"In Wanna\""))
         XCTAssertTrue(resultCard.contains("case .been:\n            \"Visited\""))
@@ -4256,7 +4268,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("includesSemanticProvider: semanticEnabled"))
         XCTAssertTrue(source.contains("backend.featureFlag(.semanticPlaceSearchV1"))
         XCTAssertTrue(source.contains("SemanticPlaceSearchAccessPolicy.isEnabled("))
-        XCTAssertTrue(source.contains("Saved on rec.me"))
+        XCTAssertTrue(source.contains("Saved on Astir"))
         XCTAssertTrue(source.contains("From Apple Maps"))
         XCTAssertTrue(source.contains("sourceType: .manual"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
@@ -5105,7 +5117,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(editorialSegmentedSwitch.contains("Rectangle()"))
         XCTAssertTrue(editorialSegmentedSwitch.contains(".frame(height: 1.5)"))
         XCTAssertTrue(editorialSegmentedSwitch.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(editorialSegmentedSwitch.contains(".astirGlassSurface(cornerRadius: 17, castsShadow: true)"))
+        XCTAssertTrue(editorialSegmentedSwitch.contains(".astirGlassSurface(cornerRadius: 17, castsShadow: true, interactive: interactive)"))
         XCTAssertTrue(mapPicker.contains("AstirEditorialSegmentedSwitch("))
         XCTAssertFalse(mapPicker.contains("WanderGlassButtonCluster"))
     }

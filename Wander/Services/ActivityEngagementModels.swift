@@ -210,13 +210,13 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     var shareMessage: String {
         switch ticketKind {
         case .checkIn:
-            "See \(actor.displayName)'s check-in at \(placeName) on rec.me"
+            "See \(actor.displayName)'s check-in at \(placeName) on Astir"
         case .wanna:
-            "See \(actor.displayName)'s Wanna pick \(placeName) on rec.me"
+            "See \(actor.displayName)'s Wanna pick \(placeName) on Astir"
         case .list:
-            "See \(actor.displayName)'s list activity for \(placeName) on rec.me"
+            "See \(actor.displayName)'s list activity for \(placeName) on Astir"
         case .saved:
-            "See \(actor.displayName)'s save for \(placeName) on rec.me"
+            "See \(actor.displayName)'s save for \(placeName) on Astir"
         }
     }
 }

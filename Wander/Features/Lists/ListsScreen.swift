@@ -423,7 +423,7 @@ struct ListsScreen: View {
             )
             .accessibilityIdentifier("lists.home.scroll")
 
-            AstirFloatingHeaderSurface {
+            AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {
                 HStack(spacing: WanderTheme.spacing2) {
                     scopeSwitch
 
@@ -431,6 +431,7 @@ struct ListsScreen: View {
                         systemImage: "plus",
                         accessibilityLabel: "New list",
                         accessibilityIdentifier: "lists.headerAdd",
+                        isAddAction: true,
                         action: {
                             walkthroughs.perform(.listsCreate)
                             walkthroughs.activate(.listEditor)
@@ -492,7 +493,8 @@ struct ListsScreen: View {
                     }
                     selectedScopeID = newValue
                 }
-            )
+            ),
+            interactive: true
         )
         .accessibilityLabel("List type")
         .walkthroughTarget(.listsScope)
@@ -1123,19 +1125,10 @@ private struct ListDetailScreen: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ListDetailHeaderToolbar {
                 if let listShareContent {
                     WanderShareButton(content: listShareContent) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.raisedBackground)
-                            .foregroundStyle(brandMode.primaryText)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(brandMode.border, lineWidth: 1)
-                            }
+                        ListDetailHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Share list")
                 }
@@ -1144,12 +1137,7 @@ private struct ListDetailScreen: View {
                     Button {
                         isAddingPlaces = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.accent)
-                            .foregroundStyle(brandMode.accentForeground)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        ListDetailHeaderActionLabel(systemImage: "plus")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
@@ -1159,16 +1147,7 @@ private struct ListDetailScreen: View {
                     Button {
                         onEdit(renderedList)
                     } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(width: 34, height: 34)
-                            .background(brandMode.raisedBackground)
-                            .foregroundStyle(brandMode.primaryText)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(brandMode.border, lineWidth: 1)
-                            }
+                        ListDetailHeaderActionLabel(systemImage: "pencil")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
@@ -1178,7 +1157,8 @@ private struct ListDetailScreen: View {
                     if isLeavingList {
                         ProgressView()
                             .tint(brandMode.accent)
-                            .frame(width: 34, height: 34)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .wanderGlassCapsule()
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
@@ -1196,16 +1176,7 @@ private struct ListDetailScreen: View {
                                 Label("Report list", systemImage: "exclamationmark.bubble")
                             }
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 14, weight: .black))
-                                .frame(width: 34, height: 34)
-                                .background(brandMode.raisedBackground)
-                                .foregroundStyle(brandMode.primaryText)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(brandMode.border, lineWidth: 1)
-                                }
+                            ListDetailHeaderActionLabel(systemImage: "ellipsis")
                         }
                         .accessibilityLabel("List actions")
                     }
@@ -4351,9 +4322,6 @@ private struct ListEditorDraft {
 }
 
 private struct ListEditorSheet: View {
-    @EnvironmentObject private var backend: WanderBackend
-    @State private var isAddingPlaces = false
-    @State private var removingPlaceIDs = Set<String>()
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -4446,7 +4414,7 @@ private struct ListEditorSheet: View {
                     }
 
                     if let sourceList {
-                        snapshotPlacesBlock(list: sourceList)
+                        snapshotCoverBlock(list: sourceList)
                     }
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
@@ -4524,18 +4492,6 @@ private struct ListEditorSheet: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
-        .sheet(isPresented: $isAddingPlaces) {
-            if let sourceList {
-                NavigationStack {
-                    ListAddPlacesScreen(list: sourceList) { _ in }
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { isAddingPlaces = false }
-                            }
-                        }
-                }
-            }
-        }
     }
 
     private var newListBackButton: some View {
@@ -4557,7 +4513,7 @@ private struct ListEditorSheet: View {
         return store.placeLists.first { ($0.id == id || $0.localID == id || $0.serverID == id) && $0.deletedAt == nil }
     }
 
-    private func snapshotPlacesBlock(list: LocalPlaceList) -> some View {
+    private func snapshotCoverBlock(list: LocalPlaceList) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             if list.snapshotCoverData != nil || list.snapshotCoverPath != nil {
                 ListSnapshotCover(data: list.snapshotCoverData, path: list.snapshotCoverPath)
@@ -4566,38 +4522,6 @@ private struct ListEditorSheet: View {
                 Text("Snapshot cover stays as captured.")
                     .font(.footnote)
                     .foregroundStyle(WanderTheme.textMuted.color)
-            }
-            HStack {
-                Text("places").font(.headline)
-                Spacer()
-                Button("Add places") { isAddingPlaces = true }
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityIdentifier("listEditor.addPlaces")
-            }
-            Text("Place changes save immediately.")
-                .font(.footnote)
-                .foregroundStyle(WanderTheme.textMuted.color)
-            ForEach(store.visiblePlaces(in: list)) { place in
-                HStack {
-                    Text(place.place.canonicalName)
-                    Spacer()
-                    Button {
-                        removingPlaceIDs.insert(place.id)
-                        Task {
-                            let removed = await store.removePlace(
-                                placeID: place.place.id, visiblePlaceID: place.id,
-                                from: list, backend: backend
-                            )
-                            removingPlaceIDs.remove(place.id)
-                            if !removed { contentErrorMessage = "Couldn’t remove this place. Try again." }
-                        }
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    }
-                    .disabled(!store.canManage(list) || removingPlaceIDs.contains(place.id))
-                    .accessibilityLabel("Remove \(place.place.canonicalName) from list")
-                }
             }
         }
     }
@@ -6072,5 +5996,46 @@ private struct ListSnapshotCover: View {
             guard !Task.isCancelled else { return }
             downloadedData = result
         }
+    }
+}
+
+// MARK: - List detail header controls
+
+struct ListDetailHeaderActionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 16, weight: .black))
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .foregroundStyle(brandMode.primaryText)
+            .contentShape(Circle())
+            .wanderGlassCapsule()
+    }
+}
+
+/// The toolbar owns placement; each action owns its glass surface.
+struct ListDetailHeaderToolbar<Content: View>: ToolbarContent {
+    @ViewBuilder let content: () -> Content
+
+    var body: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarTrailing) {
+                actions
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarTrailing) {
+                actions
+            }
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            content()
+        }
+        .buttonStyle(.plain)
     }
 }

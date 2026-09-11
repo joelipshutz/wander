@@ -2,32 +2,55 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-/// Plain bullets identify Lists actions; the paper outline is reserved for bottom navigation.
+/// Plain bullets identify Lists actions; the paper glyph is reserved for bottom navigation.
 /// Bookmark symbols remain reserved for Wanna and saved lenses.
 enum PlaceListSymbol {
     static let systemImage = "list.bullet"
 
-    /// A cached template image lets the native tab bar own selection tint and accessibility.
-    /// The slim border and three evenly spaced rows match the approved paper icon.
+    /// The exploration shell supplies its own tint; the native tab bar uses the original-color variants.
     @MainActor
-    static let paperTabImage: UIImage = {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 28))
-        return renderer.image { _ in
-            UIColor.black.setFill()
-            let paper = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 22, height: 26), cornerRadius: 2.4)
-            paper.append(UIBezierPath(roundedRect: CGRect(x: 2.4, y: 2.4, width: 19.2, height: 23.2), cornerRadius: 1))
-            paper.usesEvenOddFillRule = true
-            paper.fill()
+    static let paperTabImage = renderPaper(fill: .black, detail: nil).withRenderingMode(.alwaysTemplate)
 
-            for y: CGFloat in [7, 14, 21] {
-                UIBezierPath(ovalIn: CGRect(x: 4.6, y: y - 1, width: 2, height: 2)).fill()
+    /// Original colors keep selected Signal identical across native tab-bar appearances.
+    @MainActor
+    static func paperTabImage(isSelected: Bool, isDark: Bool) -> UIImage {
+        if isSelected { return isDark ? selectedDark : selectedLight }
+        return isDark ? unselectedDark : unselectedLight
+    }
+
+    @MainActor private static let selectedDark = renderPaper(
+        fill: UIColor(AstirTheme.signal.color), detail: UIColor(AstirTheme.ink.color)
+    )
+    @MainActor private static let selectedLight = renderPaper(
+        fill: UIColor(AstirTheme.signal.color), detail: UIColor(AstirTheme.paper.color)
+    )
+    @MainActor private static let unselectedDark = renderPaper(
+        fill: UIColor(AstirTheme.paper.color), detail: UIColor(AstirTheme.ink.color)
+    )
+    @MainActor private static let unselectedLight = renderPaper(
+        fill: UIColor(AstirTheme.ink.color), detail: UIColor(AstirTheme.paper.color)
+    )
+
+    @MainActor
+    private static func renderPaper(fill: UIColor, detail: UIColor?) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 25))
+        return renderer.image { context in
+            fill.setFill()
+            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 20, height: 23), cornerRadius: 2.4).fill()
+            if let detail {
+                detail.setFill()
+            } else {
+                context.cgContext.setBlendMode(.clear)
+            }
+            for y: CGFloat in [6.25, 12.5, 18.75] {
+                UIBezierPath(ovalIn: CGRect(x: 3.6, y: y - 1, width: 2, height: 2)).fill()
                 UIBezierPath(
-                    roundedRect: CGRect(x: 8.6, y: y - 0.7, width: 10.8, height: 1.4),
+                    roundedRect: CGRect(x: 7.2, y: y - 0.7, width: 11.2, height: 1.4),
                     cornerRadius: 0.7
                 ).fill()
             }
-        }.withRenderingMode(.alwaysTemplate)
-    }()
+        }.withRenderingMode(.alwaysOriginal)
+    }
 }
 
 struct WanderColorToken: Equatable {

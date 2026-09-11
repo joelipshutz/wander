@@ -58,6 +58,7 @@ struct ProfileSettingsHome: View {
             .offset(x: settingsDragOffset)
             .contentShape(Rectangle())
             .simultaneousGesture(interactiveDismissGesture(containerWidth: geometry.size.width))
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.screen")
         }
         .tint(brandMode.accent)
@@ -353,7 +354,7 @@ struct ProfileSettingsHome: View {
 
     private var featureFlagsSection: some View {
         Section {
-            Text("Device overrides are saved for this account on this device. Active behavior changes only after you fully quit and reopen rec.me.")
+            Text("Device overrides are saved for this account on this device. Active behavior changes only after you fully quit and reopen Astir.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -369,7 +370,7 @@ struct ProfileSettingsHome: View {
             }
 
             if hasPendingFeatureFlagRestart {
-                Label("Restart rec.me to apply these changes", systemImage: "arrow.clockwise")
+                Label("Restart Astir to apply these changes", systemImage: "arrow.clockwise")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.accentText)
                     .accessibilityIdentifier("settings.flags.restartRequired")
@@ -1025,8 +1026,8 @@ struct ProfilePrivacyTrustScreen: View {
                         Text("Apple Calendar")
                             .font(.system(size: 15, weight: .black))
                         Text(calendarReservations.hasFullAccess
-                             ? "Connected. rec.me can recognize restaurant reservations on this iPhone."
-                             : "Connect to let rec.me look for restaurant reservations on this iPhone.")
+                             ? "Connected. Astir can recognize restaurant reservations on this iPhone."
+                             : "Connect to let Astir look for restaurant reservations on this iPhone.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
@@ -1054,7 +1055,7 @@ struct ProfilePrivacyTrustScreen: View {
                 .disabled(isConnectingCalendar || !auth.isSignedIn)
                 .accessibilityIdentifier("settings.privacy.calendar.action")
 
-                Text("rec.me never uploads or stores raw calendar titles, notes, guests, URLs, or addresses—only the matched restaurant and reservation time.")
+                Text("Astir never uploads or stores raw calendar titles, notes, guests, URLs, or addresses—only the matched restaurant and reservation time.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
 

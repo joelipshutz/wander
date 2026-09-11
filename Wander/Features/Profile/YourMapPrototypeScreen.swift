@@ -1057,7 +1057,7 @@ private struct YourMapPrototypeSharePreview: View {
                 WanderShareSheet(content: .place(
                     item: createdLink.url,
                     name: lensTitle,
-                    message: "Explore my saved places on rec.me"
+                    message: "Explore my saved places on Astir"
                 ))
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -1441,6 +1441,7 @@ struct YourMapGeographyCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .strokeBorder(brandMode.border)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("yourMap.prototype.citiesCountries")
         .onChange(of: canExpand) { _, canExpand in
             if !canExpand { isExpanded = false }

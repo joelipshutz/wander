@@ -150,7 +150,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         )
     }
 
-    func testSnapshotCreatesListAndOpensEditablePlaces() {
+    func testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderResetWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
@@ -190,14 +190,17 @@ final class YourMapPrototypeUITests: XCTestCase {
         }
         XCTAssertTrue(cover.isHittable)
         capture("REC-413 Static snapshot cover")
-        let addPlaces = app.buttons["listEditor.addPlaces"]
-        for _ in 0..<3 where !addPlaces.isHittable || addPlaces.frame.maxY > app.frame.maxY - 140 {
+        XCTAssertFalse(app.buttons["listEditor.addPlaces"].exists)
+        XCTAssertFalse(app.staticTexts["Place changes save immediately."].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "Remove ", " from list")).count, 0)
+        let collaborators = app.staticTexts["collaborators"]
+        for _ in 0..<3 where !collaborators.isHittable {
             app.swipeUp()
         }
-        XCTAssertTrue(addPlaces.isHittable)
-        capture("REC-413 Snapshot list editor")
-        addPlaces.tap()
-        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        XCTAssertTrue(collaborators.isHittable)
+        XCTAssertTrue(app.buttons["Save changes"].exists)
+        XCTAssertTrue(app.buttons["Delete List"].exists)
+        capture("REC-480 Snapshot list editor without duplicate places")
     }
 
     private func capture(_ name: String) {

@@ -950,7 +950,7 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(copy.title, "2 source scans need a retry")
-        XCTAssertEqual(copy.body, "Open rec.me to retry 2 incomplete source scans.")
+        XCTAssertEqual(copy.body, "Open Astir to retry 2 incomplete source scans.")
     }
 
     func testWannaAutoSavesEverySelectedConfidentMatch() {

@@ -681,7 +681,7 @@ struct AddScreen: View {
         .allowsHitTesting(!isWalkthroughAutomatingPlace)
         .accessibilityHint(
             isWalkthroughAutomatingPlace
-                ? "rec.me is choosing a nearby park for this demonstration"
+                ? "Astir is choosing a nearby park for this demonstration"
                 : ""
         )
     }
@@ -1908,6 +1908,7 @@ private struct AddSearchField: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit(submit)
+                .accessibilityIdentifier("add.searchField")
 
             if !query.isEmpty {
                 Button {

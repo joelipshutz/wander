@@ -21,7 +21,7 @@ enum InviteSurface: Equatable {
         case .sharedVisit:
             "invite someone from contacts"
         case .feedPeople:
-            "invite people to rec.me"
+            "invite people to Astir"
         case .listCollaborator:
             "invite a collaborator"
         }
@@ -30,11 +30,11 @@ enum InviteSurface: Equatable {
     var entrySubtitle: String {
         switch self {
         case .sharedVisit:
-            "Invite them to rec.me, then connect after they join."
+            "Invite them to Astir, then connect after they join."
         case .feedPeople:
             "Bring the people whose taste you trust."
         case .listCollaborator:
-            "Invite someone to rec.me, then add them to this list."
+            "Invite someone to Astir, then add them to this list."
         }
     }
 
@@ -42,17 +42,17 @@ enum InviteSurface: Equatable {
         switch self {
         case .sharedVisit(let placeName):
             if let placeName, !placeName.isEmpty {
-                "Join me on rec.me so we can connect around my check-in at \(placeName)."
+                "Join me on Astir so we can connect around my check-in at \(placeName)."
             } else {
-                "Join me on rec.me so we can connect around our check-ins."
+                "Join me on Astir so we can connect around our check-ins."
             }
         case .feedPeople:
-            "Join me on rec.me so we can share places worth remembering."
+            "Join me on Astir so we can share places worth remembering."
         case .listCollaborator(let listName):
             if let listName, !listName.isEmpty {
-                "Join me on rec.me so I can add you as a collaborator on \(listName)."
+                "Join me on Astir so I can add you as a collaborator on \(listName)."
             } else {
-                "Join me on rec.me so I can add you as a list collaborator."
+                "Join me on Astir so I can add you as a list collaborator."
             }
         }
     }
@@ -77,7 +77,7 @@ enum InviteSurface: Equatable {
                 "Who were you with?"
             }
         case .feedPeople:
-            "rec.me is better with people you actually know."
+            "Astir is better with people you actually know."
         case .listCollaborator(let listName):
             if let listName, !listName.isEmpty {
                 "Invite people to help build \(listName)."
@@ -125,7 +125,7 @@ enum ContactInviteWalkthroughContent {
     static let selectionGoal = 5
 
     static let inviteProse =
-        "Hey sharing an invite to rec.me a social app for tracking places. "
+        "Hey sharing an invite to Astir a social app for tracking places. "
         + "This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. "
         + "Excited to have you on and make sure to use my link. "
         + "Heads up this invite expires in 24 hours."

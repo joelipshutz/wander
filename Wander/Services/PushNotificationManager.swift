@@ -621,7 +621,7 @@ final class PushNotificationManager: ObservableObject {
                 authSession: authSession
             )
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
-            lastErrorMessage = "rec.me could not finish notification setup. Try again."
+            lastErrorMessage = "Astir could not finish notification setup. Try again."
             return nil
         }
 
@@ -643,7 +643,7 @@ final class PushNotificationManager: ObservableObject {
                 authSession: authSession
             )
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
-            lastErrorMessage = "rec.me could not finish notification setup. Try again."
+            lastErrorMessage = "Astir could not finish notification setup. Try again."
             #if DEBUG
             WanderDebugLog.remote.error("transactional push enrollment failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
@@ -1229,10 +1229,10 @@ final class PushNotificationManager: ObservableObject {
             content.title = sourceRetryCount == 1
                 ? "Your source scan needs a retry"
                 : "\(sourceRetryCount) source scans need a retry"
-            content.body = "Open rec.me to retry the incomplete source scan."
+            content.body = "Open Astir to retry the incomplete source scan."
         } else if sourceRetryCount > 0 {
             content.title = "Your import is ready"
-            content.body = "\(matchedCount) matched. Open rec.me to review and retry the incomplete source scan."
+            content.body = "\(matchedCount) matched. Open Astir to review and retry the incomplete source scan."
         } else if needsReviewCount > 0 {
             content.title = "Your import is ready"
             content.body = "\(matchedCount) matched. \(needsReviewCount) need a quick look."

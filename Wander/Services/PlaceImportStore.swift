@@ -2798,7 +2798,7 @@ final class PlaceImportStore: ObservableObject {
             )
             persistenceError = nil
         } catch {
-            persistenceError = "Import progress could not be saved. Keep rec.me open and try again."
+            persistenceError = "Import progress could not be saved. Keep Astir open and try again."
         }
     }
 

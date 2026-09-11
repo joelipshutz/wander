@@ -93,7 +93,7 @@ private struct WanderQuickCaptureWidget: Widget {
             WanderQuickCaptureWidgetView(entry: entry)
         }
         .configurationDisplayName("I'm here now")
-        .description("Open rec.me to save the place where you are.")
+        .description("Open Astir to save the place where you are.")
         .supportedFamilies([
             .systemSmall,
             .accessoryCircular,
@@ -133,7 +133,7 @@ private struct WanderQuickCaptureWidgetView: View {
             compactSmallView
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens rec.me to save your current place.")
+        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
     }
 
     private var regularSmallView: some View {
@@ -223,7 +223,7 @@ private struct WanderQuickCaptureWidgetView: View {
                         .padding(16)
 
                     WanderCircularWidgetArcText(
-                        text: "rec.me",
+                        text: "Astir",
                         placement: .top,
                         radius: ringBandRadius
                     )
@@ -241,7 +241,7 @@ private struct WanderQuickCaptureWidgetView: View {
             .widgetAccentable()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens rec.me to save your current place.")
+        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
     }
 
     private var rectangularView: some View {
@@ -254,7 +254,7 @@ private struct WanderQuickCaptureWidgetView: View {
                 Text("I'm here now")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
-                Text("Save in rec.me")
+                Text("Save in Astir")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -262,12 +262,12 @@ private struct WanderQuickCaptureWidgetView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens rec.me to save your current place.")
+        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
     }
 
     private var inlineView: some View {
         Label("I'm here now", systemImage: "location.fill")
-            .accessibilityLabel("I'm here now. Opens rec.me.")
+            .accessibilityLabel("I'm here now. Opens Astir.")
     }
 }
 
@@ -340,7 +340,7 @@ private struct WanderQuickSearchWidget: Widget {
         ) { entry in
             WanderQuickSearchWidgetView(entry: entry)
         }
-        .configurationDisplayName("Search rec.me")
+        .configurationDisplayName("Search Astir")
         .description("Jump to the map and start a place search.")
         .supportedFamilies([
             .systemMedium,
@@ -384,7 +384,7 @@ private struct WanderQuickSearchWidgetView: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(WanderWidgetPalette.terracotta)
 
-                Text("Search in rec.me")
+                Text("Search in Astir")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(WanderWidgetPalette.textInk)
                     .lineLimit(1)
@@ -409,7 +409,7 @@ private struct WanderQuickSearchWidgetView: View {
                 .foregroundStyle(WanderWidgetPalette.textMuted)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Search rec.me. Opens the map with search ready.")
+        .accessibilityLabel("Search Astir. Opens the map with search ready.")
     }
 
     private var accessoryView: some View {
@@ -419,7 +419,7 @@ private struct WanderQuickSearchWidgetView: View {
                 .widgetAccentable()
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Search rec.me")
+                Text("Search Astir")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
                 Text("Opens the map")
@@ -430,7 +430,7 @@ private struct WanderQuickSearchWidgetView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Search rec.me. Opens the map with search ready.")
+        .accessibilityLabel("Search Astir. Opens the map with search ready.")
     }
 }
 
@@ -471,7 +471,7 @@ private struct WanderActivityCalendarWidgetView: View {
         }
         .widgetURL(WanderWidgetConstants.profileCalendarURL)
         .accessibilityElement(children: .contain)
-        .accessibilityHint("Opens your calendar in rec.me.")
+        .accessibilityHint("Opens your calendar in Astir.")
     }
 
     private func calendarContent(availableHeight: CGFloat) -> some View {
@@ -559,7 +559,7 @@ private struct WanderActivityCalendarWidgetView: View {
             Spacer(minLength: 2)
 
             if model.needsRefresh {
-                Text("Open rec.me to update")
+                Text("Open Astir to update")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(WanderWidgetPalette.textMuted)
                     .lineLimit(1)
@@ -569,7 +569,7 @@ private struct WanderActivityCalendarWidgetView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             model.needsRefresh
-                ? "Calendar has not synced yet. Open rec.me to update."
+                ? "Calendar has not synced yet. Open Astir to update."
                 : "Calendar legend: filled is been."
         )
     }
@@ -795,7 +795,7 @@ private struct WanderCalendarDisplayModel {
 
 private struct WanderWidgetBrand: View {
     var body: some View {
-        Text("rec.me")
+        Text("Astir")
             .font(.caption.weight(.black))
             .fontDesign(.rounded)
             .foregroundStyle(WanderWidgetPalette.textInk)

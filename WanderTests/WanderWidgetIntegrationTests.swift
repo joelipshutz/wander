@@ -689,7 +689,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains(".accessoryCircular"))
         XCTAssertTrue(widgetSource.contains(".accessoryRectangular"))
         XCTAssertTrue(widgetSource.contains("WanderCircularWidgetArcText("))
-        XCTAssertTrue(widgetSource.contains("text: \"rec.me\""))
+        XCTAssertTrue(widgetSource.contains("text: \"Astir\""))
         XCTAssertTrue(widgetSource.contains("Image(systemName: \"plus\")"))
         XCTAssertTrue(widgetSource.contains("text: \"CHECK-IN\""))
         XCTAssertTrue(
