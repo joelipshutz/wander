@@ -1,6 +1,50 @@
 import SwiftUI
 import UIKit
 
+private struct RestartPlaceImportKey: EnvironmentKey {
+    static let defaultValue: @MainActor @Sendable () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var restartPlaceImport: @MainActor @Sendable () -> Void {
+        get { self[RestartPlaceImportKey.self] }
+        set { self[RestartPlaceImportKey.self] = newValue }
+    }
+}
+
+/// Coverage counts source places, never candidate alternatives or scan markers.
+/// Retain saved/receipt-only successes so saving cannot turn a good report into
+/// a failure. The denominator is the known place inventory, not a guessed total.
+struct PlaceImportReportCoverage {
+    enum Footer: Equatable { case none, failed, partial }
+    let totalCount: Int
+    let matchedCount: Int
+    let footer: Footer
+
+    init(batch: PlaceImportBatch, items: [PlaceImportItem]) {
+        let scoped = items.filter { $0.batchID == batch.id }
+        let places = scoped.filter { !$0.isSourceRetry }
+        let sourceMarkers = Set(scoped.filter(\.isSourceRetry).map(\.id))
+        let receipts = (batch.receipt?.entries ?? []).filter { !sourceMarkers.contains($0.itemID) }
+        let knownIDs = Set(places.map(\.id)).union(receipts.map(\.itemID))
+        let matchedIDs = Set(places.filter {
+            !$0.candidates.isEmpty || $0.state == .saved || $0.duplicateUserPlaceID != nil
+        }.map(\.id)).union(receipts.filter { [.added, .existing].contains($0.outcome) }.map(\.itemID))
+        totalCount = knownIDs.count
+        matchedCount = matchedIDs.count
+        let hasRecovery = scoped.contains {
+            [.needsHelp, .failed].contains($0.state) && ($0.isSourceRetry || $0.candidates.isEmpty)
+        } || (batch.receipt?.sourceRetryCount ?? 0) > 0
+        if batch.state == .cancelled || scoped.contains(where: { [.queued, .resolving].contains($0.state) }) {
+            footer = .none
+        } else if matchedCount == 0 {
+            footer = hasRecovery || totalCount > 0 ? .failed : .none
+        } else {
+            footer = Double(matchedCount) / Double(max(1, totalCount)) < 0.5 ? .partial : .none
+        }
+    }
+}
+
 private struct ImportListSelectionRequest: Identifiable {
     let id = UUID()
     let itemIDs: [String]
@@ -20,6 +64,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.restartPlaceImport) private var restartPlaceImport
     @State private var expandedMatchItemIDs: Set<String> = []
     @State private var expandedDetailItemIDs: Set<String> = []
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
@@ -60,10 +105,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                     )
                 } else {
                     if !displayItems.isEmpty { reviewHeader }
-                    if !displayItems.isEmpty { applyToAllControls }
-
                     if !readyItems.isEmpty {
-                        importSection("Ready to add") {
+                        importSection("Ready to add", showsBulkControls: true) {
                             ForEach(readyItems) { item in
                                 resolvedPlaceCard(item)
                             }
@@ -71,21 +114,14 @@ struct PlaceImportCanonicalReviewScreen: View {
                     }
 
                     if !possibleMatchItems.isEmpty {
-                        importSection("Possible matches") {
+                        importSection("Possible matches", showsBulkControls: readyItems.isEmpty) {
                             ForEach(possibleMatchItems) { item in
                                 possibleMatchesCard(item)
                             }
                         }
                     }
-                    if !recoveryItems.isEmpty {
-                        ForEach(scopedBatches) { batch in
-                            let failed = recoveryItems.filter { $0.batchID == batch.id }
-                            if !failed.isEmpty {
-                                ImportRetryContent {
-                                    for item in failed { importStore.retry(itemID: item.id) }
-                                }
-                            }
-                        }
+                    ForEach(scopedBatches) { batch in
+                        recoveryFooter(batch)
                     }
                 }
             }
@@ -171,7 +207,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private var reviewHeader: some View {
-        Text("\(displayItems.count) places matched and ready")
+        Text("\(displayItems.count) \(displayItems.count == 1 ? "place" : "places") matched and ready")
             .font(AstirTypography.sheetTitle)
             .foregroundStyle(brandMode.primaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -182,7 +218,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             Text("Matching your places")
                 .font(AstirTypography.sheetTitle)
             ImportMatchingProgressBar(progress: matchingProgress, reduceMotion: reduceMotion)
-                .frame(height: 6)
+                .frame(height: 20)
                 .accessibilityHidden(true)
             Text(matchingProgress.label)
                 .font(AstirTypography.body)
@@ -201,29 +237,26 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private var applyToAllControls: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            Spacer(minLength: 0)
-            VStack(spacing: WanderTheme.spacing1) {
-                Text("Apply to all")
-                    .font(AstirTypography.label)
-                    .foregroundStyle(brandMode.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .center)
+        VStack(spacing: WanderTheme.spacing1) {
+            Text("Apply to all")
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                HStack(spacing: WanderTheme.spacing2) {
-                    masterStatusControl(.wannaGo, label: "Wanna")
-                    masterStatusControl(.been, label: "Check In")
-                    VStack(spacing: 3) {
-                        listButton(items: scopedItems.filter { !$0.isSourceRetry })
-                        Text("List").font(AstirTypography.metadata)
-                    }
+            HStack(spacing: WanderTheme.spacing2) {
+                masterStatusControl(.wannaGo, label: "Wanna")
+                masterStatusControl(.been, label: "Check In")
+                VStack(spacing: 3) {
+                    listButton(items: scopedItems.filter { !$0.isSourceRetry })
+                    Text("List").font(AstirTypography.metadata)
                 }
             }
-            .frame(width: 148)
-            .disabled(isCommitting)
-            // Match the card's inner trailing inset so the master controls
-            // align with the three actions on each place row.
-            .padding(.trailing, WanderTheme.spacing3)
         }
+        .frame(width: 148)
+        .disabled(isCommitting)
+        // Match the card's inner trailing inset so the master controls
+        // align with the three actions on each place row.
+        .padding(.trailing, WanderTheme.spacing3)
     }
 
     private var pendingItemIDs: Set<String> {
@@ -246,16 +279,79 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private func importSection<Content: View>(
         _ title: String,
+        showsBulkControls: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(title)
-                .font(AstirTypography.sectionTitle)
-                .foregroundStyle(brandMode.primaryText)
-                .accessibilityAddTraits(.isHeader)
+            if showsBulkControls {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
+                        sectionTitle(title).fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        applyToAllControls
+                    }
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        sectionTitle(title)
+                        applyToAllControls.frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+            } else {
+                sectionTitle(title)
+            }
             VStack(spacing: WanderTheme.spacing3) {
                 content()
             }
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(AstirTypography.sectionTitle)
+            .foregroundStyle(brandMode.primaryText)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder
+    private func recoveryFooter(_ batch: PlaceImportBatch) -> some View {
+        let coverage = PlaceImportReportCoverage(batch: batch, items: scopedItems)
+        switch coverage.footer {
+        case .none:
+            EmptyView()
+        case .failed:
+            ImportRetryContent {
+                for item in recoveryItems where item.batchID == batch.id {
+                    importStore.retry(itemID: item.id)
+                }
+            }
+        case .partial:
+            VStack(spacing: WanderTheme.spacing3) {
+                Text("We weren't able to resolve all places")
+                    .font(AstirTypography.sheetTitle)
+                    .foregroundStyle(brandMode.primaryText)
+                    .multilineTextAlignment(.center)
+                Text("\(coverage.matchedCount) of \(coverage.totalCount) places have matches. You can still save them.")
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .multilineTextAlignment(.center)
+                if let sourceURL = scopedItems.first(where: {
+                    $0.batchID == batch.id && $0.seed.sourceURLString != nil
+                })?.seed.sourceURLString {
+                    Button {
+                        UIPasteboard.general.string = sourceURL
+                        restartPlaceImport()
+                    } label: {
+                        Label("Try again", systemImage: "arrow.clockwise")
+                            .font(AstirTypography.control)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .foregroundStyle(brandMode.accentForeground)
+                            .background(brandMode.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Copies the source link and opens Import places. Saved places stay safe.")
+                    .accessibilityIdentifier("import.try-again")
+                }
+            }
+            .padding(.vertical, WanderTheme.spacing3)
         }
     }
 
@@ -279,23 +375,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             }
-            rowStatusControls(item)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-
-            Button {
-                toggleDetails(item, candidate: item.selectedCandidate)
-            } label: {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Text("Add details")
-                    Image(systemName: "chevron.down")
-                        .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
-                }
-                .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accentText)
-                .frame(minHeight: WanderTheme.tapMinimum)
-            }
-            .buttonStyle(.plain)
-            .disabled(item.selectedCandidate == nil)
+            cardActions(item)
 
             if detailDrafts[item.id] != nil {
                 inlineDetails(item)
@@ -327,9 +407,6 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            rowStatusControls(item)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-
             Button {
                 withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
                     if expandedMatchItemIDs.contains(item.id) {
@@ -376,20 +453,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            Button {
-                toggleDetails(item, candidate: item.selectedCandidate)
-            } label: {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Text("Add details")
-                    Image(systemName: "chevron.down")
-                        .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
-                }
-                .font(AstirTypography.label)
-                .foregroundStyle(brandMode.accentText)
-                .frame(minHeight: WanderTheme.tapMinimum)
-            }
-            .buttonStyle(.plain)
-            .disabled(item.selectedCandidate == nil)
+            cardActions(item)
 
             if detailDrafts[item.id] != nil {
                 inlineDetails(item)
@@ -454,6 +518,38 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(candidate.name), \(isSelected ? "selected" : "not selected")")
+    }
+
+    private func cardActions(_ item: PlaceImportItem) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: WanderTheme.spacing2) {
+                detailsButton(item).fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                rowStatusControls(item)
+            }
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                detailsButton(item)
+                rowStatusControls(item).frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private func detailsButton(_ item: PlaceImportItem) -> some View {
+        Button {
+            toggleDetails(item, candidate: item.selectedCandidate)
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Text("Add details")
+                Image(systemName: "chevron.down")
+                    .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
+            }
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accentText)
+            .frame(minHeight: WanderTheme.tapMinimum)
+        }
+        .buttonStyle(.plain)
+        .disabled(item.selectedCandidate == nil)
+        .accessibilityIdentifier("import.details.\(item.id)")
     }
 
     private func rowStatusControls(_ item: PlaceImportItem) -> some View {
@@ -896,34 +992,46 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 }
 
-private struct ImportMatchingProgressBar: View {
+struct ImportMatchingProgressBar: View {
     @Environment(\.astirBrandMode) private var brandMode
     let progress: PlaceImportMatchingProgress
     let reduceMotion: Bool
-    @State private var animates = false
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(brandMode.border)
-                if progress.isDiscovering {
-                    Capsule()
-                        .fill(brandMode.accent)
-                        .frame(width: proxy.size.width * 0.3)
-                        .offset(x: animates && !reduceMotion ? proxy.size.width * 0.7 : 0)
-                        .animation(
-                            reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
-                            value: animates
-                        )
-                        .onAppear { animates = true }
-                } else {
-                    Capsule()
-                        .fill(brandMode.accent)
-                        .frame(width: proxy.size.width * progress.fraction)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress.fraction)
+                // A shallow stone plinth: neutral until actual work completes.
+                // Mask the full-width surface so the texture never stretches
+                // or travels backwards like the old indeterminate capsule.
+                plinth(color: Color.gray)
+                plinth(color: brandMode.accent)
+                    .mask(alignment: .leading) {
+                        Rectangle().frame(width: proxy.size.width * progress.fraction)
+                    }
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress.fraction)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        }
+        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func plinth(color: Color) -> some View {
+        Rectangle()
+            .fill(color.gradient)
+            .overlay {
+                Canvas { context, size in
+                    // Fixed, low-contrast stone grain; no random re-layout or
+                    // repeating animation, including with Reduce Motion on.
+                    for index in 0..<220 {
+                        let x = Double((index * 73) % 997) / 997 * size.width
+                        let y = Double((index * 37) % 101) / 101 * size.height
+                        let mark = CGRect(x: x, y: y, width: 1 + Double(index % 4), height: 1 + Double(index % 3))
+                        context.fill(Path(ellipseIn: mark), with: .color(index.isMultiple(of: 2) ? .white.opacity(0.10) : .black.opacity(0.09)))
+                    }
                 }
             }
-        }
+            .overlay(alignment: .top) { Color.white.opacity(0.18).frame(height: 1) }
+            .overlay(alignment: .bottom) { Color.black.opacity(0.16).frame(height: 2) }
     }
 }
 

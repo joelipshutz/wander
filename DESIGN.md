@@ -50,7 +50,10 @@ across production surfaces by this provisional grammar:
   Avenir Next; condensed sans is reserved for short metadata.
 - Header elements float independently as Liquid Glass components. Blur stays
   localized to each logo, search field, tab control, or action; never add a
-  shared material field or put the full header group inside one glass block.
+  shared material field or put the full header group inside one glass block,
+  except for the approved REC-482 profile transition: the header starts clear,
+  then a light, feathered blur reveals from the screen top behind the pinned
+  original-size photo and name. It retracts fully on return scrolling.
 - Search and action fields use soft continuous rectangles, not hard boxes. Tabs
   use an editorial underline treatment rather than filled chips. Map source
   filters are the exception: they use compact individual glass chips because

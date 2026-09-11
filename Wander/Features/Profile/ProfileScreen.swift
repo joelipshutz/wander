@@ -2626,6 +2626,11 @@ private struct SavedPlacesListScreen: View {
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
+        .fullPageBackSwipe(
+            isEnabled: usesInlineNavigationHeader && selectedPlace == nil
+                && !showsInCommonMap && placeSaveFlow == nil,
+            onBack: { dismiss() }
+        )
     }
 
     private var navigationTitle: String {
@@ -2778,7 +2783,7 @@ private struct SavedPlacesListScreen: View {
             compactFilterDropdown(
                 title: "type",
                 systemImage: "square.grid.2x2.fill",
-                allTitle: "all types",
+                allTitle: "All types",
                 values: categories,
                 selectedValue: $selectedCategory,
                 displayTitle: { WanderPlaceCategory.broadCategory(for: $0) }
@@ -2786,7 +2791,7 @@ private struct SavedPlacesListScreen: View {
             compactFilterDropdown(
                 title: "tags",
                 systemImage: "tag.fill",
-                allTitle: "all tags",
+                allTitle: "All tags",
                 values: metadataTags,
                 selectedValue: $selectedMetadataTag,
                 displayTitle: { $0 }
@@ -2937,7 +2942,7 @@ private struct SavedPlacesListScreen: View {
                     Image(systemName: "tag.fill")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(brandMode.secondaryText)
-                    Text(selectedMetadataTag ?? "all tags")
+                    Text(selectedMetadataTag ?? "All tags")
                         .font(AstirTypography.control)
                         .foregroundStyle(selectedMetadataTag == nil ? brandMode.secondaryText : brandMode.primaryText)
                         .lineLimit(1)
@@ -2976,7 +2981,7 @@ private struct SavedPlacesListScreen: View {
 
                     ScrollView {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                            tagOption(title: "all tags", value: nil)
+                            tagOption(title: "All tags", value: nil)
 
                             if filteredMetadataTags.isEmpty {
                                 Text(metadataTags.isEmpty ? "no tags saved yet" : "no matching tags")
@@ -3316,7 +3321,7 @@ private struct GraphPersonListRow: View {
     let onFollowAction: () -> Void
 
     private var actionTitle: String {
-        relationship == .nonFollower ? "follow" : "unfollow"
+        relationship == .nonFollower ? "Follow" : "Unfollow"
     }
 
     var body: some View {
@@ -3350,12 +3355,12 @@ private struct GraphPersonListRow: View {
 
             Button(actionTitle, action: onFollowAction)
                 .font(AstirTypography.label)
-                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accentText)
+                .foregroundStyle(actionTitle == "Unfollow" ? WanderTheme.stateError.color : brandMode.accentText)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 34)
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(actionTitle == "unfollow" ? WanderTheme.stateError.color : brandMode.accent)
+                        .fill(actionTitle == "Unfollow" ? WanderTheme.stateError.color : brandMode.accent)
                         .frame(height: 1.5)
                 }
         }

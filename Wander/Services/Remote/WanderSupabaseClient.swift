@@ -610,9 +610,9 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         if name == "social-import-understand" {
-            // The server caps the complete authenticated Apify + Gemini +
-            // Google Places run at 135 seconds. URLSession's 60-second default
-            // would otherwise abandon paid work before the bounded response.
+            // The server caps the authenticated acquisition + Gemini + Google
+            // Places run at 135 seconds. URLSession's 60-second default would
+            // otherwise abandon paid work before the bounded response.
             request.timeoutInterval = Self.socialImportUnderstandingTimeout
         }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -286,6 +286,9 @@ struct ProfileOwnerHome: View {
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
+    @Environment(\.resolvedProfileHeaderMotion) private var profileHeaderMotion
+    private var isProfileMotionActive: Bool { profileHeaderMotion != nil }
+
     private let profileAvatarSize: CGFloat = 86
 
     var body: some View {
@@ -345,9 +348,18 @@ struct ProfileOwnerHome: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing12)
+            // Keep the vertical scroll content within its viewport even when a
+            // child proposes a wider ideal size (for example, the calendar).
+            .containerRelativeFrame(.horizontal)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollIndicators(.hidden)
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
+        .profileHeaderMotionOverlay(
+            avatar: profileAvatarControl,
+            name: profile.displayName,
+            navigation: profileNavigationRow
+        )
         .task(id: calendarScrollRequestID) {
             guard let calendarScrollRequestID else { return }
 
@@ -391,7 +403,15 @@ struct ProfileOwnerHome: View {
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            profileNavigationRow
+            if isProfileMotionActive {
+                // Reserve the original toolbar space without duplicating live
+                // buttons or their sheet/popover presentation bindings.
+                Color.clear
+                    .frame(height: WanderTheme.tapMinimum)
+                    .profileMotionSource(.navigation)
+            } else {
+                profileNavigationRow
+            }
             profileIdentityBlock
         }
     }
@@ -403,11 +423,13 @@ struct ProfileOwnerHome: View {
                     ProfileBackButton(action: backAction)
                 }
 
-                Text("@\(profile.handle)")
-                    .font(AstirTypography.sectionTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                if !isProfileMotionActive {
+                    Text("@\(profile.handle)")
+                        .font(AstirTypography.sectionTitle)
+                        .foregroundStyle(brandMode.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
 
                 Spacer(minLength: 0)
 
@@ -466,20 +488,8 @@ struct ProfileOwnerHome: View {
     private var profileIdentityBlock: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                Group {
-                    if mode.isOwner {
-                        Button(action: avatarAction) {
-                            profileAvatar
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!hasProfilePhoto)
-                        .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
-                        .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
-                    } else {
-                        profileAvatar
-                            .accessibilityLabel("\(profile.displayName)'s profile photo")
-                    }
-                }
+                profileAvatarControl
+                .profileMotionSource(.avatar)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(profile.displayName)
@@ -487,6 +497,7 @@ struct ProfileOwnerHome: View {
                         .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .profileMotionSource(.name)
 
                     HStack(spacing: 0) {
                         ProfileGraphCountButton(value: followerCount, label: "Followers") {
@@ -507,6 +518,11 @@ struct ProfileOwnerHome: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
+                if isProfileMotionActive {
+                    Text("@\(profile.handle)")
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.primaryText)
+                }
                 if let homeArea = normalized(profile.homeArea) {
                     Text(homeArea)
                         .font(AstirTypography.control)
@@ -518,11 +534,13 @@ struct ProfileOwnerHome: View {
                         .font(AstirTypography.body)
                         .foregroundStyle(brandMode.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                        .profileMotionSource(.bio)
                 }
 
                 Text(memberSinceText)
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
+                    .profileMotionSource(normalized(profile.bio) == nil ? .bio : nil)
             }
 
             if let relationship = mode.relationship {
@@ -543,6 +561,22 @@ struct ProfileOwnerHome: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var profileAvatarControl: some View {
+        if mode.isOwner {
+            Button(action: avatarAction) { profileAvatar }
+                .buttonStyle(.plain)
+                .disabled(!hasProfilePhoto)
+                .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
+                .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
+                .accessibilityIdentifier("profile.header.photo")
+        } else {
+            profileAvatar
+                .accessibilityLabel("\(profile.displayName)'s profile photo")
+                .accessibilityIdentifier("profile.header.photo")
         }
     }
 
@@ -1463,10 +1497,9 @@ struct ProfileCalendarDayCell: View {
                 if isToday {
                     Text("NOW")
                         .font(AstirTypography.metadata)
-                        // The badge is decorative and the accessibility label
-                        // already announces "today". Keep oversized text from
-                        // spilling into and obscuring the date marker below it.
-                        .dynamicTypeSize(.large)
+                        // This decorative badge shares a fixed-size date cell.
+                        // VoiceOver announces "today" through the cell's label.
+                        .dynamicTypeSize(...DynamicTypeSize.large)
                         .foregroundStyle(brandMode.accentText)
                         .padding(.horizontal, 5)
                         .frame(height: 13)

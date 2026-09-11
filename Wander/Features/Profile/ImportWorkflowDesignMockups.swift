@@ -5,7 +5,7 @@ import UIKit
 /// Captures the production import views with deterministic data and the same
 /// photo repository used by the map screenshot harness.
 enum ImportImplementationCapturePage: String, CaseIterable {
-    case review, details, history, processing, share, recovery, report
+    case review, details, history, processing, share, recovery, report, partial, progress
 
     static func resolved() -> Self? {
         allCases.first {
@@ -22,6 +22,7 @@ struct ImportImplementationCaptureRoot: View {
     @StateObject private var walkthroughs = FirstVisitWalkthroughCoordinator(isEnabled: false)
     @StateObject private var productUpsells = ProductUpsellCoordinator()
     @StateObject private var importStore: PlaceImportStore
+    @State private var showsImportEntry = false
 
     init(page: ImportImplementationCapturePage) {
         self.page = page
@@ -71,17 +72,50 @@ struct ImportImplementationCaptureRoot: View {
                 return item
             }
         }
+        if page == .report {
+            // A successful partial scan can retain an internal retry marker.
+            // It must not make the entire report look like a failed link.
+            var retry = snapshot.items[0]
+            retry = PlaceImportItem(id: "report-source-retry", batchID: "capture-instagram", source: .instagram,
+                kind: .sourceRetry, seed: retry.seed, state: .needsHelp)
+            snapshot.items.append(retry)
+        }
+        if page == .partial {
+            let seed = snapshot.items[0].seed
+            let candidate = snapshot.items[0].candidates[0]
+            snapshot.items = (0..<17).map { index in
+                PlaceImportItem(id: "partial-place-\(index)", batchID: "capture-instagram", source: .instagram,
+                    seed: seed, state: index == 0 ? .ready : .needsHelp,
+                    candidates: index == 0 ? [candidate] : [],
+                    selectedCandidateID: index == 0 ? candidate.id : nil)
+            }
+        }
         try? persistence.save(snapshot)
         _importStore = StateObject(wrappedValue: PlaceImportStore(persistence: persistence))
     }
 
     var body: some View {
         NavigationStack {
-            if page == .share {
+            if page == .progress {
+                VStack(spacing: 28) {
+                    Text("Matching your places").font(AstirTypography.sheetTitle)
+                    ForEach([0, 5, 13, 17], id: \.self) { completed in
+                        VStack(spacing: 8) {
+                            ImportMatchingProgressBar(progress: .init(totalCount: 17, completedCount: completed,
+                                resolvedCount: completed, isDiscovering: completed == 0), reduceMotion: true)
+                                .frame(height: 20)
+                            Text("Resolved \(completed) out of 17 places").font(AstirTypography.body)
+                        }
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .astirScreen()
+            } else if page == .share {
                 ImportShareHostCaptureView()
             } else if page == .history {
                 PlaceImportHistoryScreen(importStore: importStore)
-            } else if page == .report || page == .recovery {
+            } else if page == .report || page == .recovery || page == .partial {
                 PlaceImportHistoryDestination(importStore: importStore, batchID: "capture-instagram")
             } else {
                 PlaceImportCanonicalReviewScreen(
@@ -96,6 +130,16 @@ struct ImportImplementationCaptureRoot: View {
         .environmentObject(walkthroughs)
         .environmentObject(productUpsells)
         .astirAdaptiveBrandMode()
+        .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-WanderImportDarkAppearance") ? .dark : .light)
+        .environment(\.restartPlaceImport, { showsImportEntry = true })
+        .sheet(isPresented: $showsImportEntry) {
+            NavigationStack {
+                PlaceImportHubScreen(importStore: importStore,
+                    completionAction: { _ in showsImportEntry = false },
+                    inboxAction: { showsImportEntry = false },
+                    cancelAction: { showsImportEntry = false })
+            }
+        }
     }
 
     private static var snapshot: PlaceImportSnapshot {

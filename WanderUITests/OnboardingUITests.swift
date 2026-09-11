@@ -81,6 +81,67 @@ final class ImportFormRefinementUITests: XCTestCase {
         keepScreenshot("Import report — inline review")
     }
 
+    func testSuccessfulReportDoesNotShowSourceRetryFooter() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Saved (1)"].waitForExistence(timeout: 15))
+        for _ in 0..<12 { app.swipeUp() }
+        XCTAssertFalse(app.buttons["import.retry"].exists)
+        XCTAssertFalse(app.staticTexts["Oops that link didn't work"].exists)
+        XCTAssertFalse(app.buttons["import.try-again"].exists)
+        keepScreenshot("Import report — successful partial scan has no failure footer")
+    }
+
+    func testLowCoverageReturnsToImportEntryWithCopiedLink() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationPartial"]
+        app.launch()
+        let tryAgain = app.buttons["import.try-again"]
+        for _ in 0..<5 where !tryAgain.isHittable { app.swipeUp() }
+        XCTAssertTrue(tryAgain.isHittable)
+        XCTAssertTrue(app.staticTexts["We weren't able to resolve all places"].exists)
+        XCTAssertFalse(app.buttons["import.retry"].exists)
+        keepScreenshot("Import report — low coverage warning")
+        tryAgain.tap()
+        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 5))
+        app.buttons["Paste from clipboard"].tap()
+        XCTAssertEqual(app.textFields["import.input"].value as? String, "https://example.com/recme-import-ui-fixture")
+        keepScreenshot("Import report — try again returns to entry with source copied")
+    }
+
+    func testImportActionsShareCompactBottomRow() {
+        let app = XCUIApplication()
+        // This assertion covers the standard-text horizontal layout. At
+        // accessibility sizes, ViewThatFits intentionally stacks the actions.
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReview",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        app.launch()
+        let wanna = app.buttons["import.wanna.capture-instagram-0"]
+        for _ in 0..<5 where !wanna.isHittable || wanna.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        let details = app.buttons["import.details.capture-instagram-0"]
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertTrue(details.isHittable)
+        // Text/chevron accessibility bounds differ from the circular action's
+        // layout bounds by 3pt on iOS 26.5. Screenshots confirm one centered row.
+        XCTAssertEqual(wanna.frame.midY, details.frame.midY, accuracy: 4)
+        XCTAssertGreaterThanOrEqual(wanna.frame.height, 44)
+        XCTAssertLessThan(details.frame.maxX, wanna.frame.minX)
+        keepScreenshot("Import report — compact bottom actions")
+    }
+
+    func testPlinthProgressStagesInLightAndDark() {
+        let app = XCUIApplication()
+        for appearance in ["Dark", "Light"] {
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationProgress"]
+            if appearance == "Dark" { app.launchArguments.append("-WanderImportDarkAppearance") }
+            app.launch()
+            XCTAssertTrue(app.staticTexts["Resolved 17 out of 17 places"].waitForExistence(timeout: 15))
+            keepScreenshot("Import plinth — \(appearance) — zero, partial, and complete")
+            app.terminate()
+        }
+    }
+
     func testSingleInlineSaveLeavesOtherMatchesAvailable() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
@@ -186,8 +247,17 @@ final class ImportFormRefinementUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationDetails"]
         app.launch()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
         let more = app.buttons["Hide more options"].firstMatch
-        for _ in 0..<5 where !more.isHittable || more.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        // The center of this long form contains an interactive rating slider.
+        // Scroll from the page margin so the gesture cannot adjust the rating
+        // instead of revealing the fields below it.
+        for _ in 0..<8 where !more.isHittable || more.frame.maxY > app.frame.height - 120 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.78))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.98, dy: 0.30)
+                ))
+        }
         XCTAssertTrue(more.isHittable)
         keepScreenshot("Import report — inline details")
     }
@@ -1465,8 +1535,8 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(app.staticTexts["Hotchkiss Park"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.buttons["check in"]
-        let wannaGoChoice = app.buttons["wanna go"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
+        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertEqual(checkInChoice.value as? String, "not selected")
         XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
         XCTAssertFalse(app.buttons["continue to details"].exists)
@@ -1528,7 +1598,11 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
                 .waitForExistence(timeout: 16)
         )
-        XCTAssertFalse(app.buttons["Check in"].isEnabled)
+        XCTAssertFalse(
+            app.buttons.matching(NSPredicate(
+                format: "label == %@ AND identifier != %@", "Check in", "save.statusSelector"
+            )).element.isEnabled
+        )
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
@@ -1601,8 +1675,8 @@ final class OnboardingUITests: XCTestCase {
                 .waitForExistence(timeout: 14)
         )
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.buttons["check in"]
-        let wannaGoChoice = app.buttons["wanna go"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
+        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertEqual(checkInChoice.value as? String, "not selected")
         XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
         XCTAssertFalse(app.buttons["continue to details"].exists)
@@ -2821,12 +2895,14 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
         saveButton.tap()
 
-        let checkInChoice = app.buttons["check in"]
+        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
         let statusSelector = app.staticTexts["save.statusSelector"]
         XCTAssertTrue(statusSelector.exists)
         XCTAssertTrue(checkInChoice.isSelected)
-        let finalCheckIn = app.buttons["Check in"]
+        let finalCheckIn = app.buttons.matching(NSPredicate(
+            format: "label == %@ AND identifier != %@", "Check in", "save.statusSelector"
+        )).element
         XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["continue to details"].exists)
         XCTAssertFalse(app.buttons["back"].exists)
@@ -2845,6 +2921,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(disclosure.isHittable)
 
         note.tap()
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 2) {
+            note.tap()
+        }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         note.typeText("Discard this draft")
         app.buttons["save.close"].tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
@@ -2855,7 +2935,7 @@ final class OnboardingUITests: XCTestCase {
 
         app.textFields["save.note"].tap()
         app.textFields["save.note"].typeText("Check-in mode draft")
-        let wannaChoice = app.buttons["wanna go"]
+        let wannaChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)
         wannaChoice.tap()

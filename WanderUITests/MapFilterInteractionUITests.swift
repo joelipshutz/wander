@@ -229,6 +229,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         selectFirstPin.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 3))
         XCTAssertTrue(activePin.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.alerts.firstMatch.exists, "The offscreen preloaded place page must not expose a modal alert")
+        XCTAssertFalse(app.scrollViews["place-profile.scroll"].isHittable, "The preloaded page must not intercept touches before it is opened")
 
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.46)).tap()
         XCTAssertTrue(card.waitForNonExistence(timeout: 3))
@@ -616,7 +618,18 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["map.locationEducation.allow"].tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+        let permissionAlert = springboard.alerts.firstMatch
+        XCTAssertTrue(permissionAlert.waitForExistence(timeout: 5))
+
+        // Complete the native request before teardown resets authorization.
+        // Terminating with an unanswered request can leave the next iteration
+        // in the denied state instead of exercising the first-request primer.
+        let deny = permissionAlert.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")
+        ).firstMatch
+        XCTAssertTrue(deny.waitForExistence(timeout: 2))
+        deny.tap()
+        XCTAssertTrue(permissionAlert.waitForNonExistence(timeout: 3))
     }
 
     private func launchMoreFilters(source: String = "friends", resetSeconds: String? = nil) -> XCUIApplication {

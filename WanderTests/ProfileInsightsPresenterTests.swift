@@ -10,7 +10,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             for day in [3, 13, 30] {
                 let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: day)))
                 for visitCount in [0, 1, 3] {
-                    for typeSize: DynamicTypeSize in [.large, .accessibility3] {
+                    for typeSize in DynamicTypeSize.allCases {
                         let summary = ProfileCalendarDaySummary(
                             date: date, visitCount: visitCount, wannaCount: 0,
                             visitPlaceIDs: [], wannaPlaceIDs: []
@@ -30,6 +30,14 @@ final class ProfileInsightsPresenterTests: XCTestCase {
 
                         let ordinary = try render(isToday: false)
                         let today = try render(isToday: true)
+                        if width == 44, day == 13, visitCount == 1, typeSize == .accessibility3 {
+                            for (name, image) in [("ordinary", ordinary), ("today", today)] {
+                                let attachment = XCTAttachment(image: image)
+                                attachment.name = "calendar-\(name)-accessibility3"
+                                attachment.lifetime = .keepAlways
+                                add(attachment)
+                            }
+                        }
                         XCTAssertEqual(today.size, ordinary.size, "NOW must not change the calendar row height")
                         XCTAssertNotEqual(today.pngData(), ordinary.pngData(), "The NOW badge must remain visible")
 

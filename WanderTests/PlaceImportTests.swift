@@ -398,6 +398,106 @@ final class PlaceImportUnreadReviewTests: XCTestCase {
     }
 }
 
+final class PlaceImportReportCoverageTests: XCTestCase {
+    func testSeventeenMatchedPlacesAndSourceRetryDoNotShowFailure() {
+        var items = (0..<17).map { item($0, candidates: $0 < 13 ? 1 : 4) }
+        items.append(retry())
+        let result = coverage(items)
+        XCTAssertEqual(result.matchedCount, 17)
+        XCTAssertEqual(result.totalCount, 17)
+        XCTAssertEqual(result.footer, .none)
+    }
+
+    func testLowCoverageAndStrictFiftyPercentBoundary() {
+        for (matched, total, expected) in [(0, 17, PlaceImportReportCoverage.Footer.failed),
+                                           (1, 17, .partial), (8, 17, .partial),
+                                           (9, 17, .none), (1, 2, .none), (17, 17, .none)] {
+            let items = (0..<total).map { item($0, candidates: $0 < matched ? 1 : 0) }
+            XCTAssertEqual(coverage(items).footer, expected, "\(matched)/\(total)")
+        }
+    }
+
+    func testAlternativeCandidatesAndDeselectionDoNotInflateOrEraseCoverage() {
+        var match = item(0, candidates: 5)
+        match.selectedCandidateID = nil
+        match.selectedCandidateIDsRaw = []
+        let result = coverage([match, item(1, candidates: 0), item(2, candidates: 0)])
+        XCTAssertEqual(result.matchedCount, 1)
+        XCTAssertEqual(result.footer, .partial)
+    }
+
+    func testSavedAndReceiptRowsRemainSuccessWithoutDoubleCounting() {
+        var saved = item(0, candidates: 0)
+        saved.state = .saved
+        var batch = batch()
+        batch.receipt = PlaceImportReceipt(batchID: batch.id, sourceName: nil, entries: [
+            PlaceImportReceiptEntry(itemID: saved.id, displayName: "Saved", displayArea: nil,
+                status: .wannaGo, outcome: .added, userPlaceID: "saved-id"),
+            PlaceImportReceiptEntry(itemID: "receipt-only", displayName: "Saved earlier", displayArea: nil,
+                status: .wannaGo, outcome: .added, userPlaceID: "earlier-id")
+        ], destinationListID: nil)
+        let result = PlaceImportReportCoverage(batch: batch, items: [saved, retry()])
+        XCTAssertEqual(result.matchedCount, 2)
+        XCTAssertEqual(result.totalCount, 2)
+        XCTAssertEqual(result.footer, .none)
+    }
+
+    func testCoverageIsPerPostAndExcludesSourceMarkers() {
+        var otherPost = item(1, candidates: 1)
+        otherPost = PlaceImportItem(batchID: "another-post", source: .instagram,
+            seed: otherPost.seed, state: .ready, candidates: otherPost.candidates)
+        let result = coverage([item(0, candidates: 0), otherPost, retry()])
+        XCTAssertEqual(result.totalCount, 1)
+        XCTAssertEqual(result.footer, .failed)
+        XCTAssertEqual(coverage([retry()]).footer, .failed)
+    }
+
+    func testFailedReceiptWithoutAMatchDoesNotInflateCoverage() {
+        var batch = batch()
+        let unresolved = item(1, candidates: 0)
+        batch.receipt = PlaceImportReceipt(batchID: batch.id, sourceName: nil, entries: [
+            PlaceImportReceiptEntry(itemID: unresolved.id, displayName: "Unresolved", displayArea: nil,
+                status: nil, outcome: .failed, userPlaceID: nil)
+        ], destinationListID: nil)
+        let result = PlaceImportReportCoverage(batch: batch, items: [item(0, candidates: 1), unresolved, item(2, candidates: 0)])
+        XCTAssertEqual(result.matchedCount, 1)
+        XCTAssertEqual(result.footer, .partial)
+    }
+
+    func testProcessingCancelledAndEmptyReportsDoNotShowFailurePrematurely() {
+        var pending = item(0, candidates: 0)
+        pending.state = .resolving
+        XCTAssertEqual(coverage([pending]).footer, .none)
+        var cancelled = batch()
+        cancelled.state = .cancelled
+        XCTAssertEqual(PlaceImportReportCoverage(batch: cancelled, items: [retry()]).footer, .none)
+        XCTAssertEqual(coverage([]).footer, .none)
+    }
+
+    private func batch() -> PlaceImportBatch {
+        PlaceImportBatch(id: "coverage", source: .instagram, sourceName: nil, state: .ready, totalCount: 0)
+    }
+
+    private func coverage(_ items: [PlaceImportItem]) -> PlaceImportReportCoverage {
+        PlaceImportReportCoverage(batch: batch(), items: items)
+    }
+
+    private func item(_ index: Int, candidates count: Int) -> PlaceImportItem {
+        let candidates = (0..<count).map { placeImportCandidate(name: "Place \(index) option \($0)") }
+        return PlaceImportItem(id: "coverage-\(index)", batchID: "coverage", source: .instagram,
+            seed: PlaceImportSeed(rawText: "Place \(index)", nameHint: "Place \(index)", areaHint: nil,
+                sourceURLString: "https://example.com/post", sourceLine: index),
+            state: count > 1 ? .ambiguous : count == 1 ? .ready : .needsHelp,
+            candidates: candidates, selectedCandidateID: candidates.first?.id)
+    }
+
+    private func retry() -> PlaceImportItem {
+        var result = item(99, candidates: 0)
+        result.kind = .sourceRetry
+        return result
+    }
+}
+
 final class PlaceImportMatchingProgressTests: XCTestCase {
     func testSourceURLIsNotMisrepresentedAsOnePlace() {
         let progress = PlaceImportMatchingProgress.summarize(items: [item(name: nil, state: .resolving)])
@@ -2663,6 +2763,38 @@ final class PlaceImportStoreTests: XCTestCase {
             items.compactMap { $0.selectedCandidate?.sourceProviderPlaceID },
             ["mapkit-branch-one", "mapkit-branch-two"]
         )
+    }
+
+    func testSocialDedupDoesNotTreatLAAreaAsLaosCountryEvidence() async throws {
+        let sourceURL = "https://www.instagram.com/p/ambiguous-country-code/"
+        let entries = [("LA", "US"), ("Laos", "LA")].enumerated().map { index, location in
+            let candidate = PlaceCandidate(
+                id: "country-candidate-\(index)", name: "Garden Cafe", category: "cafe",
+                address: nil, locality: nil, region: nil, country: location.1,
+                latitude: index == 0 ? 34.0522 : 17.9757,
+                longitude: index == 0 ? -118.2437 : 102.6331,
+                sourceProvider: "mapkit", sourceProviderPlaceID: "country-provider-\(index)",
+                confidence: 0.7
+            )
+            return PlaceImportResolvedEntry(
+                seed: PlaceImportSeed(
+                    rawText: sourceURL, nameHint: candidate.name, areaHint: location.0,
+                    sourceURLString: sourceURL, sourceLine: index + 1
+                ),
+                candidates: [candidate], selectedCandidateID: nil,
+                helpMessage: "Choose the matching venue from this post."
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: SequencedPlaceImportResolver(resolutions: [.expandedResolved(entries, sourceName: nil)])
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        XCTAssertEqual(store.items(for: batchID).count, 2)
+        XCTAssertEqual(store.items(for: batchID).compactMap { $0.candidates.first?.country }, ["US", "LA"])
     }
 
     func testSocialDedupKeepsDistinctAmbiguousVenuesWithTheSameLeadingCandidate() async throws {
@@ -5897,7 +6029,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected one unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.count, 1)
-        XCTAssertTrue(entries[0].helpMessage?.contains("needs your help matching") == true)
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
@@ -5939,8 +6071,32 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected clean unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe", "Cafe", "Cafe"])
-        XCTAssertTrue(entries[0].helpMessage?.contains("needs your help matching") == true)
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
+    }
+
+    func testSocialLAHintSurvivesCountryFilteringAndSelectsLosAngelesVenue() async throws {
+        let candidate = placeImportCandidate(name: "Summit Archive")
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: ScriptedDevicePlaceResolver(results: [.candidates([candidate])]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(),
+            socialUnderstandingRepository: FakeSocialImportUnderstandingRepository(
+                result: socialUnderstandingResult(
+                    hint: SocialPlaceSearchHint(name: "Summit Archive", area: "LA", evidence: .itineraryPhrase)
+                )
+            )
+        )
+        let sourceURL = "https://www.instagram.com/reel/la-country-code-regression/"
+        let resolution = try await resolver.resolve(
+            seed: PlaceImportSeed(
+                rawText: sourceURL, nameHint: nil, areaHint: nil,
+                sourceURLString: sourceURL, sourceLine: 1
+            ),
+            source: .instagram
+        )
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
 
     func testPlausibleSoleSocialCandidateRemainsAvailableForReview() async throws {
@@ -8206,6 +8362,44 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         XCTAssertEqual(match.candidates.map(\.id), [sanDiego.id])
         XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testFreeTextAreaAbbreviationsDoNotBecomeCountryFilters() {
+        let candidate = placeImportCandidate(name: "Garden Cafe")
+        for area in ["LA", "la", "L.A.", "CA", "IN", "ME", "DE", "SG", "FR", "VN"] {
+            XCTAssertEqual(
+                SocialImportCountry.candidatesCompatibleWithExactCountry([candidate], areaHint: area),
+                [candidate],
+                "Free-text area \(area) must not be treated as a structured provider country code"
+            )
+        }
+        XCTAssertEqual(SocialImportCountry.isoCode(for: "LA"), "LA")
+        XCTAssertEqual(SocialImportCountry.isoCode(for: "CA"), "CA")
+    }
+
+    func testExplicitLaosCountryNameStillFiltersStructuredProviderCountryCodes() {
+        let local = placeImportCandidate(name: "Garden Cafe")
+        let laos = placeImportCandidate(
+            name: "Garden Cafe", locality: "Vientiane", region: "Vientiane", country: "LA",
+            latitude: 17.9757, longitude: 102.6331
+        )
+        XCTAssertEqual(
+            SocialImportCountry.candidatesCompatibleWithExactCountry([local, laos], areaHint: "Laos"),
+            [laos]
+        )
+        let match = PlaceImportCandidateMatcher.match(
+            [local, laos], nameHint: "Garden Cafe", areaHint: "Laos",
+            selectionPolicy: .socialGroundedArea
+        )
+        XCTAssertEqual(match.candidates.map(\.id), [laos.id])
+        XCTAssertEqual(match.selectedCandidateID, laos.id)
+    }
+
+    func testCountryGuideRequiresCountryNamesInsteadOfLocalAbbreviations() {
+        XCTAssertNil(SocialGuideTextParser.components(from: "Garden Cafe / LA"))
+        XCTAssertNil(SocialGuideTextParser.components(from: "Garden Cafe / CA"))
+        XCTAssertEqual(SocialGuideTextParser.components(from: "Garden Cafe / Laos")?.area, "Laos")
+        XCTAssertEqual(SocialGuideTextParser.components(from: "Garden Cafe / USA")?.area, "USA")
     }
 
     func testSocialCandidateMatcherTreatsLAAliasAsLosAngelesEvidence() {

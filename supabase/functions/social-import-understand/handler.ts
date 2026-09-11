@@ -1,4 +1,8 @@
-import { acquireInstagramProfileAliases, acquireWithApify } from "./apify.ts";
+import {
+  acquireSocialEvidence,
+  type AcquisitionProvider,
+} from "./acquisition.ts";
+import { acquireInstagramProfileAliases } from "./apify.ts";
 import {
   deterministicFallbackHints,
   evidenceCatalog,
@@ -37,6 +41,11 @@ import { Deadline, SocialImportError } from "./types.ts";
 // comfortably below the platform response ceiling.
 export const maximumHandlerDurationMilliseconds = 135_000;
 export const maximumExtractionDurationMilliseconds = 120_000;
+// Acquisition leaves a media + generation window. Download and upload share
+// that window: a fast download lends time to preparation and vice versa.
+// Separate fixed caps discarded evidence despite unused request time.
+const maximumAcquisitionMilliseconds = 45_000;
+const minimumGenerationMilliseconds = 30_000;
 const paidWorkAdmissionFinishTimeoutMilliseconds = 3_000;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -139,13 +148,22 @@ export async function handleRequest(
   const clientRequestID = String(body.client_request_id);
 
   const apifyToken = secret(dependencies.env("WANDER_APIFY_TOKEN"));
+  const brightDataToken = secret(
+    dependencies.env("WANDER_BRIGHTDATA_API_TOKEN"),
+  );
   const geminiKey = secret(dependencies.env("WANDER_GEMINI_API_KEY"));
   const googlePlacesKey = googlePlacesAPIKey(dependencies);
+  const instagramMode = instagramAcquisitionMode(dependencies);
   // Paid work must never start unless this invocation can release its
   // admission with a server credential. The caller's short-lived user token
   // is intentionally used only for authentication and begin admission.
   if (
-    !apifyToken || !geminiKey || !googlePlacesKey ||
+    !acquisitionIsConfigured(
+      source,
+      apifyToken,
+      brightDataToken,
+      instagramMode,
+    ) || !geminiKey || !googlePlacesKey ||
     !supabaseServiceRPCConfiguration(dependencies)
   ) {
     return finish(fallbackResponse(
@@ -189,6 +207,8 @@ export async function handleRequest(
     payload = await runAdmittedImport(
       source,
       apifyToken,
+      brightDataToken,
+      instagramMode ?? "brightdata_hybrid",
       geminiKey,
       googlePlacesKey,
       extractionDeadline,
@@ -230,7 +250,9 @@ export async function handleRequest(
 
 async function runAdmittedImport(
   source: SocialSource,
-  apifyToken: string,
+  apifyToken: string | null,
+  brightDataToken: string | null,
+  instagramMode: "apify" | "brightdata_hybrid",
   geminiKey: string,
   googlePlacesKey: string,
   extractionDeadline: Deadline,
@@ -239,14 +261,27 @@ async function runAdmittedImport(
   signal: AbortSignal,
 ): Promise<UnderstandResponse> {
   let evidence: AcquisitionEvidence;
+  let acquisitionProvider: AcquisitionProvider;
   try {
-    evidence = await acquireWithApify(
-      source,
-      apifyToken,
-      extractionDeadline,
+    const acquisition = await observeStage(
+      "acquisition",
       dependencies,
-      signal,
+      () =>
+        acquireSocialEvidence(
+          source,
+          { apifyToken, brightDataToken, instagramMode },
+          stageDeadline(
+            extractionDeadline,
+            75_000,
+            maximumAcquisitionMilliseconds,
+            dependencies,
+          ),
+          dependencies,
+          signal,
+        ),
     );
+    evidence = acquisition.evidence;
+    acquisitionProvider = acquisition.provider;
   } catch (error) {
     return fallbackResponse(
       fallbackReason(error, "acquisition_unavailable"),
@@ -258,29 +293,44 @@ async function runAdmittedImport(
   }
 
   const catalog = evidenceCatalog(evidence);
+  const mediaDeadline = stageDeadline(
+    extractionDeadline,
+    minimumGenerationMilliseconds,
+    maximumExtractionDurationMilliseconds,
+    dependencies,
+  );
   const profileUsernames = prioritizedInstagramProfileUsernames(evidence);
   const profileAliasesPromise: Promise<InstagramProfileAlias[]> =
-    source.platform === "instagram" && profileUsernames.length > 0
-      ? acquireInstagramProfileAliases(
-        profileUsernames,
-        apifyToken,
-        extractionDeadline,
+    source.platform === "instagram" && profileUsernames.length > 0 &&
+      apifyToken
+      ? observeStage(
+        "profile_enrichment",
         dependencies,
-        signal,
+        () =>
+          acquireInstagramProfileAliases(
+            profileUsernames,
+            apifyToken,
+            // This helper already caps its own work at 24 seconds, in parallel
+            // with download. Its admission check needs the global budget.
+            extractionDeadline,
+            dependencies,
+            signal,
+          ),
       )
       : Promise.resolve([]);
   let ingestions: MediaIngestion[] = [];
   let profileAliases: InstagramProfileAlias[] = [];
   try {
     const [mediaResult, profileResult] = await Promise.allSettled([
-      ingestAcquiredMedia(
-        evidence.media,
-        source,
-        apifyToken,
-        extractionDeadline,
-        dependencies,
-        signal,
-      ),
+      observeStage("media_download", dependencies, () =>
+        ingestAcquiredMedia(
+          evidence.media,
+          source,
+          apifyToken,
+          mediaDeadline,
+          dependencies,
+          signal,
+        )),
       profileAliasesPromise,
     ]);
     const providerAliases = profileResult.status === "fulfilled"
@@ -297,6 +347,7 @@ async function runAdmittedImport(
       ingestions,
       0,
       profileAliases,
+      deterministicProviderPath(acquisitionProvider),
     );
   }
 
@@ -310,16 +361,25 @@ async function runAdmittedImport(
   );
   let understanding;
   try {
-    understanding = await understandWithGemini(
-      source,
-      catalog,
-      ingestions,
-      geminiKey,
-      dependencies.env("WANDER_GEMINI_MODEL"),
-      extractionDeadline,
+    understanding = await observeStage(
+      "understanding",
       dependencies,
-      signal,
-      modelProfileAliases,
+      () =>
+        understandWithGemini(
+          source,
+          catalog,
+          ingestions,
+          geminiKey,
+          dependencies.env("WANDER_GEMINI_MODEL"),
+          extractionDeadline,
+          dependencies,
+          signal,
+          modelProfileAliases,
+          undefined,
+          {
+            mediaPreparationDeadline: mediaDeadline,
+          },
+        ),
     );
   } catch (error) {
     const attempts = error instanceof SocialImportError
@@ -333,6 +393,7 @@ async function runAdmittedImport(
       ingestions,
       attempts,
       profileAliases,
+      deterministicProviderPath(acquisitionProvider),
     );
   }
 
@@ -388,13 +449,14 @@ async function runAdmittedImport(
     ? "grounding_rejected"
     : null;
   const hasIntentionalExclusions = grounded.intentionalExcludedCount > 0;
+  const providerPath = geminiProviderPath(acquisitionProvider);
   clearMediaBytes(ingestions);
   if (grounded.hints.length === 0) {
     if (failedCount > 0) {
       return {
         schema_version: 1,
         outcome: "partial",
-        provider_path: "apify_gemini",
+        provider_path: providerPath,
         hints: [],
         media_count: evidence.media.length,
         model_attempt_count: understanding.attemptCount,
@@ -405,7 +467,7 @@ async function runAdmittedImport(
       return {
         schema_version: 1,
         outcome: "partial",
-        provider_path: "apify_gemini",
+        provider_path: providerPath,
         hints: [],
         media_count: evidence.media.length,
         model_attempt_count: understanding.attemptCount,
@@ -416,7 +478,7 @@ async function runAdmittedImport(
       return {
         schema_version: 1,
         outcome: "partial",
-        provider_path: "apify_gemini",
+        provider_path: providerPath,
         hints: [],
         media_count: evidence.media.length,
         model_attempt_count: understanding.attemptCount,
@@ -428,7 +490,7 @@ async function runAdmittedImport(
         return {
           schema_version: 1,
           outcome: "partial",
-          provider_path: "apify_gemini",
+          provider_path: providerPath,
           hints: [],
           media_count: evidence.media.length,
           model_attempt_count: understanding.attemptCount,
@@ -441,12 +503,14 @@ async function runAdmittedImport(
         catalog,
         ingestions,
         understanding.attemptCount,
+        profileAliases,
+        deterministicProviderPath(acquisitionProvider),
       );
     }
     return {
       schema_version: 1,
       outcome: "no_places",
-      provider_path: "apify_gemini",
+      provider_path: providerPath,
       hints: [],
       media_count: evidence.media.length,
       model_attempt_count: understanding.attemptCount,
@@ -454,18 +518,23 @@ async function runAdmittedImport(
     };
   }
 
-  const resolvedHints = await resolvePlaceHintsWithGoogle(
-    grounded.hints,
-    googlePlacesKey,
-    resolutionDeadline,
+  const resolvedHints = await observeStage(
+    "resolution",
     dependencies,
-    signal,
+    () =>
+      resolvePlaceHintsWithGoogle(
+        grounded.hints,
+        googlePlacesKey,
+        resolutionDeadline,
+        dependencies,
+        signal,
+      ),
   );
 
   return {
     schema_version: 1,
     outcome: failureCategory === null ? "ok" : "partial",
-    provider_path: "apify_gemini",
+    provider_path: providerPath,
     hints: resolvedHints,
     media_count: evidence.media.length,
     model_attempt_count: understanding.attemptCount,
@@ -615,6 +684,7 @@ function fallbackResponse(
   ingestions: MediaIngestion[],
   modelAttempts: number,
   profileAliases: InstagramProfileAlias[] = [],
+  providerPath: UnderstandResponse["provider_path"] = "apify_deterministic",
 ): UnderstandResponse {
   const safeCatalog = catalog ?? { texts: [], media: [] };
   const hints = deterministicFallbackHints(safeCatalog, 150, profileAliases);
@@ -622,12 +692,61 @@ function fallbackResponse(
   return {
     schema_version: 1,
     outcome: hints.length > 0 ? "partial" : "fallback",
-    provider_path: "apify_deterministic",
+    provider_path: providerPath,
     hints,
     media_count: evidence?.media.length ?? 0,
     model_attempt_count: modelAttempts,
     failure_category: reason,
   };
+}
+
+function acquisitionIsConfigured(
+  source: SocialSource,
+  apifyToken: string | null,
+  brightDataToken: string | null,
+  instagramMode: "apify" | "brightdata_hybrid" | null,
+): boolean {
+  if (source.platform === "tiktok") return apifyToken !== null;
+  if (!instagramMode) return false;
+  return instagramMode === "apify"
+    ? apifyToken !== null
+    : brightDataToken !== null || apifyToken !== null;
+}
+
+function instagramAcquisitionMode(
+  dependencies: RuntimeDependencies,
+): "apify" | "brightdata_hybrid" | null {
+  const value = cleanString(
+    dependencies.env("WANDER_INSTAGRAM_ACQUISITION_MODE"),
+    64,
+  ) ?? "brightdata_hybrid";
+  return value === "apify" || value === "brightdata_hybrid" ? value : null;
+}
+
+function geminiProviderPath(
+  provider: AcquisitionProvider,
+): UnderstandResponse["provider_path"] {
+  switch (provider) {
+    case "brightdata":
+      return "brightdata_gemini";
+    case "brightdata_apify":
+      return "brightdata_apify_gemini";
+    case "apify":
+      return "apify_gemini";
+  }
+}
+
+function deterministicProviderPath(
+  provider: AcquisitionProvider,
+): UnderstandResponse["provider_path"] {
+  switch (provider) {
+    case "brightdata":
+      return "brightdata_deterministic";
+    case "brightdata_apify":
+      return "brightdata_apify_deterministic";
+    case "apify":
+      return "apify_deterministic";
+  }
 }
 
 function admissionFallbackReason(
@@ -655,6 +774,60 @@ function fallbackReason(
       error.code === "deadline_exceeded"
     ? "deadline_exceeded"
     : defaultReason;
+}
+
+function stageDeadline(
+  parent: Deadline,
+  reservedMilliseconds: number,
+  capMilliseconds: number,
+  dependencies: RuntimeDependencies,
+): Deadline {
+  const available = parent.remaining() - reservedMilliseconds;
+  if (available <= 0) throw new SocialImportError("deadline_exceeded");
+  return new Deadline(Math.min(available, capMilliseconds), dependencies.now);
+}
+
+async function observeStage<T>(
+  stage:
+    | "acquisition"
+    | "profile_enrichment"
+    | "media_download"
+    | "understanding"
+    | "resolution",
+  dependencies: RuntimeDependencies,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const started = dependencies.now();
+  let errorCategory: string | null = null;
+  try {
+    return await operation();
+  } catch (error) {
+    // Never log arbitrary error messages/codes: providers can echo private
+    // payloads. Only coarse categories and enumerated numeric HTTP statuses.
+    errorCategory = error instanceof SocialImportError
+      ? error.code === "deadline_exceeded"
+        ? "deadline_exceeded"
+        : /^gemini_http_[45][0-9]{2}$/.test(error.code)
+        ? error.code
+        : error.code === "gemini_output_truncated"
+        ? "gemini_output_truncated"
+        : error.code === "request_cancelled"
+        ? "request_cancelled"
+        : "provider_error"
+      : error instanceof DOMException && error.name === "TimeoutError"
+      ? "timeout"
+      : "unexpected_error";
+    throw error;
+  } finally {
+    console.log(
+      "social_import_stage_complete",
+      JSON.stringify({
+        stage,
+        elapsedMs: Math.max(0, Math.round(dependencies.now() - started)),
+        errorCategory,
+      }),
+    );
+  }
 }
 
 function validBearerHeader(value: string | null): value is string {
