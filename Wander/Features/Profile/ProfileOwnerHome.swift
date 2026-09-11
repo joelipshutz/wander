@@ -345,7 +345,11 @@ struct ProfileOwnerHome: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing12)
+            // Keep the vertical scroll content within its viewport even when a
+            // child proposes a wider ideal size (for example, the calendar).
+            .containerRelativeFrame(.horizontal)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollIndicators(.hidden)
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
         .task(id: calendarScrollRequestID) {
