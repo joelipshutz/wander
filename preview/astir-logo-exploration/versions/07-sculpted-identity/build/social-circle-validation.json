@@ -1,0 +1,44 @@
+[
+  {
+    "file": "icon-34-signal.png",
+    "maxArtworkRadius": 449.1063348473277,
+    "circleRadius": 512,
+    "minimumCircularMargin": 62.89366515267233,
+    "pass": true
+  },
+  {
+    "file": "icon-34-mono.png",
+    "maxArtworkRadius": 449.1063348473277,
+    "circleRadius": 512,
+    "minimumCircularMargin": 62.89366515267233,
+    "pass": true
+  },
+  {
+    "file": "icon-34-none.png",
+    "maxArtworkRadius": 402.3164177609459,
+    "circleRadius": 512,
+    "minimumCircularMargin": 109.68358223905409,
+    "pass": true
+  },
+  {
+    "file": "icon-36-signal.png",
+    "maxArtworkRadius": 449.1063348473277,
+    "circleRadius": 512,
+    "minimumCircularMargin": 62.89366515267233,
+    "pass": true
+  },
+  {
+    "file": "icon-36-mono.png",
+    "maxArtworkRadius": 449.1063348473277,
+    "circleRadius": 512,
+    "minimumCircularMargin": 62.89366515267233,
+    "pass": true
+  },
+  {
+    "file": "icon-36-none.png",
+    "maxArtworkRadius": 407.9344310057683,
+    "circleRadius": 512,
+    "minimumCircularMargin": 104.06556899423168,
+    "pass": true
+  }
+]
