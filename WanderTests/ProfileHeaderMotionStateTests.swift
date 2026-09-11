@@ -58,6 +58,17 @@ final class ProfileHeaderMotionStateTests: XCTestCase {
         XCTAssertFalse(state.expanded)
     }
 
+    func testInlineTransitionStartsAsTheNamePassesUnderTheToolbar() {
+        var state = ProfileHeaderMotionState()
+        let visibleAvatar = avatar.offsetBy(dx: 0, dy: -56)
+        let nameTop: CGFloat = 68 - 56
+        XCTAssertFalse(state.update(offset: 11, originalAvatar: visibleAvatar, entryBoundary: nameTop))
+        XCTAssertTrue(state.update(offset: 12, originalAvatar: visibleAvatar, entryBoundary: nameTop))
+        XCTAssertTrue(state.expanded)
+        XCTAssertLessThan(nameTop, visibleAvatar.midY)
+        XCTAssertFalse(state.update(offset: 300, originalAvatar: visibleAvatar, entryBoundary: nameTop))
+    }
+
     func testPreviewRequiresExplicitKnownVariant() {
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: []))
         XCTAssertNil(ProfileHeaderMotionVariant.resolved(arguments: ["-ProfileHeaderMotion"]))

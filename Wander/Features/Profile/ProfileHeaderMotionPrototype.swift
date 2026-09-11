@@ -54,11 +54,11 @@ struct ProfileHeaderMotionState {
     private(set) var expanded = false
     private(set) var previousOffset: CGFloat = 0
 
-    mutating func update(offset: CGFloat, originalAvatar: CGRect, restoreBoundary: CGFloat? = nil) -> Bool {
+    mutating func update(offset: CGFloat, originalAvatar: CGRect, entryBoundary: CGFloat? = nil, restoreBoundary: CGFloat? = nil) -> Bool {
         let wasExpanded = expanded
-        // The midpoint / lower edge are measured in the visible viewport.
-        // The overlay subtracts the pinned control row before passing this rect.
-        if offset > previousOffset, offset >= originalAvatar.midY {
+        // Boundaries are measured below the pinned controls. The compact
+        // option overrides entry with the name edge and restoration with the bio.
+        if offset > previousOffset, offset >= (entryBoundary ?? originalAvatar.midY) {
             expanded = true
         } else if offset < previousOffset, offset <= (restoreBoundary ?? originalAvatar.maxY) {
             expanded = false
@@ -109,17 +109,19 @@ private struct ProfileMotionOverlayModifier<A: View, N: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         if let variant {
-            content.overlayPreferenceValue(ProfileMotionAnchors.self) { anchors in
-                GeometryReader { proxy in
-                    if let a = anchors[.avatar], let n = anchors[.name], let bar = anchors[.navigation] {
-                        ProfileMotionOverlay(
-                            variant: variant, avatar: avatar, name: name, navigation: navigation,
-                            avatarRect: proxy[a], nameRect: proxy[n], navigationRect: proxy[bar],
-                            bioRect: anchors[.bio].map { proxy[$0] }, width: proxy.size.width
-                        )
+            content.scrollClipDisabled(variant == .compact)
+                .overlayPreferenceValue(ProfileMotionAnchors.self) { anchors in
+                    GeometryReader { proxy in
+                        if let a = anchors[.avatar], let n = anchors[.name], let bar = anchors[.navigation] {
+                            ProfileMotionOverlay(
+                                variant: variant, avatar: avatar, name: name, navigation: navigation,
+                                avatarRect: proxy[a], nameRect: proxy[n], navigationRect: proxy[bar],
+                                bioRect: anchors[.bio].map { proxy[$0] }, width: proxy.size.width,
+                                height: proxy.size.height, topInset: max(0, proxy.frame(in: .global).minY)
+                            )
+                        }
                     }
                 }
-            }
         } else {
             content
         }
@@ -129,6 +131,7 @@ private struct ProfileMotionOverlayModifier<A: View, N: View>: ViewModifier {
 private struct ProfileMotionOverlay<A: View, N: View>: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let variant: ProfileHeaderMotionVariant
     let avatar: A
     let name: String
@@ -138,6 +141,8 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
     let navigationRect: CGRect
     let bioRect: CGRect?
     let width: CGFloat
+    let height: CGFloat
+    let topInset: CGFloat
     @State private var initialAvatar: CGRect?
     @State private var initialName: CGRect?
     @State private var initialNavigation: CGRect?
@@ -191,21 +196,34 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             .allowsHitTesting(false)
     }
 
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Group {
-                if variant.usesBlur {
-                    Rectangle().fill(.ultraThinMaterial)
-                        .environment(\.colorScheme, brandMode == .editorialLight ? .dark : .light)
-                } else {
-                    contrastingBackground
-                }
+    /// Shares the neutral ultra-thin material, desaturation, and soft edge used
+    /// by the other tabs' localized header blur. Only this review option expands
+    /// it into one continuous field. The upper field is always present.
+    private var continuousHeaderBlur: some View {
+        Group {
+            if reduceTransparency {
+                brandMode.background
+            } else {
+                ProfileMotionBackdropBlur(isDark: brandMode.prefersDarkInterface)
+                    .saturation(0)
             }
-            .frame(height: surfaceBottom - toolbarBottom)
-            .offset(y: toolbarBottom)
-            .opacity(surfaceProgress)
-            .allowsHitTesting(false)
+        }
+        .frame(width: width,
+               height: topInset + toolbarBottom + (surfaceBottom - toolbarBottom) * surfaceProgress)
+        .mask(alignment: .bottom) {
+            VStack(spacing: 0) {
+                Color.white
+                LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 16)
+            }
+        }
+        .offset(y: -topInset)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 
+    private var identity: some View {
+        ZStack(alignment: .topLeading) {
             avatar
                 .modifier(ProfileMotionTransform(
                     progress: photoProgress, source: motion.expanded ? (entryAvatar ?? avatarRect) : avatarRect,
@@ -219,7 +237,7 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
                 displayName(color: brandMode.primaryText)
                     .position(x: nameRect.midX, y: nameRect.midY)
                     .opacity(1 - nameProgress)
-                displayName(color: contrastingText)
+                displayName(color: brandMode.primaryText)
                     .modifier(ProfileMotionTransform(
                         progress: nameProgress, source: motion.expanded ? (entryName ?? nameRect) : nameRect,
                         destination: CGPoint(x: (initialName ?? nameRect).midX, y: 111),
@@ -232,11 +250,37 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
                     .opacity(1 - surfaceProgress)
                 expandedName
             }
+        }
+        .frame(width: width, height: height, alignment: .topLeading)
+    }
 
-            // The moving identity and scroll content pass underneath the fixed
-            // controls. The contrasting identity panel begins below this row.
-            brandMode.background.frame(height: toolbarBottom).allowsHitTesting(false)
-            brandMode.background.frame(height: 100).offset(y: -100).allowsHitTesting(false)
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if variant == .compact {
+                continuousHeaderBlur
+                identity.mask(alignment: .top) {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: toolbarBottom)
+                        Color.white
+                    }
+                }
+            } else {
+                Group {
+                    if variant.usesBlur {
+                        Rectangle().fill(.ultraThinMaterial)
+                            .environment(\.colorScheme, brandMode == .editorialLight ? .dark : .light)
+                    } else {
+                        contrastingBackground
+                    }
+                }
+                .frame(height: surfaceBottom - toolbarBottom)
+                .offset(y: toolbarBottom)
+                .opacity(surfaceProgress)
+                .allowsHitTesting(false)
+                identity
+                brandMode.background.frame(height: toolbarBottom).allowsHitTesting(false)
+                brandMode.background.frame(height: topInset).offset(y: -topInset).allowsHitTesting(false)
+            }
             navigation
                 .frame(width: navigationRect.width, height: navigationRect.height)
                 .position(x: width / 2, y: (initialNavigation ?? navigationRect).midY)
@@ -253,7 +297,9 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             let viewportTop = initialNavigation?.maxY ?? 0
             let viewportAvatar = initialAvatar.offsetBy(dx: 0, dy: -viewportTop)
             let restoreBoundary = variant == .compact ? initialBio.map { $0.maxY - viewportTop } : nil
-            guard motion.update(offset: offset, originalAvatar: viewportAvatar, restoreBoundary: restoreBoundary) else { return }
+            let entryBoundary = variant == .compact ? initialName.map { max(0, $0.minY - viewportTop) } : nil
+            guard motion.update(offset: offset, originalAvatar: viewportAvatar,
+                                entryBoundary: entryBoundary, restoreBoundary: restoreBoundary) else { return }
             // Freeze the entry geometry while the content continues to scroll.
             // A downward curve keeps the portrait clear of the pinned toolbar.
             if motion.expanded {
@@ -262,12 +308,66 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             }
             let target: CGFloat = motion.expanded ? 1 : 0
             withAnimation(reduceMotion ? nil : variant.animation) { photoProgress = target }
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24).delay(motion.expanded ? 0 : 0.3)) {
+            withAnimation(reduceMotion ? nil : (variant == .compact ? .easeInOut(duration: 0.55) : .easeOut(duration: 0.24).delay(motion.expanded ? 0 : 0.3))) {
                 surfaceProgress = target
             }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.56).delay(variant == .compact ? 0 : 0.2)) {
                 nameProgress = target
             }
+        }
+    }
+}
+
+/// Keep the blur layer opaque as a compositor while reducing the material's
+/// intensity. Lowering the view alpha would reveal a second, sharp copy of
+/// scrolling text under the name and clock.
+private struct ProfileMotionBackdropBlur: UIViewRepresentable {
+    let isDark: Bool
+
+    func makeUIView(context: Context) -> BackdropView {
+        let view = BackdropView()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: BackdropView, context: Context) {
+        view.setAppearance(isDark ? .dark : .light)
+    }
+
+    static func dismantleUIView(_ view: BackdropView, coordinator: ()) {
+        view.stop()
+    }
+
+    final class BackdropView: UIVisualEffectView {
+        private var animator: UIViewPropertyAnimator?
+
+        init() { super.init(effect: nil) }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { configure() } else { stop() }
+        }
+
+        func setAppearance(_ appearance: UIUserInterfaceStyle) {
+            guard overrideUserInterfaceStyle != appearance else { return }
+            overrideUserInterfaceStyle = appearance
+            if window != nil { configure() }
+        }
+
+        func stop() {
+            animator?.stopAnimation(true)
+            animator = nil
+        }
+
+        private func configure() {
+            stop()
+            effect = nil
+            let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) { [weak self] in
+                self?.effect = UIBlurEffect(style: .systemUltraThinMaterial)
+            }
+            self.animator = animator
+            animator.fractionComplete = 0.65
         }
     }
 }

@@ -1,6 +1,20 @@
 # Profile header motion exploration · REC-482
 
-Four native SwiftUI previews run on the current shared `ProfileOwnerHome` component. Each MP4 compares your profile and another person's profile in both light and dark mode, using the same automated down/hold/up scroll sequence.
+## Current review: option 4 with continuous transparent blur
+
+[Play the updated MP4](option-4-continuous-blur.mp4)
+
+![Updated option 4](option-4-continuous-blur-pinned.png)
+
+Option 4 is the current direction. The toolbar and status-bar area always have a light, theme-matched blur. As the original name begins passing beneath the toolbar, the same field extends down behind the original-size photo and the vertically aligned name. The complete surface reaches the top of the screen, with a soft lower edge and no opaque toolbar band. It uses the same neutral, desaturated ultra-thin material family as the other tabs' localized blur, at a reduced material intensity, without lowering the blur layer's opacity and leaking sharp background text. Text follows the normal light/dark theme for readability. Reduce Transparency uses the app background instead.
+
+The photo remains 86pt. Scrolling back up to the bio's lower edge restores the original identity and retracts the lower blur while keeping the toolbar/status-bar blur active. This remains a DEBUG-only review route; normal profiles are unchanged.
+
+The updated video includes both profile roles in light and dark mode. Capture the `compact` variant with the commands below, then render the four files with the output prefix `option-4-continuous-blur`.
+
+## Previous four-option comparison
+
+The previous four native SwiftUI previews ran on the shared `ProfileOwnerHome` component. Each earlier MP4 compares your profile and another person's profile in both light and dark mode, using the same automated down/hold/up scroll sequence.
 
 | Option | Expanded layout | Surface |
 | --- | --- | --- |
@@ -20,10 +34,10 @@ The username sits immediately above the city/state at the same font size in all 
 
 ## Motion behavior
 
-- The photo begins moving when its original midpoint crosses the bottom of the pinned navigation row.
+- Options 1–3 begin moving when the original photo midpoint crosses the bottom of the pinned navigation row. The current option 4 begins when the original name's top edge reaches that boundary.
 - Options 1–3 follow the staged arc: the portrait leads over 0.8 seconds, followed by a fading name that rises into position after a 0.2-second delay. The portrait is 40% smaller than the previous 172pt render; the name is 55% of the previous 1.4× name, or 0.77× the original sheet-title size (about 17pt at default type size).
 - The identity holds still while the activity, map, and calendar continue scrolling underneath. On upward scrolling, options 1–3 restore when the original photo's lower edge returns to the pinned toolbar boundary.
-- Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
+- Option 4 keeps the portrait at 86pt and shifts the original-size name down to its center line. Its latest continuous blur is shown in the current-review MP4 above; the older option-4.mp4 preserves the earlier appearance. It restores on upward scrolling when the bio's lower edge reaches the toolbar boundary. This preview interprets the bio boundary as the return-scroll threshold.
 - The original layout reserves its space throughout, so changing motion state never changes scroll content height. A stationary scroll offset does not retrigger animation.
 - Reduce Motion removes animation. Long names shrink to one line. Accessibility text sizes and interrupted gestures still need production design review before adopting a variant.
 
@@ -71,4 +85,4 @@ Repeat with the other three variants. Add `--gif` only when a looping GIF is nee
 
 `ProfileHeaderMotionStateTests` covers midpoint entry, continued-scroll hold, directional photo/bio boundary restoration, stationary offsets, and explicit preview argument parsing. The final PR records the native build, unit-test results, and large/compact phone visual checks. The repository's prescribed iPhone 16 Plus / iOS 18.6 destination is unavailable on this machine; installed iOS 26.5 Simulators are used instead.
 
-The final native build and all seven profile-motion tests passed. An earlier full unit run passed all 1,896 tests. The final run after the entrance refinement passed 1,895 tests with one remaining failure: the unchanged high-data fixture benchmark took 1.707s for list suggestions against a 0.75s budget. Recording and export were stopped for that run. This validation gap remains documented in the draft PR; the benchmark and its underlying data code were not changed.
+The latest native build and full unit run passed all 1,897 tests, including eight profile-motion tests. There were no failures or skips. Tests and recordings ran separately. Native captures check the updated header on iPhone 17 and the smaller iPhone 17e, both on iOS 26.5.
