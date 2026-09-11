@@ -2629,7 +2629,6 @@ private struct SavedPlacesListScreen: View {
         .fullPageBackSwipe(
             isEnabled: usesInlineNavigationHeader && selectedPlace == nil
                 && !showsInCommonMap && placeSaveFlow == nil,
-            usesNativeNavigation: true,
             onBack: { dismiss() }
         )
     }

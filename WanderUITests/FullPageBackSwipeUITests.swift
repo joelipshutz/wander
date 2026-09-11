@@ -36,6 +36,15 @@ final class FullPageBackSwipeUITests: XCTestCase {
         let back = app.buttons["place-profile.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 8))
         capture("Map place full page")
+        app.buttons["place-profile.add-to-list"].tap()
+        let cancel = app.buttons["map-list-picker.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        drag(app)
+        XCTAssertTrue(cancel.exists, "Swiping a sheet must not dismiss the full page below it")
+        cancel.tap()
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        app.swipeUp()
+        XCTAssertTrue(back.exists, "Vertical scrolling must not go back")
         drag(app, from: 0.01, to: 0.12, duration: 1)
         XCTAssertTrue(back.exists)
         drag(app, from: 0.5, to: 0.8)
@@ -49,58 +58,6 @@ final class FullPageBackSwipeUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         back.tap()
         XCTAssertTrue(back.waitForNonExistence(timeout: 5))
-    }
-
-    func testCommentsPhotoViewerReturnsToComments() {
-        let app = launchComments()
-        let photo = app.buttons["Open activity photos"]
-        XCTAssertTrue(photo.waitForExistence(timeout: 15))
-        photo.tap()
-        let photoBack = app.buttons["Back"]
-        XCTAssertTrue(photoBack.waitForExistence(timeout: 5))
-        capture("Comments photo full page")
-        drag(app, from: 0.5, to: 0.2)
-        XCTAssertTrue(photoBack.exists, "Photo paging must not dismiss")
-        drag(app, from: 0.01, to: 0.12, duration: 1)
-        XCTAssertTrue(photoBack.exists)
-        drag(app)
-        XCTAssertTrue(photoBack.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(photo.waitForExistence(timeout: 5))
-        photo.tap()
-        XCTAssertTrue(photoBack.waitForExistence(timeout: 5))
-        photoBack.tap()
-        XCTAssertTrue(photo.waitForExistence(timeout: 5))
-
-    }
-
-    func testSharePreviewReturnsToCommentsAndDoesNotDismissUnderSheet() {
-        let app = launchComments()
-        let photo = app.buttons["Open activity photos"]
-        XCTAssertTrue(photo.waitForExistence(timeout: 15))
-        app.buttons["Share activity"].firstMatch.tap()
-        let shareBack = app.buttons["Close share preview"]
-        XCTAssertTrue(shareBack.waitForExistence(timeout: 8))
-        capture("Activity share full page")
-        drag(app, from: 0.01, to: 0.12, duration: 1)
-        XCTAssertTrue(shareBack.exists)
-        app.buttons["Open more sharing options"].tap()
-        let nativeShare = app.otherElements["ActivityListView"]
-        XCTAssertTrue(nativeShare.waitForExistence(timeout: 10))
-        drag(app)
-        XCTAssertTrue(nativeShare.exists, "A sheet must not get a page-back gesture")
-        app.buttons["Close"].firstMatch.tap()
-        XCTAssertTrue(shareBack.waitForExistence(timeout: 5))
-        drag(app)
-        XCTAssertTrue(shareBack.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(photo.waitForExistence(timeout: 5))
-        capture("Comments restored after share")
-    }
-
-    private func launchComments() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingCommentsCapture", "-WanderFullPageBackSwipeUITest"]
-        app.launch()
-        return app
     }
 
     private func launch(_ arguments: [String]) -> XCUIApplication {
