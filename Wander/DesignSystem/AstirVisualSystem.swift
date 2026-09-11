@@ -292,7 +292,10 @@ private struct AstirGlassSurface: ViewModifier {
         if reduceTransparency {
             content
                 .background(
-                    selected || accentAction ? brandMode.accent : brandMode.raisedBackground,
+                    // Selected labels already use accentText; an opaque accent
+                    // fill makes them disappear in Dark Mode. Keep the neutral
+                    // surface and accent outline, reserving solid coral for actions.
+                    accentAction ? brandMode.accent : brandMode.raisedBackground,
                     in: shape
                 )
                 .overlay {

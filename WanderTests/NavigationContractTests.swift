@@ -1599,7 +1599,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(glassSurface.contains("shape.fill(.ultraThinMaterial)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.accessibilityReduceTransparency)"))
         XCTAssertTrue(glassSurface.contains("if reduceTransparency"))
-        XCTAssertTrue(glassSurface.contains("selected || accentAction ? brandMode.accent : brandMode.raisedBackground"))
+        XCTAssertTrue(glassSurface.contains("accentAction ? brandMode.accent : brandMode.raisedBackground"))
         XCTAssertTrue(glassSurface.contains("brandMode.prefersDarkInterface"))
         XCTAssertTrue(glassSurface.contains("brandMode.raisedBackground.opacity(0.82)"))
         XCTAssertTrue(glassSurface.contains("@Environment(\\.colorSchemeContrast)"))
