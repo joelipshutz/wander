@@ -55,9 +55,9 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Astir uses the camera only when you choose to take a photo in the app.</string>
+	<string>Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Astir uses contacts only to help you find people you already know. It never messages anyone.</string>
+	<string>Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

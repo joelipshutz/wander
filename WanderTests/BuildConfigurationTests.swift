@@ -199,6 +199,15 @@ final class BuildConfigurationTests: XCTestCase {
             XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
         }
 
+        let cameraUsage = try XCTUnwrap(plist["NSCameraUsageDescription"] as? String)
+        XCTAssertTrue(cameraUsage.contains("profile or place photo"))
+        XCTAssertTrue(cameraUsage.contains("restaurant photo"))
+
+        let contactsUsage = try XCTUnwrap(plist["NSContactsUsageDescription"] as? String)
+        XCTAssertTrue(contactsUsage.contains("on this device"))
+        XCTAssertTrue(contactsUsage.contains("address book is not uploaded"))
+        XCTAssertTrue(contactsUsage.contains("only a number you select"))
+
         for (relativePath, expectedName) in [
             ("WanderShareExtension/Info.plist", "Save to Astir"),
             ("WanderWidgets/Info.plist", "Astir"),
@@ -215,6 +224,18 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(project.contains("PRODUCT_NAME: Wander"))
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander"))
         XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander;"))
+    }
+
+    func testAppReviewNotesExplainContactsAndLocationDataFlows() throws {
+        let notes = try String(
+            contentsOf: projectRoot.appendingPathComponent("docs/app-store/reviewer-notes.txt")
+        )
+
+        XCTAssertTrue(notes.contains("Every pin represents a place"))
+        XCTAssertTrue(notes.contains("address book is not uploaded"))
+        XCTAssertTrue(notes.contains("Only a phone number the user selects"))
+        XCTAssertTrue(notes.contains("does not display nearby users"))
+        XCTAssertTrue(notes.contains("never checks a user in automatically"))
     }
 
     func testAppIconRenditionsHaveRequiredSizesAndNoAlpha() throws {

@@ -9,8 +9,8 @@ fi
 
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OUTPUT_DIRECTORY=$1
-SIMULATOR_NAME=${2:-"iPhone 16 Plus"}
-OS_VERSION=${3:-"18.6"}
+SIMULATOR_NAME=${2:-"iPhone 17 Pro Max"}
+OS_VERSION=${3:-"26.1"}
 
 for command_name in xcodegen xcodebuild xcrun jq swift; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -67,7 +67,7 @@ if [[ "$CAPTURE_COUNT" != "6" ]]; then
   exit 1
 fi
 
-swift scripts/generate-app-store-concepts.swift "$RAW_SCREENSHOTS" "$OUTPUT_DIRECTORY"
+swift scripts/generate-astir-app-store-panels.swift "$RAW_SCREENSHOTS" "$OUTPUT_DIRECTORY"
 cp "$RAW_SCREENSHOTS"/recme-store-*.png "$OUTPUT_DIRECTORY"/
 
 echo "Captured 6 public-safe storefront screens on $SIMULATOR_NAME / iOS $OS_VERSION"
