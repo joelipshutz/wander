@@ -239,26 +239,31 @@ struct OnboardingLaunchView: View {
         ZStack {
             AstirLaunchArtwork.background.ignoresSafeArea()
             GeometryReader { proxy in
-                VStack(spacing: WanderTheme.spacing4) {
-                    // Keep the approved splash still while a quicker STIR glint is explored.
-                    AstirLaunchLockup(animationsEnabled: false)
-                        .frame(width: AstirLaunchArtwork.width(availableWidth: proxy.size.width))
-
-                    if let message {
-                        VStack(spacing: WanderTheme.spacing2) {
-                            ProgressView()
-                                .tint(AstirTheme.signal.color)
-                            Text(message)
-                                .font(AstirTypography.bodySmall)
-                                .foregroundStyle(AstirLaunchArtwork.text)
-                                .multilineTextAlignment(.center)
-                                .fixedSize(horizontal: false, vertical: true)
+                // Center the artwork alone. Loading copy must not change its frame.
+                AstirLaunchLockup(animationsEnabled: false)
+                    .frame(width: AstirLaunchArtwork.width(availableWidth: proxy.size.width))
+                    .overlay(alignment: .top) {
+                        if let message {
+                            VStack(spacing: WanderTheme.spacing2) {
+                                ProgressView()
+                                    .tint(AstirTheme.signal.color)
+                                    .dynamicTypeSize(.large)
+                                Text(message)
+                                    .font(AstirTypography.bodySmall)
+                                    .foregroundStyle(AstirLaunchArtwork.text)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: max(0, proxy.size.width - 48))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .offset(y: AstirLaunchArtwork.width(availableWidth: proxy.size.width)
+                                / AstirLaunchArtwork.aspectRatio + WanderTheme.spacing4)
                         }
-                        .frame(maxWidth: max(0, proxy.size.width - 48))
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            // Startup and the map tab must use the same full-screen center.
+            .ignoresSafeArea(.container)
         }
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
