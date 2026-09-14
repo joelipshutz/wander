@@ -319,6 +319,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("await contactProvider.requestAccess()"))
         XCTAssertTrue(sheet.contains("await contactProvider.matches()"))
         XCTAssertTrue(sheet.contains("if isLoadingContacts"))
+        XCTAssertTrue(sheet.contains("Your address book stays on this device"))
+        XCTAssertTrue(sheet.contains("Invites open in Messages for you to send"))
         let provider = try projectSource("Wander/Services/ContactProvider.swift")
         XCTAssertFalse(provider.contains("CNContactEmailAddressesKey"))
         XCTAssertTrue(provider.contains("guard let phoneNumber, !phoneNumber.isEmpty else { return nil }"))

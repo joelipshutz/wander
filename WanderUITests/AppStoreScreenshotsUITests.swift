@@ -43,6 +43,9 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["No exact matches yet"].exists)
         settleForCapture()
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(
+            format: "label BEGINSWITH %@", "Some results may be missing"
+        )).firstMatch.exists)
         capture("recme-store-03-trusted-search")
     }
 

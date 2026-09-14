@@ -21,9 +21,11 @@ final class ClerkAuthService: AuthSessionProviding {
 
     typealias SessionResolver = @MainActor () async throws -> ResolvedSession?
     typealias SessionIDResolver = @MainActor () -> String?
+    typealias SessionActivator = @MainActor (String) async throws -> Void
     typealias SessionAdoptionSleeper = @MainActor (UInt64) async throws -> Void
     private let resolveAuthoritativeSession: SessionResolver
     private let resolveActiveSessionID: SessionIDResolver
+    private let activateSession: SessionActivator
     private let nativeAuthSessionFenceStore: NativeAuthSessionFenceStore
     private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
     private let sessionAdoptionTimeoutNanoseconds: UInt64
@@ -41,6 +43,7 @@ final class ClerkAuthService: AuthSessionProviding {
         configuration: WanderBackendConfiguration,
         resolveSession: @escaping SessionResolver = ClerkAuthService.resolveCurrentSession,
         resolveSessionID: @escaping SessionIDResolver = { Clerk.shared.session?.id },
+        activateSession: @escaping SessionActivator = { try await Clerk.shared.auth.setActive(sessionId: $0) },
         sessionCache: AuthSessionCache = .live,
         nativeAuthSessionFenceStore: NativeAuthSessionFenceStore = .live,
         sessionAdoptionRetryDelaysNanoseconds: [UInt64] = [
@@ -57,6 +60,7 @@ final class ClerkAuthService: AuthSessionProviding {
         self.configuration = configuration
         self.resolveAuthoritativeSession = resolveSession
         self.resolveActiveSessionID = resolveSessionID
+        self.activateSession = activateSession
         self.sessionCache = sessionCache
         self.nativeAuthSessionFenceStore = nativeAuthSessionFenceStore
         switch nativeAuthSessionFenceStore.load() {
@@ -195,7 +199,7 @@ final class ClerkAuthService: AuthSessionProviding {
                     state = .signedOut
                     return
                 }
-                resolvedSession = try await resolveAuthoritativeSession(within: remaining)
+                resolvedSession = try await resolveAuthoritativeSession(within: remaining, expectedSessionID: expectedSessionID)
             } else {
                 resolvedSession = try await resolveAuthoritativeSession()
             }
@@ -299,7 +303,11 @@ final class ClerkAuthService: AuthSessionProviding {
         } catch is CancellationError {
             throw AuthSessionError.cancelled
         } catch {
-            throw Self.authError(from: error)
+            let mappedError = Self.authError(from: error)
+            if mode == .signIn, mappedError as? AuthSessionError == .accountNotFound {
+                return NativeSocialAuthResult(outcome: .requiresExistingAccountVerification)
+            }
+            throw mappedError
         }
 
         let outcome: NativeAuthOutcome
@@ -422,11 +430,30 @@ final class ClerkAuthService: AuthSessionProviding {
         return true
     }
 
-    private func resolveAuthoritativeSession(within timeoutNanoseconds: UInt64) async throws -> ResolvedSession? {
+    private func resolveAuthoritativeSession(
+        within timeoutNanoseconds: UInt64,
+        expectedSessionID: String?
+    ) async throws -> ResolvedSession? {
         let (stream, continuation) = AsyncThrowingStream<TimedSessionResolution, Error>.makeStream()
         let sessionResolver = resolveAuthoritativeSession
         let resolverTask = Task { @MainActor in
             do {
+                // Refreshing the client cannot select a session. Activate only
+                // the ID returned by this completed authentication attempt.
+                // Activation and validation share the overall deadline.
+                if let expectedSessionID,
+                   self.resolveActiveSessionID() != expectedSessionID {
+                    do {
+                        try await self.activateSession(expectedSessionID)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        // A response can be lost after activation is accepted.
+                        // Authoritative refresh and both ID checks must still
+                        // prove success before entering the app.
+                    }
+                }
+                try Task.checkCancellation()
                 let session = try await sessionResolver()
                 continuation.yield(.resolved(session))
                 continuation.finish()
@@ -745,6 +772,8 @@ final class ClerkAuthService: AuthSessionProviding {
     private static let accountNotFoundCodes: Set<String> = [
         "form_identifier_not_found",
         "invitation_account_not_exists",
+        "sign_up_if_missing_transfer",
+        "external_account_not_found",
     ]
 
     private static let emailAlreadyInUseCodes: Set<String> = [
@@ -766,7 +795,7 @@ final class ClerkAuthService: AuthSessionProviding {
         "no_password_set",
     ]
 
-    private static func authError(from error: Error) -> Error {
+    static func authError(from error: Error) -> Error {
         guard let clerkError = error as? ClerkAPIError else { return error }
         if accountNotFoundCodes.contains(clerkError.code) {
             return AuthSessionError.accountNotFound
