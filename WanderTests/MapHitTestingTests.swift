@@ -3268,6 +3268,88 @@ final class MapFilterSelectionTests: XCTestCase {
 }
 
 final class MapFeaturedSelectionTests: XCTestCase {
+    func testFeaturedAggregateSelectionSurvivesRerankingWithoutASocialSave() throws {
+        let viewerID = "viewer"
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Community Coffee",
+            status: .been,
+            communitySaveCount: 1
+        )
+        // The server can return this anonymous place even when the viewer has
+        // deleted their own save and does not follow any of its contributors.
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: []))
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [],
+            featuredPlaces: [aggregate],
+            featuredAccountID: viewerID,
+            currentUserID: viewerID
+        )
+        let selected = try XCTUnwrap(
+            MapActivePinRetention.authorizedPlace(aggregate, within: corpus)
+        )
+        let selectedGroup = try XCTUnwrap(MapActivePinRetention.authorizedGroup(
+            nil, requiring: selected, within: corpus, currentUserID: viewerID
+        ))
+        // Recenter/ranking has omitted the selected pin from the presentation.
+        let groups = MapActivePinRetention.groups(
+            from: [], retaining: selected, retainingGroup: selectedGroup,
+            currentUserID: viewerID
+        )
+        XCTAssertEqual(MapActivePinRetention.groupKey(for: selected, in: groups), selectedGroup.key)
+        XCTAssertEqual(groups.first?.primary.communitySaveCount, 1)
+        XCTAssertTrue(try XCTUnwrap(groups.first).primary.isCommunityAggregate)
+    }
+
+    func testFeaturedSelectionCorpusCannotRestoreRevokedNamedSaveOrDeletedAggregate() {
+        let viewerID = "viewer"
+        let named = visiblePlace(owner: profile(id: "friend"), name: "Coffee", status: .been)
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Deleted Coffee", status: .been
+        )
+        aggregate.userPlace.deletedAt = .now
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [], featuredPlaces: [named, aggregate],
+            featuredAccountID: viewerID, currentUserID: viewerID
+        )
+        XCTAssertTrue(corpus.isEmpty)
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(named, within: corpus))
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: corpus))
+    }
+
+    func testFeaturedAggregateSelectionExpiresWithItsAccountOrServerResponse() {
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Coffee", status: .been
+        )
+        for accountID in [nil, "previous-viewer"] as [String?] {
+            let corpus = MapActivePinRetention.authorizationCorpus(
+                socialPlaces: [], featuredPlaces: [aggregate],
+                featuredAccountID: accountID, currentUserID: "viewer"
+            )
+            XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: corpus))
+        }
+        let refreshedCorpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [], featuredPlaces: [],
+            featuredAccountID: "viewer", currentUserID: "viewer"
+        )
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: refreshedCorpus))
+    }
+
+    func testFeaturedSelectionCorpusPreservesSocialSavesAndDeduplicatesAggregates() {
+        let social = visiblePlace(owner: profile(id: "viewer"), name: "My Coffee", status: .been)
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Community Coffee", status: .been
+        )
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [social], featuredPlaces: [aggregate, aggregate, social],
+            featuredAccountID: "viewer", currentUserID: "viewer"
+        )
+        XCTAssertEqual(corpus.map(\.id), [social.id, aggregate.id])
+    }
+
     private let losAngelesRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
