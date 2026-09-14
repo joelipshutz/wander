@@ -8,6 +8,8 @@ enum CommonGroundMockPage: String, CaseIterable, Sendable {
     case mix
     case invitation
     case recipient
+    case messages
+    case recipientOpened
     case sparse
     case loading
     case unavailable

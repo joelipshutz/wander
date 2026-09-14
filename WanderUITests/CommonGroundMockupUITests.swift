@@ -41,29 +41,36 @@ final class CommonGroundMockupUITests: XCTestCase {
         let invite = app.buttons["common-ground.invite.not-no-bar"]
         XCTAssertTrue(scrollTo(invite, in: app))
         invite.tap()
-        let share = app.buttons["Share your invitation"]
-        XCTAssertTrue(share.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars["Your invitation"].exists)
+        let previewMessages = app.buttons["common-ground.invitation.messages"]
+        XCTAssertTrue(previewMessages.waitForExistence(timeout: 5))
+        let postcardPlace = app.staticTexts["common-ground.invitation.place"]
+        let postcardReason = app.staticTexts["common-ground.invitation.reason-title"]
+        XCTAssertEqual(postcardPlace.label, "Not No Bar")
+        XCTAssertFalse(postcardReason.label.isEmpty)
+        let expectedReason = postcardReason.label
         capture("rec486-flow-03-invitation")
-        share.tap()
+        previewMessages.tap()
 
-        XCTAssertTrue(app.navigationBars["Sharing preview"].waitForExistence(timeout: 4))
-        let localPreviewNotice = app.staticTexts["Preview only. Nothing has been sent."]
-        XCTAssertTrue(localPreviewNotice.waitForExistence(timeout: 3))
-        let messages = app.buttons["Messages"].firstMatch
-        XCTAssertTrue(messages.waitForExistence(timeout: 3))
-        messages.tap()
-        XCTAssertTrue(app.navigationBars["Messages"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["To Joe"].exists)
-        XCTAssertTrue(app.staticTexts["Not No Bar"].firstMatch.exists)
-        XCTAssertTrue(localPreviewNotice.exists)
-        XCTAssertFalse(app.buttons["Send"].exists, "The local demo must not expose actual delivery.")
+        assertMessagesPreview(in: app)
+        let message = app.staticTexts["common-ground.messages.message"]
+        assertLabelContains("Not No Bar", on: message)
+        XCTAssertFalse(message.label.contains("Narwhal"), "The invitation should describe the selected place.")
+        let invitationLink = app.buttons["common-ground.messages.open-invitation"]
+        assertLabelContains("Not No Bar", on: invitationLink)
+        assertLabelContains(expectedReason, on: invitationLink)
         capture("rec486-flow-04-local-messages-preview")
 
-        app.buttons["Done"].tap()
-        XCTAssertTrue(app.navigationBars["Messages"].waitForNonExistence(timeout: 3))
-        XCTAssertTrue(share.waitForExistence(timeout: 3))
-        XCTAssertTrue(share.isHittable)
+        openRecipientFromMessages(in: app)
+        XCTAssertEqual(postcardPlace.label, "Not No Bar")
+        XCTAssertEqual(postcardReason.label, expectedReason)
+        XCTAssertTrue(app.buttons["Reply in Messages"].exists)
+        capture("rec486-flow-05-opened-recipient")
+
+        closeRecipientToMessages(in: app)
+        assertLabelContains("Not No Bar", on: message)
+        app.buttons["common-ground.messages.close"].tap()
+        XCTAssertTrue(previewMessages.waitForExistence(timeout: 3))
+        XCTAssertTrue(previewMessages.isHittable)
         let invitationNavigation = app.navigationBars["Your invitation"]
         XCTAssertTrue(invitationNavigation.exists)
         invitationNavigation.buttons.firstMatch.tap()
@@ -73,13 +80,67 @@ final class CommonGroundMockupUITests: XCTestCase {
         assertLabel(losAngelesCount, on: count)
         XCTAssertFalse(app.buttons["common-ground.occasion"].exists)
         XCTAssertTrue(scrollTo(invite, in: app))
-        capture("rec486-flow-05-returned-city-recommendations")
+        capture("rec486-flow-06-returned-city-recommendations")
+    }
+
+    func testCalendarSelectionAndPersonalNoteSurviveMessagesAndRecipientRoundTrip() {
+        let app = launch(page: "mix")
+        XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 8))
+        let invite = app.buttons["common-ground.invite.not-no-bar"]
+        XCTAssertTrue(scrollTo(invite, in: app))
+        invite.tap()
+
+        let whenButton = app.buttons["common-ground.invitation.when"]
+        XCTAssertTrue(whenButton.waitForExistence(timeout: 5))
+        let whenValue = app.staticTexts["common-ground.invitation.when-value"]
+        XCTAssertFalse(whenValue.exists, "An invitation from the collection starts without a proposed time.")
+
+        let personalNote = "This looks like a good spot for our next catch-up."
+        let noteField = identifiedElement("common-ground.invitation.message", in: app)
+        XCTAssertTrue(scrollTo(noteField, in: app))
+        noteField.tap()
+        noteField.typeText(personalNote)
+        XCTAssertTrue(scrollTo(whenButton, in: app))
+        whenButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Pick a time"].waitForExistence(timeout: 4))
+        XCTAssertTrue(identifiedElement("common-ground.invitation.date-picker", in: app).exists)
+        capture("rec486-date-calendar-picker")
+        let useDate = app.buttons["common-ground.invitation.use-date"]
+        XCTAssertTrue(useDate.waitForExistence(timeout: 3))
+        useDate.tap()
+
+        XCTAssertTrue(whenValue.waitForExistence(timeout: 4))
+        let chosenDate = whenValue.label
+        XCTAssertFalse(chosenDate.isEmpty)
+        assertLabelContains(chosenDate, on: whenButton)
+        capture("rec486-date-01-composed-postcard")
+
+        let previewMessages = app.buttons["common-ground.invitation.messages"]
+        XCTAssertTrue(scrollTo(previewMessages, in: app))
+        previewMessages.tap()
+        assertMessagesPreview(in: app)
+        assertLabel(personalNote, on: app.staticTexts["common-ground.messages.message"])
+        let invitationLink = app.buttons["common-ground.messages.open-invitation"]
+        XCTAssertEqual(invitationLink.value as? String, chosenDate)
+
+        openRecipientFromMessages(in: app)
+        XCTAssertEqual(app.staticTexts["common-ground.invitation.place"].label, "Not No Bar")
+        assertLabel(chosenDate, on: whenValue)
+        XCTAssertTrue(app.staticTexts[personalNote].exists)
+        capture("rec486-date-02-recipient-keeps-date-and-note")
+
+        closeRecipientToMessages(in: app)
+        XCTAssertEqual(invitationLink.value as? String, chosenDate)
+        app.buttons["common-ground.messages.close"].tap()
+        XCTAssertTrue(previewMessages.waitForExistence(timeout: 3))
+        assertLabel(chosenDate, on: whenValue)
     }
 
     func testCaptureEveryNativeDesignState() {
         let pages = [
             "detail", "mix", "profile", "ownProfile", "invitation",
-            "recipient", "sparse", "loading", "unavailable"
+            "messages", "recipient", "recipientOpened", "sparse", "loading", "unavailable"
         ]
 
         for page in pages {
@@ -93,10 +154,14 @@ final class CommonGroundMockupUITests: XCTestCase {
                     XCTAssertTrue(scrollTo(finalNarrative, in: app))
                     capture("rec486-state-mix-scrolled-evidence")
                 }
+                if page == "messages" {
+                    app.buttons["common-ground.messages.close"].tap()
+                    XCTAssertTrue(app.buttons["common-ground.profile-entry"].waitForExistence(timeout: 4))
+                }
                 if page == "recipient" {
                     app.buttons["Open Ryan’s invitation"].tap()
                     XCTAssertTrue(app.buttons["Reply in Messages"].waitForExistence(timeout: 4))
-                    capture("rec486-state-recipient-opened")
+                    capture("rec486-state-recipient-revealed")
                 }
                 app.terminate()
             }
@@ -116,7 +181,9 @@ final class CommonGroundMockupUITests: XCTestCase {
     }
 
     private func assertReady(page: String, in app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["Design previews"].firstMatch.waitForExistence(timeout: 8))
+        if page != "messages" {
+            XCTAssertTrue(app.buttons["Design previews"].firstMatch.waitForExistence(timeout: 8))
+        }
         switch page {
         case "detail":
             XCTAssertTrue(app.buttons["common-ground.open-mix"].waitForExistence(timeout: 3))
@@ -134,11 +201,16 @@ final class CommonGroundMockupUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["Ryan"].firstMatch.exists)
             XCTAssertFalse(app.buttons["common-ground.profile-entry"].exists)
         case "invitation":
-            XCTAssertTrue(app.buttons["Share your invitation"].waitForExistence(timeout: 3))
-            XCTAssertTrue(app.staticTexts["A little nudge from Astir."].exists)
+            XCTAssertTrue(app.buttons["common-ground.invitation.messages"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].exists)
+        case "messages":
+            assertMessagesPreview(in: app)
         case "recipient":
             XCTAssertTrue(app.buttons["Open Ryan’s invitation"].waitForExistence(timeout: 3))
             XCTAssertFalse(app.buttons["Reply in Messages"].exists)
+        case "recipientOpened":
+            XCTAssertTrue(app.buttons["Reply in Messages"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].exists)
         case "sparse":
             let mix = app.buttons["common-ground.open-mix"]
             XCTAssertTrue(mix.waitForExistence(timeout: 3))
@@ -164,6 +236,33 @@ final class CommonGroundMockupUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists && element.isHittable
+    }
+
+    private func identifiedElement(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    private func assertMessagesPreview(in app: XCUIApplication) {
+        XCTAssertTrue(identifiedElement("common-ground.messages.conversation", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["common-ground.messages.preview-notice"].exists)
+        XCTAssertTrue(app.buttons["common-ground.messages.open-invitation"].exists)
+        XCTAssertFalse(app.buttons["Send"].exists, "The local demo must not expose actual delivery.")
+    }
+
+    private func openRecipientFromMessages(in app: XCUIApplication) {
+        let invitationLink = app.buttons["common-ground.messages.open-invitation"]
+        XCTAssertTrue(scrollTo(invitationLink, in: app))
+        invitationLink.tap()
+        XCTAssertTrue(app.buttons["Reply in Messages"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Open Ryan’s invitation"].exists, "The Messages link should open the postcard directly.")
+    }
+
+    private func closeRecipientToMessages(in app: XCUIApplication) {
+        let closeRecipient = app.buttons["common-ground.recipient.close"]
+        XCTAssertTrue(closeRecipient.waitForExistence(timeout: 3))
+        closeRecipient.tap()
+        XCTAssertTrue(closeRecipient.waitForNonExistence(timeout: 4))
+        assertMessagesPreview(in: app)
     }
 
     private func selectCity(_ city: String, in app: XCUIApplication) {

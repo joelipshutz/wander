@@ -9,6 +9,7 @@ private enum CommonGroundMockRoute: Hashable {
     case place(CommonGroundMockPlace)
     case invitation(CommonGroundMockPlace)
     case recipient(CommonGroundMockPlace)
+    case messages, recipientOpened
 }
 
 /// Isolated native design exploration. No account data, persistence, or delivery.
@@ -52,11 +53,14 @@ struct CommonGroundDesignMockupRoot: View {
         case .place(let place):
             CommonGroundPlaceMockup(place: place) { path.append(.invitation(place)) }
         case .invitation(let place):
-            CommonGroundInvitationMockup(placeName: place.name, category: place.category,
-                                         systemImage: place.systemImage)
+            CommonGroundInvitationMockup(draft: CommonGroundInvitationDraft(place: place))
         case .recipient(let place):
-            CommonGroundInvitationMockup(placeName: place.name, category: place.category,
-                                         systemImage: place.systemImage, opensEnvelope: true)
+            CommonGroundInvitationMockup(draft: CommonGroundInvitationDraft(place: place), opensEnvelope: true)
+        case .messages:
+            CommonGroundMessagesMockup(draft: .preview, onClose: { path.removeLast() })
+                .toolbar(.hidden, for: .navigationBar)
+        case .recipientOpened:
+            CommonGroundInvitationMockup(draft: .preview, opensEnvelope: true, initiallyOpened: true)
         }
     }
 
@@ -85,6 +89,8 @@ struct CommonGroundDesignMockupRoot: View {
         case .mix: return [.detail, .mix]
         case .invitation: return [.detail, .mix, .invitation(place)]
         case .recipient: return [.detail, .recipient(place)]
+        case .messages: return [.messages]
+        case .recipientOpened: return [.detail, .recipientOpened]
         }
     }
 }
@@ -98,6 +104,8 @@ private extension CommonGroundMockPage {
         case .mix: "Thought of you two"
         case .invitation: "Make an invitation"
         case .recipient: "Receive an invitation"
+        case .messages: "In Messages"
+        case .recipientOpened: "Opened invitation"
         case .sparse: "A little common ground"
         case .loading: "Loading"
         case .unavailable: "Unavailable"
@@ -708,7 +716,7 @@ private struct CommonGroundAvatar: View {
     }
 }
 
-private struct CommonGroundPhoto: View {
+struct CommonGroundPhoto: View {
     let tile: Int
     var body: some View {
         GeometryReader { geometry in

@@ -1,546 +1,385 @@
 #if DEBUG
 import SwiftUI
 
+/// A local invitation rehearsal. The same draft travels through every preview.
 struct CommonGroundInvitationMockup: View {
-    let placeName: String
-    let category: String
-    let systemImage: String
-    var opensEnvelope = false
-
-    var body: some View {
-        CGInvitationScreen(
-            placeName: placeName,
-            category: category,
-            systemImage: systemImage,
-            opensEnvelope: opensEnvelope
-        )
-        .astirAdaptiveBrandMode()
-    }
-}
-
-private struct CGInvitationScreen: View {
-    let placeName: String
-    let category: String
-    let systemImage: String
+    @Environment(\.astirBrandMode) private var brand
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var draft: CommonGroundInvitationDraft
+    @State private var envelopeOpened: Bool
+    @State private var showsMessages = false
+    @State private var showsCalendar = false
+    @AccessibilityFocusState private var postcardFocused: Bool
+    @FocusState private var noteFocused: Bool
     let opensEnvelope: Bool
 
-    @Environment(\.astirBrandMode) private var brandMode
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var note = ""
-    @State private var suggestedTime = ""
-    @State private var envelopeOpened = false
-    @State private var showsSharingPreview = false
-    @AccessibilityFocusState private var postcardFocused: Bool
-
-    private var invitationCopy: String {
-        note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Astir picked this for us. Want to go?"
-            : note
+    init(draft: CommonGroundInvitationDraft, opensEnvelope: Bool = false, initiallyOpened: Bool = false) {
+        _draft = State(initialValue: draft)
+        _envelopeOpened = State(initialValue: initiallyOpened)
+        self.opensEnvelope = opensEnvelope
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+            VStack(alignment: .leading, spacing: 24) {
                 if opensEnvelope {
-                    recipientContent
+                    recipient
                 } else {
-                    composerContent
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Astir’s taking the wheel.")
+                            .font(AstirTypography.sheetTitle).accessibilityAddTraits(.isHeader)
+                        Text("You bring the company.")
+                            .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
+                    }
+                    postcard
+                    composerFields
                 }
             }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing4)
-            .padding(.bottom, WanderTheme.spacing6)
+            .padding(20).padding(.bottom, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(opensEnvelope ? "For you two" : "Your invitation")
+        .navigationTitle(opensEnvelope ? "From Ryan" : "Your invitation")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !opensEnvelope || envelopeOpened {
-                bottomAction
+            if !opensEnvelope || envelopeOpened { bottomAction }
+        }
+        .sheet(isPresented: $showsCalendar) {
+            CGInvitationDatePicker(date: draft.suggestedDate ?? CommonGroundInvitationDraft.preview.suggestedDate ?? .now) {
+                draft.suggestedDate = $0
             }
         }
-        .sheet(isPresented: $showsSharingPreview) {
-            CGInvitationSharingPreview(
-                placeName: placeName,
-                invitationCopy: invitationCopy,
-                suggestedTime: suggestedTime,
-                isReply: opensEnvelope
-            )
+        .sheet(isPresented: $showsMessages) {
+            CommonGroundMessagesMockup(draft: draft, isReply: opensEnvelope)
         }
         .astirScreen()
         .astirAdaptiveBrandMode()
     }
 
-    private var composerContent: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("A little nudge from Astir.")
-                    .font(AstirTypography.sheetTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                Text("A place picked for your two maps. Make the invitation yours.")
-                    .font(AstirTypography.bodySmall)
-                    .foregroundStyle(brandMode.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            postcard
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                invitationField(title: "A personal note", detail: "Optional") {
-                    TextField("Add your own message…", text: $note, axis: .vertical)
-                        .lineLimit(2...5)
-                        .accessibilityLabel("Personal note, optional")
-                }
-                invitationField(title: "When", detail: "Optional") {
-                    TextField("Maybe Saturday afternoon?", text: $suggestedTime)
-                        .accessibilityLabel("Suggested time, optional")
-                }
-            }
-        }
+    private var postcard: some View {
+        CGInvitationPostcard(draft: draft)
+            .accessibilityElement(children: .contain)
+            .accessibilityFocused($postcardFocused)
     }
 
-    private var recipientContent: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-            HStack(spacing: WanderTheme.spacing3) {
-                CGInvitationInitials(initials: "R", size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Ryan found something for you two.")
-                        .font(AstirTypography.cardTitle)
-                    Text("A suggestion from your two maps.")
-                        .font(AstirTypography.bodySmall)
-                        .foregroundStyle(brandMode.secondaryText)
+    private var composerFields: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Make it yours").font(AstirTypography.control)
+                    Text("Optional").font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 }
-            }
-            .accessibilityElement(children: .combine)
-
-            if envelopeOpened {
-                postcard
-                    .accessibilityFocused($postcardFocused)
-                    .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 12)))
-
-                Text("Something familiar or somewhere new. The next move is yours.")
-                    .font(AstirTypography.bodySmall)
-                    .foregroundStyle(brandMode.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Button(action: revealPostcard) {
-                    VStack(spacing: WanderTheme.spacing4) {
-                        CGInvitationEnvelopeArtwork()
-                            .aspectRatio(1.35, contentMode: .fit)
-                            .accessibilityHidden(true)
-                        Text("A little common ground.")
-                            .font(AstirTypography.sheetTitle)
-                            .foregroundStyle(brandMode.primaryText)
-                        Label("Open your invitation", systemImage: "envelope.open")
-                            .font(AstirTypography.control)
-                            .foregroundStyle(brandMode.accentText)
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                    }
-                    .frame(maxWidth: .infinity)
+                TextField(draft.message, text: $draft.note, axis: .vertical)
+                    .focused($noteFocused)
+                    .font(AstirTypography.body).lineLimit(2...5)
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 14))
                     .contentShape(Rectangle())
+                    .onTapGesture { noteFocused = true }
+                    .accessibilityLabel("Your message, optional")
+                    .accessibilityIdentifier("common-ground.invitation.message")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    noteFocused = false
+                    showsCalendar = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "calendar").font(.title3).foregroundStyle(brand.accentText)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("When").font(AstirTypography.control)
+                            Text(draft.whenText ?? "Pick a day & time")
+                                .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("common-ground.invitation.when-selection")
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.down").font(.caption)
+                    }
+                    .foregroundStyle(brand.primaryText).padding(16)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                    .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open Ryan’s invitation")
-                .accessibilityHint("Reveals the place suggested for you two")
-                .padding(.vertical, WanderTheme.spacing6)
+                .accessibilityLabel("When, \(draft.whenText ?? "optional, choose a day and time")")
+                .accessibilityIdentifier("common-ground.invitation.when")
+                if draft.suggestedDate != nil {
+                    Button("Keep the time open") { draft.suggestedDate = nil }
+                        .font(AstirTypography.bodySmall).frame(minHeight: 44)
+                        .accessibilityIdentifier("common-ground.invitation.clear-date")
+                }
             }
         }
     }
 
-    private var postcard: some View {
-        CGInvitationPostcard(
-            placeName: placeName,
-            category: category,
-            systemImage: systemImage,
-            message: invitationCopy,
-            suggestedTime: suggestedTime
-        )
-        .accessibilityElement(children: .combine)
-    }
-
-    private func invitationField<Content: View>(
-        title: String,
-        detail: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(AstirTypography.control)
-                Text(detail)
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brandMode.secondaryText)
+    private var recipient: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 12) {
+                CGInvitationInitials(initials: "R", size: 42)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ryan’s got a plan.").font(AstirTypography.sheetTitle)
+                    Text("And a pretty good reason for it.")
+                        .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                }
             }
-            content()
-                .font(AstirTypography.body)
-                .tint(brandMode.accentText)
-                .padding(WanderTheme.spacing3)
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .background(brandMode.recessedBackground, in: RoundedRectangle(cornerRadius: 12))
+            if envelopeOpened {
+                postcard
+                    .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 16)))
+                Text("Like the sound of it? Take it back to your chat.")
+                    .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+            } else {
+                Button {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.85)) {
+                        envelopeOpened = true
+                    }
+                    Task { @MainActor in
+                        await Task.yield()
+                        postcardFocused = true
+                    }
+                } label: {
+                    VStack(spacing: 22) {
+                        CGInvitationEnvelopeArtwork(symbol: draft.reasonSymbol)
+                            .aspectRatio(1.25, contentMode: .fit)
+                        Text("A little plan for us.").font(AstirTypography.screenTitle)
+                        Label("Take a peek", systemImage: "envelope.open")
+                            .font(AstirTypography.control).foregroundStyle(brand.accentText)
+                            .frame(minHeight: 44)
+                    }
+                    .foregroundStyle(brand.primaryText).frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).padding(.vertical, 20)
+                .accessibilityLabel("Open Ryan’s invitation")
+                .accessibilityHint("Reveals the place, the reason, and the proposed time")
+            }
         }
     }
 
     private var bottomAction: some View {
-        VStack(spacing: WanderTheme.spacing2) {
+        VStack(spacing: 8) {
             Button {
-                showsSharingPreview = true
+                noteFocused = false
+                showsMessages = true
             } label: {
-                Label(
-                    opensEnvelope ? "Reply in Messages" : "Share your invitation",
-                    systemImage: opensEnvelope ? "message" : "square.and.arrow.up"
-                )
-                .font(AstirTypography.control)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, WanderTheme.spacing3)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .foregroundStyle(brandMode.accentForeground)
-                .background(brandMode.accent, in: RoundedRectangle(cornerRadius: 16))
+                Label(opensEnvelope ? "Reply in Messages" : "Preview in Messages", systemImage: "message.fill")
+                    .font(AstirTypography.control).frame(maxWidth: .infinity, minHeight: 52)
+                    .foregroundStyle(brand.accentForeground)
+                    .background(brand.accent, in: RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Opens a sharing preview. This mock does not send messages.")
-
-            Text("Sharing preview · nothing is sent")
-                .font(AstirTypography.caption)
-                .foregroundStyle(brandMode.secondaryText)
-                .multilineTextAlignment(.center)
+            .accessibilityIdentifier("common-ground.invitation.messages")
+            Text("Design preview · nothing is sent")
+                .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
         }
-        .padding(.horizontal, WanderTheme.spacing4)
-        .padding(.top, WanderTheme.spacing3)
-        .padding(.bottom, WanderTheme.spacing2)
-        .background(brandMode.background)
-        .overlay(alignment: .top) {
-            Rectangle().fill(brandMode.border.opacity(0.35)).frame(height: 0.5)
-        }
-    }
-
-    private func revealPostcard() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
-            envelopeOpened = true
-        }
-        Task { @MainActor in
-            await Task.yield()
-            postcardFocused = true
-        }
+        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+        .background(brand.background)
     }
 }
 
-private struct CGInvitationPostcard: View {
-    @Environment(\.astirBrandMode) private var brandMode
+/// Shared artwork, also usable inside the Messages rich-link mock.
+struct CGInvitationPostcard: View {
+    @Environment(\.astirBrandMode) private var brand
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let placeName: String
-    let category: String
-    let systemImage: String
-    let message: String
-    let suggestedTime: String
+    let draft: CommonGroundInvitationDraft
+    var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("Ryan & Joe")
-                        .font(AstirTypography.sectionTitle)
-                    Text("A PLACE FOR YOU TWO")
-                        .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.secondaryText)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "sparkle")
-                    .font(.system(.title2))
-                    .foregroundStyle(brandMode.accentText)
-                    .frame(width: 46, height: 54)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(brandMode.border, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("RYAN + JOE").font(AstirTypography.metadata).tracking(2)
+                        Text("Good company.\nGood excuse.")
+                            .font(AstirTypography.sectionTitle)
                     }
-                    .rotationEffect(.degrees(5))
-                    .accessibilityHidden(true)
-            }
-
-            HStack(alignment: .center, spacing: WanderTheme.spacing4) {
-                Image(systemName: systemImage)
-                    .font(.system(.largeTitle, design: .rounded))
-                    .foregroundStyle(brandMode.accentText)
-                    .frame(width: 66, height: 78)
-                    .background(brandMode.accentWash, in: RoundedRectangle(cornerRadius: 24))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text(placeName)
-                        .font(AstirTypography.sheetTitle)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(category)
-                        .font(AstirTypography.bodySmall)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    postageStamp
+                }
+                HStack(alignment: .center, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(draft.place.name).font(compact ? AstirTypography.sheetTitle : AstirTypography.screenTitle)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("common-ground.invitation.place")
+                        Text("\(draft.place.category) · \(draft.place.area)")
+                            .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    if !dynamicTypeSize.isAccessibilitySize && !compact {
+                        CommonGroundPhoto(tile: draft.place.category == "Bar" ? 3 : 0)
+                            .frame(width: 78, height: 96)
+                            .padding(5).padding(.bottom, 12)
+                            .background(brand.raisedBackground)
+                            .rotationEffect(.degrees(6))
+                            .shadow(color: .black.opacity(0.1), radius: 4, y: 3)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
+            .padding(compact ? 18 : 22)
+            .background(WanderTheme.terracottaTint.color)
 
-            Rectangle()
-                .fill(brandMode.border.opacity(0.45))
-                .frame(height: 0.5)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                Text(message)
-                    .font(AstirTypography.sectionTitle)
+            VStack(alignment: .leading, spacing: 18) {
+                Text(draft.message)
+                    .font(compact ? AstirTypography.body : AstirTypography.sheetTitle)
                     .fixedSize(horizontal: false, vertical: true)
-                if !suggestedTime.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Label(suggestedTime, systemImage: "calendar")
-                        .font(AstirTypography.bodySmall)
-                        .foregroundStyle(brandMode.secondaryText)
+                    .accessibilityIdentifier("common-ground.invitation.copy")
+                if let when = draft.whenText {
+                    Label {
+                        Text(when).accessibilityIdentifier("common-ground.invitation.when-value")
+                    } icon: { Image(systemName: "calendar") }
+                    .font(AstirTypography.control).foregroundStyle(brand.accentText)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                CGInvitationPerforation().stroke(brand.border, style: StrokeStyle(lineWidth: 1, dash: [3, 5]))
+                    .frame(height: 1).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 7) {
+                    Label {
+                        Text(draft.reasonTitle)
+                            .accessibilityIdentifier("common-ground.invitation.reason-title")
+                    } icon: { Image(systemName: draft.reasonSymbol) }
+                    .font(AstirTypography.label).foregroundStyle(brand.accentText)
+                    Text(draft.reasonDetail)
+                        .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                HStack {
+                    Text("From Ryan, with a little help.").font(AstirTypography.caption)
+                        .foregroundStyle(brand.secondaryText)
+                    Spacer(minLength: 12)
+                    Text("astir").font(.system(.title3, design: .serif).italic())
+                }.padding(.top, 3)
             }
-
-            ViewThatFits(in: .horizontal) {
-                signatureRow
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    signature
-                    attribution
-                }
-            }
+            .padding(compact ? 18 : 22)
+            .background(brand.raisedBackground)
         }
-        .padding(dynamicTypeSize.isAccessibilitySize ? WanderTheme.spacing4 : WanderTheme.spacing6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(brandMode.border.opacity(0.7), lineWidth: 0.75)
+            RoundedRectangle(cornerRadius: 20).stroke(brand.border.opacity(0.3), lineWidth: 0.75)
         }
     }
 
-    private var signatureRow: some View {
-        HStack(alignment: .center, spacing: WanderTheme.spacing4) {
-            signature
-            Spacer(minLength: WanderTheme.spacing2)
-            attribution
+    private var postageStamp: some View {
+        VStack(spacing: 3) {
+            Image(systemName: draft.reasonSymbol).font(.system(size: 24, weight: .semibold))
+            Text("LET’S GO").font(AstirTypography.metadata).tracking(1)
         }
-    }
-
-    private var signature: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            CGInvitationInitials(initials: "R", size: 30)
-            Text("From Ryan")
-                .font(AstirTypography.caption)
-                .foregroundStyle(brandMode.secondaryText)
+        .foregroundStyle(brand.accentText).frame(width: 66, height: 76)
+        .background(brand.raisedBackground.opacity(0.85))
+        .overlay {
+            RoundedRectangle(cornerRadius: 3).stroke(brand.accentText.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
         }
-        .fixedSize()
+        .rotationEffect(.degrees(8)).accessibilityHidden(true)
     }
+}
 
-    private var attribution: some View {
-        Text("Picked by Astir")
-            .font(AstirTypography.caption)
-            .foregroundStyle(brandMode.secondaryText)
-            .fixedSize()
+private struct CGInvitationPerforation: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        }
     }
 }
 
 private struct CGInvitationInitials: View {
-    @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.astirBrandMode) private var brand
     let initials: String
     let size: CGFloat
-
     var body: some View {
-        Text(initials)
-            .font(AstirTypography.label)
-            .foregroundStyle(brandMode.accentText)
-            .frame(width: size, height: size)
-            .background(brandMode.accentWash, in: Circle())
-            .accessibilityHidden(true)
+        Text(initials).font(AstirTypography.control)
+            .foregroundStyle(brand.accentText).frame(width: size, height: size)
+            .background(brand.accentWash, in: Circle()).accessibilityHidden(true)
     }
 }
 
 private struct CGInvitationEnvelopeArtwork: View {
-    @Environment(\.astirBrandMode) private var brandMode
-
+    @Environment(\.astirBrandMode) private var brand
+    let symbol: String
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(brandMode.raisedBackground)
+                RoundedRectangle(cornerRadius: 16).fill(WanderTheme.terracottaTint.color)
                 Path { path in
-                    let width = geometry.size.width
-                    let height = geometry.size.height
-                    path.move(to: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: width * 0.5, y: height * 0.58))
-                    path.addLine(to: CGPoint(x: width, y: 0))
-                    path.move(to: CGPoint(x: 0, y: height))
-                    path.addLine(to: CGPoint(x: width * 0.38, y: height * 0.46))
-                    path.move(to: CGPoint(x: width, y: height))
-                    path.addLine(to: CGPoint(x: width * 0.62, y: height * 0.46))
+                    let w = geometry.size.width, h = geometry.size.height
+                    path.move(to: .zero)
+                    path.addQuadCurve(to: CGPoint(x: w * 0.5, y: h * 0.58), control: CGPoint(x: w * 0.25, y: h * 0.4))
+                    path.addQuadCurve(to: CGPoint(x: w, y: 0), control: CGPoint(x: w * 0.75, y: h * 0.4))
+                    path.move(to: CGPoint(x: 0, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.35, y: h * 0.5))
+                    path.move(to: CGPoint(x: w, y: h))
+                    path.addLine(to: CGPoint(x: w * 0.65, y: h * 0.5))
+                }.stroke(brand.accentText.opacity(0.22), lineWidth: 1.2)
+                VStack(spacing: 3) {
+                    Text("JOE,").font(AstirTypography.metadata).tracking(2)
+                    Text("this one’s for us.").font(AstirTypography.sectionTitle)
                 }
-                .stroke(brandMode.border.opacity(0.55), lineWidth: 0.75)
-
-                Image(systemName: "sparkle")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(brandMode.accentForeground)
-                    .frame(width: 58, height: 58)
-                    .background(brandMode.accent, in: Circle())
-                    .position(x: geometry.size.width * 0.5, y: geometry.size.height * 0.56)
+                .foregroundStyle(brand.primaryText)
+                .position(x: geometry.size.width / 2, y: geometry.size.height * 0.2)
+                Image(systemName: symbol).font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(brand.accentForeground).frame(width: 62, height: 62)
+                    .background(brand.accent, in: Circle())
+                    .overlay(Circle().stroke(brand.accentText.opacity(0.25), lineWidth: 4).padding(5))
+                    .rotationEffect(.degrees(-10))
+                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.58)
+                Text("A LITTLE HELP FROM ASTIR").font(AstirTypography.metadata).tracking(1.4)
+                    .foregroundStyle(brand.secondaryText)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.87)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(brandMode.border.opacity(0.7), lineWidth: 0.75)
-            }
-        }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(brand.border.opacity(0.4), lineWidth: 0.8))
+            .rotationEffect(.degrees(-3)).padding(8)
+        }.accessibilityHidden(true)
     }
 }
 
-private struct CGInvitationSharingPreview: View {
+private struct CGInvitationDatePicker: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.astirBrandMode) private var brandMode
-    let placeName: String
-    let invitationCopy: String
-    let suggestedTime: String
-    let isReply: Bool
-    @State private var selectedChannel: String?
-    @State private var reply = ""
-
-    private var channel: String? { selectedChannel ?? (isReply ? "Messages" : nil) }
+    @Environment(\.astirBrandMode) private var brand
+    @State var date: Date
+    let confirm: (Date) -> Void
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-                    if let channel {
-                        channelPreview(channel)
-                    } else {
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                            Text("An invitation, your way.")
-                                .font(AstirTypography.sheetTitle)
-                            Text("Choose where to share your postcard.")
-                                .font(AstirTypography.bodySmall)
-                                .foregroundStyle(brandMode.secondaryText)
-                        }
-                        VStack(spacing: 0) {
-                            channelButton("Messages", systemImage: "message.fill")
-                            Divider().overlay(brandMode.border.opacity(0.4))
-                            channelButton("More sharing", systemImage: "square.and.arrow.up")
-                        }
-                        .padding(.horizontal, WanderTheme.spacing4)
-                        .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: 16))
-                    }
-
-                    Label("Preview only. Nothing has been sent.", systemImage: "eye")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(WanderTheme.spacing4)
+                VStack(alignment: .leading, spacing: 22) {
+                    Text("Put a little something on the calendar.")
+                        .font(AstirTypography.sheetTitle)
+                    DatePicker("Day", selection: $date, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .accessibilityIdentifier("common-ground.invitation.date-picker")
+                    DatePicker("Time", selection: $date, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact).font(AstirTypography.control)
+                        .frame(minHeight: 44)
+                    Text("Just a proposal. You can work out the details in your chat.")
+                        .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                }.padding(20)
             }
-            .navigationTitle(channel ?? "Sharing preview")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .tint(brandMode.accentText)
+            .navigationTitle("Pick a time").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    confirm(date)
+                    dismiss()
+                } label: {
+                    Text("Use this time").font(AstirTypography.control)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .foregroundStyle(brand.accentForeground)
+                        .background(brand.accent, in: RoundedRectangle(cornerRadius: 16))
                 }
-                if selectedChannel != nil && !isReply {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Back") { selectedChannel = nil }
-                            .tint(brandMode.accentText)
-                    }
-                }
+                .buttonStyle(.plain).padding(20)
+                .accessibilityIdentifier("common-ground.invitation.use-date")
             }
             .astirScreen()
         }
-        .astirAdaptiveBrandMode()
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-    }
-
-    private func channelButton(_ title: String, systemImage: String) -> some View {
-        Button {
-            selectedChannel = title
-        } label: {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: systemImage)
-                    .foregroundStyle(brandMode.accentText)
-                    .frame(width: 30)
-                Text(title).font(AstirTypography.control)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(.caption, weight: .semibold))
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-            .foregroundStyle(brandMode.primaryText)
-            .frame(minHeight: 64)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Shows a local preview only")
-    }
-
-    @ViewBuilder
-    private func channelPreview(_ channel: String) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            Text(isReply ? "To Ryan" : "To Joe")
-                .font(AstirTypography.control)
-                .foregroundStyle(brandMode.secondaryText)
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                Text(placeName)
-                    .font(AstirTypography.sectionTitle)
-                Text(invitationCopy)
-                    .font(AstirTypography.body)
-                if !suggestedTime.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Label(suggestedTime, systemImage: "calendar")
-                        .font(AstirTypography.bodySmall)
-                }
-                Text("An Astir postcard")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(WanderTheme.spacing4)
-            .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: 18))
-
-            if isReply {
-                TextField("Write a reply…", text: $reply, axis: .vertical)
-                    .font(AstirTypography.body)
-                    .lineLimit(3...6)
-                    .padding(WanderTheme.spacing3)
-                    .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-                    .background(brandMode.recessedBackground, in: RoundedRectangle(cornerRadius: 12))
-                    .accessibilityLabel("Reply preview, not sent")
-            } else if channel == "More sharing" {
-                Text("Your postcard can travel with its place link.")
-                    .font(AstirTypography.bodySmall)
-                    .foregroundStyle(brandMode.secondaryText)
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    Label("AirDrop", systemImage: "airplayaudio")
-                    Label("Mail", systemImage: "envelope")
-                    Label("Copy link", systemImage: "link")
-                }
-                .font(AstirTypography.control)
-                .foregroundStyle(brandMode.secondaryText)
-                .accessibilityLabel("Example sharing destinations: AirDrop, Mail, and Copy link")
-            }
-        }
+        .tint(brand.accentText).astirAdaptiveBrandMode()
+        .presentationDetents([.large]).presentationDragIndicator(.visible)
     }
 }
 
-#Preview("Invitation · Light") {
-    NavigationStack {
-        CommonGroundInvitationMockup(
-            placeName: "Courage Bagels",
-            category: "Bagels · Virgil Village",
-            systemImage: "cup.and.saucer"
-        )
-    }
-    .preferredColorScheme(.light)
+#Preview("Invitation · composer") {
+    NavigationStack { CommonGroundInvitationMockup(draft: .preview) }
 }
-
-#Preview("Invitation · Envelope") {
-    NavigationStack {
-        CommonGroundInvitationMockup(
-            placeName: "Courage Bagels",
-            category: "Bagels · Virgil Village",
-            systemImage: "cup.and.saucer",
-            opensEnvelope: true
-        )
-    }
-    .preferredColorScheme(.dark)
+#Preview("Invitation · opened") {
+    NavigationStack { CommonGroundInvitationMockup(draft: .preview, opensEnvelope: true, initiallyOpened: true) }
 }
 #endif
