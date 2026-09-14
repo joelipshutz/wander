@@ -2384,7 +2384,27 @@ final class WanderStore: ObservableObject {
         ]
         .compactMap { $0 }
 
-        let orderedActivity = FeedPresentation.newestFirst(activity, relativeTo: now)
+        var displayActivity = activity
+        #if DEBUG
+        // An explicit UI-test fixture exercises grouping through the real Feed
+        // and original-post routes without writing or reading remote activity.
+        if ProcessInfo.processInfo.arguments.contains("-WanderFeedGroupingUITest"),
+           let visit = activity.first, let list = mayaList {
+            displayActivity += [
+                FeedActivity(
+                    id: "fixture-feed-group-wanna", kind: .placeWannaGo,
+                    actor: visit.actor, place: visit.place,
+                    occurredAt: visit.occurredAt.addingTimeInterval(-120)
+                ),
+                FeedActivity(
+                    id: "fixture-feed-group-list", kind: .listItemAdded,
+                    actor: visit.actor, place: visit.place, list: list,
+                    occurredAt: visit.occurredAt.addingTimeInterval(120)
+                )
+            ]
+        }
+        #endif
+        let orderedActivity = FeedPresentation.newestFirst(displayActivity, relativeTo: now)
         let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
         return FollowedFeedPage(
             activity: orderedActivity,
