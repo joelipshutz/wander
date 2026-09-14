@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import Wander
 
 final class AstirLaunchLockupTests: XCTestCase {
@@ -78,6 +79,54 @@ final class AstirLaunchLockupTests: XCTestCase {
         XCTAssertEqual(outsideLetters, 0, "The photograph and foundation must never be highlighted.")
         XCTAssertGreaterThan(covered, 50_000)
         XCTAssertLessThan(covered, 150_000)
+    }
+
+    @MainActor
+    func testLoadingMessageDoesNotMoveSplashArtwork() throws {
+        // Compare the actual artwork pixels, not a duplicated layout formula.
+        // The former centered VStack shifts it when the status gains height.
+        for size in [CGSize(width: 320, height: 568), CGSize(width: 393, height: 852), CGSize(width: 768, height: 1024)] {
+            for typeSize in [DynamicTypeSize.large, .accessibility5] {
+                func render(message: String?) throws -> (width: Int, height: Int, bytes: [UInt8]) {
+                    let renderer = ImageRenderer(content:
+                        OnboardingLaunchView(message: message)
+                            .environment(\.dynamicTypeSize, typeSize)
+                            .frame(width: size.width, height: size.height)
+                    )
+                    renderer.scale = 1
+                    let image = try XCTUnwrap(renderer.cgImage)
+                    var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+                    try bytes.withUnsafeMutableBytes { buffer in
+                        let context = try XCTUnwrap(CGContext(
+                            data: buffer.baseAddress, width: image.width, height: image.height,
+                            bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                        ))
+                        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+                    }
+                    return (image.width, image.height, bytes)
+                }
+                let opening = try render(message: nil)
+                let loading = try render(message: "Loading your map…")
+                XCTAssertEqual(opening.width, loading.width)
+                XCTAssertEqual(opening.height, loading.height)
+                let artworkRows = (0..<opening.height).filter { y in
+                    (0..<opening.width).contains { x in
+                        let index = (y * opening.width + x) * 4
+                        return (0..<3).contains { opening.bytes[index + $0] > 40 }
+                    }
+                }
+                let firstRow = try XCTUnwrap(artworkRows.first)
+                let lastRow = try XCTUnwrap(artworkRows.last)
+                XCTAssertGreaterThan(lastRow - firstRow, 30, "The approved artwork must actually render.")
+                let artworkRange = (firstRow * opening.width * 4)..<((lastRow + 1) * opening.width * 4)
+                XCTAssertTrue(
+                    opening.bytes[artworkRange].elementsEqual(loading.bytes[artworkRange]),
+                    "Loading status moved or overlapped the artwork at \(size), Dynamic Type \(typeSize)"
+                )
+            }
+        }
     }
 
     private func raster(_ name: String) throws -> (width: Int, height: Int, bytes: [UInt8]) {
