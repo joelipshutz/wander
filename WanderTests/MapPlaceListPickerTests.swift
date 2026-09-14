@@ -290,9 +290,9 @@ final class MapPlaceListPickerTests: XCTestCase {
             XCTAssertEqual(selected.size, CGSize(width: 22, height: 25))
             XCTAssertEqual(unselected.size, selected.size)
             XCTAssertEqual(selected.renderingMode, .alwaysOriginal)
-            XCTAssertEqual(unselected.renderingMode, .alwaysOriginal)
+            XCTAssertEqual(unselected.renderingMode, .alwaysTemplate)
             XCTAssertEqual(try paperFillRGBA(selected), [240, 90, 60, 255])
-            XCTAssertEqual(try paperFillRGBA(unselected), isDark ? [242, 233, 219, 255] : [20, 23, 20, 255])
+            XCTAssertEqual(try paperFillRGBA(unselected.withTintColor(.white)), [255, 255, 255, 255])
             XCTAssertTrue(selected === PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark))
         }
     }
