@@ -443,6 +443,49 @@ final class MapPlaceCardUITests: XCTestCase {
         capture("rec-293-place-card-returned")
     }
 
+    func testCompactPlacePreviewKeepsTabsThroughProfileRoundTrip() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest", "-WanderResetWalkthroughs",
+            "-WanderMapCardLocationFixture", "-WanderMapPlace", "Hearthline Coffee",
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        // Wait for the offscreen profile to prepare before checking its effect
+        // on the parent tab bar.
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 8))
+        XCTAssertTrue(tabs.isHittable)
+        capture("rec-464-compact-tabs")
+
+        card.tap()
+        let tabsHidden = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"), object: tabs
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [tabsHidden], timeout: 5), .completed)
+        let back = app.buttons["place-profile.back"]
+        XCTAssertTrue(back.isHittable)
+        capture("rec-464-expanded-profile")
+        back.tap()
+
+        let tabsReturned = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"), object: tabs
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [tabsReturned], timeout: 5), .completed)
+        XCTAssertTrue(card.isHittable)
+        capture("rec-464-returned-tabs")
+
+        tabs.buttons["Lists"].tap()
+        XCTAssertTrue(tabs.buttons["Lists"].isSelected)
+        capture("rec-464-lists-tint")
+        tabs.buttons["Map"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(tabs.isHittable)
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

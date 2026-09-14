@@ -99,6 +99,7 @@ struct PlaceProfileFullScreen: View {
     let action: PlaceSheetAction
     let initialSection: PlaceProfileInitialSection
     let usesInteractiveHorizontalDismissal: Bool
+    let hidesTabBar: Bool
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
@@ -124,6 +125,7 @@ struct PlaceProfileFullScreen: View {
         attachedSaveDraft: PlaceSaveDraft? = nil,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
+        hidesTabBar: Bool = true,
         onBack: @escaping () -> Void,
         onAction: @escaping () -> Void,
         onAddToList: (() -> Void)? = nil,
@@ -141,6 +143,7 @@ struct PlaceProfileFullScreen: View {
         self.action = action
         self.initialSection = initialSection
         self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
+        self.hidesTabBar = hidesTabBar
         self.onBack = onBack
         self.onAction = onAction
         self.onAddToList = onAddToList
@@ -199,7 +202,7 @@ struct PlaceProfileFullScreen: View {
         )
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
         .onChange(of: currentUserActionState) { _, state in
             guard let snapshot = saveActionSnapshot,
                   snapshot.usesFloatingActions,
