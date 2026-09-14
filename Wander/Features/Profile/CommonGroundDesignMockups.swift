@@ -95,7 +95,7 @@ private extension CommonGroundMockPage {
         case .profile: "Joe’s profile"
         case .ownProfile: "Your profile"
         case .detail: "Common Ground"
-        case .mix: "For you two"
+        case .mix: "Thought of you two"
         case .invitation: "Make an invitation"
         case .recipient: "Receive an invitation"
         case .sparse: "A little common ground"
@@ -139,15 +139,14 @@ private struct CommonGroundDetailMockup: View {
                 } else {
                     sharedFavorite
                     VStack(alignment: .leading, spacing: 16) {
-                        CommonGroundSectionHeading(title: "For you two", subtitle: "Good places. Even better company.")
-                        CommonGroundMixCover(count: state == .sparse ? 2 : 6, action: openMix)
+                        CommonGroundMixCover(count: CommonGroundMockData.mix(sparse: state == .sparse).count, action: openMix)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         CommonGroundSectionHeading(title: "Your common ground")
-                        evidenceLink("Both loved", detail: "The ones you’d happily go back to", count: 2, icon: "heart")
-                        evidenceLink("Both regulars", detail: "Part of both your routines", count: 2, icon: "arrow.counterclockwise")
-                        evidenceLink("Both wanna go", detail: "Already on both your maps", count: 2, icon: "bookmark")
-                        evidenceLink("All shared places", detail: "The familiar, the new, the different takes", count: 8, icon: "mappin.and.ellipse")
+                        evidenceLink("Both loved", detail: "The ones you’d happily go back to", count: CommonGroundMockData.places.filter(\.bothLoved).count, icon: "heart")
+                        evidenceLink("Both regulars", detail: "Part of both your routines", count: CommonGroundMockData.places.filter(\.bothRegulars).count, icon: "arrow.counterclockwise")
+                        evidenceLink("Both wanna go", detail: "Already on both your maps", count: CommonGroundMockData.places.filter { $0.youWanna && $0.joeWanna }.count, icon: "bookmark")
+                        evidenceLink("All shared places", detail: "The familiar, the new, the different takes", count: CommonGroundMockData.places.count, icon: "mappin.and.ellipse")
                     }
                 }
                 CommonGroundSampleCaption()
@@ -160,35 +159,24 @@ private struct CommonGroundDetailMockup: View {
     }
 
     private var sharedFavorite: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("A SHARED SOFT SPOT").font(AstirTypography.metadata)
-                        .tracking(1.5).foregroundStyle(brand.accentText)
-                    Text("You both\nlove Narwhal.")
-                        .font(AstirTypography.screenTitle).fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                if !dynamicTypeSize.isAccessibilitySize {
-                    CommonGroundPhoto(tile: 0).frame(width: 90, height: 112)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .rotationEffect(.degrees(4)).padding(.top, 10)
-                }
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("A SHARED SOFT SPOT").font(AstirTypography.metadata)
+                    .tracking(1.5).foregroundStyle(brand.accentText)
+                Spacer()
+                CommonGroundSparkStamp(symbol: "flame.fill")
             }
-            ratingLayout {
-                rating("You", value: "5.0")
-                if !dynamicTypeSize.isAccessibilitySize {
-                    Text("·").foregroundStyle(brand.secondaryText)
-                }
-                rating("Joe", value: "5.0")
-            }
-            Divider()
-            HStack(alignment: .center, spacing: 12) {
-                Text("35").font(AstirTypography.screenTitle).monospacedDigit()
-                    .foregroundStyle(brand.accentText)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("check-ins between you").font(AstirTypography.control)
-                    Text("You: 18  ·  Joe: 17").font(AstirTypography.bodySmall)
+            Text("You both love Narwhal.")
+                .font(AstirTypography.screenTitle).fixedSize(horizontal: false, vertical: true)
+            Text("18 check-ins for you. 17 for Joe.\nSafe to say you’ve both found your spot.")
+                .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                CommonGroundPhoto(tile: 0).frame(width: 48, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Narwhal").font(AstirTypography.control)
+                    Text("Coffee · Silver Lake").font(AstirTypography.bodySmall)
                         .foregroundStyle(brand.secondaryText)
                 }
                 Spacer(minLength: 0)
@@ -199,25 +187,8 @@ private struct CommonGroundDetailMockup: View {
             }
             .accessibilityIdentifier("common-ground.return")
         }
-        .padding(20)
-        .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    private var ratingLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 8))
-    }
-
-    private func rating(_ name: String, value: String) -> some View {
-        HStack(spacing: 5) {
-            Text(name).foregroundStyle(brand.secondaryText)
-            Image(systemName: "star.fill").foregroundStyle(brand.accentText)
-            Text(value).font(AstirTypography.control)
-        }
-        .font(AstirTypography.bodySmall)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name) rated Narwhal \(value) out of 5")
+        .padding(22)
+        .background(brand.accentWash, in: RoundedRectangle(cornerRadius: 22))
     }
 
     private func evidenceLink(_ title: String, detail: String, count: Int, icon: String) -> some View {
@@ -250,16 +221,16 @@ private struct CommonGroundMixCover: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("PICKED BY ASTIR").font(AstirTypography.metadata).tracking(1.5)
-                        Text("Joe & Ryan’s\nmix").font(AstirTypography.screenTitle)
+                        Text("Thought of\nyou two.").font(AstirTypography.screenTitle)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                     if !dynamicTypeSize.isAccessibilitySize {
-                        Image(systemName: "map.fill").font(.system(size: 40, weight: .light))
+                        Image(systemName: "envelope.open").font(.system(size: 40, weight: .light))
                             .rotationEffect(.degrees(12)).padding(.top, 15).accessibilityHidden(true)
                     }
                 }
-                Text("A little familiar. A little undiscovered.")
+                Text("A few places that have you both written all over them.")
                     .font(AstirTypography.bodySmall)
                 HStack {
                     Text("\(count) places · Los Angeles").font(AstirTypography.label)
@@ -273,7 +244,7 @@ private struct CommonGroundMixCover: View {
             .background(WanderTheme.terracottaTint.color, in: RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open your mix, \(count) places for you and Joe")
+        .accessibilityLabel("Thought of you two, \(count) places for you and Joe")
         .accessibilityIdentifier("common-ground.open-mix")
     }
 }
@@ -281,113 +252,165 @@ private struct CommonGroundMixCover: View {
 private struct CommonGroundMixMockup: View {
     @Environment(\.astirBrandMode) private var brand
     @State private var area = "Los Angeles"
-    @State private var occasion = CommonGroundMockOccasion.any
     let sparse: Bool
     let openPlace: (CommonGroundMockPlace) -> Void
     let invite: (CommonGroundMockPlace) -> Void
 
     private var places: [CommonGroundMockPlace] {
-        CommonGroundMockData.mix(area: area, occasion: occasion, sparse: sparse)
+        CommonGroundMockData.mix(area: area, sparse: sparse)
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 10) {
-                    CommonGroundAvatarPair()
-                    Text("Joe & Ryan’s mix").font(AstirTypography.screenTitle)
-                    Text("Places with a reason to go. Pick one and make it a plan.")
+            VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        CommonGroundAvatarPair(size: 38)
+                        Text("RYAN & JOE").font(AstirTypography.metadata)
+                            .tracking(1.4).foregroundStyle(brand.secondaryText)
+                        Spacer()
+                    }
+                    Text("Thought of you two.").font(AstirTypography.screenTitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("common-ground.collection-title")
+                    Text("The spots you love. The ones you’re curious about. A few good reasons to go together.")
                         .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
                 }
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) { areaPicker; occasionPicker }
-                    VStack(alignment: .leading, spacing: 8) { areaPicker; occasionPicker }
+                HStack(alignment: .center) {
+                    areaPicker
+                    Spacer(minLength: 12)
+                    Text("\(places.count) places")
+                        .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                        .accessibilityIdentifier("common-ground.mix-count")
                 }
-                Text("\(places.count) PLACES FOR YOU TWO")
-                    .font(AstirTypography.metadata).tracking(1.5).foregroundStyle(brand.secondaryText)
-                    .accessibilityIdentifier("common-ground.mix-count")
                 if places.isEmpty {
                     ContentUnavailableView {
-                        Label("Nothing here just yet", systemImage: "map")
+                        Label("A little more to discover", systemImage: "map")
                     } description: {
-                        Text("Try the area where your maps already overlap.")
+                        Text("There aren’t any picks for you two in this city yet.")
                     } actions: {
-                        Button("Try Los Angeles") { area = "Los Angeles" }
+                        Button("Back to Los Angeles") { area = "Los Angeles" }
                             .buttonStyle(.bordered).frame(minHeight: 44)
                     }
                 } else {
-                    ForEach(Array(places.enumerated()), id: \.element.id) { index, place in
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(alignment: .top, spacing: 14) {
-                                Text(String(format: "%02d", index + 1)).font(AstirTypography.metadata)
-                                    .foregroundStyle(brand.secondaryText).padding(.top, 5)
-                                Button { openPlace(place) } label: {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(place.name).font(AstirTypography.sheetTitle)
-                                        Text("\(place.category) · \(place.area)")
-                                            .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
-                                    }
-                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                }.buttonStyle(.plain)
-                                Image(systemName: place.systemImage)
-                                    .font(.title2).foregroundStyle(brand.accentText)
-                                    .frame(width: 42, height: 48).accessibilityHidden(true)
-                            }
-                            Text(place.reason).font(AstirTypography.body)
-                                .fixedSize(horizontal: false, vertical: true)
-                            HStack {
-                                Label(place.kind.shortLabel, systemImage: place.kind.symbol)
-                                    .font(AstirTypography.label).foregroundStyle(brand.secondaryText)
-                                Spacer(minLength: 8)
-                                Button { invite(place) } label: {
-                                    Label("Invite Joe", systemImage: "arrow.up.right")
-                                        .font(AstirTypography.control).frame(minHeight: 44)
-                                }
-                                .accessibilityIdentifier("common-ground.invite.\(place.id)")
-                            }
-                            Divider()
-                        }
+                    ForEach(places) { place in
+                        CommonGroundNarrativeCard(place: place, openPlace: { openPlace(place) },
+                                                   invite: { invite(place) })
                     }
                 }
                 CommonGroundSampleCaption()
             }
             .padding(20).padding(.bottom, 24)
         }
-        .navigationTitle("For you two").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .astirScreen()
     }
 
     private var areaPicker: some View {
         Menu {
-            Picker("Area", selection: $area) {
-                Text("Los Angeles").tag("Los Angeles")
-                Text("San Francisco").tag("San Francisco")
-            }
-        } label: { filterLabel(area, symbol: "location") }
-            .accessibilityIdentifier("common-ground.area")
-    }
-
-    private var occasionPicker: some View {
-        Menu {
-            Picker("Occasion", selection: $occasion) {
-                ForEach(CommonGroundMockOccasion.allCases, id: \.self) { option in
-                    Text(option.rawValue).tag(option)
+            Picker("City", selection: $area) {
+                ForEach(CommonGroundMockData.availableCities, id: \.self) { city in
+                    Text(city).tag(city)
                 }
             }
-        } label: { filterLabel(occasion.rawValue, symbol: "sparkle") }
-            .accessibilityIdentifier("common-ground.occasion")
+            Text("Cities either of you has been to")
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "mappin.and.ellipse")
+                Text(area)
+                Image(systemName: "chevron.down").font(.caption2)
+            }
+            .font(AstirTypography.control).foregroundStyle(brand.primaryText)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(area)
+        .accessibilityHint("Choose a city either of you has visited")
+        .accessibilityIdentifier("common-ground.area")
+    }
+}
+
+private struct CommonGroundNarrativeCard: View {
+    @Environment(\.astirBrandMode) private var brand
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let place: CommonGroundMockPlace
+    let openPlace: () -> Void
+    let invite: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                CommonGroundSparkStamp(symbol: place.narrativeSymbol)
+                Text(place.kind.shortLabel.uppercased())
+                    .font(AstirTypography.metadata).tracking(1.2)
+                    .foregroundStyle(brand.secondaryText)
+                Spacer(minLength: 0)
+            }
+            Text(place.narrativeTitle)
+                .font(.system(.title, design: .serif).weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("common-ground.narrative.\(place.id)")
+            Text(place.reason).font(AstirTypography.body)
+                .foregroundStyle(brand.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider()
+            footerLayout {
+                Button(action: openPlace) {
+                    HStack(spacing: 10) {
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            CommonGroundPhoto(tile: place.category == "Bar" ? 3 : 0)
+                                .frame(width: 40, height: 46)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(place.category).font(AstirTypography.label)
+                            Text(place.area).font(AstirTypography.caption)
+                                .foregroundStyle(brand.secondaryText)
+                        }
+                        Image(systemName: "chevron.right").font(.caption2)
+                            .foregroundStyle(brand.secondaryText)
+                    }
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View \(place.name), \(place.category), \(place.area)")
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                Button(action: invite) {
+                    Label("Invite Joe", systemImage: "arrow.up.right")
+                        .font(AstirTypography.control)
+                        .padding(.horizontal, 14).frame(minHeight: 44)
+                        .background(brand.accentWash, in: Capsule())
+                }
+                .accessibilityIdentifier("common-ground.invite.\(place.id)")
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 22))
     }
 
-    private func filterLabel(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-            Text(title)
-            Image(systemName: "chevron.down").font(.caption2)
-        }
-        .font(AstirTypography.label).foregroundStyle(brand.primaryText)
-        .padding(.horizontal, 12).frame(minHeight: 44)
-        .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 12))
+    private var footerLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+    }
+}
+
+private struct CommonGroundSparkStamp: View {
+    @Environment(\.astirBrandMode) private var brand
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 26, weight: .semibold))
+            .foregroundStyle(brand.accentText)
+            .frame(width: 52, height: 52)
+            .background(brand.accentWash, in: Circle())
+            .rotationEffect(.degrees(-9))
+            .accessibilityHidden(true)
     }
 }
 
@@ -559,10 +582,10 @@ private struct CommonGroundProfileMockup: View {
                             .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         Button(action: openMix) {
                             HStack(spacing: 12) {
-                                Image(systemName: "map.fill").font(.title2)
+                                Image(systemName: "envelope.open").font(.title2)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("Joe & Ryan’s mix").font(AstirTypography.sectionTitle)
-                                    Text("6 places picked for you two").font(AstirTypography.bodySmall)
+                                    Text("Thought of you two").font(AstirTypography.sectionTitle)
+                                    Text("\(CommonGroundMockData.mix().count) places picked for you two").font(AstirTypography.bodySmall)
                                 }
                                 Spacer(minLength: 0)
                                 Image(systemName: "arrow.up.right")
@@ -710,7 +733,7 @@ private struct CommonGroundSampleCaption: View {
 }
 
 #Preview("Common Ground") { CommonGroundDesignMockupRoot(page: .detail) }
-#Preview("For you two") { CommonGroundDesignMockupRoot(page: .mix) }
+#Preview("Thought of you two") { CommonGroundDesignMockupRoot(page: .mix) }
 #Preview("Member profile") { CommonGroundDesignMockupRoot(page: .profile) }
 #Preview("Your profile") { CommonGroundDesignMockupRoot(page: .ownProfile) }
 #Preview("Common Ground · Dark") { CommonGroundDesignMockupRoot(page: .detail).preferredColorScheme(.dark) }

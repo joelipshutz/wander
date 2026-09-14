@@ -53,7 +53,10 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertEqual(garden.youRating, 5)
         XCTAssertEqual(garden.joeRating, 4.5)
         XCTAssertTrue(garden.bothLoved)
-        XCTAssertTrue(garden.bothRegulars)
+        XCTAssertFalse(garden.bothRegulars)
+        XCTAssertEqual(garden.totalVisits, 2)
+        XCTAssertNotEqual(narwhal.narrativeTitle, garden.narrativeTitle)
+        XCTAssertNotEqual(narwhal.narrativeSymbol, garden.narrativeSymbol)
 
         for id in ["not-no-bar", "mudwater", "lantern-kitchen", "terrace"] {
             let candidate = try place(id)
@@ -83,35 +86,62 @@ final class CommonGroundMockDataTests: XCTestCase {
 
     func testCuratedMixExcludesHistoryAndKeepsDistinctEvidenceBasedCandidates() {
         let mix = CommonGroundMockData.mix()
-        XCTAssertEqual(mix.count, 6)
+        XCTAssertEqual(mix.count, 5)
         XCTAssertEqual(Set(mix.map(\.id)).count, mix.count)
         XCTAssertFalse(mix.contains { $0.kind == .history })
         XCTAssertFalse(mix.contains { ["lantern-kitchen", "terrace"].contains($0.id) })
         XCTAssertTrue(mix.contains { $0.bothLoved && $0.bothRegulars })
+        XCTAssertTrue(mix.contains { $0.bothLoved && !$0.bothRegulars })
         XCTAssertTrue(mix.contains { $0.youWanna && $0.joeWanna })
         XCTAssertTrue(mix.contains { $0.kind == .introduce })
-        XCTAssertEqual(CommonGroundMockData.places.count, 8)
+        XCTAssertEqual(Set(mix.map(\.narrativeTitle)).count, 5)
+        XCTAssertEqual(Set(mix.map(\.narrativeSymbol)).count, 5)
+        XCTAssertTrue(mix.allSatisfy { $0.narrativeTitle.contains($0.name) })
+        XCTAssertEqual(CommonGroundMockData.places.count, 10)
     }
 
-    func testAreaAndOccasionFiltersIntersectTheAvailablePool() {
-        let coffee = CommonGroundMockData.mix(occasion: .coffeeWalk)
-        let date = CommonGroundMockData.mix(occasion: .dateNight)
-        XCTAssertEqual(coffee.map(\.id), ["narwhal", "mudwater", "sundial-books", "grove-gardens"])
-        XCTAssertEqual(date.map(\.id), ["not-no-bar", "the-little-room"])
-        XCTAssertTrue(Set(coffee.map(\.id)).isDisjoint(with: date.map(\.id)))
+    func testIntroductionNarrativesRespectWhoseFavoriteTheOtherPersonWantsToTry() throws {
+        let joesFavorite = try place("mudwater")
+        XCTAssertTrue(joesFavorite.youWanna)
+        XCTAssertEqual(joesFavorite.youVisits, 0)
+        XCTAssertGreaterThanOrEqual(joesFavorite.joeVisits, 3)
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Mudwater. You’re next?")
 
-        for occasion in CommonGroundMockOccasion.allCases {
-            XCTAssertTrue(CommonGroundMockData.mix(area: "San Francisco", occasion: occasion).isEmpty)
-            XCTAssertTrue(CommonGroundMockData.mix(area: "San Francisco", occasion: occasion, sparse: true).isEmpty)
+        let yourFavorite = try place("the-little-room")
+        XCTAssertTrue(yourFavorite.joeWanna)
+        XCTAssertEqual(yourFavorite.joeVisits, 0)
+        XCTAssertGreaterThanOrEqual(yourFavorite.youVisits, 3)
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You could show Joe The Little Room.")
+
+        for candidate in [try place("narwhal"), joesFavorite, yourFavorite] {
+            XCTAssertFalse(candidate.reason.contains("/5"), "Repeat evidence should describe check-ins.")
         }
-        XCTAssertEqual(CommonGroundMockData.mix(area: " los angeles ").count, 6)
     }
 
-    func testSparseModeDoesNotRefillFromUnavailableCandidatesAfterFiltering() {
-        let sparse = CommonGroundMockData.mix(sparse: true)
-        XCTAssertEqual(sparse.map(\.id), ["narwhal", "not-no-bar"])
-        XCTAssertEqual(CommonGroundMockData.mix(occasion: .coffeeWalk, sparse: true).map(\.id), ["narwhal"])
-        XCTAssertEqual(CommonGroundMockData.mix(occasion: .dateNight, sparse: true).map(\.id), ["not-no-bar"])
+    func testAvailableCitiesUseTheUnionOfVisitsAndExcludeWannaOnlyCities() {
+        XCTAssertEqual(CommonGroundMockData.availableCities, ["Los Angeles", "London"])
+        let london = CommonGroundMockData.places.filter { $0.city == "London" }
+        XCTAssertTrue(london.allSatisfy { $0.youVisits == 0 })
+        XCTAssertTrue(london.contains { $0.joeVisits > 0 })
+        XCTAssertTrue(CommonGroundMockData.availableCities.contains("London"))
+
+        let kyoto = CommonGroundMockData.places.filter { $0.city == "Kyoto" }
+        XCTAssertFalse(kyoto.isEmpty)
+        XCTAssertTrue(kyoto.allSatisfy { $0.youWanna && $0.joeWanna && $0.totalVisits == 0 })
+        XCTAssertFalse(CommonGroundMockData.availableCities.contains("Kyoto"))
+    }
+
+    func testMixUsesTheChosenEligibleCityAndSparseKeepsItsFirstTwoCandidates() {
+        XCTAssertEqual(CommonGroundMockData.mix().map(\.id), [
+            "narwhal", "grove-gardens", "not-no-bar", "mudwater", "the-little-room"
+        ])
+        XCTAssertEqual(CommonGroundMockData.mix(area: "London").map(\.id), ["canal-coffee", "sundial-books"])
+        XCTAssertEqual(CommonGroundMockData.mix(area: " los angeles ").count, 5)
+        XCTAssertTrue(CommonGroundMockData.mix(area: "San Francisco").isEmpty)
+        XCTAssertTrue(CommonGroundMockData.mix(area: "Kyoto").isEmpty)
+        XCTAssertTrue(CommonGroundMockData.mix(area: "Kyoto", sparse: true).isEmpty)
+        XCTAssertEqual(CommonGroundMockData.mix(sparse: true).map(\.id), ["narwhal", "grove-gardens"])
+        XCTAssertEqual(CommonGroundMockData.mix(area: "London", sparse: true).map(\.id), ["canal-coffee", "sundial-books"])
     }
 
     private func place(_ id: String) throws -> CommonGroundMockPlace {
@@ -122,7 +152,7 @@ final class CommonGroundMockDataTests: XCTestCase {
         youRating: Double?, joeRating: Double?, youVisits: Int, joeVisits: Int
     ) -> CommonGroundMockPlace {
         CommonGroundMockPlace(
-            id: "evidence", name: "Evidence", category: "Coffee", area: "Los Angeles",
+            id: "evidence", name: "Evidence", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
             systemImage: "cup.and.saucer", youRating: youRating, joeRating: joeRating,
             youVisits: youVisits, joeVisits: joeVisits, youWanna: false, joeWanna: false,
             reason: "Threshold fixture", kind: .history
