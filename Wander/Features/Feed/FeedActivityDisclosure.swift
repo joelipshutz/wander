@@ -61,7 +61,6 @@ struct FeedActivityDisclosure: View {
                 }
                 .padding(.top, WanderTheme.spacing1)
                 .transition(.opacity)
-                .accessibilityIdentifier("feed.activity.\(group.id).sequence")
             }
         }
     }
