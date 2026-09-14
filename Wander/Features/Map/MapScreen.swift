@@ -1414,6 +1414,7 @@ struct MapScreen: View {
     @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var featuredViewportAccountID: String?
     @State private var featuredPlacesRevision: UInt64 = 0
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportLoader = MapFeaturedViewportLoader()
@@ -1620,8 +1621,17 @@ struct MapScreen: View {
         _routedVisiblePlaceGroup = State(initialValue: nil)
     }
 
+    private var authorizedSelectionPlaces: [VisiblePlace] {
+        MapActivePinRetention.authorizationCorpus(
+            socialPlaces: store.visiblePlaces(),
+            featuredPlaces: featuredViewportPlaces ?? [],
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id
+        )
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -1672,7 +1682,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -1800,7 +1810,7 @@ struct MapScreen: View {
     private var mapFilterEmptyMessage: String? {
         guard MapActivePinRetention.authorizedPlace(
                   routedVisiblePlace,
-                  within: store.visiblePlaces()
+                  within: authorizedSelectionPlaces
               ) == nil,
               mapSearchCandidates.isEmpty,
               Self.normalized(mapQuery).isEmpty,
@@ -2809,7 +2819,7 @@ struct MapScreen: View {
     }
 
     private func handleMapSearchAuthorizationChange() {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -3402,6 +3412,7 @@ struct MapScreen: View {
 
     private func updateFeaturedViewportPlaces(_ places: [VisiblePlace]) {
         featuredViewportPlaces = places
+        featuredViewportAccountID = store.currentUser.id
         featuredPlacesRevision &+= 1
     }
 
@@ -10265,6 +10276,25 @@ enum MapPinSelectionMotionStyle {
 }
 
 enum MapActivePinRetention {
+    /// Featured's anonymous place aggregates are server-authorized separately
+    /// from personal/social saves. Use the unranked response so recentering or
+    /// the Featured presentation cap cannot revoke the selected place.
+    /// Named saves must still pass the store's current authorization checks.
+    static func authorizationCorpus(
+        socialPlaces: [VisiblePlace],
+        featuredPlaces: [VisiblePlace],
+        featuredAccountID: String?,
+        currentUserID: String
+    ) -> [VisiblePlace] {
+        guard featuredAccountID == currentUserID else { return socialPlaces }
+        var seen = Set(socialPlaces.map(\.userPlace.id))
+        return socialPlaces + featuredPlaces.filter {
+            $0.isCommunityAggregate
+                && $0.userPlace.deletedAt == nil
+                && seen.insert($0.userPlace.id).inserted
+        }
+    }
+
     static func authorizedPlace(
         _ retainedPlace: VisiblePlace?,
         within authorizedPlaces: [VisiblePlace]
