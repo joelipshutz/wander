@@ -470,7 +470,14 @@ final class OnboardingUITests: XCTestCase {
 
         locationContinue.tap()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        XCTAssertTrue(springboard.alerts.firstMatch.waitForExistence(timeout: 5))
+        let locationAlert = springboard.alerts.firstMatch
+        XCTAssertTrue(locationAlert.waitForExistence(timeout: 5))
+        let denyLocation = locationAlert.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Don’t Allow", "Don't Allow"])
+        ).firstMatch
+        XCTAssertTrue(denyLocation.exists)
+        denyLocation.tap()
+        XCTAssertTrue(locationAlert.waitForNonExistence(timeout: 5))
 
         app.terminate()
         app.resetAuthorizationStatus(for: .location)
@@ -537,6 +544,7 @@ final class OnboardingUITests: XCTestCase {
             app.resetAuthorizationStatus(for: .contacts)
         }
         app.launchArguments = [
+            "-WanderAuthenticatedUITest",
             "-WanderMapCapture",
             "-WanderUseEphemeralEmptyFixtures",
             "-WanderDisableWalkthroughs",
@@ -561,6 +569,30 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-396 actual Feed contact invite permission"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        permissionContinue.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let alert = springboard.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.matching(
+            NSPredicate(
+                format: "label == %@",
+                "Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select."
+            )
+        ).firstMatch.exists)
+
+        let systemPrompt = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        systemPrompt.name = "REC-469 Contacts system permission"
+        systemPrompt.lifetime = .keepAlways
+        add(systemPrompt)
+
+        let deny = alert.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Don’t Allow", "Don't Allow"])
+        ).firstMatch
+        XCTAssertTrue(deny.exists)
+        deny.tap()
+        XCTAssertTrue(app.staticTexts["contacts are off"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Share an invite link"].exists)
     }
 
     func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {

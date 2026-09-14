@@ -1,4 +1,4 @@
-# rec.me App Store screenshot capture
+# Astir App Store screenshot capture
 
 Use this pipeline to generate the approved six-panel App Store story from the
 exact release-candidate source tree. It does not sign in, query production
@@ -22,14 +22,14 @@ accounts, read the local user database, or send analytics.
 From the release-candidate branch:
 
 ```bash
-scripts/capture-app-store-screenshots.sh /tmp/recme-app-store-6.9
+scripts/capture-app-store-screenshots.sh /tmp/astir-app-store-6.9
 ```
 
 To reuse the Xcode cache across large and compact captures:
 
 ```bash
 RECME_CAPTURE_DERIVED_DATA=/tmp/recme-app-store-derived-data \
-  scripts/capture-app-store-screenshots.sh /tmp/recme-app-store-6.9
+  scripts/capture-app-store-screenshots.sh /tmp/astir-app-store-6.9
 ```
 
 The script runs only `AppStoreScreenshotsUITests`, exports the six named XCTest
@@ -37,15 +37,21 @@ attachments, creates the 1320 × 2868 opaque panels, and produces the combined
 storyboard. The output directory contains both the raw simulator captures and
 the final panels.
 
+The default capture device is iPhone 17 Pro Max on iOS 26.1. Install Apple's
+universal runtime through Xcode; the iOS 26.3.1 runtime on this Mac renders
+emoji as question-mark boxes and must not be used for storefront captures.
+Panels use the approved Astir Signal icon, Paper/Ink backgrounds, editorial
+serif headlines, and unchanged full-aspect-ratio app screenshots.
+
 ## Compact-phone QA
 
 Run the same six states on the smaller supported phone before approval:
 
 ```bash
 scripts/capture-app-store-screenshots.sh \
-  /tmp/recme-app-store-compact \
+  /tmp/astir-app-store-compact \
   "iPhone 16e" \
-  "18.6"
+  "26.1"
 ```
 
 Compact output is visual-QA evidence, not the upload set. Upload the 6.9-inch

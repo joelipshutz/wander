@@ -6867,8 +6867,11 @@ private struct NativeMapView: UIViewRepresentable {
                 isDark: parent.isDark,
                 reduceMotion: parent.reduceMotion
             )
-            view.onAccessibilityActivate = { [weak self, weak annotation] in
-                guard let self, let annotation else { return }
+            view.onAccessibilityActivate = { [weak self, weak annotation, weak view] in
+                guard let self, let annotation,
+                      let mapView = self.tapRecognizer.view as? MKMapView,
+                      MapHitTesting.isAnnotationViewVisible(view, in: mapView)
+                else { return }
                 self.parent.onAnnotationTap(annotation.kind)
             }
         }
@@ -6917,6 +6920,11 @@ private struct NativeMapView: UIViewRepresentable {
                     let center = mapView.convert(annotation.coordinate, toPointTo: mapView)
                     let distance = hypot(point.x - center.x, point.y - center.y)
                     guard distance <= MapHitTesting.markerTapRadius else { return nil }
+                    // Viewport membership includes pins suppressed by MapKit's
+                    // collision layout. Only a currently rendered pin is tappable.
+                    guard MapHitTesting.isAnnotationViewVisible(
+                        mapView.view(for: annotation), in: mapView
+                    ) else { return nil }
                     return (annotation, center, distance)
                 }
 
@@ -8075,6 +8083,30 @@ enum MapHitTesting {
     static let passiveTapAllowableMovement: CGFloat = 10
     static let colocatedMarkerTolerance: CGFloat = 1
     static let equalDistanceTolerance: CGFloat = 0.5
+
+    @MainActor
+    static func isAnnotationViewVisible(
+        _ view: MKAnnotationView?,
+        in mapView: MKMapView
+    ) -> Bool {
+        guard let view,
+              view.isDescendant(of: mapView),
+              !view.bounds.isEmpty,
+              view.convert(view.bounds, to: mapView).intersects(mapView.bounds)
+        else { return false }
+
+        var ancestor: UIView? = view
+        var opacity: Float = 1
+        while let current = ancestor {
+            let renderedLayer = current.layer.presentation() ?? current.layer
+            guard !current.isHidden, !renderedLayer.isHidden else { return false }
+            opacity *= renderedLayer.opacity
+            guard opacity > 0.01 else { return false }
+            if current === mapView { return true }
+            ancestor = current.superview
+        }
+        return false
+    }
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
