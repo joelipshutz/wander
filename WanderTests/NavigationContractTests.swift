@@ -886,7 +886,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
-        XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(mapCaptureRoot.contains("placePhotoRepository: MapCapturePlacePhotoRepository()"))
         XCTAssertTrue(mapCaptureRoot.contains("initialSession: auth.state.session"))
         XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
         XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
