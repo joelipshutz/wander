@@ -184,6 +184,8 @@ struct WanderApp: App {
                     .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
+            } else if let commonGroundMockupPage = CommonGroundMockPage.resolved() {
+                CommonGroundDesignMockupRoot(page: commonGroundMockupPage)
             } else if let inCommonMockupPage = InCommonDesignMockupPage.resolved() {
                 InCommonDesignMockupRoot(page: inCommonMockupPage)
             } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
