@@ -105,10 +105,12 @@ The remaining unit failures need a controlled recheck with unchanged thresholds:
   grouping 204.70 ms against 150 ms.
 - Feed photo fallback: the expected image load exceeded its 2-second wait.
 
-Three initial UI checks passed. Later automation queries timed out while the
-host was under heavy memory pressure, and cancellation of the full UI run was
-requested. The host conditions may explain the timing failures, but that
-remains an unverified explanation. This is not a passing full-suite result.
+Three initial UI checks passed. The place-detail UI test failed because its
+snapshot query timed out; the next Add-sheet test was canceled when the full
+run was interrupted. The final result bundle reports 1,967 passes and five
+failed/canceled cases across both targets. The host was under heavy memory
+pressure, which may explain the timing failures, but that remains an unverified
+explanation. This is not a passing full-suite result.
 
 - Passed: classification equivalence benchmark, Swift parsing, XcodeGen
   regeneration, and `git diff --check`. The Debug device build also succeeded
