@@ -1274,6 +1274,44 @@ enum WanderPlaceCategory {
 
     static let allowedCategories = taxonomy.map(\.id)
     static let editableCategories = taxonomy.filter(\.isEditable).map(\.id)
+
+    // Normalize the fixed catalog once, not once per restored place or lookup.
+    // Keep first-match taxonomy order, including aliases shared by categories.
+    private struct IndexedTaxonomyEntry {
+        let entry: PlaceCategoryTaxonomyEntry
+        let idKey: String
+        let groupKey: String
+        let aliases: [(key: String, phrase: String)]
+        let subcategories: [String: String]
+    }
+
+    private static let indexedTaxonomy: [IndexedTaxonomyEntry] = taxonomy.map { entry in
+        var subcategories: [String: String] = [:]
+        for value in entry.subcategories {
+            let key = normalizedCategoryText(value)
+            if subcategories[key] == nil { subcategories[key] = value }
+        }
+        return IndexedTaxonomyEntry(
+            entry: entry,
+            idKey: normalizedCategoryText(entry.id),
+            groupKey: normalizedCategoryText(entry.group),
+            aliases: entry.aliases.map {
+                let key = normalizedCategoryText($0)
+                return (key, " \(key) ")
+            },
+            subcategories: subcategories
+        )
+    }
+
+    private static let taxonomyByKey: [String: IndexedTaxonomyEntry] = {
+        var result: [String: IndexedTaxonomyEntry] = [:]
+        for indexed in indexedTaxonomy {
+            for key in [indexed.entry.id, indexed.idKey, indexed.groupKey] where result[key] == nil {
+                result[key] = indexed
+            }
+        }
+        return result
+    }()
     static var supportedMapKitProviderTypes: [String] {
         mapKitProviderCategories.keys.sorted().map { "mkpoicategory\($0)" }
     }
@@ -1808,12 +1846,11 @@ enum WanderPlaceCategory {
         }
 
         let padded = " \(normalized) "
-        for entry in taxonomy where entry.id != fallbackPlace {
-            if entry.aliases.contains(where: { alias in
-                let normalizedAlias = normalizedCategoryText(alias)
-                return normalizedAlias == normalized || (!normalizedAlias.isEmpty && padded.contains(" \(normalizedAlias) "))
+        for indexed in indexedTaxonomy where indexed.entry.id != fallbackPlace {
+            if indexed.aliases.contains(where: { alias in
+                alias.key == normalized || (!alias.key.isEmpty && padded.contains(alias.phrase))
             }) {
-                return entry.id
+                return indexed.entry.id
             }
         }
 
@@ -1846,9 +1883,7 @@ enum WanderPlaceCategory {
         let key = normalizedCategoryText(normalized)
         let primary = normalizedPrimaryCategory(primaryCategory)
 
-        return entry(for: primary)?.subcategories.first { subcategory in
-            normalizedCategoryText(subcategory) == key
-        } ?? normalized
+        return taxonomyByKey[primary]?.subcategories[key] ?? normalized
     }
 
     static func isDefaultSubcategory(_ value: String?, primaryCategory: String) -> Bool {
@@ -2004,10 +2039,11 @@ enum WanderPlaceCategory {
         return updated
     }
 
-    private static let normalizedRestaurantCuisineOptions: [(name: String, normalized: String)] = {
+    private static let normalizedRestaurantCuisineOptions: [(name: String, normalized: String, phrase: String)] = {
         restaurantCuisineOptions
             .map { cuisine in
-                (name: cuisine, normalized: normalizedCategoryText(cuisine))
+                let normalized = normalizedCategoryText(cuisine)
+                return (name: cuisine, normalized: normalized, phrase: " \(normalized) ")
             }
             .sorted { $0.normalized.count > $1.normalized.count }
     }()
@@ -2024,7 +2060,7 @@ enum WanderPlaceCategory {
 
         return normalizedRestaurantCuisineOptions.first { cuisine in
             normalized == cuisine.normalized
-                || padded.contains(" \(cuisine.normalized) ")
+                || padded.contains(cuisine.phrase)
                 || withoutCuisineSuffix == cuisine.normalized
         }?.name
     }
@@ -2307,31 +2343,25 @@ enum WanderPlaceCategory {
             return defaultSubcategory(for: restaurantsFood)
         }
 
-        if let entry = entry(for: primaryCategory) {
-            if let exactSuggestion = entry.subcategories.first(where: { normalizedCategoryText($0) == normalized }) {
+        if let indexed = taxonomyByKey[primaryCategory] {
+            if let exactSuggestion = indexed.subcategories[normalized] {
                 return exactSuggestion
             }
 
-            if normalized == normalizedCategoryText(entry.id) || normalized == normalizedCategoryText(entry.group) {
-                return entry.defaultSubcategory
+            if normalized == indexed.idKey || normalized == indexed.groupKey {
+                return indexed.entry.defaultSubcategory
             }
-        }
 
-        if let entry = entry(for: primaryCategory),
-           entry.aliases.contains(where: { normalizedCategoryText($0) == normalized }) {
-            return entry.defaultSubcategory
+            if indexed.aliases.contains(where: { $0.key == normalized }) {
+                return indexed.entry.defaultSubcategory
+            }
         }
 
         return normalizedSubcategory(rawValue) ?? defaultSubcategory(for: primaryCategory)
     }
 
     private static func entry(for category: String) -> PlaceCategoryTaxonomyEntry? {
-        let normalized = normalizedCategoryText(category)
-        return taxonomy.first { entry in
-            entry.id == category
-                || normalizedCategoryText(entry.id) == normalized
-                || normalizedCategoryText(entry.group) == normalized
-        }
+        (taxonomyByKey[category] ?? taxonomyByKey[normalizedCategoryText(category)])?.entry
     }
 
     private static func sourceDisplayLabel(_ source: String) -> String {

@@ -263,6 +263,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var currentUserCalendarHydrationRevision: UInt64 = 0
     private var authoritativeCalendarUserID: String?
     private var currentUserCalendarLocalFingerprint: CurrentUserCalendarLocalFingerprint?
+    private var currentUserCalendarFingerprintNeedsReconciliation = false
     private var currentUserCalendarLocalMutationRevision: UInt64 = 0
     private var isApplyingAcceptedCurrentUserCalendarHydration = false
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
@@ -528,6 +529,7 @@ final class WanderStore: ObservableObject {
     private(set) var visiblePlaceProjectionBuildCount = 0
     private(set) var visiblePlaceOwnerCountBuildCount = 0
     private(set) var currentUserCalendarProjectionBuildCount = 0
+    private(set) var currentUserCalendarFingerprintBuildCount = 0
     private(set) var visiblePlacesByOwnerProjectionBuildCount = 0
     private(set) var placesInCommonProjectionBuildCount = 0
     #endif
@@ -654,6 +656,18 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        currentUserCalendarFingerprintNeedsReconciliation = true
+        // Reads inside a synchronous batch must still see current membership
+        // and authorization. Only defer the expensive calendar comparison/write.
+        invalidatePresentationCaches()
+        if persistenceDeferralDepth > 0 {
+            persistenceRequestedWhileDeferred = true
+            return
+        }
+        persistCurrentState()
+    }
+
+    private func persistCurrentState() {
         let persistenceSignpostID = WanderDebugLog.beginPerformanceInterval("Store Persistence")
         defer {
             WanderDebugLog.endPerformanceInterval(
@@ -662,13 +676,7 @@ final class WanderStore: ObservableObject {
             )
         }
         reconcileCurrentUserCalendarLocalFingerprint()
-        invalidatePresentationCaches()
         guard let persistence else { return }
-
-        if persistenceDeferralDepth > 0 {
-            persistenceRequestedWhileDeferred = true
-            return
-        }
 
         let snapshotSignpostID = WanderDebugLog.beginPerformanceInterval("Snapshot Build")
         let snapshot = WanderStoreSnapshot(store: self)
@@ -681,6 +689,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
+        #if DEBUG
+        currentUserCalendarFingerprintBuildCount += 1
+        #endif
         let ownedUserPlaces = userPlaces
             .filter { $0.userID == currentUser.id }
             .sorted { $0.localID < $1.localID }
@@ -708,6 +719,10 @@ final class WanderStore: ObservableObject {
     }
 
     private func reconcileCurrentUserCalendarLocalFingerprint() {
+        guard currentUserCalendarFingerprintNeedsReconciliation else { return }
+        // Clear before publishing an authority change: a synchronous observer
+        // can read the calendar again while that notification is delivered.
+        currentUserCalendarFingerprintNeedsReconciliation = false
         let fingerprint = makeCurrentUserCalendarLocalFingerprint()
         guard let previousFingerprint = currentUserCalendarLocalFingerprint else {
             currentUserCalendarLocalFingerprint = fingerprint
@@ -733,6 +748,7 @@ final class WanderStore: ObservableObject {
         isApplyingAcceptedCurrentUserCalendarHydration = true
         defer {
             currentUserCalendarLocalFingerprint = makeCurrentUserCalendarLocalFingerprint()
+            currentUserCalendarFingerprintNeedsReconciliation = false
             isApplyingAcceptedCurrentUserCalendarHydration = wasApplyingAcceptedHydration
         }
         return try operation()
@@ -1115,13 +1131,14 @@ final class WanderStore: ObservableObject {
             persistenceDeferralDepth -= 1
             if persistenceDeferralDepth == 0, persistenceRequestedWhileDeferred {
                 persistenceRequestedWhileDeferred = false
-                persist()
+                persistCurrentState()
             }
         }
         return try operation()
     }
 
-    /// Coalesces a group of local mutations into one snapshot write. Keep the
+    /// Coalesces calendar reconciliation and snapshot writing across local
+    /// mutations. Calendar reads reconcile earlier when needed. Keep the
     /// operation synchronous so unrelated main-actor work cannot become part
     /// of the batch while it is suspended.
     func performBatchedLocalMutations<Result>(
@@ -1527,6 +1544,7 @@ final class WanderStore: ObservableObject {
     }
 
     var currentUserCalendarProjection: CurrentUserCalendarProjection {
+        reconcileCurrentUserCalendarLocalFingerprint()
         if let cached = currentUserCalendarProjectionCache,
            cached.userID == currentUser.id {
             return cached.projection
@@ -7740,9 +7758,7 @@ final class WanderStore: ObservableObject {
                         }
                         applyRemoteRelationship(profileID: ownerID, relationship: relationship)
                     }
-                    for detail in snapshot.details {
-                        upsertRemotePlaceListDetail(detail)
-                    }
+                    upsertRemotePlaceListDetails(snapshot.details)
                     lastRemoteError = nil
                     persist()
                 }
@@ -7791,9 +7807,7 @@ final class WanderStore: ObservableObject {
                         applyRemoteRelationship(profileID: ownerID, relationship: relationship)
                     }
                 }
-                for detail in details {
-                    upsertRemotePlaceListDetail(detail)
-                }
+                upsertRemotePlaceListDetails(details)
                 lastRemoteError = firstRefreshError.map(remoteErrorMessage)
                 persist()
             }
@@ -9976,20 +9990,45 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
-        guard !shouldPreserveLocalPlaceListChanges(remoteListID: detail.list.id) else { return }
+    private func upsertRemotePlaceListDetails(_ details: [RemotePlaceListDetail]) {
+        var updatedListIDs = Set<String>()
+        for detail in details {
+            if let listID = upsertRemotePlaceListDetail(detail, reconcileItemCount: false) {
+                updatedListIDs.insert(listID)
+            }
+        }
+        guard !updatedListIDs.isEmpty else { return }
+
+        // All details are installed before grouping. Per-detail persistence
+        // requests invalidate the shared index, so grouping in that loop turns
+        // a single refresh into a whole-store scan for every list.
+        let lists = placeLists.filter { updatedListIDs.contains($0.id) }
+        let itemsByListID = visibleListItemsByListID(in: lists)
+        for index in placeLists.indices where updatedListIDs.contains(placeLists[index].id) {
+            placeLists[index].cachedItemCount = itemsByListID[placeLists[index].id, default: []].count
+        }
+    }
+
+    @discardableResult
+    private func upsertRemotePlaceListDetail(
+        _ detail: RemotePlaceListDetail,
+        reconcileItemCount: Bool = true
+    ) -> String? {
+        guard !shouldPreserveLocalPlaceListChanges(remoteListID: detail.list.id) else { return nil }
 
         upsertRemoteProfileShells(detail.collaborators.map(\.profileShell), preserveExistingProfileMetadataWhenMissing: true)
         upsertRemotePlaceList(detail.list)
         replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
         replaceRemoteItems(listID: detail.list.id, items: detail.items)
 
-        if let index = placeLists.firstIndex(where: { $0.id == detail.list.id || $0.serverID == detail.list.id }) {
-            placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
+        let updatedListIndex = placeLists.firstIndex { $0.id == detail.list.id || $0.serverID == detail.list.id }
+        if reconcileItemCount, let updatedListIndex {
+            placeLists[updatedListIndex].cachedItemCount = listItems(for: placeLists[updatedListIndex]).count
         }
 
         objectWillChange.send()
         persist()
+        return updatedListIndex.map { placeLists[$0].id }
     }
 
     private func shouldPreserveLocalPlaceListChanges(remoteListID: String) -> Bool {
@@ -10194,6 +10233,7 @@ final class WanderStore: ObservableObject {
         _ visiblePlaces: [VisiblePlace],
         in viewport: MapViewport
     ) {
+        reconcileCurrentUserCalendarLocalFingerprint()
         let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
             $0.owner.id == currentUser.id
         }
