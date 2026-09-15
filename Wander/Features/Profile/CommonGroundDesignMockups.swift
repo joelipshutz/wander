@@ -9,7 +9,7 @@ private enum CommonGroundMockRoute: Hashable {
     case place(CommonGroundMockPlace)
     case invitation(CommonGroundMockPlace)
     case recipient(CommonGroundMockPlace)
-    case messages, recipientOpened
+    case recipientOpened
 }
 
 /// Isolated native design exploration. No account data, persistence, or delivery.
@@ -24,6 +24,21 @@ struct CommonGroundDesignMockupRoot: View {
     }
 
     var body: some View {
+        Group {
+            if page == .messages {
+                CommonGroundMessagesMockup(draft: .preview, onClose: {
+                    path = []
+                    page = .profile
+                })
+            } else {
+                navigation
+            }
+        }
+        .tint(colorScheme == .dark ? AstirTheme.signal.color : AstirTheme.signalOnPaper.color)
+        .astirAdaptiveBrandMode()
+    }
+
+    private var navigation: some View {
         NavigationStack(path: $path) {
             CommonGroundProfileMockup(isOwner: page == .ownProfile, open: { path.append(.detail) },
                                       openMix: { path.append(.mix) })
@@ -33,8 +48,6 @@ struct CommonGroundDesignMockupRoot: View {
                 }
                 .toolbar { previewMenu }
         }
-        .tint(colorScheme == .dark ? AstirTheme.signal.color : AstirTheme.signalOnPaper.color)
-        .astirAdaptiveBrandMode()
     }
 
     @ViewBuilder private func destination(_ route: CommonGroundMockRoute) -> some View {
@@ -56,9 +69,6 @@ struct CommonGroundDesignMockupRoot: View {
             CommonGroundInvitationMockup(draft: CommonGroundInvitationDraft(place: place))
         case .recipient(let place):
             CommonGroundInvitationMockup(draft: CommonGroundInvitationDraft(place: place), opensEnvelope: true)
-        case .messages:
-            CommonGroundMessagesMockup(draft: .preview, onClose: { path.removeLast() })
-                .toolbar(.hidden, for: .navigationBar)
         case .recipientOpened:
             CommonGroundInvitationMockup(draft: .preview, opensEnvelope: true, initiallyOpened: true)
         }
@@ -89,7 +99,7 @@ struct CommonGroundDesignMockupRoot: View {
         case .mix: return [.detail, .mix]
         case .invitation: return [.detail, .mix, .invitation(place)]
         case .recipient: return [.detail, .recipient(place)]
-        case .messages: return [.messages]
+        case .messages: return []
         case .recipientOpened: return [.detail, .recipientOpened]
         }
     }
