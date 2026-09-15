@@ -1535,6 +1535,74 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertTrue(fit.reasons.contains { $0.contains("quiet") })
     }
 
+    func testFullHistoryIncludesSocialCheckInWhenEntrySeedContainsOnlyOwnWanna() {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let original = place(id: "original", category: "restaurant")
+        let duplicate = place(id: "duplicate", category: "restaurant")
+        duplicate.canonicalName = original.canonicalName
+        duplicate.sourceProviderPlaceID = original.id
+        duplicate.address = "Different provider formatting"
+        let wanna = summary(owner: viewer, place: duplicate, status: .wannaGo, ratingScore: nil, tags: [])
+        let checkIn = summary(owner: friend, place: original, status: .been, ratingScore: 4, tags: [])
+        let candidate = PlaceSheetPlace(visiblePlace: wanna.visiblePlace).saveCandidate
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: candidate, seeds: [wanna.visiblePlace],
+            available: [wanna.visiblePlace, checkIn.visiblePlace, checkIn.visiblePlace],
+            currentUserID: viewer.id, viewerFollows: { $0 == friend.id }
+        )
+        XCTAssertEqual(Set(history.map(\.id)), Set([wanna.id, checkIn.id]))
+        XCTAssertEqual(history.first?.id, wanna.id)
+        XCTAssertNil(PlaceProfilePresenter.ownRating(from: history, currentUserID: viewer.id))
+        XCTAssertEqual(PlaceProfilePresenter.overallRating(from: history, currentUserID: viewer.id)?.score, 4)
+    }
+
+    func testAuthoritativeEmptyHistoryDoesNotReinsertStaleEntrySeed() {
+        let owner = profile(id: "friend", handle: "friend")
+        let saved = summary(owner: owner, place: place(id: "cafe", category: "coffee"), ratingScore: 4, tags: [])
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: saved.visiblePlace).saveCandidate,
+            seeds: [saved.visiblePlace], available: [], currentUserID: "viewer", viewerFollows: { _ in true }
+        )
+        XCTAssertTrue(history.isEmpty)
+        saved.visiblePlace.userPlace.deletedAt = .now
+        XCTAssertTrue(PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: saved.visiblePlace).saveCandidate,
+            seeds: [saved.visiblePlace], available: [saved.visiblePlace], currentUserID: "viewer", viewerFollows: { _ in true }
+        ).isEmpty)
+    }
+
+    func testMyCheckInsExcludesCurrentAndHistoricalWannasForEveryOwner() {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let venue = place(id: "venue", category: "restaurant")
+        for owner in [viewer, friend] {
+            let saved = summary(owner: owner, place: venue, ratingScore: 4, tags: [])
+            for kind in [PlaceActivityEntryKind.currentWant, .historicalWant, .visit, .legacyBeenSummary] {
+                let entry = PlaceActivityEntry(summary: saved, visit: nil, kind: kind, currentUserID: viewer.id)
+                XCTAssertTrue(PlaceActivityFilter.all.includes(entry))
+                XCTAssertEqual(PlaceActivityFilter.myVisits.includes(entry), owner.id == viewer.id && (kind == .visit || kind == .legacyBeenSummary))
+            }
+        }
+    }
+
+    @MainActor
+    func testOwnWannaRingStaysDottedAlongsideFriendsCheckInAtEveryScale() throws {
+        let outlines = MapPinOutlineBuilder.outlines(for: [
+            MapPinSaveState(ownership: .currentUser, status: .wannaGo),
+            MapPinSaveState(ownership: .social, status: .been)
+        ])
+        let own = try XCTUnwrap(outlines.first { $0.ownership == .currentUser })
+        let social = try XCTUnwrap(outlines.first { $0.ownership == .social })
+        XCTAssertFalse(own.dashPattern.isEmpty)
+        XCTAssertTrue(social.dashPattern.isEmpty)
+        for scale in [MapPinSelectionMotionStyle.inactiveScale, MapPinSelectionMotionStyle.selectedScale] {
+            let dash = own.scaledDashPattern(scale: scale)
+            // Round caps consume one line width of the nominal gap.
+            XCTAssertGreaterThan(dash[1] - MapPinVisualMetrics.outlineWidth * scale, 1)
+        }
+    }
+
     private func profile(id: String, handle: String) -> LocalProfile {
         LocalProfile(
             localID: "local_\(id)",

@@ -4930,6 +4930,63 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testPlaceProfileReadDoesNotResurrectLocalDeletionOrBlockedOwner() throws {
+        let store = WanderStore(fixtures: .seed())
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let staleRow = LocalUserPlace(
+            localID: "stale-profile-row", serverID: own.userPlace.id,
+            userID: store.currentUser.id, placeID: own.place.id,
+            status: own.userPlace.status, visibility: .followers, note: nil,
+            sourceType: "test", syncState: .synced
+        )
+        let stale = VisiblePlace(id: staleRow.id, place: own.place, userPlace: staleRow, owner: own.owner)
+        own.userPlace.deletedAt = .now
+        own.userPlace.syncStateRaw = SyncState.pendingDelete.rawValue
+        XCTAssertTrue(store.placeProfileVisibleSaves(from: [stale]).isEmpty)
+        let social = try XCTUnwrap(store.visiblePlaces().first { $0.owner.id != store.currentUser.id })
+        store.block(userID: social.owner.id)
+        XCTAssertTrue(store.placeProfileVisibleSaves(from: [social]).isEmpty)
+    }
+
+    func testPlaceHistoryRefreshReconcilesSyncedOwnVisitsAndPreservesPendingEdits() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let saved = store.saveCandidate(
+            PlaceCandidate(id: "history-cafe", name: "History Cafe", category: "coffee", latitude: 34, longitude: -118, confidence: 1),
+            status: .been, visibility: .followers, note: "original", sourceType: .manual, ratingScore: 3
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        visit.serverID = "remote-history-visit"
+        visit.syncStateRaw = SyncState.synced.rawValue
+        let updated = PlaceVisitResult(
+            visitID: "remote-history-visit", userPlaceID: saved.userPlaceID,
+            visitedAt: visit.visitedAt, note: "server edit", ratingScore: 5,
+            tags: [], backfilledFromUserPlace: false
+        )
+        let refreshed = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository(visitsByUserPlaceID: [saved.userPlaceID: [updated]]))
+        )
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(visit.note, "server edit")
+        XCTAssertEqual(visit.ratingScore, 5)
+
+        visit.note = "pending local edit"
+        visit.syncStateRaw = SyncState.pendingUpdate.rawValue
+        _ = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository())
+        )
+        XCTAssertEqual(store.visits(for: saved.userPlaceID).first?.note, "pending local edit")
+
+        visit.syncStateRaw = SyncState.synced.rawValue
+        _ = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository())
+        )
+        XCTAssertTrue(store.visits(for: saved.userPlaceID).isEmpty)
+        XCTAssertFalse(store.shouldShowLegacyCheckInSummary(for: saved.userPlaceID))
+    }
+
     func testRemoteCalendarCheckInDeleteIsAcceptedAndDoesNotReappearFromCache() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let userID = "user_current"

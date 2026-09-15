@@ -7292,6 +7292,7 @@ private enum NativeMapPinImageRenderer {
                     center: center,
                     radius: radius,
                     lineWidth: MapPinVisualMetrics.outlineWidth * scale,
+                    scale: scale,
                     context: context
                 )
             }
@@ -7318,6 +7319,7 @@ private enum NativeMapPinImageRenderer {
         center: CGPoint,
         radius: CGFloat,
         lineWidth: CGFloat,
+        scale: CGFloat,
         context: CGContext
     ) {
         let color = UIColor(outline.ownership.color)
@@ -7327,7 +7329,7 @@ private enum NativeMapPinImageRenderer {
                 radius: radius,
                 color: color,
                 lineWidth: lineWidth,
-                dash: outline.dashPattern,
+                dash: outline.scaledDashPattern(scale: scale),
                 context: context
             )
             return
@@ -7338,7 +7340,7 @@ private enum NativeMapPinImageRenderer {
             context.setStrokeColor(color.cgColor)
             context.setLineWidth(lineWidth)
             context.setLineCap(.round)
-            context.setLineDash(phase: 0, lengths: arc.dashPattern)
+            context.setLineDash(phase: 0, lengths: arc.dashPattern.map { $0 * scale })
             let rotation = arc.rotationDegrees * .pi / 180
             context.addArc(
                 center: center,
@@ -10153,7 +10155,7 @@ enum MapPinVisualMetrics {
     static let emojiDiameter: CGFloat = 24
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
-    static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+    static let wannaDashPattern: [CGFloat] = [1.5, 5.5]
     static let searchResultOutlineCount = 2
     static let activeTitleClearance: CGFloat = 2
     static let activeTitleFontSize: CGFloat = 13
@@ -10547,6 +10549,10 @@ struct MapPinOutline: Identifiable, Equatable {
         status == .wannaGo ? MapPinVisualMetrics.wannaDashPattern : []
     }
 
+    func scaledDashPattern(scale: CGFloat) -> [CGFloat] {
+        dashPattern.map { $0 * scale }
+    }
+
     var arcs: [MapPinOutlineArc] {
         guard let secondaryStatus else {
             return [
@@ -10776,6 +10782,19 @@ struct PlaceSheetPlace {
     var compactPlaceType: String {
         WanderPlaceCategory.display(for: categoryAssignment)
             .compactType(foodType: cuisine)
+    }
+
+    var saveCandidate: PlaceCandidate {
+        PlaceCandidate(
+            id: id, name: name, category: category,
+            primaryCategory: primaryCategory, subcategory: subcategory,
+            address: address, locality: locality, region: region,
+            latitude: latitude, longitude: longitude,
+            sourceProvider: sourceProvider ?? "mapkit",
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            websiteURLString: websiteURLString, phoneNumber: phoneNumber,
+            actionLinksJSON: actionLinksJSON, confidence: 1
+        )
     }
 
     var photoRequest: PlacePhotoRequest {
@@ -17122,6 +17141,10 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    func includes(_ entry: PlaceActivityEntry) -> Bool {
+        self == .all || (entry.isCurrentUser && entry.status == .been)
+    }
+
     var title: String {
         switch self {
         case .all: "ALL"
@@ -17329,6 +17352,7 @@ struct PlaceActivitySection: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
     let saves: [PlaceSaveSummary]
     let currentUserID: String
+    var refreshesRemoteHistory = true
     @State private var filter: PlaceActivityFilter = .all
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
     @State private var editFlow: MapPlaceSaveContext?
@@ -17387,7 +17411,7 @@ struct PlaceActivitySection: View {
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
         .task(id: remoteActivityUserPlaceIDs) {
-            guard auth.isSignedIn else { return }
+            guard refreshesRemoteHistory, auth.isSignedIn else { return }
             await store.refreshRemotePlaceActivity(
                 userPlaceIDs: remoteActivityUserPlaceIDs,
                 backend: backend
@@ -17414,7 +17438,7 @@ struct PlaceActivitySection: View {
                         PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
                     }
 
-                    if entries.isEmpty {
+                    if entries.isEmpty, store.shouldShowLegacyCheckInSummary(for: userPlace.serverID ?? userPlace.id) {
                         entries.append(
                             PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
                         )
@@ -17450,7 +17474,7 @@ struct PlaceActivitySection: View {
         case .all:
             entries
         case .myVisits:
-            entries.filter { $0.isCurrentUser }
+            entries.filter { filter.includes($0) }
         }
     }
 
@@ -17482,7 +17506,6 @@ struct PlaceActivitySection: View {
         Array(
             Set(
                 saves.compactMap { summary in
-                    guard summary.visiblePlace.owner.id != currentUserID else { return nil }
                     let userPlaceID = summary.visiblePlace.userPlace.serverID
                         ?? summary.visiblePlace.userPlace.id
                     return UUID(uuidString: userPlaceID) == nil ? nil : userPlaceID.lowercased()
@@ -17707,6 +17730,7 @@ private struct PlaceActivityCard: View {
             ActivityEngagementActionRow(
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
+                showsWannaButton: false,
                 isEngagementEnabled: isEngagementResolved,
                 reportSubjectOverride: reportableUserPlaceSubject
             )
