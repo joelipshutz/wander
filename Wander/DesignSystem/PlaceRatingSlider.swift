@@ -1,5 +1,29 @@
 import SwiftUI
 
+#Preview("Rating scale · Dark") {
+    VStack(spacing: 20) {
+        ForEach([1.0, 3.0, 5.0], id: \.self) { score in
+            PlaceRatingSlider(score: .constant(score))
+        }
+    }
+    .padding(20)
+    .background(AstirBrandMode.editorial.background)
+    .environment(\.astirBrandMode, .editorial)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Rating scale · Light") {
+    VStack(spacing: 20) {
+        ForEach([1.0, 3.0, 5.0], id: \.self) { score in
+            PlaceRatingSlider(score: .constant(score))
+        }
+    }
+    .padding(20)
+    .background(AstirBrandMode.editorialLight.background)
+    .environment(\.astirBrandMode, .editorialLight)
+    .preferredColorScheme(.light)
+}
+
 struct PlaceRatingReaction: Equatable {
     let score: Double
     let label: String
@@ -50,7 +74,7 @@ struct PlaceRatingLiquidState: Equatable {
         Color(red: red, green: green, blue: blue)
     }
 
-    static func resolve(_ score: Double) -> PlaceRatingLiquidState {
+    static func resolve(_ score: Double, isDarkMode: Bool = false) -> PlaceRatingLiquidState {
         let candidate = score.isFinite ? score : PlaceRating.defaultScore
         let normalized = min(
             max(candidate, PlaceRating.minimumScore),
@@ -60,16 +84,27 @@ struct PlaceRatingLiquidState: Equatable {
         let progress = span > 0 ? (normalized - PlaceRating.minimumScore) / span : 1
         let tone: (red: Double, green: Double, blue: Double)
 
+        // Approved dark-mode neon palette; keep the same blue → orange → red scale.
+        let cool = isDarkMode
+            ? (red: 0.12, green: 0.80, blue: 1.00)
+            : (red: 0.24, green: 0.63, blue: 0.82)
+        let middle = isDarkMode
+            ? (red: 1.00, green: 0.55, blue: 0.10)
+            : (red: 0.93, green: 0.55, blue: 0.24)
+        let hot = isDarkMode
+            ? (red: 1.00, green: 0.18, blue: 0.23)
+            : (red: 0.42, green: 0.07, blue: 0.09)
+
         if progress <= 0.5 {
             tone = interpolate(
-                from: (red: 0.24, green: 0.63, blue: 0.82),
-                to: (red: 0.93, green: 0.55, blue: 0.24),
+                from: cool,
+                to: middle,
                 progress: progress / 0.5
             )
         } else {
             tone = interpolate(
-                from: (red: 0.93, green: 0.55, blue: 0.24),
-                to: (red: 0.42, green: 0.07, blue: 0.09),
+                from: middle,
+                to: hot,
                 progress: (progress - 0.5) / 0.5
             )
         }
@@ -114,7 +149,10 @@ struct PlaceRatingSlider: View {
     }
 
     private var liquidState: PlaceRatingLiquidState {
-        PlaceRatingLiquidState.resolve(interactionScore ?? reaction.score)
+        PlaceRatingLiquidState.resolve(
+            interactionScore ?? reaction.score,
+            isDarkMode: brandMode.prefersDarkInterface
+        )
     }
 
     var body: some View {
