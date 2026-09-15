@@ -109,6 +109,10 @@ async function main() {
           strangerUserID,
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/checkin_history_engagement.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - check-in history engagement, historical repair, and owner deletion");
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
         await runListSnapshotCoverSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
@@ -1191,6 +1195,14 @@ function runLinkedSmokeChecks(
       new URL("../supabase/tests/social_import_paid_work_admission.sql", import.meta.url),
     )
     : "";
+  // Keep this suite in the generated SQL too. Its separate transaction needs
+  // the same preview because the main smoke transaction rolls its preview back.
+  const checkInHistorySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(
+      new URL("../supabase/tests/checkin_history_engagement.sql", import.meta.url),
+    ),
+    "rollback",
+  )}\nrollback;`;
   try {
     const linkedSQL = migrationTestPath
       ? `begin;\n${migrationPreviewSQL}\n${migrationPreviewTestSQL}\nrollback;`
@@ -1200,7 +1212,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
@@ -1242,7 +1254,7 @@ function runLinkedSmokeChecks(
         : "hosted schema";
       console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${migrationTestPath}`);
     } else {
-      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, paid social-import admission, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, paid social-import admission, Shared Visits, cuisine inference, Discover profile recommendations, subtype details, owner visit answers, and check-in history engagement contracts are valid.");
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });

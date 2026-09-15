@@ -17525,7 +17525,8 @@ struct PlaceActivitySection: View {
                         PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
                     }
 
-                    if entries.isEmpty {
+                    if entries.isEmpty,
+                       store.shouldShowLegacyCheckInSummary(for: userPlace.serverID ?? userPlace.id) {
                         entries.append(
                             PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
                         )
@@ -17581,8 +17582,8 @@ struct PlaceActivitySection: View {
         Array(
             Set(
                 saves.compactMap { summary in
-                    let serverID = summary.visiblePlace.userPlace.serverID
-                    return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                    let serverID = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
+                    return UUID(uuidString: serverID) == nil ? nil : serverID
                 }
             )
         )
@@ -17857,6 +17858,7 @@ private struct PlaceActivityCard: View {
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
                 isEngagementEnabled: isEngagementResolved,
+                resolveContext: resolveEngagementContext,
                 reportSubjectOverride: reportableUserPlaceSubject
             )
 
@@ -17957,7 +17959,7 @@ private struct PlaceActivityCard: View {
         let visiblePlace = entry.summary.visiblePlace
         let match = store.placeActivityEngagementMatch(
             userPlaceID: entry.userPlace.serverID ?? entry.userPlace.id,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         )
         let location = [visiblePlace.place.locality, visiblePlace.place.region]
@@ -17990,13 +17992,27 @@ private struct PlaceActivityCard: View {
         )
     }
 
+    @MainActor
+    private func resolveEngagementContext() async -> ActivityEngagementContext? {
+        if isEngagementResolved { return engagementContext }
+        let requestUserID = store.currentUser.id
+        let userPlaceID = entry.userPlace.serverID ?? entry.userPlace.id
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: [userPlaceID], backend: backend)
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return nil }
+        if isEngagementResolved { return engagementContext }
+        // Refresh the source as well: an owner deletion removes the tile instead
+        // of leaving an unresolved action row attached to stale visit data.
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [userPlaceID], backend: backend)
+        return nil
+    }
+
     private var isEngagementResolved: Bool {
-        guard let serverID = entry.userPlace.serverID,
-              UUID(uuidString: serverID) != nil
+        let serverID = entry.userPlace.serverID ?? entry.userPlace.id
+        guard UUID(uuidString: serverID) != nil
         else { return true }
         return store.placeActivityEngagementMatch(
             userPlaceID: serverID,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         ) != nil
     }

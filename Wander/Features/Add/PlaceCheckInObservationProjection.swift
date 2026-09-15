@@ -7,10 +7,16 @@ enum PlaceCheckInObservationProjection {
         base: [LocalPlaceAttribute],
         visits: [LocalPlaceVisit],
         userPlaceID: String,
-        status: PlaceStatus
+        status: PlaceStatus,
+        hasLoadedVisitHistory: Bool = false
     ) -> [LocalPlaceAttribute] {
         let ordinary = base.filter { !PlaceCheckInQuestionCatalog.isDetailQuestion($0.questionKey) }
         guard status == .been else { return ordinary }
+        // A successful history read with no active visits is an authoritative
+        // deletion. An unloaded history still needs its cached parent details.
+        if hasLoadedVisitHistory && !visits.contains(where: { $0.deletedAt == nil }) {
+            return ordinary
+        }
         guard !visits.isEmpty else { return base }
         guard visits.contains(where: { $0.attributeAnswersAreComplete == true }) else { return base }
         let activeVisits = visits.filter { $0.deletedAt == nil }

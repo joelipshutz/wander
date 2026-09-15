@@ -136,7 +136,25 @@ final class PlaceCheckInObservationProjectionTests: XCTestCase {
         unknown.attributeAnswersAreComplete = false
         let parent = parentAttribute(answer: "A few")
 
-        XCTAssertEqual(project([unknown], base: [parent]).map(\.valueJSON), [parent.valueJSON])
+        for hasLoadedVisitHistory in [false, true] {
+            XCTAssertEqual(
+                project([unknown], base: [parent], hasLoadedVisitHistory: hasLoadedVisitHistory).map(\.valueJSON),
+                [parent.valueJSON]
+            )
+        }
+    }
+
+    func testAuthoritativeEmptyHistoryRemovesStaleDetailsButKeepsOtherAttributes() {
+        let label = LocalPlaceAttribute(
+            localID: "label", userPlaceID: "save", questionKey: "personal_labels",
+            valueType: "personal_label", valueJSON: #"["Weekend"]"#
+        )
+        let base = [parentAttribute(answer: "Plenty"), label]
+
+        XCTAssertEqual(project([], base: base).map(\.questionKey), base.map(\.questionKey))
+        let loaded = project([], base: base, hasLoadedVisitHistory: true)
+        XCTAssertEqual(loaded.map(\.questionKey), ["personal_labels"])
+        XCTAssertEqual(loaded.first?.valueJSON, label.valueJSON)
     }
 
     func testUnknownLaterVisitDoesNotReplaceAnExplicitOwnerObservation() throws {
@@ -206,10 +224,12 @@ final class PlaceCheckInObservationProjectionTests: XCTestCase {
     }
 
     private func project(
-        _ visits: [LocalPlaceVisit], base: [LocalPlaceAttribute] = []
+        _ visits: [LocalPlaceVisit], base: [LocalPlaceAttribute] = [],
+        hasLoadedVisitHistory: Bool = false
     ) -> [LocalPlaceAttribute] {
         PlaceCheckInObservationProjection.attributes(
-            base: base, visits: visits, userPlaceID: "save", status: .been
+            base: base, visits: visits, userPlaceID: "save", status: .been,
+            hasLoadedVisitHistory: hasLoadedVisitHistory
         )
     }
 
