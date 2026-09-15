@@ -2480,7 +2480,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("minWidth: WanderTheme.tapMinimum"))
         XCTAssertTrue(mapScreen.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(mapScreen.contains(".frame(width: 32, height: 32)"))
-        XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = true"))
+        XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = false"))
         XCTAssertFalse(mapScreen.contains("didSelectStatus"))
         XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"))
         XCTAssertTrue(mapScreen.contains("action.displayTitle("))
@@ -2496,6 +2496,7 @@ final class NavigationContractTests: XCTestCase {
 
         let orderedMarkers = [
             "ratingSection",
+            "checkInQuestionsSection",
             "noteSection",
             "MapCheckInDateSection(",
             "placeTypeSection",

@@ -601,6 +601,7 @@ struct ProfileSettingsHome: View {
     @MainActor
     private func deleteAccount() async {
         guard !isDeleting else { return }
+        let questionOwnerID = store.currentUser.id
         let deletingUserID: String? = if case .signedIn(let session) = auth.state {
             session.userID
         } else {
@@ -618,6 +619,7 @@ struct ProfileSettingsHome: View {
                 )
             }
             try await auth.deleteAccount()
+            try CheckInQuestionPreferenceStore().removeAccount(ownerUserID: questionOwnerID)
             if let deletingUserID {
                 OnboardingCompletionStore().clear(for: deletingUserID)
             }

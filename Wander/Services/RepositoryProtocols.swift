@@ -890,6 +890,11 @@ struct PlaceVisitResult: Equatable, Sendable {
     let ratingScore: Double?
     let tags: [String]
     let backfilledFromUserPlace: Bool
+    /// Nil means this response did not include answers; an empty array is an
+    /// authoritative answer set and must remain distinguishable from nil.
+    var attributeAnswersJSON: String? = nil
+    var createdAt: Date? = nil
+    var updatedAt: Date? = nil
 }
 
 struct HistoricalWantSnapshotDraft: Equatable {
@@ -1249,6 +1254,7 @@ struct PlacePhoto: Decodable, Equatable {
 }
 
 struct SaveResult: Equatable {
+    var localDetailsWarning: String? = nil
     let userPlaceID: String
     let syncState: SyncState
     let placeID: String?

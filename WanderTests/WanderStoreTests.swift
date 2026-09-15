@@ -2093,6 +2093,42 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
     }
 
+    func testAuthoritativeEmptyHistoryClearsCachedDetailsWhileFailedRefreshKeepsThem() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        let detail = LocalPlaceAttribute(
+            localID: "cached-detail", userPlaceID: parentID, questionKey: "place_detail_outlets",
+            valueType: "single_choice", valueJSON: #""Plenty""#
+        )
+        let label = LocalPlaceAttribute(
+            localID: "cached-label", userPlaceID: parentID, questionKey: "personal_labels",
+            valueType: "personal_label", valueJSON: #"["Weekend"]"#
+        )
+        let remote = makeRemoteCalendarVisiblePlace(
+            owner: store.currentUser, userPlaceID: parentID, placeID: "history-place",
+            name: "History Cafe", status: .been, savedAt: .now, visitedAt: .now,
+            attributes: [detail, label]
+        )
+        await store.refreshRemoteProfileVisiblePlaces(profileID: store.currentUser.id, backend: WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [store.currentUser.id: [remote]])
+        ))
+        XCTAssertEqual(try XCTUnwrap(store.visiblePlaces().first).attributes.count, 2)
+
+        let failed = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(error: TestError.expected)
+        ))
+        XCTAssertFalse(failed)
+        XCTAssertEqual(try XCTUnwrap(store.visiblePlaces().first).attributes.count, 2)
+
+        let refreshed = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository()
+        ))
+        XCTAssertTrue(refreshed)
+        let projected = try XCTUnwrap(store.visiblePlaces().first)
+        XCTAssertEqual(projected.attributes.map(\.questionKey), ["personal_labels"])
+        XCTAssertEqual(projected.attributes.first?.valueJSON, label.valueJSON)
+    }
+
     func testRemoteStealthCalendarRetainsOwnerProfileActivity() async {
         let store = WanderStore(fixtures: .empty())
         store.apply(authState: .signedIn(AuthSession(userID: "stealth_owner", displayName: "Owner", handle: "owner")))
@@ -5788,48 +5824,23 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(PlaceRating.averageDisplay(5), "5")
     }
 
-    func testSaveQuestionTemplatesUseSliderRatingAndMultiBestFor() {
-        let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
-        let occasion = restaurantBlocks.first { $0.key == "occasion" }
-        let tags = restaurantBlocks.first { $0.key == "restaurant_tags" }
-
-        XCTAssertFalse(restaurantBlocks.contains { $0.key == "rating_signal" })
-        XCTAssertEqual(restaurantBlocks.map(\.key), ["price", "occasion", "restaurant_tags"])
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "price" }?.defaultValues, [])
-        XCTAssertEqual(occasion?.kind, .multiTag)
-        XCTAssertEqual(occasion?.valueType, "multi_tag")
-        XCTAssertTrue((occasion?.defaultValues.count ?? 0) > 1)
-        XCTAssertEqual(tags?.kind, .multiTag)
+    func testCheckInTemplatesKeepRatingSeparateAndOfferThreeObservations() {
+        let blocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
+        let questions = blocks.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.key) }
+        XCTAssertEqual(questions.count, 3)
+        XCTAssertTrue(questions.allSatisfy { $0.kind == .singleChoice && $0.defaultValues.isEmpty })
+        XCTAssertFalse(blocks.contains { $0.key == "rating_signal" || $0.key == "occasion" })
+        XCTAssertEqual(blocks.last?.key, "restaurant_tags")
     }
 
     func testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts() {
-        let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .wannaGo)
-        let coffeeBlocks = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)
-        let hikeBlocks = AddQuestionTemplates.blocks(category: "hike", status: .wannaGo)
-        let parkBlocks = AddQuestionTemplates.blocks(category: "park", status: .wannaGo)
-
-        XCTAssertEqual(restaurantBlocks.map(\.key), ["interest_signal", "occasion", "restaurant_tags"])
-        XCTAssertEqual(restaurantBlocks.first?.title, "how excited are you?")
-        XCTAssertEqual(restaurantBlocks.first?.options, ["curious", "excited", "must go"])
-        XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "occasion" }?.title, "planning for?")
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
-        XCTAssertTrue(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues.contains("recommended") == true)
-        XCTAssertTrue(restaurantBlocks.first { $0.key == "restaurant_tags" }?.options.contains("food shortlist") == true)
-
-        XCTAssertEqual(coffeeBlocks.map(\.key), ["interest_signal", "coffee_tags"])
-        XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
-        XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
-        XCTAssertTrue(coffeeBlocks.first { $0.key == "coffee_tags" }?.defaultValues.contains("work maybe") == true)
-
-        XCTAssertEqual(hikeBlocks.map(\.key), ["interest_signal", "hike_tags"])
-        XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
-        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
-
-        XCTAssertEqual(parkBlocks.map(\.key), ["interest_signal", "best_for", "park_tags"])
-        XCTAssertEqual(parkBlocks.first { $0.key == "best_for" }?.title, "planning for?")
-        XCTAssertEqual(parkBlocks.first { $0.key == "park_tags" }?.title, "why save it?")
-        XCTAssertEqual(parkBlocks.first { $0.key == "park_tags" }?.options.contains("outdoor shortlist"), true)
+        for category in ["restaurant", "coffee", "hike", "park", "gym", "bar"] {
+            let blocks = AddQuestionTemplates.blocks(category: category, status: .wannaGo)
+            XCTAssertEqual(blocks.count, 1, category)
+            XCTAssertTrue(blocks[0].key.hasSuffix("_tags"))
+            XCTAssertEqual(blocks[0].title, "Tags")
+            XCTAssertTrue(blocks[0].defaultValues.isEmpty)
+        }
     }
 
     func testNewSaveKeepsOptionalQuestionSelectionsUnselectedByDefault() throws {
@@ -5854,8 +5865,8 @@ final class WanderStoreTests: XCTestCase {
         )
         let wannaBlock = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)[0]
         let beenBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
-        let price = try XCTUnwrap(beenBlocks.first { $0.key == "price" })
-        let bestFor = try XCTUnwrap(beenBlocks.first { $0.key == "occasion" })
+        let price = try XCTUnwrap(beenBlocks.first)
+        let bestFor = beenBlocks[1]
         let tags = try XCTUnwrap(beenBlocks.first { $0.key == "restaurant_tags" })
 
         XCTAssertTrue(
@@ -5879,7 +5890,7 @@ final class WanderStoreTests: XCTestCase {
             now: Date(timeIntervalSince1970: 1_700_000_000)
         ))
         XCTAssertEqual(newSaveDraft.form.step, .details)
-        XCTAssertTrue(newSaveDraft.form.isShowingOptionalDetails)
+        XCTAssertFalse(newSaveDraft.form.isShowingOptionalDetails)
         XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
         XCTAssertTrue(preselectedImport.startsOnDetails)
         XCTAssertEqual(preselectedImport.initialStatus, .been)
@@ -5927,10 +5938,10 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertEqual(synchronized[bestFor.key], [])
         XCTAssertEqual(synchronized[tags.key], ["late-night"])
-        XCTAssertEqual(synchronized[price.key], [])
+        XCTAssertNil(synchronized[price.key])
     }
 
-    func testChangingTaxonomyDropsStaleSuggestedTagsButKeepsCustomTags() {
+    func testChangingTaxonomyPreservesAllExplicitlySelectedTags() {
         let existing: Set<String> = ["Thai craving", "date night", "Joe's pick"]
         let synchronized = MapPlaceSaveDetailsPolicy.synchronizedUnifiedTagSelections(
             existing: existing,
@@ -5938,7 +5949,7 @@ final class WanderStoreTests: XCTestCase {
             nextSuggestedOptions: ["Mediterranean craving", "date night", "dinner rotation"]
         )
 
-        XCTAssertEqual(synchronized, ["date night", "Joe's pick"])
+        XCTAssertEqual(synchronized, existing)
     }
 
     func testLocalTagSuggestionsRequireMatchingSubcategoryAndRestaurantCuisine() {
@@ -6014,9 +6025,10 @@ final class WanderStoreTests: XCTestCase {
             previousSuggestedOptions: previousOptions
         )
 
-        XCTAssertNil(synchronized["price"])
-        XCTAssertEqual(synchronized["occasion"], ["custom anniversary"])
-        XCTAssertEqual(barBlocks.map(\.key), ["occasion", "bar_tags"])
+        XCTAssertEqual(synchronized["price"], ["$$$"])
+        XCTAssertEqual(synchronized["occasion"], ["rainy night", "custom anniversary"])
+        XCTAssertEqual(barBlocks.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.key) }.count, 3)
+        XCTAssertEqual(barBlocks.last?.key, "bar_tags")
     }
 
     func testNewSaveContextsClearInheritedPriceFeelWhileEditPreservesIt() throws {
@@ -8258,7 +8270,7 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(context.initialStatus, .been)
         XCTAssertEqual(context.initialVisibility, .followers)
-        XCTAssertEqual(context.initialAnswers["strenuousness"], Set(["easy"]))
+        XCTAssertNil(context.initialAnswers["strenuousness"])
         XCTAssertNil(context.initialAnswers["hike_tags"])
         XCTAssertTrue(context.initialPersonalLabels.isEmpty)
     }

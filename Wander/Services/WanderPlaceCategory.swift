@@ -1104,10 +1104,12 @@ enum WanderPlaceCategory {
             "sports club", "sports complex", "hospital", "medical", "clinic", "doctor", "dentist", "pharmacy",
             "drugstore", "spa", "massage", "sauna", "therapy", "veterinary care", "veterinarian", "urgent care",
             "optometrist", "ophthalmologist", "eye doctor", "eye care center", "vision center", "physical therapy",
-            "dermatologist", "pediatrician", "podiatrist"
+            "dermatologist", "pediatrician", "podiatrist", "pilates", "pilates studio", "crossfit",
+            "crossfit gym", "functional fitness", "functional fitness studio"
         ],
             subcategories: [
-            "Gym", "Fitness center", "Yoga studio", "Wellness studio", "Wellness center", "Sports club",
+            "Gym", "Fitness center", "Yoga studio", "Pilates studio", "CrossFit gym", "Functional fitness studio",
+            "Wellness studio", "Wellness center", "Sports club",
             "Sports complex", "Sports coaching", "Sports school", "Athletic field", "Swimming pool",
             "Tennis court", "Golf course", "Indoor golf", "Ice skating rink", "Volleyball court", "Soccer field",
             "Basketball court", "Pickleball court", "Spa", "Massage", "Massage spa", "Sauna", "Chiropractor",
@@ -1376,7 +1378,7 @@ enum WanderPlaceCategory {
         "park": "Park",
         "gym": "Gym",
         "fitness studio": "Fitness center",
-        "pilates studio": "Fitness center",
+        "pilates studio": "Pilates studio",
         "spiritual": "Place of worship",
         "hospital": "Hospital",
         "urgent care": "Urgent care",
@@ -1578,7 +1580,8 @@ enum WanderPlaceCategory {
         ],
         wellnessFitness: [
             PlaceCategorySubcategoryGroup(title: "Fitness & sports", subcategories: [
-                "Gym", "Fitness center", "Yoga studio", "Wellness studio", "Wellness center", "Sports club",
+                "Gym", "Fitness center", "Yoga studio", "Pilates studio", "CrossFit gym", "Functional fitness studio",
+                "Wellness studio", "Wellness center", "Sports club",
                 "Sports complex", "Sports coaching", "Sports school", "Athletic field", "Swimming pool",
                 "Tennis court", "Golf course", "Indoor golf", "Ice skating rink", "Volleyball court",
                 "Soccer field", "Basketball court", "Pickleball court"
@@ -2511,9 +2514,22 @@ enum WanderPlaceCategory {
     static func providerCategoryAssignment(
         for value: String?
     ) -> (primaryCategory: String, subcategory: String)? {
-        guard let metadata = mapKitProviderMetadata(for: value) else { return nil }
+        guard let key = providerTypeKey(value),
+              let metadata = mapKitProviderCategories[key] ?? explicitProviderCategories[key] else { return nil }
         return (metadata.primaryCategory, metadata.subcategory)
     }
+
+    /// Exact provider type tokens only. Generic gyms and business names never
+    /// become CrossFit or Pilates evidence. These are not MapKit enum cases.
+    private static let explicitProviderCategories: [String: ProviderCategoryMetadata] = [
+        "volleyballcourt": ProviderCategoryMetadata(canonicalType: "volleyball court", primaryCategory: wellnessFitness, subcategory: "Volleyball court"),
+        "pilates": ProviderCategoryMetadata(canonicalType: "pilates studio", primaryCategory: wellnessFitness, subcategory: "Pilates studio"),
+        "pilatesstudio": ProviderCategoryMetadata(canonicalType: "pilates studio", primaryCategory: wellnessFitness, subcategory: "Pilates studio"),
+        "crossfit": ProviderCategoryMetadata(canonicalType: "crossfit gym", primaryCategory: wellnessFitness, subcategory: "CrossFit gym"),
+        "crossfitgym": ProviderCategoryMetadata(canonicalType: "crossfit gym", primaryCategory: wellnessFitness, subcategory: "CrossFit gym"),
+        "functionalfitness": ProviderCategoryMetadata(canonicalType: "functional fitness studio", primaryCategory: wellnessFitness, subcategory: "Functional fitness studio"),
+        "functionalfitnessstudio": ProviderCategoryMetadata(canonicalType: "functional fitness studio", primaryCategory: wellnessFitness, subcategory: "Functional fitness studio")
+    ]
 
     private static func mapKitProviderMetadata(for value: String?) -> ProviderCategoryMetadata? {
         guard let key = providerTypeKey(value) else { return nil }

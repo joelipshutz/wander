@@ -732,6 +732,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let note: String?
         let ratingScore: Double?
         let attributeAnswersJSON: String
+        let attributeAnswersAreComplete: Bool?
         let tagsJSON: String
         let backfilledFromUserPlace: Bool
         let syncStateRaw: String
@@ -750,6 +751,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             note = visit.note
             ratingScore = visit.ratingScore
             attributeAnswersJSON = visit.attributeAnswersJSON
+            attributeAnswersAreComplete = visit.attributeAnswersAreComplete
             tagsJSON = visit.tagsJSON
             backfilledFromUserPlace = visit.backfilledFromUserPlace
             syncStateRaw = visit.syncStateRaw
@@ -763,6 +765,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
 
         func model() -> LocalPlaceVisit {
             let tags = (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? []
+            let isUnsentLocalDraft = localID.hasPrefix("local_visit_")
+                && serverUpdatedAt == nil
+                && [SyncState.localOnly.rawValue, SyncState.pendingCreate.rawValue, SyncState.failed.rawValue].contains(syncStateRaw)
             return LocalPlaceVisit(
                 localID: localID,
                 serverID: serverID,
@@ -779,7 +784,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 lastSyncError: lastSyncError,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
-                deletedAt: deletedAt
+                deletedAt: deletedAt,
+                attributeAnswersAreComplete: attributeAnswersAreComplete
+                    ?? (!localID.hasPrefix("remote_profile_visit_") && serverID == nil || isUnsentLocalDraft || attributeAnswersJSON != "[]")
             )
         }
     }
