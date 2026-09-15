@@ -185,6 +185,7 @@ private struct CGMessagesConversation: View {
             RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         }
+        .contentShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private var composerBar: some View {
