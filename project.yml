@@ -29,6 +29,18 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  CommonGroundMock:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+      environmentVariables:
+        WANDER_COMMON_GROUND_MOCKUP: detail
   Wander:
     build:
       targets:
