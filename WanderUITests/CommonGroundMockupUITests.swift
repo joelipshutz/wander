@@ -61,8 +61,8 @@ final class CommonGroundMockupUITests: XCTestCase {
         capture("rec486-flow-04-local-messages-preview")
 
         openRecipientFromMessages(in: app)
-        XCTAssertEqual(postcardPlace.label, "Not No Bar")
-        XCTAssertEqual(postcardReason.label, expectedReason)
+        XCTAssertEqual(visibleText("common-ground.invitation.place", in: app).label, "Not No Bar")
+        XCTAssertEqual(visibleText("common-ground.invitation.reason-title", in: app).label, expectedReason)
         XCTAssertTrue(app.buttons["Reply in Messages"].exists)
         capture("rec486-flow-05-opened-recipient")
 
@@ -125,9 +125,9 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertEqual(invitationLink.value as? String, chosenDate)
 
         openRecipientFromMessages(in: app)
-        XCTAssertEqual(app.staticTexts["common-ground.invitation.place"].label, "Not No Bar")
-        assertLabel(chosenDate, on: whenValue)
-        XCTAssertTrue(app.staticTexts[personalNote].exists)
+        XCTAssertEqual(visibleText("common-ground.invitation.place", in: app).label, "Not No Bar")
+        assertLabel(chosenDate, on: visibleText("common-ground.invitation.when-value", in: app))
+        assertLabel(personalNote, on: visibleText("common-ground.invitation.copy", in: app))
         capture("rec486-date-02-recipient-keeps-date-and-note")
 
         closeRecipientToMessages(in: app)
@@ -236,6 +236,15 @@ final class CommonGroundMockupUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists && element.isHittable
+    }
+
+    // A full-screen recipient cover preserves its presenting composer. Verify
+    // the visible postcard rather than accepting either copy in the AX tree.
+    private func visibleText(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let matches = app.staticTexts.matching(identifier: identifier)
+        let visible = matches.allElementsBoundByIndex.first { $0.isHittable }
+        XCTAssertNotNil(visible, "Expected visible postcard text: \(identifier)")
+        return visible ?? matches.firstMatch
     }
 
     private func identifiedElement(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
