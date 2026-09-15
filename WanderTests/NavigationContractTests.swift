@@ -4055,7 +4055,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
         XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
-        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))

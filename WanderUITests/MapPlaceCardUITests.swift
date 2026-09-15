@@ -455,9 +455,8 @@ final class MapPlaceCardUITests: XCTestCase {
         let card = app.buttons["map.selectedPlaceCard"]
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 8))
-        // Wait for the offscreen profile to prepare before checking its effect
-        // on the parent tab bar.
-        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 8))
+        // A compact preview must not construct the full page offscreen.
+        XCTAssertFalse(app.buttons["place-profile.back"].exists)
         XCTAssertTrue(tabs.isHittable)
         capture("rec-464-compact-tabs")
 
