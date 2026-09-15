@@ -105,13 +105,11 @@ private struct CGMessagesConversation: View {
                         .accessibilityIdentifier("common-ground.messages.close")
                 }
             }
-        }
-        .tint(linkBlue)
-        .fullScreenCover(isPresented: $showsRecipient) {
-            NavigationStack {
+            .navigationDestination(isPresented: $showsRecipient) {
                 CommonGroundInvitationMockup(draft: draft, opensEnvelope: true, initiallyOpened: true)
+                    .navigationBarBackButtonHidden(true)
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
+                        ToolbarItem(placement: .topBarLeading) {
                             Button {
                                 showsRecipient = false
                             } label: {
@@ -121,9 +119,10 @@ private struct CGMessagesConversation: View {
                             .accessibilityIdentifier("common-ground.recipient.close")
                         }
                     }
+                    .tint(brand.accentText)
             }
-            .tint(brand.accentText)
         }
+        .tint(linkBlue)
     }
 
     private var messageIndent: CGFloat {

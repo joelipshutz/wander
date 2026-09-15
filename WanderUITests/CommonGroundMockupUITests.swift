@@ -140,6 +140,32 @@ final class CommonGroundMockupUITests: XCTestCase {
         assertLabel(chosenDate, on: whenValue)
     }
 
+    func testMessagesRecipientReturnsToUsableConversation() {
+        let app = launch(page: "messages")
+        assertMessagesPreview(in: app)
+        let message = app.staticTexts["common-ground.messages.message"]
+        let expectedMessage = message.label
+        let invitationLink = app.buttons["common-ground.messages.open-invitation"]
+        let expectedDate = invitationLink.value as? String
+        XCTAssertNotNil(expectedDate)
+
+        openRecipientFromMessages(in: app)
+        let expectedFields = [
+            ("common-ground.invitation.place", "Narwhal"),
+            ("common-ground.invitation.copy", expectedMessage),
+            ("common-ground.invitation.when-value", expectedDate ?? ""),
+            ("common-ground.invitation.reason-title", "Shared regulars")
+        ]
+        for (identifier, expected) in expectedFields {
+            XCTAssertTrue(scrollTo(app.staticTexts[identifier], in: app))
+            assertLabel(expected, on: visibleText(identifier, in: app))
+        }
+
+        closeRecipientToMessages(in: app)
+        assertLabel(expectedMessage, on: message)
+        XCTAssertEqual(invitationLink.value as? String, expectedDate)
+    }
+
     func testCaptureEveryNativeDesignState() {
         let pages = [
             "detail", "mix", "profile", "ownProfile", "invitation",
@@ -241,7 +267,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         return element.exists && element.isHittable
     }
 
-    // A full-screen recipient cover preserves its presenting composer. Verify
+    // The Messages presentation preserves its composer. Verify
     // the visible postcard rather than accepting either copy in the AX tree.
     private func visibleText(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         let matches = app.staticTexts.matching(identifier: identifier)
@@ -255,9 +281,12 @@ final class CommonGroundMockupUITests: XCTestCase {
     }
 
     private func assertMessagesPreview(in app: XCUIApplication) {
-        XCTAssertTrue(identifiedElement("common-ground.messages.conversation", in: app).waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["common-ground.messages.preview-notice"].exists)
-        XCTAssertTrue(app.buttons["common-ground.messages.open-invitation"].exists)
+        assertHittable(identifiedElement("common-ground.messages.conversation", in: app))
+        assertHittable(app.buttons["common-ground.messages.close"])
+        assertHittable(app.staticTexts["common-ground.messages.preview-notice"])
+        let invitationLink = app.buttons["common-ground.messages.open-invitation"]
+        XCTAssertTrue(scrollTo(invitationLink, in: app))
+        assertHittable(invitationLink)
         XCTAssertFalse(app.buttons["Send"].exists, "The local demo must not expose actual delivery.")
     }
 
@@ -271,10 +300,26 @@ final class CommonGroundMockupUITests: XCTestCase {
 
     private func closeRecipientToMessages(in app: XCUIApplication) {
         let closeRecipient = app.buttons["common-ground.recipient.close"]
-        XCTAssertTrue(closeRecipient.waitForExistence(timeout: 3))
+        assertHittable(closeRecipient, timeout: 3)
         closeRecipient.tap()
-        XCTAssertTrue(closeRecipient.waitForNonExistence(timeout: 4))
+        let recipientInactive = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"), object: closeRecipient
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [recipientInactive], timeout: 4), .completed)
         assertMessagesPreview(in: app)
+    }
+
+    private func assertHittable(
+        _ element: XCUIElement, timeout: TimeInterval = 5,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout), .completed,
+            "Expected a visible, hittable control: \(element.identifier)", file: file, line: line
+        )
     }
 
     private func selectCity(_ city: String, in app: XCUIApplication) {
