@@ -132,8 +132,10 @@ struct FeedScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
-                selectedPlaceDestination
+            .fullScreenCover(isPresented: selectedPlaceDestinationBinding) {
+                NavigationStack {
+                    selectedPlaceDestination
+                }
             }
             .navigationDestination(item: commentsRouteBinding) { route in
                 ActivityCommentsRouteScreen(

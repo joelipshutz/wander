@@ -26,6 +26,7 @@ struct ActivityEngagementActionRow: View {
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
     var showsCommentButton = true
+    var showsWannaButton = true
     var isEngagementEnabled = true
     var resolveContext: (@MainActor () async -> ActivityEngagementContext?)?
     var reportSubjectOverride: CommunityReportSubject?
@@ -52,7 +53,9 @@ struct ActivityEngagementActionRow: View {
 
             Spacer(minLength: WanderTheme.spacing3)
 
-            bookmarkButton
+            if showsWannaButton {
+                bookmarkButton
+            }
         }
         .frame(minHeight: 44)
         .alert("Couldn't load this check-in", isPresented: Binding(

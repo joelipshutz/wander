@@ -916,7 +916,7 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 

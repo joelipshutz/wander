@@ -204,6 +204,37 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         }
     }
 
+    func testFeedFullPlaceProfileKeepsFloatingActionsAndHistoryAboveBottomEdge() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover", "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
+        let place = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.place"]
+        reveal(place, in: app)
+        XCTAssertTrue(place.isHittable)
+        place.tap()
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 10))
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertLessThan(checkIn.frame.maxY, app.frame.maxY)
+        capture("REC495 Feed full profile top")
+        for _ in 0..<5 { app.swipeUp() }
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(app.buttons["MY CHECK-INS"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")).firstMatch.exists)
+        capture("REC495 Feed full profile history")
+        checkIn.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        capture("REC495 Shared attached check-in editor")
+        app.buttons["save.close"].tap()
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 5))
+    }
+
     private func performanceFeedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
