@@ -4,13 +4,13 @@ Open **[astir-events-flowchart.html](astir-events-flowchart.html)** locally in a
 
 ## Open the actual screens
 
-GitHub shows HTML source rather than running this page. On this page's branch, download the HTML using **Download raw file**, then open the downloaded file in Safari or Chrome. All screen images and the short motion preview are embedded, so the HTML works by itself without installation, a server, sign-in, or an internet connection.
+GitHub shows HTML source rather than running this page. Download the HTML using **Download raw file**, then open the downloaded file in Safari or Chrome. All screen images and the short motion preview are embedded, so the HTML works by itself without installation, a server, sign-in, or an internet connection.
 
-For the supporting specification and diagram links, keep this entire directory together. From an existing checkout, fetch `codex/rec-467-events-flowchart` into a separate worktree to avoid disturbing application work:
+For the supporting specification and diagram links, keep this entire directory together. From an existing checkout, open the copy on `main` in a separate worktree to avoid disturbing application work:
 
 ```sh
-git fetch origin codex/rec-467-events-flowchart
-git worktree add --detach ../astir-events-review origin/codex/rec-467-events-flowchart
+git fetch origin main
+git worktree add --detach ../astir-events-review origin/main
 open ../astir-events-review/docs/designs/astir-events/astir-events-flowchart.html
 ```
 
