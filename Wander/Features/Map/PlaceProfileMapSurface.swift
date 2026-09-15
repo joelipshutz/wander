@@ -1042,6 +1042,15 @@ private struct PlaceProfilePreviewCard: View {
             )
             try Task.checkCancellation()
 
+            // Show the photo (including fallbacks) before category enrichment,
+            // which can persist the store and wait for remote save retries.
+            await prepareRemoteCard(
+                using: remotePhoto,
+                localPhoto: localPhoto,
+                resolutionKey: resolutionKey
+            )
+            guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+
             if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
                     placeID: place.id,
@@ -1050,24 +1059,31 @@ private struct PlaceProfilePreviewCard: View {
                     backend: backend
                 )
             }
-
-            if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
-                return
-            }
-
-            if remotePhoto.isGooglePlacesPhoto {
-                let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
-                if await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
-                    return
-                }
-            }
-
-            await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         } catch is CancellationError {
             return
         } catch {
             await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         }
+    }
+
+    private func prepareRemoteCard(
+        using remotePhoto: PlacePhoto,
+        localPhoto: PlacePhoto?,
+        resolutionKey: String
+    ) async {
+        if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
+            return
+        }
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+
+        if remotePhoto.isGooglePlacesPhoto,
+           let visibleUserPhoto = try? await backend.visibleUserPlacePhoto(for: place.photoRequest),
+           await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
+            return
+        }
+
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+        await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
     }
 
     @discardableResult
