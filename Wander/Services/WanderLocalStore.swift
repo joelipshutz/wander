@@ -283,6 +283,8 @@ final class WanderStore: ObservableObject {
     )?
     private var feedRefreshCompletedAt: Date?
     private var feedRefreshCompletedRevision: UInt64?
+    @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
+    private var syncingWannaIDs = Set<String>()
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
@@ -574,6 +576,7 @@ final class WanderStore: ObservableObject {
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
             self.remoteVisiblePlaceCache = restored.cachedCurrentUserVisiblePlaces
+            self.placeWannaSaves = restored.placeWannaSaves
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
@@ -1469,6 +1472,7 @@ final class WanderStore: ObservableObject {
         places = []
         userPlaces = []
         placeAttributes = []
+        placeWannaSaves = []
         placeVisits = []
         visitPhotos = []
         follows = []
@@ -6344,6 +6348,130 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }
 
+    func wannaSaves(for userPlace: LocalUserPlace) -> [PlaceWannaSave] {
+        guard userPlace.deletedAt == nil else { return [] }
+        let ids = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
+        return placeWannaSaves.filter {
+            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID
+                && visibilityPolicy.canSeePlace(
+                    viewerID: currentUser.id, ownerID: $0.ownerID, visibility: $0.visibility,
+                    relationship: relationship(to: $0.ownerID),
+                    isBlocked: isBlockedBetweenCurrentUser(and: $0.ownerID)
+                )
+        }.sorted { $0.occurredAt > $1.occurredAt }
+    }
+
+    /// Unlike edit/import/save-from-Feed, a new form submission appends a Wanna.
+    /// Existing Been/Wanna summary metadata is deliberately left untouched.
+    func saveNewWanna(
+        _ candidate: PlaceCandidate,
+        operationID: String = UUID().uuidString.lowercased(),
+        visibility: PlaceVisibility,
+        note: String?,
+        plannedDate: Date?,
+        attributes: [PlaceAttributeDraft],
+        sourceType: AddSourceType = .manual,
+        backend: WanderBackend?
+    ) async -> SaveResult {
+        guard let existing = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }) else {
+            return await saveCandidate(candidate, status: .wannaGo, visibility: visibility,
+                                       note: note, sourceType: sourceType, plannedDate: plannedDate,
+                                       attributes: attributes, backend: backend)
+        }
+        if let pending = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            let synced = pending.isSynced ? true : await syncWannaSave(id: pending.id, backend: backend)
+            return SaveResult(userPlaceID: existing.userPlace.id,
+                              syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed))
+        }
+        let wanna = PlaceWannaSave(
+            id: operationID, ownerID: currentUser.id,
+            userPlaceID: existing.userPlace.id, occurredAt: .now, note: note,
+            visibility: visibilityForSave(visibility),
+            plannedDate: plannedDate.map { WannaGoDate.normalized($0) },
+            attributeAnswersJSON: VisitAttributeAnswers.encoded(from: attributes)
+        )
+        placeWannaSaves.append(wanna)
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placeSaved,
+            properties: ["source_type": sourceType.rawValue, "visibility": wanna.visibility.rawValue,
+                         "status": PlaceStatus.wannaGo.rawValue]))
+        analytics.track(.engagement(need: .expression, action: .placeSaved, surface: "add",
+            properties: ["source_type": sourceType.rawValue, "status": PlaceStatus.wannaGo.rawValue]))
+        persist()
+        let synced = await syncWannaSave(id: wanna.id, backend: backend)
+        return SaveResult(userPlaceID: existing.userPlace.id,
+                          syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed),
+                          placeID: existing.place.serverID)
+    }
+
+    @discardableResult
+    func syncPendingWannaSaves(backend: WanderBackend?) async -> Int {
+        let pending = placeWannaSaves.filter { !$0.isSynced && $0.ownerID == currentUser.id }
+        var count = 0
+        for wanna in pending {
+            if await syncWannaSave(id: wanna.id, backend: backend) { count += 1 }
+        }
+        return count
+    }
+
+    private func syncWannaSave(id: String, backend: WanderBackend?) async -> Bool {
+        guard let backend,
+              let repository = backend.userPlaceRepository as? any WannaSaveRepository,
+              var wanna = placeWannaSaves.first(where: { $0.id == id }),
+              wanna.ownerID == currentUser.id,
+              !wanna.isSynced,
+              syncingWannaIDs.insert(id).inserted else { return false }
+        defer { syncingWannaIDs.remove(id) }
+        guard let parent = currentUserVisiblePlaces.first(where: {
+            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(wanna.userPlaceID)
+        })?.userPlace, parent.deletedAt == nil else { return false }
+        // Parent creation uses the existing sync path. Do not write a Been
+        // summary just to append an event to a server-owned place.
+        if parent.serverID == nil {
+            _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .failedRetry)
+        }
+        let parentID = parent.serverID ?? parent.id
+        guard UUID(uuidString: parentID) != nil else { return false }
+        wanna.userPlaceID = parentID
+        do {
+            try await repository.saveWanna(wanna)
+            guard currentUser.id == wanna.ownerID,
+                  let index = placeWannaSaves.firstIndex(where: { $0.id == id }) else { return false }
+            wanna.isSynced = true
+            placeWannaSaves[index] = wanna
+            persist()
+            return true
+        } catch {
+            return false // The persisted UUID remains available to the normal sync retry.
+        }
+    }
+
+    func refreshWannaSaves(userPlaceIDs: [String], backend: WanderBackend) async {
+        guard let repository = backend.userPlaceRepository as? any WannaSaveRepository else { return }
+        let viewerID = currentUser.id
+        let ids = userPlaceIDs.filter { UUID(uuidString: $0) != nil }
+        guard !ids.isEmpty else { return }
+        let requested = Set(ids)
+        let previouslySyncedIDs = Set(placeWannaSaves.filter {
+            $0.isSynced && requested.contains($0.userPlaceID)
+        }.map(\.id))
+        do {
+            let rows = try await repository.wannaSaves(userPlaceIDs: ids)
+            guard currentUser.id == viewerID else { return }
+            let remoteIDs = Set(rows.map(\.id))
+            // A save can finish while this read is in flight. Do not evict
+            // newly synced events that were absent from the query snapshot.
+            placeWannaSaves.removeAll {
+                remoteIDs.contains($0.id) || previouslySyncedIDs.contains($0.id)
+            }
+            placeWannaSaves.append(contentsOf: rows)
+            persist()
+        } catch {
+            // Keep the last local snapshot on transient failure.
+        }
+    }
+
     /// Import is idempotent. A repeated import may enrich a Wanna with its
     /// first Check In, but it must never create another visit for a place that
     /// is already Been or overwrite details the user previously entered.
@@ -6747,7 +6875,8 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount + deletedCount
+        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        return syncedCount + deletedCount + wannaCount
     }
 
     @discardableResult
@@ -6772,7 +6901,8 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount + deletedCount
+        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        return syncedCount + deletedCount + wannaCount
     }
 
     @discardableResult
@@ -8353,6 +8483,7 @@ final class WanderStore: ObservableObject {
             )
         ).sorted()
         guard !requestedUserPlaceIDs.isEmpty else { return true }
+        await refreshWannaSaves(userPlaceIDs: requestedUserPlaceIDs, backend: backend)
 
         var hydratedVisits: [PlaceVisitResult] = []
         var hydratedPhotos: [VisitPhotoResult] = []

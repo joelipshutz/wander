@@ -5262,7 +5262,7 @@ struct MapScreen: View {
                action: saveAction,
             baseContext: context
         ) {
-            presentAttachedSaveFlow(attachedContext)
+            presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)
             return
         }
 
@@ -5308,7 +5308,7 @@ struct MapScreen: View {
                action: saveAction,
             baseContext: context
         ) {
-            presentAttachedSaveFlow(attachedContext)
+            presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)
             return
         }
 
@@ -5330,9 +5330,13 @@ struct MapScreen: View {
         return draft
     }
 
-    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext) {
+    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext, startsFreshWanna: Bool = false) {
         guard attachedMapSaveFlow == nil else { return }
-        if let existingDraft = placeSaveDraftStore.draft,
+        if startsFreshWanna, let draft = PlaceSaveDraft.restorableFlow(
+            ownerUserID: store.currentUser.id, context: context
+        ) {
+            placeSaveDraftStore.begin(draft)
+        } else if let existingDraft = placeSaveDraftStore.draft,
            existingDraft.ownerUserID == store.currentUser.id,
            existingDraft.candidate.id == context.candidate.id {
             if existingDraft.form.selectedStatus != context.initialStatus {
@@ -11260,6 +11264,24 @@ struct MapPlaceSaveContext: Identifiable {
         return resolvingExistingSave(selection: selection)
     }
 
+    func freshWannaContext() -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate,
+            mode: .add(.manual),
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
+            initialStatus: .wannaGo,
+            initialVisibility: initialVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialPlannedDate: nil,
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil,
+            initialPhotoAttachments: []
+        )
+    }
+
     func preselectingStatus(_ selection: PlaceStatus) -> MapPlaceSaveContext {
         if existingCurrentUserSave != nil {
             return resolvingExistingSave(selection: selection)
@@ -11585,6 +11607,7 @@ struct MapPlaceSaveSubmission {
     let reconcilesSharedVisitInvitees: Bool
     var visitedAt: Date = .now
     var plannedDate: Date? = nil
+    var wannaOperationID: UUID? = nil
 
     func replacingImportCandidate(
         _ candidate: PlaceCandidate,
@@ -11830,6 +11853,19 @@ func persistNewPlaceSaveSubmission(
           })
     else {
         return nil
+    }
+
+    if submission.status == .wannaGo {
+        return await store.saveNewWanna(
+            submission.candidate,
+            operationID: (submission.wannaOperationID ?? submission.context.id).uuidString.lowercased(),
+            visibility: submission.visibility,
+            note: submission.note,
+            plannedDate: submission.plannedDate,
+            attributes: submission.attributes,
+            sourceType: sourceType,
+            backend: backend
+        )
     }
 
     let result = await store.saveCandidate(
@@ -12858,7 +12894,8 @@ struct MapPlaceSaveEditor: View {
             plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
                 plannedDate,
                 status: selectedStatus
-            )
+            ),
+            wannaOperationID: draftID ?? context.id
         )
     }
 
@@ -17146,9 +17183,11 @@ struct PlaceActivityEntry: Identifiable {
     let visit: LocalPlaceVisit?
     let kind: PlaceActivityEntryKind
     let currentUserID: String
+    var wanna: PlaceWannaSave? = nil
 
     var id: String {
-        switch kind {
+        if let wanna { return wanna.id }
+        return switch kind {
         case .visit:
             visit?.id ?? "\(summary.id)_visit"
         case .currentWant:
@@ -17177,7 +17216,8 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var timestamp: Date {
-        switch kind {
+        if let wanna { return wanna.occurredAt }
+        return switch kind {
         case .visit:
             visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.savedAt
         case .currentWant:
@@ -17205,7 +17245,7 @@ struct PlaceActivityEntry: Identifiable {
         case .historicalWant:
             userPlace.historicalWantNote
         }
-        let trimmed = sourceNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = (wanna == nil ? sourceNote : wanna?.note)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
@@ -17232,7 +17272,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var canEdit: Bool {
-        isCurrentUser && (kind == .visit || kind == .currentWant)
+        wanna == nil && isCurrentUser && (kind == .visit || kind == .currentWant)
     }
 
     var editAccessibilityLabel: String {
@@ -17249,6 +17289,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var tags: [String] {
+        if let wanna { return uniqueTags(VisitAttributeAnswers.tags(fromAttributeAnswersJSON: wanna.attributeAnswersJSON)) }
         if let visit, !visit.tags.isEmpty {
             return uniqueTags(visit.tags)
         }
@@ -17408,6 +17449,10 @@ struct PlaceActivitySection: View {
             .flatMap { summary -> [PlaceActivityEntry] in
                 let userPlace = summary.visiblePlace.userPlace
                 let visits = store.visits(for: summary.visiblePlace.userPlace.id)
+                let wannaEntries = store.wannaSaves(for: userPlace).map {
+                    PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant,
+                                       currentUserID: currentUserID, wanna: $0)
+                }
 
                 if userPlace.status == .been {
                     var entries = visits.map { visit in
@@ -17426,10 +17471,10 @@ struct PlaceActivitySection: View {
                         )
                     }
 
-                    return entries
+                    return entries + wannaEntries
                 }
 
-                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)]
+                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)] + wannaEntries
             }
             .sorted { lhs, rhs in
                 if lhs.kind.sortBucket != rhs.kind.sortBucket {
@@ -17450,7 +17495,7 @@ struct PlaceActivitySection: View {
         case .all:
             entries
         case .myVisits:
-            entries.filter { $0.isCurrentUser }
+            entries.filter { $0.isCurrentUser && $0.status == .been }
         }
     }
 
@@ -17482,7 +17527,6 @@ struct PlaceActivitySection: View {
         Array(
             Set(
                 saves.compactMap { summary in
-                    guard summary.visiblePlace.owner.id != currentUserID else { return nil }
                     let userPlaceID = summary.visiblePlace.userPlace.serverID
                         ?? summary.visiblePlace.userPlace.id
                     return UUID(uuidString: userPlaceID) == nil ? nil : userPlaceID.lowercased()
@@ -17809,7 +17853,8 @@ private struct PlaceActivityCard: View {
             .filter { !$0.isEmpty }
 
         return ActivityEngagementContext(
-            activityID: match?.activityID ?? "local-place-activity-\(entry.id)",
+            activityID: entry.wanna.map { $0.isSynced ? $0.id : "local-place-activity-\($0.id)" }
+                ?? match?.activityID ?? "local-place-activity-\(entry.id)",
             actor: store.shell(for: entry.owner),
             placeName: visiblePlace.place.canonicalName,
             placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
@@ -17830,6 +17875,7 @@ private struct PlaceActivityCard: View {
     }
 
     private var isEngagementResolved: Bool {
+        if let wanna = entry.wanna { return wanna.isSynced }
         guard let serverID = entry.userPlace.serverID,
               UUID(uuidString: serverID) != nil
         else { return true }

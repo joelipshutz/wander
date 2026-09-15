@@ -28,6 +28,20 @@ async function main() {
     return;
   }
 
+  // Connector transports can execute the identical rollback-only smoke SQL
+  // without loading local credentials or spawning an authenticated CLI.
+  if (options.printSQL) {
+    const previews = (options.migrationPreviews ?? []).map(loadMigrationPreview).join("\n\n");
+    const test = options.migrationTest
+      ? transactionBody(readFileSync(resolve(options.migrationTest), "utf8"), "rollback")
+      : "";
+    process.stdout.write(options.migrationTest
+      ? `begin;\n${previews}\n${test}\nrollback;\n`
+      : buildLinkedSmokeSQL(DEFAULT_SMOKE_USER_ID, DEFAULT_SMOKE_COLLABORATOR_ID,
+          DEFAULT_SMOKE_STRANGER_ID, previews));
+    return;
+  }
+
   loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? DEFAULT_ENV_FILE);
 
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
@@ -98,6 +112,10 @@ async function main() {
           strangerUserID,
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await client.query(transactionBody(
+          readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"),
+          "rollback",
+        ));
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
         await runListSnapshotCoverSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
@@ -1062,6 +1080,9 @@ function parseArgs(args) {
         parsed.dbURL = requiredValue(args, index, arg);
         index += 1;
         break;
+      case "--print-sql":
+        parsed.printSQL = true;
+        break;
       case "--linked":
         parsed.linked = true;
         break;
@@ -1103,6 +1124,7 @@ Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
+  --print-sql                      Emit rollback-only SQL for a connector; do not load credentials or connect.
   --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
   --migration-test <path>          Run one strict rollback-only pgTAP file against the current schema and any supplied previews.
 
@@ -2476,6 +2498,8 @@ end
 $user_place_soft_delete$;
 
 ${migrationPreviewTestSQL}
+
+${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 
 reset role;
 rollback;

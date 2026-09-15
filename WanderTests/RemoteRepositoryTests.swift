@@ -3,6 +3,39 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testRepeatWannaUsesOwnerRPCAndDecodesHistorySnapshots() async throws {
+        let rpc = RecordingRPC()
+        let response = """
+        {"id":"11111111-1111-4111-8111-111111111111", "owner_id":"owner",
+         "user_place_id":"22222222-2222-4222-8222-222222222222",
+         "occurred_at":"2026-09-14T12:00:00Z", "note":"Go again", "visibility":"followers",
+         "planned_date":"2026-09-20", "attribute_answers_json":"[]"}
+        """
+        rpc.responses["save_own_place_wanna"] = Data(response.utf8)
+        rpc.responses["visible_place_wannas"] = Data("[\(response)]".utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let wanna = PlaceWannaSave(id: "11111111-1111-4111-8111-111111111111", ownerID: "owner",
+                                  userPlaceID: "22222222-2222-4222-8222-222222222222",
+                                  occurredAt: Date(timeIntervalSince1970: 1_789_387_200),
+                                  note: "Go again", visibility: .followers, plannedDate: WannaGoDate.date(fromStorageString: "2026-09-20"),
+                                  attributeAnswersJSON: "[]")
+        try await repository.saveWanna(wanna)
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_own_place_wanna"])
+        let body = try XCTUnwrap(rpc.rawBodies.first)
+        XCTAssertEqual(body["input_user_place_id"] as? String, wanna.userPlaceID)
+        let payload = try XCTUnwrap(body["input_wanna"] as? [String: Any])
+        XCTAssertEqual(payload["id"] as? String, wanna.id)
+        XCTAssertEqual(payload["planned_date"] as? String, "2026-09-20")
+        XCTAssertNil(payload["owner_id"], "The authenticated claim determines ownership")
+        XCTAssertNil(payload["status"], "A Wanna event never requests a parent state change")
+        XCTAssertNotNil(payload["attribute_answers"] as? [Any])
+        let rows = try await repository.wannaSaves(userPlaceIDs: [wanna.userPlaceID])
+        XCTAssertEqual(rows.map(\.id), [wanna.id])
+        XCTAssertEqual(rows.first?.note, "Go again")
+        XCTAssertEqual(rows.first?.isSynced, true)
+        XCTAssertEqual(rows.first?.plannedDate.map { WannaGoDate.storageString(from: $0) }, "2026-09-20")
+    }
+
     func testListSnapshotUploadUsesPrivateStorageThenOwnerRPC() async throws {
         let rpc = RecordingRPC()
         rpc.responses["set_place_list_snapshot_cover"] = Data("null".utf8)

@@ -1,0 +1,187 @@
+import XCTest
+@testable import Wander
+
+@MainActor
+final class PlaceWannaSaveTests: XCTestCase {
+    private var candidate: PlaceCandidate {
+        PlaceCandidate(id: "repeat-wanna-cafe", name: "Repeat Wanna Cafe", category: "coffee",
+                       latitude: 34.1, longitude: -118.3, sourceProvider: "manual",
+                       sourceProviderPlaceID: "repeat-wanna-cafe", confidence: 1)
+    }
+
+    func testWannaCheckInAndRepeatedWannasPreserveCheckInSummaryAndCounters() async throws {
+        let store = WanderStore(fixtures: .seed())
+        _ = await store.saveNewWanna(candidate, visibility: .followers, note: "First Wanna",
+                                     plannedDate: nil, attributes: [], backend: nil)
+        let checkedIn = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                            note: "Actual visit", sourceType: .manual, ratingScore: 4)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            $0.userPlace.id == checkedIn.userPlaceID
+        }?.userPlace)
+        let wannaCount = store.currentUserVisiblePlaces.filter { $0.userPlace.status == .wannaGo }.count
+        let visitIDs = store.visits(for: parent.id).map(\.id)
+        let updatedAt = parent.updatedAt
+        for note in ["Go again", "One more Wanna"] {
+            _ = await store.saveNewWanna(candidate, visibility: .selfOnly, note: note,
+                                         plannedDate: nil, attributes: [], backend: nil)
+        }
+        XCTAssertEqual(parent.status, .been)
+        XCTAssertEqual(parent.note, "Actual visit")
+        XCTAssertEqual(parent.visibility, .followers)
+        XCTAssertEqual(parent.ratingScore, 4)
+        XCTAssertEqual(parent.updatedAt, updatedAt)
+        XCTAssertEqual(parent.historicalWantNote, "First Wanna")
+        XCTAssertEqual(store.visits(for: parent.id).map(\.id), visitIDs)
+        XCTAssertEqual(store.currentUserVisiblePlaces.filter { $0.userPlace.status == .wannaGo }.count, wannaCount)
+        XCTAssertEqual(Set(store.wannaSaves(for: parent).compactMap(\.note)), ["Go again", "One more Wanna"])
+        let summary = PlaceSaveSummary(visiblePlace: try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            $0.userPlace.id == parent.id
+        }), attributes: [])
+        let entry = PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant,
+                                       currentUserID: store.currentUser.id, wanna: store.wannaSaves(for: parent)[0])
+        XCTAssertEqual(entry.status, .wannaGo)
+        XCTAssertNotEqual(entry.note, parent.note)
+        XCTAssertNil(entry.ratingScore)
+        XCTAssertFalse(entry.canEdit)
+    }
+
+    func testRepeatWannaOnlyCountsPlaceOnceAndPersistsAcrossRestart() async throws {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 })
+        let store = WanderStore(fixtures: .seed(), persistence: persistence)
+        _ = await store.saveNewWanna(candidate, visibility: .followers, note: "Original",
+                                     plannedDate: nil, attributes: [], backend: nil)
+        let before = store.currentUserVisiblePlaces.filter { $0.userPlace.status == .wannaGo }.count
+        let id = UUID().uuidString.lowercased()
+        for _ in 0..<2 {
+            let result = await store.saveNewWanna(candidate, operationID: id, visibility: .followers, note: "Repeat",
+                                                   plannedDate: nil, attributes: [], backend: WanderBackend())
+            XCTAssertEqual(result.syncState, .pendingCreate)
+        }
+        XCTAssertEqual(store.currentUserVisiblePlaces.filter { $0.userPlace.status == .wannaGo }.count, before)
+        XCTAssertEqual(store.placeWannaSaves.count, 1, "A retry of the same form must not append twice")
+        let encoded = try JSONEncoder().encode(try XCTUnwrap(snapshot))
+        snapshot = try JSONDecoder().decode(WanderStoreSnapshot.self, from: encoded)
+        let restored = WanderStore(fixtures: .seed(), persistence: persistence)
+        XCTAssertEqual(restored.placeWannaSaves.map(\.id), [id])
+        XCTAssertFalse(try XCTUnwrap(restored.placeWannaSaves.first).isSynced)
+        XCTAssertEqual(restored.currentUserVisiblePlaces.filter { $0.userPlace.status == .wannaGo }.count, before)
+    }
+
+    func testFailedSyncRetriesTheSameUUIDAndNeverWritesTheParentSummary() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let result = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                          note: "Visit", sourceType: .manual, ratingScore: 5)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let repository = RepeatWannaTestRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let failed = await store.saveNewWanna(candidate, visibility: .followers, note: "Again",
+                                               plannedDate: nil, attributes: [], backend: backend)
+        XCTAssertEqual(failed.syncState, .failed)
+        XCTAssertEqual(parent.status, .been)
+        XCTAssertEqual(parent.note, "Visit")
+        let id = try XCTUnwrap(store.placeWannaSaves.first?.id)
+        repository.shouldFail = false
+        let count = await store.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(repository.attempts, [id, id])
+        XCTAssertEqual(repository.parentWriteCount, 0)
+        XCTAssertTrue(try XCTUnwrap(store.placeWannaSaves.first).isSynced)
+        let duplicate = await store.saveNewWanna(candidate, operationID: id, visibility: .followers,
+                                                  note: "Again", plannedDate: nil, attributes: [], backend: backend)
+        XCTAssertEqual(duplicate.syncState, .synced)
+        XCTAssertEqual(store.placeWannaSaves.count, 1)
+        XCTAssertEqual(repository.attempts.count, 2)
+    }
+
+    func testHistoryRefreshDoesNotEvictAWannaSyncedWhileTheReadWasInFlight() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let result = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                          note: "Visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        repository.onRead = {
+            _ = await store.saveNewWanna(self.candidate, visibility: .followers, note: "Concurrent Wanna",
+                                         plannedDate: nil, attributes: [], backend: backend)
+            return [] // The server read took its snapshot before the new write.
+        }
+        await store.refreshWannaSaves(userPlaceIDs: [parent.id], backend: backend)
+        XCTAssertEqual(store.placeWannaSaves.count, 1)
+        XCTAssertTrue(try XCTUnwrap(store.placeWannaSaves.first).isSynced)
+        repository.onRead = nil
+    }
+
+    func testRepeatWannaAnalyticsContainOnlyCoarsePropertiesAndDoNotRepeatOnRetry() async {
+        let analytics = RepeatWannaAnalyticsRecorder()
+        let store = WanderStore(fixtures: .seed(), analytics: analytics)
+        _ = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                  note: "Private visit", sourceType: .manual)
+        analytics.events = []
+        let id = UUID().uuidString.lowercased()
+        for _ in 0..<2 {
+            _ = await store.saveNewWanna(candidate, operationID: id, visibility: .selfOnly,
+                                         note: "Private Wanna", plannedDate: nil, attributes: [], backend: nil)
+        }
+        let saves = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeSaved }
+        XCTAssertEqual(saves.count, 1)
+        XCTAssertEqual(saves.first?.properties, ["source_type": "manual", "status": "wanna_go", "visibility": "self"])
+        XCTAssertEqual(analytics.events.filter { $0.name == "engagement_action_performed" }.count, 1)
+        XCTAssertFalse(analytics.events.contains { event in
+            event.properties.values.contains("Private Wanna") || event.properties.values.contains(id)
+        })
+    }
+
+    func testRightActionIsFreshWannaForEveryEditablePlaceState() throws {
+        for state in [PlaceProfileSaveActionState.unsaved, .wanna, .checkInHistory] {
+            let actions = PlaceProfileSaveActionPolicy.resolve(state: state).actions
+            XCTAssertEqual(actions[0].kind, .checkIn)
+            XCTAssertEqual(actions[0].title, state == .checkInHistory ? "Check in again" : "Check in")
+            XCTAssertEqual(actions[1].kind, .wanna)
+            XCTAssertEqual(actions[1].title, "Wanna")
+            XCTAssertFalse(actions[1].isSelected)
+            let base = MapPlaceSaveContext.addCandidate(candidate, sourceType: .manual, defaultVisibility: .followers)
+            let context = try XCTUnwrap(PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .floatingActions, state: state, action: actions[1], baseContext: base))
+            XCTAssertFalse(context.isEditing)
+            XCTAssertEqual(context.initialStatus, .wannaGo)
+            XCTAssertTrue(context.initialNote.isEmpty)
+            XCTAssertTrue(context.initialAnswers.isEmpty)
+            XCTAssertNil(context.initialPlannedDate)
+            XCTAssertNil(context.initialRatingScore)
+            XCTAssertFalse(context.showsRemoveControl)
+        }
+    }
+}
+
+@MainActor
+private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRepository {
+    var shouldFail = true
+    var attempts: [String] = []
+    var parentWriteCount = 0
+    var onRead: (() async -> [PlaceWannaSave])?
+    func saveWanna(_ wanna: PlaceWannaSave) async throws {
+        attempts.append(wanna.id)
+        if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
+    }
+    func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
+        await onRead?() ?? []
+    }
+    func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] { [] }
+    func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
+        parentWriteCount += 1
+        throw WanderRemoteError.invalidResponse("Parent must stay unchanged")
+    }
+    func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
+    func delete(userPlaceID: String) async throws {}
+}
+
+private final class RepeatWannaAnalyticsRecorder: AnalyticsClient {
+    var events: [AnalyticsEvent] = []
+    func track(_ event: AnalyticsEvent) { events.append(event) }
+    func identify(userID: String) {}
+    func resetIdentity() {}
+}

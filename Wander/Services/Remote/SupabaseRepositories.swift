@@ -805,7 +805,7 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 }
 
-struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
+struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository, WannaSaveRepository {
     private let rpc: RemoteProcedureCalling
 
     init(rpc: RemoteProcedureCalling) {
@@ -849,6 +849,21 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             params: SaveOwnPlaceParams(draft: draft)
         )
         return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced, placeID: result.placeID)
+    }
+
+    func saveWanna(_ wanna: PlaceWannaSave) async throws {
+        try CommunityContentPolicy.validate(wanna.note)
+        try CommunityContentPolicy.validateJSONText(wanna.attributeAnswersJSON)
+        let _: RemoteWannaSaveDTO = try await rpc.call(
+            "save_own_place_wanna", params: SaveOwnPlaceWannaParams(wanna: wanna)
+        )
+    }
+
+    func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
+        let rows: [RemoteWannaSaveDTO] = try await rpc.call(
+            "visible_place_wannas", params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
+        )
+        return rows.map { $0.model }
     }
 
     func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
@@ -4144,5 +4159,65 @@ private struct SaveOwnPlaceResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
+    }
+}
+
+private struct SaveOwnPlaceWannaParams: Encodable {
+    let inputUserPlaceID: String
+    let inputWanna: Payload
+
+    init(wanna: PlaceWannaSave) throws {
+        inputUserPlaceID = wanna.userPlaceID
+        inputWanna = Payload(id: wanna.id, occurredAt: wanna.occurredAt, note: wanna.note,
+                            visibility: wanna.visibility, plannedDate: wanna.plannedDate.map { WannaGoDate.storageString(from: $0) },
+                            attributeAnswers: try JSONDecoder().decode(JSONValue.self,
+                                from: Data(wanna.attributeAnswersJSON.utf8)))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+        case inputWanna = "input_wanna"
+    }
+
+    struct Payload: Encodable {
+        let id: String
+        let occurredAt: Date
+        let note: String?
+        let visibility: PlaceVisibility
+        let plannedDate: String?
+        let attributeAnswers: JSONValue
+        enum CodingKeys: String, CodingKey {
+            case id, note, visibility
+            case occurredAt = "occurred_at"
+            case plannedDate = "planned_date"
+            case attributeAnswers = "attribute_answers"
+        }
+    }
+}
+
+private struct RemoteWannaSaveDTO: Decodable {
+    let id: String
+    let ownerID: String
+    let userPlaceID: String
+    let occurredAt: Date
+    let note: String?
+    let visibility: PlaceVisibility
+    let plannedDate: String?
+    let attributeAnswersJSON: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, note, visibility
+        case ownerID = "owner_id"
+        case userPlaceID = "user_place_id"
+        case occurredAt = "occurred_at"
+        case plannedDate = "planned_date"
+        case attributeAnswersJSON = "attribute_answers_json"
+    }
+
+    var model: PlaceWannaSave {
+        PlaceWannaSave(id: id, ownerID: ownerID, userPlaceID: userPlaceID,
+                      occurredAt: occurredAt, note: note, visibility: visibility,
+                      plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) }, attributeAnswersJSON: attributeAnswersJSON,
+                      isSynced: true)
     }
 }

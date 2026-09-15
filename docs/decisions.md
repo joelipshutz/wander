@@ -133,3 +133,14 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | M2 local product loop pushed | 2026-06-01 | Commit `962efce`, 18 tests passing, visual QA still pending. |
 | Add agent work log protocol | 2026-06-01 | All agents must update `docs/agent-log.md` before, during, and after non-trivial work. |
 | Retire agent work log protocol | 2026-07-28 | REC-177 supersedes the active diary requirement. The file is frozen as history; Linear and PRs are the current coordination surface. |
+
+## 2026-09-14 — Repeat Wanna saves preserve check-in state (REC-497)
+
+The place-profile right floating action always starts a fresh Wanna. The left
+Check in / Check in again action keeps its existing behavior. Repeated Wannas
+are independent history and Feed events; they do not rewrite the parent save.
+Any existing check-in therefore remains authoritative for the map pin, place
+state, rating, and unique-place profile counters. Wanna → Check-in → Wanna
+stays Been and does not increase the profile Wanna count. Repeat Wanna-only
+saves still count as one place. This supersedes REC-357's proposed active-Wanna
+after-check-in relationship rule, without adopting its planning/invitation work.

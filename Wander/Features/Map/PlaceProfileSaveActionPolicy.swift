@@ -134,6 +134,12 @@ enum PlaceProfileSaveActionPolicy {
         action: PlaceProfileSaveAction,
         baseContext: MapPlaceSaveContext
     ) -> MapPlaceSaveContext? {
+        if route == .floatingActions,
+           [.unsaved, .wanna, .checkInHistory].contains(state),
+           action.kind == .wanna, action.destinationStatus == .wannaGo {
+            return baseContext.freshWannaContext()
+        }
+
         if let firstSave = attachedFirstSaveContext(
             route: route,
             state: state,
@@ -215,12 +221,12 @@ enum PlaceProfileSaveActionPolicy {
         case .wanna:
             PlaceProfileSaveActionPresentation(actions: [
                 action(.checkIn, title: "Check in", destinationStatus: .been),
-                action(.wanna, title: "Wanna", isSelected: true, destinationStatus: .wannaGo)
+                action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .checkInHistory:
             PlaceProfileSaveActionPresentation(actions: [
                 action(.checkIn, title: "Check in again", destinationStatus: .been),
-                action(.editHistory, title: "Edit / history", destinationStatus: nil)
+                action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .sharedInvite:
             PlaceProfileSaveActionPresentation(actions: [

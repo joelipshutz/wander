@@ -156,7 +156,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
     }
 
-    func testAttachedEditorRoutesExistingWannaEditAndCheckInConversion() throws {
+    func testAttachedEditorRoutesFreshWannaAndUnchangedCheckInConversion() throws {
         let currentUser = profile(id: "user_current_edit_wanna", handle: "current")
         let currentWanna = summary(
             owner: currentUser,
@@ -184,14 +184,14 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 baseContext: base
             )
         )
-        guard case .editWant(let visiblePlace) = attached.mode else {
-            return XCTFail("The selected existing Wanna action must use the edit-Wanna path")
+        guard case .add = attached.mode else {
+            return XCTFail("The Wanna action must open a new save")
         }
-        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertNil(attached.existingCurrentUserSave)
         XCTAssertEqual(attached.initialStatus, .wannaGo)
-        XCTAssertEqual(attached.initialNote, "Bring a picnic blanket.")
+        XCTAssertEqual(attached.initialNote, "")
         XCTAssertTrue(attached.startsOnDetails)
-        XCTAssertTrue(attached.showsRemoveControl)
+        XCTAssertFalse(attached.showsRemoveControl)
 
         let draft = try XCTUnwrap(
             PlaceSaveDraft.restorableFlow(
@@ -199,8 +199,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 context: attached
             )
         )
-        XCTAssertEqual(draft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
-        XCTAssertEqual(draft.form.note, "Bring a picnic blanket.")
+        XCTAssertNil(draft.baselineUserPlaceLocalID)
+        XCTAssertEqual(draft.form.note, "")
         XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
         XCTAssertEqual(draft.form.step, .details)
 
@@ -310,7 +310,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
 
         XCTAssertEqual(refreshed.route, .floatingActions)
-        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Edit / history"])
+        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Wanna"])
         XCTAssertEqual(flagOffSnapshot.route, .legacy)
         XCTAssertEqual(snapshot.route, .floatingActions)
         let legacy = PlaceProfileSaveActionSnapshot(
@@ -714,7 +714,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 PlaceProfileSaveAction(
                     kind: .wanna,
                     title: "Wanna",
-                    isSelected: true,
+                    isSelected: false,
                     destinationStatus: .wannaGo
                 )
             ]
@@ -729,10 +729,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
                     destinationStatus: .been
                 ),
                 PlaceProfileSaveAction(
-                    kind: .editHistory,
-                    title: "Edit / history",
+                    kind: .wanna,
+                    title: "Wanna",
                     isSelected: false,
-                    destinationStatus: nil
+                    destinationStatus: .wannaGo
                 )
             ]
         )
