@@ -2061,6 +2061,38 @@ final class WanderStoreTests: XCTestCase {
         assertHistory(relaunched, using: ProfilePresentationCache())
     }
 
+    func testPlaceHistoryRefreshKeepsLiveVisitsAndRemovesOwnerDeletedVisits() async {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        let firstID = "a940b2a4-605d-48d3-a5cd-b23d230b00ce"
+        let secondID = "3223700f-cefc-4593-867e-d97f5830f428"
+        func visit(_ id: String) -> PlaceVisitResult {
+            PlaceVisitResult(visitID: id, userPlaceID: parentID, visitedAt: .now,
+                note: nil, ratingScore: nil, tags: [], backfilledFromUserPlace: false)
+        }
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(visitsByUserPlaceID: [parentID: [visit(firstID), visit(secondID)]])))
+        XCTAssertEqual(store.visits(for: parentID).count, 2)
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(visitsByUserPlaceID: [parentID: [visit(firstID)]])))
+        XCTAssertEqual(store.visits(for: parentID).map(\.id), [firstID])
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository()))
+        XCTAssertTrue(store.visits(for: parentID).isEmpty)
+        XCTAssertFalse(store.shouldShowLegacyCheckInSummary(for: parentID),
+            "An authoritative empty history must not resurrect a deleted check-in as a summary")
+    }
+
+    func testFailedPlaceHistoryRefreshPreservesExistingTiles() async {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
+        let result = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(error: TestError.expected)))
+        XCTAssertFalse(result)
+        XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
+    }
+
     func testRemoteStealthCalendarRetainsOwnerProfileActivity() async {
         let store = WanderStore(fixtures: .empty())
         store.apply(authState: .signedIn(AuthSession(userID: "stealth_owner", displayName: "Owner", handle: "owner")))
