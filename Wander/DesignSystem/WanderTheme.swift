@@ -15,7 +15,7 @@ enum PlaceListSymbol {
     @MainActor
     static func paperTabImage(isSelected: Bool, isDark: Bool) -> UIImage {
         if isSelected { return isDark ? selectedDark : selectedLight }
-        return isDark ? unselectedDark : unselectedLight
+        return paperTabImage
     }
 
     @MainActor private static let selectedDark = renderPaper(
