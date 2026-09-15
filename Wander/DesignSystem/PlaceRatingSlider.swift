@@ -103,6 +103,10 @@ struct PlaceRatingSlider: View {
     @Binding var score: Double
     var isCompact = false
 
+    #if DEBUG
+    var previewPalette = RatingColorPreviewPalette.current
+    #endif
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
 
@@ -114,7 +118,12 @@ struct PlaceRatingSlider: View {
     }
 
     private var liquidState: PlaceRatingLiquidState {
-        PlaceRatingLiquidState.resolve(interactionScore ?? reaction.score)
+        let state = PlaceRatingLiquidState.resolve(interactionScore ?? reaction.score)
+        #if DEBUG
+        return previewPalette.applying(to: state)
+        #else
+        return state
+        #endif
     }
 
     var body: some View {
