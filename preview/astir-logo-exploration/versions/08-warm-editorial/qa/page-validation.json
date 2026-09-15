@@ -1,0 +1,702 @@
+{
+  "checkedAt": "2026-09-10T06:19:31.265751+00:00",
+  "passed": true,
+  "scope": "Static local references, SVG XML/dependencies, expected files, PNG headers, reference copies and archive preservation. Not browser interaction or visual QA; alpha pixel extrema and geometry are checked separately by the asset build.",
+  "failures": [],
+  "pendingPackaging": [
+    "ASTIR-exploration-08.zip"
+  ],
+  "uniqueHtmlIds": true,
+  "literalJsIdSelectorsPresent": true,
+  "directions": [
+    46,
+    54,
+    55
+  ],
+  "wordmarkPngs": 6,
+  "wordmarkSvgs": 6,
+  "blackIconOptions": 15,
+  "socialOptions": 15,
+  "pngChecks": [
+    {
+      "file": "46-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "46-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "54-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "54-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "55-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "55-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-34-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-34-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-34-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-34-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-warm-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-warm-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-warm-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-warm-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-34-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "icon-36-warm-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-34-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-34-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-34-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-34-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-warm-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-warm-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-warm-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-warm-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-34-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    },
+    {
+      "file": "social-36-warm-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bitDepth": 8,
+      "colorType": 6,
+      "alphaChannelDeclared": true
+    }
+  ],
+  "svgChecks": [
+    {
+      "file": "46-tall-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "46-tall-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "54-tall-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "54-tall-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "55-tall-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "55-tall-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-34-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-34-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-34-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-34-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-warm-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-warm-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-warm-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-36-warm-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "icon-34-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png"
+      ]
+    },
+    {
+      "file": "icon-36-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png"
+      ]
+    },
+    {
+      "file": "icon-36-warm-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png"
+      ]
+    },
+    {
+      "file": "social-34-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-34-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-34-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-34-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-warm-long-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-warm-long-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-warm-compact-signal.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-36-warm-compact-oxide.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png",
+        "source35.png"
+      ]
+    },
+    {
+      "file": "social-34-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source34.png"
+      ]
+    },
+    {
+      "file": "social-36-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png"
+      ]
+    },
+    {
+      "file": "social-36-warm-none.svg",
+      "validXml": true,
+      "localDependencies": [
+        "source36.png"
+      ]
+    }
+  ],
+  "reference46Copies": [
+    {
+      "file": "46-tall-signal.png",
+      "identical": true
+    },
+    {
+      "file": "46-tall-signal.svg",
+      "identical": true
+    },
+    {
+      "file": "46-tall-oxide.png",
+      "identical": true
+    },
+    {
+      "file": "46-tall-oxide.svg",
+      "identical": true
+    }
+  ],
+  "priorVersions": {
+    "fileCount": 526,
+    "changed": [],
+    "missing": [],
+    "added": []
+  },
+  "nativeComparisonSheets": {
+    "files": [
+      "qa/splash-comparison.png",
+      "qa/icon-comparison-signal.png",
+      "qa/icon-comparison-oxide.png"
+    ],
+    "kind": "Native-rendered composition studies",
+    "browserScreenshots": false,
+    "liveAppScreenshots": false,
+    "visualReviewRecord": "qa/visual-review.json"
+  },
+  "interactiveBrowserVerified": false
+}
