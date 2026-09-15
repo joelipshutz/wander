@@ -39,6 +39,30 @@ During work and at handoff:
 - If local-only work is incomplete, leave a Linear comment naming the worktree,
   branch, last verified commit, commands already run, and exact next action.
 
+## Shared Documentation Location
+
+The default shared home for project documents, roadmaps, decks, and other
+human-readable deliverables is the
+[Hotchkiss Technologies Google Drive folder](https://drive.google.com/drive/folders/1WdFcQMSLocXGD9LVjy-ZFY207G8SzfAc).
+
+- Put new shared documents in this folder or an appropriate existing project
+  subfolder beneath it. Follow an explicitly requested destination exactly.
+- Keep repo-owned source documents and relevant downloadable exports under
+  `docs/` as well, so Joe and Ryan can retrieve them through git. Include the
+  shared Drive link in the document's README or handoff.
+- For decks, keep a viewable PDF alongside the editable/source artifact and
+  bundle any local files required by its links. Do not leave the only copy in
+  an agent-local workspace.
+- When revising an existing shared artifact, update its existing Drive file
+  where possible to preserve links. Verify the destination and uploaded file;
+  preserve sharing permissions and do not publish broadly without approval.
+- This does not replace Linear and PRs as task/progress records, or the durable
+  decisions and open-question files specified above. Do not upload credentials,
+  raw tester responses, or other sensitive operational data as general docs.
+
+The September 2026 roadmap package lives at
+[`docs/plans/september-2026/README.md`](docs/plans/september-2026/README.md).
+
 ## Agent Execution Efficiency
 
 Be conclusive and preserve human control, while keeping routine mechanics out
