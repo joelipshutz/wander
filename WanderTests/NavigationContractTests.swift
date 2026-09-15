@@ -4842,7 +4842,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("existingDraft.form.selectedStatus != context.initialStatus"))
         XCTAssertTrue(mapScreen.contains("switchedForm.selectedStatus = context.initialStatus"))
         XCTAssertTrue(mapScreen.contains("submittedAt: nil"))
-        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
+        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)"))
         XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
 
         let visiblePlaceHandler = try sourceSection(
