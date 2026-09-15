@@ -1459,6 +1459,11 @@ struct MapScreen: View {
         MapRenderProjection
     >()
 
+    @State private var retainedProjectionCache = MapRenderProjectionCache<
+        MapRetainedProjectionKey<MapRenderProjectionKey>,
+        MapRetainedProjection
+    >(capacity: 1)
+
     private static let defaultRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
         span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
@@ -1517,12 +1522,12 @@ struct MapScreen: View {
         }
     }
 
-    private var renderProjection: MapRenderProjection {
+    private var renderProjectionKey: MapRenderProjectionKey {
         let currentUserID = store.currentUser.id
         let rankingRegion = mapFilterState.source == .featured
             ? featuredRankingRegion
             : Self.defaultRegion
-        let key = MapRenderProjectionKey(
+        return MapRenderProjectionKey(
             storeRevision: store.presentationRevision,
             featuredPlacesRevision: mapFilterState.source == .featured
                 ? featuredPlacesRevision
@@ -1535,7 +1540,11 @@ struct MapScreen: View {
             rankingLatitudeDelta: rankingRegion.span.latitudeDelta,
             rankingLongitudeDelta: rankingRegion.span.longitudeDelta
         )
+    }
 
+    private var renderProjection: MapRenderProjection {
+        let key = renderProjectionKey
+        let currentUserID = key.currentUserID
         return renderProjectionCache.value(
             for: key,
             partition: mapFilterState.source.rawValue
@@ -1630,32 +1639,38 @@ struct MapScreen: View {
         )
     }
 
+    private var retainedProjection: MapRetainedProjection {
+        let key = MapRetainedProjectionKey(
+            base: renderProjectionKey,
+            authorizationRevision: featuredPlacesRevision,
+            activePlace: routedVisiblePlace,
+            retainedGroup: routedVisiblePlaceGroup,
+            submittedGroups: submittedSavedSearchGroups
+        )
+        return retainedProjectionCache.value(for: key) {
+            let interval = WanderDebugLog.beginPerformanceInterval("Map Retained Projection")
+            defer { WanderDebugLog.endPerformanceInterval("Map Retained Projection", id: interval) }
+            let base = renderProjection
+            let authorizedPlaces = authorizedSelectionPlaces
+            return MapRetainedProjection(
+                places: base.visiblePlaces,
+                groups: base.visiblePlaceGroups,
+                activePlace: routedVisiblePlace,
+                retainedGroup: routedVisiblePlaceGroup,
+                submittedGroups: submittedSavedSearchGroups,
+                authorizedPlaces: authorizedPlaces,
+                // The store index contains social saves. A corpus extended by
+                // Featured needs its complete grouping if the route lacks one.
+                authorizedGroups: authorizedPlaces.count == store.visiblePlaces().count
+                    ? store.visiblePlaceGroups()
+                    : nil,
+                currentUserID: store.currentUser.id
+            )
+        }
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let activeRetainedPlaces = MapActivePinRetention.places(
-            from: renderProjection.visiblePlaces,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup
-        )
-        return MapActivePinRetention.places(
-            from: activeRetainedPlaces,
-            retainingGroups: authorizedSubmittedGroups
-        )
+        retainedProjection.places
     }
 
     /// Search spans every save the viewer is authorized to see, independent of
@@ -1682,33 +1697,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let activeRetainedGroups = MapActivePinRetention.groups(
-            from: renderProjection.visiblePlaceGroups,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup,
-            currentUserID: store.currentUser.id
-        )
-        return MapActivePinRetention.groups(
-            from: activeRetainedGroups,
-            retainingGroups: authorizedSubmittedGroups,
-            currentUserID: store.currentUser.id
-        )
+        retainedProjection.groups
     }
 
     private func projectedGroupKey(for visiblePlace: VisiblePlace) -> String? {
@@ -10307,6 +10296,72 @@ enum MapPinSelectionMotionStyle {
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
+/// The base key includes the store revision/account and every map filter input.
+/// Featured authorization has its own revision even under Friends/You filters.
+/// Retained membership is refreshed from these authorized revisions.
+struct MapRetainedProjectionKey<Base: Equatable>: Equatable {
+    let base: Base
+    let authorizationRevision: UInt64
+    let activeSaveID: String?
+    let retainedSaveIDs: [String]?
+    let submittedSaveIDs: [[String]]
+
+    init(
+        base: Base,
+        authorizationRevision: UInt64 = 0,
+        activePlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup]
+    ) {
+        self.base = base
+        self.authorizationRevision = authorizationRevision
+        activeSaveID = activePlace?.userPlace.id
+        retainedSaveIDs = retainedGroup?.places.map(\.userPlace.id)
+        submittedSaveIDs = submittedGroups.map { $0.places.map(\.userPlace.id) }
+    }
+}
+
+struct MapRetainedProjection {
+    let places: [VisiblePlace]
+    let groups: [VisiblePlaceGroup]
+
+    init(
+        places: [VisiblePlace],
+        groups: [VisiblePlaceGroup],
+        activePlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup],
+        authorizedPlaces: [VisiblePlace],
+        authorizedGroups: @autoclosure () -> [VisiblePlaceGroup]?,
+        currentUserID: String
+    ) {
+        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(activePlace, within: authorizedPlaces)
+        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
+            retainedGroup,
+            requiring: authorizedRoutedPlace,
+            within: authorizedPlaces,
+            currentUserID: currentUserID,
+            cachedGroups: authorizedGroups()
+        )
+        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
+            submittedGroups,
+            within: authorizedPlaces,
+            currentUserID: currentUserID
+        )
+        self.places = MapActivePinRetention.places(
+            from: MapActivePinRetention.places(from: places, retaining: authorizedRoutedPlace, retainingGroup: authorizedRoutedGroup),
+            retainingGroups: authorizedSubmittedGroups
+        )
+        self.groups = MapActivePinRetention.groups(
+            from: MapActivePinRetention.groups(
+                from: groups, retaining: authorizedRoutedPlace, retainingGroup: authorizedRoutedGroup, currentUserID: currentUserID
+            ),
+            retainingGroups: authorizedSubmittedGroups,
+            currentUserID: currentUserID
+        )
+    }
+}
+
 enum MapActivePinRetention {
     /// Featured's anonymous place aggregates are server-authorized separately
     /// from personal/social saves. Use the unranked response so recentering or
@@ -10341,10 +10396,15 @@ enum MapActivePinRetention {
         _ retainedGroup: VisiblePlaceGroup?,
         requiring activePlace: VisiblePlace?,
         within authorizedPlaces: [VisiblePlace],
-        currentUserID: String
+        currentUserID: String,
+        cachedGroups: @autoclosure () -> [VisiblePlaceGroup]? = nil
     ) -> VisiblePlaceGroup? {
         guard let activePlace else { return nil }
         guard let retainedGroup else {
+            if let groups = cachedGroups() {
+                let aliases = VisiblePlaceGrouping.matchingAliases(for: activePlace)
+                return groups.first { !$0.aliases.isDisjoint(with: aliases) }
+            }
             return VisiblePlaceGrouping.matchingGroup(
                 for: activePlace,
                 in: authorizedPlaces,
@@ -10367,6 +10427,7 @@ enum MapActivePinRetention {
         within authorizedPlaces: [VisiblePlace],
         currentUserID: String
     ) -> [VisiblePlaceGroup] {
+        guard !retainedGroups.isEmpty else { return [] }
         var authorizedByUserPlaceID: [String: VisiblePlace] = [:]
         authorizedByUserPlaceID.reserveCapacity(authorizedPlaces.count)
         for place in authorizedPlaces {

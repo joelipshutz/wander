@@ -302,7 +302,7 @@ struct WanderRootView: View {
     @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
     @State private var importHubPresentationID = UUID()
     @State private var opensImportHubAfterReportDismissal = false
-    @State private var addSheetDetent: PresentationDetent
+    @State private var selectedAddSheetDetent: PresentationDetent?
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
     @State private var profileCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
@@ -377,7 +377,9 @@ struct WanderRootView: View {
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser(),
-        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil
+        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil,
+        storeFactory: (@MainActor () -> WanderStore)? = nil,
+        importStoreFactory: (@MainActor () -> PlaceImportStore)? = nil
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -415,28 +417,23 @@ struct WanderRootView: View {
         _placeProfileFloatingActionVariant = State(
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
-        let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        let store = Self.makeStore(
+        // StateObject's autoclosure must own construction. An eager local would
+        // reload the entire snapshot on every parent update, even when SwiftUI
+        // keeps the already-mounted store for this account.
+        _store = StateObject(wrappedValue: storeFactory?() ?? Self.makeStore(
             fixtureMode: fixtureMode,
             parser: parser,
             analytics: analytics,
-            persistence: persistence,
-            initialSession: initialSession
-        )
-        if Self.resolvedInitialDarkMap(from: launchArguments) {
-            store.isDarkMapEnabled = true
-        }
-        _store = StateObject(wrappedValue: store)
-        let importPersistence: any PlaceImportPersisting = fixtureMode == .empty
-            ? FilePlaceImportPersistence()
-            : EphemeralPlaceImportPersistence()
-        let importStore = PlaceImportStore(
-            persistence: importPersistence,
-            resolver: DevicePlaceImportResolver(
+            persistence: fixtureMode == .empty ? .live : nil,
+            initialSession: initialSession,
+            initialDarkMap: Self.resolvedInitialDarkMap(from: launchArguments)
+        ))
+        _importStore = StateObject(
+            wrappedValue: importStoreFactory?() ?? Self.makeImportStore(
+                fixtureMode: fixtureMode,
                 socialUnderstandingRepository: socialImportUnderstandingRepository
             )
         )
-        _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
             wrappedValue: PlaceSaveDraftStore(
                 persistence: fixtureMode == .empty ? .live : .ephemeral
@@ -456,11 +453,6 @@ struct WanderRootView: View {
                     walkthroughDebugPreferences.clearReplayRequest(for: completedUserID)
                     onFirstVisitWalkthroughCompleted(completedUserID)
                 }
-            )
-        )
-        _addSheetDetent = State(
-            initialValue: AddSheetLayout.restingDetent(
-                hasPendingImports: importStore.summary.hasPendingImports
             )
         )
     }
@@ -735,7 +727,10 @@ struct WanderRootView: View {
                     importStore: importStore,
                     placeSaveDraftStore: placeSaveDraftStore,
                     resetToken: addTabResetToken,
-                    selectedDetent: $addSheetDetent,
+                    selectedDetent: Binding(
+                        get: { addSheetDetent },
+                        set: { addSheetDetent = $0 }
+                    ),
                     launchRequest: addLaunchRequest,
                     onLaunchRequestHandled: consumeAddLaunchRequest,
                     walkthroughParkSuggestion: resolveFirstVisitParkSuggestion,
@@ -1370,6 +1365,11 @@ struct WanderRootView: View {
         addLaunchRequest = nil
         addSheetDetent = .large
         isPresentingAdd = true
+    }
+
+    private var addSheetDetent: PresentationDetent {
+        get { selectedAddSheetDetent ?? addSheetRestingDetent }
+        nonmutating set { selectedAddSheetDetent = newValue }
     }
 
     private var addSheetRestingDetent: PresentationDetent {
@@ -3120,8 +3120,11 @@ struct WanderRootView: View {
         parser: any LLMFilterParser,
         analytics: AnalyticsClient,
         persistence: WanderStorePersistence?,
-        initialSession: AuthSession?
+        initialSession: AuthSession?,
+        initialDarkMap: Bool
     ) -> WanderStore {
+        let interval = WanderDebugLog.beginPerformanceInterval("Root Store Initialization")
+        defer { WanderDebugLog.endPerformanceInterval("Root Store Initialization", id: interval) }
         let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
         let fixtures = resolvedFixtures(from: ProcessInfo.processInfo.arguments)
         let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
@@ -3142,11 +3145,30 @@ struct WanderRootView: View {
         if (fixtureMode == .empty || fixtureMode == .ephemeralEmpty), let initialSession {
             store.apply(authState: .signedIn(initialSession))
         }
+        if initialDarkMap {
+            store.isDarkMapEnabled = true
+        }
         let storeFinishedAt = CFAbsoluteTimeGetCurrent()
         WanderDebugLog.performance.notice(
             "root initialization fixture_mode=\(String(describing: fixtureMode), privacy: .public) fixture_ms=\((fixturesFinishedAt - fixturesStartedAt) * 1_000, privacy: .public) store_ms=\((storeFinishedAt - fixturesFinishedAt) * 1_000, privacy: .public)"
         )
         return store
+    }
+
+    private static func makeImportStore(
+        fixtureMode: WanderFixtureMode,
+        socialUnderstandingRepository: (any SocialImportUnderstandingRepository)?
+    ) -> PlaceImportStore {
+        let interval = WanderDebugLog.beginPerformanceInterval("Import Store Initialization")
+        defer { WanderDebugLog.endPerformanceInterval("Import Store Initialization", id: interval) }
+        return PlaceImportStore(
+            persistence: fixtureMode == .empty
+                ? FilePlaceImportPersistence()
+                : EphemeralPlaceImportPersistence(),
+            resolver: DevicePlaceImportResolver(
+                socialUnderstandingRepository: socialUnderstandingRepository
+            )
+        )
     }
 }
 
