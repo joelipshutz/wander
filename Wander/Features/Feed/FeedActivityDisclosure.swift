@@ -120,7 +120,7 @@ private extension FeedActivity {
     var sequenceTitle: String {
         switch kind {
         case .placeBeen: "Checked in"
-        case .placeWannaGo: "Marked Wanna Go"
+        case .placeWannaGo: "Wanna Go"
         case .listItemAdded: "Added to a list"
         case .listCreated: "Created a list"
         case .placeSaved: "Saved a place"
