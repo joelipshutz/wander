@@ -1,0 +1,17 @@
+{
+  "screens": 165,
+  "primary_native_mocks": 26,
+  "primary_wireframes": 139,
+  "visible_default_ui_images": 179,
+  "all_inline_images_decoded": true,
+  "desktop_in_place_expand": true,
+  "mobile_in_place_expand": true,
+  "external_requests": [],
+  "new_tabs_on_expand": 0,
+  "search_preserves_all_screens": true,
+  "all_previews_visible_in_print": true,
+  "motion_duration_seconds": 5.603333,
+  "errors": [],
+  "html_sha256": "35105194f9edef38cd3a80d6467dab4453c76f5338323d6b496dda86cb7b50f7",
+  "verified_at": "2026-09-15T16:09:40.417Z"
+}
