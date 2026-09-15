@@ -1,0 +1,11 @@
+{
+  "verifiedAt": "2026-09-14T20:51:42.344Z",
+  "artifact": "astir-events-native-review.html",
+  "htmlSha256": "ad33eee494aee62d2e70958a33b68cda14abd540874421c016afbd62cad7ee02",
+  "screenshots": 32,
+  "videoDurationSeconds": 5.603333,
+  "scriptErrors": [],
+  "modalAndFiltersPassed": true,
+  "mobileOverflow": false,
+  "scope": "Gallery rendering and controls only. Native build/capture evidence is recorded separately; backend acceptance tests not executed."
+}

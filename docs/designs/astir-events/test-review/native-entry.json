@@ -1,0 +1,1221 @@
+{
+  "area": "Native/entry: canonical links, surface continuity, identity, verification and entry setup",
+  "baseline": {
+    "checkout": "wander-events-flowchart-review",
+    "commit": "f8d258e869503a28d70518a050dff36a344134c6",
+    "app_code_baseline": "a0117cff (per engineering-plan inspection baseline; newer main must be reconciled before implementation)",
+    "authority": "events-exit-criteria.md L01–L17 and I01–I12; engineering D3A/D16A plus parent-reported D17A test-review approval",
+    "criteria_sha256": "9029c96df070540dc66f87650d7bf158a9bde60fd7c8caede72c4292a6007ea3",
+    "status": "PLANNED / NOT IMPLEMENTED / NOT EXECUTED",
+    "scope": "Exactly 29 entry/link/identity case IDs plus TN01–TN05 technical risks; no app, service, test or repository edits."
+  },
+  "cases": [
+    {
+      "id": "L01",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventLinkRoutingTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Parameterize original invitation, confirmation, reminder, shared link and event-notification sources against the same canonical Event A link; cover cold launch and foreground app.",
+        "A validated confirmed identity opens Event A in the installed app with the original booking ID; no RSVP mutation or Clip/browser detour is initiated.",
+        "Delay session validation and booking retrieval independently; event intent survives, protected state waits, and the final account/event matches the request.",
+        "Exercise actual link taps and delivery surfaces on the intended TestFlight and public distributions separately; record the observed host, build and booking ID. A launch argument is not invocation proof."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 103,
+          "note": "Adjacent evidence only; not Events coverage. Quick-capture intent waits for session validation and only the matching request is consumed."
+        },
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 126,
+          "note": "Adjacent evidence only; not Events coverage. Static full-app associated-domain assertions; does not prove hosted AASA, Clip invocation or distribution."
+        }
+      ]
+    },
+    {
+      "id": "L02",
+      "layers": [
+        "native XCTest",
+        "App Clip XCUITest",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "For each of the five L01 origins with no full app installed, a valid recognized Clip session resolves its existing confirmed booking for Event A.",
+        "Guest list and View or change RSVP remain usable in the Clip; detail has no full-app tabs or required download transition.",
+        "Reopen the Clip after dismissal and a process restart; resolve current server booking instead of trusting a stale confirmation snapshot.",
+        "On physical devices, prove real hosted Clip invocation and recognized-session continuity; simulator fixtures and the full-app Apple entitlement test cannot satisfy this result."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 103,
+          "note": "Adjacent evidence only; not Events coverage. Quick-capture intent waits for session validation and only the matching request is consumed."
+        },
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 126,
+          "note": "Adjacent evidence only; not Events coverage. Static full-app associated-domain assertions; does not prove hosted AASA, Clip invocation or distribution."
+        }
+      ]
+    },
+    {
+      "id": "L03",
+      "layers": [
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "events-web/tests/guest/event-links.spec.ts",
+        "events-web/tests/guest/reservation-management.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "For each of the five L01 origins, make Clip invocation unavailable and retain a recognized browser session; the permitted event fallback still loads.",
+        "Browser confirmation uses the same canonical identity/event/booking as the service; full guest list and management work without installation or full-app tabs.",
+        "Reload and use browser back/forward around management; preserve Event A and reconcile its current state, never invent a replacement RSVP.",
+        "Prove fallback on an actual device/browser when public Clip invocation fails or is unavailable; a stubbed redirect proves only browser rendering."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 126,
+          "note": "Adjacent evidence only; not Events coverage. Static full-app associated-domain assertions; does not prove hosted AASA, Clip invocation or distribution."
+        }
+      ]
+    },
+    {
+      "id": "L04",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventAccountRecoveryTests.swift",
+        "WanderUITests/Events/EventAccountRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventAccountRecoveryUITests.swift",
+        "events-web/tests/guest/account-recovery.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Run missing, expired and deleted session variants on app, Clip and browser while a confirmed RSVP exists for the original account.",
+        "Before account resolution show only permitted event detail and recovery; never display a successful no-booking result for an unknown identity.",
+        "Original-account Apple/Google authentication retrieves the original booking ID without a new RSVP write, new identity merge or leaked private fields.",
+        "Cancel, fail and retry recovery while preserving event intent; real provider and cross-surface session behavior is a separate physical-device pass."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1385,
+          "note": "Adjacent evidence only; not Events coverage. Simulated session validation blocks token issuance until complete."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 259,
+          "note": "Adjacent evidence only; not Events coverage. Unmatched Apple sign-in requires original-account recovery instead of simulated account creation."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 973,
+          "note": "Adjacent evidence only; not Events coverage. Native session adoption rejects an unrelated resolved session ID."
+        }
+      ]
+    },
+    {
+      "id": "L05",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/event-states.spec.ts"
+      ],
+      "assertions": [
+        "Only a successful lookup for the currently validated account returning no booking becomes known-not-RSVPed.",
+        "Show permitted detail and conversion hook; no full guest list or ticket; offer the current applicable RSVP action, respecting registration/code/capacity/approval results.",
+        "Keep loading, timeout, denied, unknown response and account switch distinct from no booking; delayed earlier results cannot overwrite the active account.",
+        "Assert lookup performs no reservation creation and hidden protected fields are absent from the authorized payload, not merely visually hidden."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1385,
+          "note": "Adjacent evidence only; not Events coverage. Simulated session validation blocks token issuance until complete."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    },
+    {
+      "id": "L06",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/event-states.spec.ts"
+      ],
+      "assertions": [
+        "On all three surfaces, a pending applicant sees pending approval rather than confirmed or no booking.",
+        "No entry QR, full guest list or booking-derived exact home address is rendered, announced or returned through the guest projection.",
+        "Refreshing during a pending-to-confirmed or rejected transition uses the authoritative new state; no client-side timer or stale confirmation upgrades access.",
+        "Pending lookup/retry neither holds a seat nor creates another application; corroborate with controlled service state."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1385,
+          "note": "Adjacent evidence only; not Events coverage. Simulated session validation blocks token issuance until complete."
+        }
+      ]
+    },
+    {
+      "id": "L07",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/event-states.spec.ts"
+      ],
+      "assertions": [
+        "On app, Clip and browser, a waitlisted account sees waitlist state, no ticket/full guest list and no invented queue rank.",
+        "Reopening, refreshing or repeated link taps do not promote the guest or issue an offer; only authoritative staff selection changes that state.",
+        "A later valid offer changes the action to explicit acceptance; a released seat alone does not confirm the account.",
+        "Hold a response, switch accounts, then release it; waitlist status remains account/event scoped."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1441,
+          "note": "Adjacent evidence only; not Events coverage. Observed account switch invalidates an older in-flight refresh."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    },
+    {
+      "id": "L08",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventOfferPresentationTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/offers.spec.ts"
+      ],
+      "assertions": [
+        "A current offer is displayed only for its recipient with the service-issued deadline; it is not labeled confirmed and grants no confirmed-only guest list or ticket.",
+        "Explicit acceptance is required; opening/reloading the canonical event link does not mutate the offer.",
+        "Control time immediately before, at and after the deadline; reconcile actual service state at acceptance, including a device clock that disagrees with the server.",
+        "Repeat after another account opens the same link; no offer ownership is transferred and no deadline is extended by authentication or rendering."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1385,
+          "note": "Adjacent evidence only; not Events coverage. Simulated session validation blocks token issuance until complete."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    },
+    {
+      "id": "L09",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventOfferPresentationTests.swift",
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/stale-links.spec.ts"
+      ],
+      "assertions": [
+        "Seed confirmed/offer UI, then cancel the booking or expire/decline the offer server-side before opening an old message link.",
+        "All hosts re-evaluate current state; never restore stale confirmation/QR or allow an expired unaccepted offer to confirm.",
+        "An old operation retry returns the current canceled/expired outcome without reviving a booking or emitting another confirmation.",
+        "Keep P11 return-to-waiting wording/status presentation conditional on its reviewed policy. Assert the approved no-confirmation/no-auto-promotion invariant now; do not approve a presentation by hard-coding it into a test."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 103,
+          "note": "Adjacent evidence only; not Events coverage. Quick-capture intent waits for session validation and only the matching request is consumed."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 682,
+          "note": "Adjacent evidence only; not Events coverage. A non-idempotent edge function does not blindly replay on auth failure; no Events mutation is tested."
+        }
+      ]
+    },
+    {
+      "id": "L10",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntryStateTests.swift",
+        "WanderTests/Events/EventRepositoryOutcomeTests.swift",
+        "WanderUITests/Events/EventLookupRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventLookupRecoveryUITests.swift",
+        "events-web/tests/guest/lookup-recovery.spec.ts"
+      ],
+      "assertions": [
+        "Suspend lookup, then return timeout, offline, 5xx, malformed/unsupported response and signed-in permission-denied variants on each surface.",
+        "Loading/retry retains Event A; no intermediate or persistent no-RSVP/confirmed state is emitted without its authoritative result.",
+        "Retry reconciles booking state without a new RSVP mutation; a successful late response from an obsolete request or previous account is ignored.",
+        "Assert error categories are typed and distinct from missing booking; service denial must not be converted into account-switch advice solely by generic 403 decoding."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        },
+        {
+          "file": "WanderTests/OnboardingStateTests.swift",
+          "line": 751,
+          "note": "Adjacent evidence only; not Events coverage. Suspended foreground refresh retains the ready root."
+        },
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 602,
+          "note": "Adjacent evidence only; not Events coverage. Legacy transport intentionally treats both 401 and 403 as refreshable; Events distinctions need new tests."
+        }
+      ]
+    },
+    {
+      "id": "L11",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventLinkPrivacyTests.swift",
+        "WanderUITests/Events/EventAccountRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventAccountRecoveryUITests.swift",
+        "events-web/tests/guest/forwarded-links.spec.ts"
+      ],
+      "assertions": [
+        "Forward the exact confirmed sender link to an anonymous recipient, then to a different recognized account, on each surface.",
+        "Resolve the recipient identity and its own booking state only; the URL is event intent, never proof of sender booking ownership.",
+        "Inspect controlled service payload, page/app accessibility tree and retained state: no sender phone, booking/admission, full guest list or protected exact-home details leak.",
+        "Sender and recipient reservation counts/owners remain unchanged; switching identities after a delayed sender response cannot import sender state."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 9,
+          "note": "Adjacent evidence only; not Events coverage. Canonical identity mapping preserves an existing profile identity."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    },
+    {
+      "id": "L12",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventsTabRoutingTests.swift",
+        "WanderUITests/Events/EventsTabNavigationUITests.swift"
+      ],
+      "assertions": [
+        "Tap a discovery card without a booking, then a confirmed Events card for the same event: both open full-app detail with the appropriate current viewer state.",
+        "Tap direct Show ticket from the confirmed Events card: reach app-only QR without an extra detail screen, subject to required name/username and current confirmed state.",
+        "Changing booking state between list fetch and tap is reconciled before protected actions; no Clip/browser shell is inserted.",
+        "Back returns to the originating Events list; repeated taps do not stack duplicate presentations or create an RSVP."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/NavigationContractTests.swift",
+          "line": 898,
+          "note": "Adjacent evidence only; not Events coverage. Existing feed place actions use a common place-profile route; Events tab/card routing is absent."
+        }
+      ]
+    },
+    {
+      "id": "L13",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventHandoffTests.swift",
+        "WanderUITests/Events/EventLinkEntryUITests.swift",
+        "events-web/tests/guest/app-handoff.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "With the app installed, intentionally leave a canonical event link in the browser; browser detail remains usable before and after a failed Open Astir attempt.",
+        "Explicit Open Astir carries Event A into the app; validate/recover its current account and retrieve that account’s current booking.",
+        "Do not infer app absence or no RSVP from invocation failure; do not copy browser cookies or a booking claim as identity proof.",
+        "Prove actual browser-to-app handoff on physical devices for warm/cold app and matching/different/expired app accounts; web stubs alone cannot pass the case."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 126,
+          "note": "Adjacent evidence only; not Events coverage. Static full-app associated-domain assertions; does not prove hosted AASA, Clip invocation or distribution."
+        },
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 103,
+          "note": "Adjacent evidence only; not Events coverage. Quick-capture intent waits for session validation and only the matching request is consumed."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1441,
+          "note": "Adjacent evidence only; not Events coverage. Observed account switch invalidates an older in-flight refresh."
+        }
+      ]
+    },
+    {
+      "id": "L14",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventHostNavigationTests.swift",
+        "WanderUITests/Events/EventManagementNavigationUITests.swift",
+        "AstirEventsClipUITests/EventManagementNavigationUITests.swift",
+        "events-web/tests/guest/reservation-management.spec.ts"
+      ],
+      "assertions": [
+        "For confirmed guests on each host, open full guest list and View or change RSVP, then use visible Back and the host’s supported back gesture/history.",
+        "Return to the originating event/surface with current account and booking state; no automatic app install, cross-host detour or guest-to-console route.",
+        "After a successful management change, back navigation reflects its authoritative state rather than the cached confirmation.",
+        "Canceling a management dialog or recovering a request error keeps the event and valid reservation intact; full list remains unavailable to nonconfirmed controls."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/NavigationContractTests.swift",
+          "line": 2708,
+          "note": "Adjacent evidence only; not Events coverage. Existing member-profile paths share back navigation; no event-management host continuity coverage."
+        }
+      ]
+    },
+    {
+      "id": "L15",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRepositoryOutcomeTests.swift",
+        "WanderUITests/Events/EventUnavailableUITests.swift",
+        "AstirEventsClipUITests/EventUnavailableUITests.swift",
+        "events-web/tests/guest/event-unavailable.spec.ts"
+      ],
+      "assertions": [
+        "Open links for denied, draft, removed and unknown events with unknown and recognized viewers; the server returns only the permitted projection.",
+        "No event/booking/private location payload appears in network response, accessibility tree, persisted UI state or stale cached detail after denial.",
+        "Distinguish auth-required, permission-denied, unavailable, transient failure and unsupported response states; none defaults to confirmed/no-booking.",
+        "P19 unavailable wording and precise safe-return interaction remain proposed; test invariant-safe exits and approved identity recovery without freezing an unselected layout."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 121,
+          "note": "Adjacent evidence only; not Events coverage. Invalid URLs do not replace pending intent; latest valid widget intent wins."
+        },
+        {
+          "file": "WanderTests/BuildConfigurationTests.swift",
+          "line": 602,
+          "note": "Adjacent evidence only; not Events coverage. Current generic 401/403 handling is a regression constraint, not Events authorization coverage."
+        }
+      ]
+    },
+    {
+      "id": "L16",
+      "layers": [
+        "native XCTest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventPostRSVPContinuationTests.swift",
+        "AstirEventsClipUITests/EventEntryUITests.swift",
+        "events-web/tests/guest/post-rsvp-continuation.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Immediately after a real confirmed RSVP without the app, dismiss/ignore the optional download offer and close the Clip/browser.",
+        "Reopen the event: when recognized, the same booking, full guest list and management remain accessible without download; expired identity follows L04 instead of assuming a session.",
+        "Controlled service evidence retains the confirmation and agreed event-message intent; declining installation does not cancel/suppress event texts or add a download deadline.",
+        "Actual Clip/browser lifecycle and reopen behavior require a device pass; no app-only QR/check-in/upload is granted in the no-app host."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+          "line": 103,
+          "note": "Adjacent evidence only; not Events coverage. Quick-capture intent waits for session validation and only the matching request is consumed."
+        },
+        {
+          "file": "WanderTests/OnboardingStateTests.swift",
+          "line": 149,
+          "note": "Adjacent evidence only; not Events coverage. Onboarding progress persistence is isolated per user."
+        }
+      ]
+    },
+    {
+      "id": "L17",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventContractParityTests.swift",
+        "WanderUITests/Events/EventSurfaceParityUITests.swift",
+        "AstirEventsClipUITests/EventSurfaceParityUITests.swift",
+        "events-web/tests/guest/surface-parity.spec.ts",
+        "tests/fixtures/events/entry-states.json"
+      ],
+      "assertions": [
+        "Run the explicit nine app/Clip/browser × unknown/known-no-booking/confirmed states against one language-neutral fixture set; compare permitted content, state names and action eligibility.",
+        "Unknown is not a negative lookup; confirmed-only fields/actions do not appear in the other two states.",
+        "App-only actions are explicitly gated by host; Clip/browser show event-specific chrome with no full-app tabs.",
+        "Original invitation, confirmation, reminder, shared-link and event-notification fixtures use consistent View event labeling and the same canonical event identity. This is nine-state parity, not a claim that all platform combinations were exercised."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/NavigationContractTests.swift",
+          "line": 963,
+          "note": "Adjacent evidence only; not Events coverage. Profile-link parsing tests exist; no shared Events or Swift/web parity fixture exists."
+        }
+      ]
+    },
+    {
+      "id": "I01",
+      "layers": [
+        "native XCTest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRSVPIdentityTests.swift",
+        "AstirEventsClipUITests/EventRSVPUITests.swift",
+        "events-web/tests/guest/rsvp-identity.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Independently complete Apple and Google sign-up in the real Clip and browser without installing the full app; verify canonical service identity, event and account survive redirects.",
+        "Collect missing name and phone; phone challenge must bind to the current account and exact current number, and verification precedes successful RSVP.",
+        "Before authoritative verification, zero confirmed reservation and confirmation-message intents exist; after eligible submit exactly one correct booking exists.",
+        "Do not substitute phone-only identity or infer proof from a stored phone string. Record actual provider, phone-proof result and masked test fixture identity without exposing tokens/codes.",
+        "Run installed-app RSVP identity adapter against equivalent controlled fixtures; real Clip provider compatibility is a foundation acceptance gate, not proved by PreviewAuthSessionProvider."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 159,
+          "note": "Adjacent evidence only; not Events coverage. PreviewAuthSessionProvider simulates Apple completion; no provider or Clip integration is exercised."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 279,
+          "note": "Adjacent evidence only; not Events coverage. PreviewAuthSessionProvider simulates Google completion; no real provider redirect is exercised."
+        },
+        {
+          "file": "Wander/Services/Auth/AuthSessionProviding.swift",
+          "line": 48,
+          "note": "Adjacent evidence only; not Events coverage. AuthSession stores a phone string but no verified-current-phone proof."
+        }
+      ]
+    },
+    {
+      "id": "I02",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRSVPIdentityTests.swift",
+        "WanderUITests/Events/EventRSVPUITests.swift",
+        "AstirEventsClipUITests/EventRSVPUITests.swift",
+        "events-web/tests/guest/rsvp-identity.spec.ts"
+      ],
+      "assertions": [
+        "Provide service-confirmed proof for the same current account/phone and already-known name; reuse those fields and proof without redundant collection or SMS sends.",
+        "No proof from a different account/old number or a locally populated phone string qualifies; those controls route to verification.",
+        "Even with reusable identity, evaluate current event registration, invitation code, approval and capacity; identity reuse does not imply confirmation.",
+        "A refresh or repeated tap does not create a new challenge, booking or confirmation message for an already-completed operation."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 9,
+          "note": "Adjacent evidence only; not Events coverage. Canonical identity mapping preserves an existing profile identity."
+        },
+        {
+          "file": "WanderTests/ProfileIdentityDraftTests.swift",
+          "line": 43,
+          "note": "Adjacent evidence only; not Events coverage. Unchanged original handles avoid redundant availability checks; no phone-verification reuse test exists."
+        }
+      ]
+    },
+    {
+      "id": "I03",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventPhoneProofTests.swift",
+        "WanderTests/Events/EventRSVPStateTests.swift",
+        "WanderUITests/Events/EventRSVPUITests.swift",
+        "AstirEventsClipUITests/EventRSVPUITests.swift",
+        "events-web/tests/guest/phone-verification.spec.ts"
+      ],
+      "assertions": [
+        "Stored-only phone, changed number and proof for another account/number cannot confirm an RSVP; verify against authoritative current proof.",
+        "While a new unreserved guest verifies, another eligible guest takes the final seat; the verifying attempt holds no capacity.",
+        "On later submission, preserve successful verification and Event A but return actual full/waitlist-eligible state; offer a choice and do not auto-join or falsely confirm.",
+        "Repeat with available capacity as control and with registration closing during verification; submission uses current rules, not eligibility captured at flow start."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "Wander/Services/Auth/AuthSessionProviding.swift",
+          "line": 53,
+          "note": "Adjacent evidence only; not Events coverage. Stored phoneNumber has no verification provenance; new proof and capacity-race coverage are absent."
+        }
+      ]
+    },
+    {
+      "id": "I04",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventPhoneProofTests.swift",
+        "WanderUITests/Events/EventPhoneVerificationUITests.swift",
+        "AstirEventsClipUITests/EventPhoneVerificationUITests.swift",
+        "events-web/tests/guest/phone-verification.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Wrong, expired and superseded challenge codes cannot confirm; changing the phone invalidates old-number proof and retains event/account context.",
+        "Resend/error/rate-limit/offline responses remain recoverable without false success; countdown follows the selected provider policy. P02 exact timing is not approved by this mapping.",
+        "For existing confirmed recovery, verification retry neither cancels nor duplicates the booking. For a valid issued offer it neither adds a hold nor changes the original deadline.",
+        "At/after an unaccepted offer deadline, verification success does not confirm that expired offer; recover actual current state.",
+        "Exercise real provider delivery and verification using controlled test phones on devices, including app/Clip/browser return; no messages go to real attendees."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1385,
+          "note": "Adjacent evidence only; not Events coverage. Simulated session validation blocks token issuance until complete."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 565,
+          "note": "Adjacent evidence only; not Events coverage. Injected activation-response loss recovers the expected session; this is not a real install/Clip handoff."
+        }
+      ]
+    },
+    {
+      "id": "I05",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventAccountRecoveryTests.swift",
+        "WanderUITests/Events/EventAccountRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventAccountRecoveryUITests.swift",
+        "events-web/tests/guest/account-recovery.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "For Apple and Google independently, cancel, return provider failure and require an additional verification step; retain Event A and any original booking.",
+        "No unrelated session event or partially completed login establishes ownership, creates a replacement booking or silently merges accounts.",
+        "Retry/recover can retrieve the original account/booking; support exit retains safe context and does not bypass entry.",
+        "P01 exact interrupted-auth presentation remains proposed. Verify real provider cancellation/additional-verification behavior where the provider can produce it; mark unavailable variants unverified rather than simulating a device pass."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 199,
+          "note": "Adjacent evidence only; not Events coverage. Simulated Apple cancellation retains the auth presentation without a false completion."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 220,
+          "note": "Adjacent evidence only; not Events coverage. Simulated Apple failure remains recoverable."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 259,
+          "note": "Adjacent evidence only; not Events coverage. Unmatched Apple sign-in requires original-account recovery instead of simulated account creation."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 973,
+          "note": "Adjacent evidence only; not Events coverage. Native session adoption rejects an unrelated resolved session ID."
+        }
+      ]
+    },
+    {
+      "id": "I06",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventAccountRecoveryTests.swift",
+        "WanderUITests/Events/EventAccountRecoveryUITests.swift",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Only after successful lookup for the active account with no RSVP show No RSVP found for this account / Already RSVPed? and Find my RSVP / Get help.",
+        "Pending, waitlisted, offered, loading and failed lookup are distinct controls and never display the no-match recovery state.",
+        "Switch to the original Apple/Google account, preserving Event A; retrieve its existing booking and complete only missing entry identity. No replacement RSVP or silent merge occurs.",
+        "Cancel auth, choose another unmatched account, delay the old lookup and switch during token refresh; discard stale/private results and make no claim about who owns another booking.",
+        "Prove different-current-app-account recovery with real provider sessions on a physical device, not only state-injection tests."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 259,
+          "note": "Adjacent evidence only; not Events coverage. Unmatched Apple sign-in requires original-account recovery instead of simulated account creation."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1441,
+          "note": "Adjacent evidence only; not Events coverage. Observed account switch invalidates an older in-flight refresh."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    },
+    {
+      "id": "I07",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventInstallRecoveryTests.swift",
+        "WanderUITests/Events/EventInstallRecoveryUITests.swift",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "From confirmed Clip and browser fixtures independently, start full-app installation then launch from its icon without reopening the event link.",
+        "After legitimate session recovery, reach the originating event and original booking; server reservation count/identity stay unchanged.",
+        "Run no transferred session, expired session, different existing app account and relaunch during recovery; preserve intent safely, require original-account proof where needed and never infer ownership from the link.",
+        "Prove the concrete mechanism with intended TestFlight and public installation paths separately. A simulator fixture surviving argument-free relaunch is not install transfer evidence.",
+        "If public distribution or required account handoff cannot be exercised, record the exact blocked variant and do not mark I07 passed."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 565,
+          "note": "Adjacent evidence only; not Events coverage. Injected activation-response loss recovers the expected session; this is not a real install/Clip handoff."
+        },
+        {
+          "file": "WanderUITests/OnboardingUITests.swift",
+          "line": 598,
+          "note": "Adjacent evidence only; not Events coverage. A persisted simulator fixture survives relaunch; explicitly does not establish Clip/browser install handoff."
+        }
+      ]
+    },
+    {
+      "id": "I08",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntrySetupTests.swift",
+        "WanderUITests/Events/EventEntrySetupUITests.swift"
+      ],
+      "assertions": [
+        "Parameterize missing name, missing username, both missing, whitespace-only name, invalid username and unavailable username.",
+        "QR is withheld until the current account has server-accepted valid name/username; collect only missing/invalid essentials and retain the original confirmed booking.",
+        "A failed profile save or handle becoming taken after an availability check remains incomplete; no optimistic local success unlocks QR.",
+        "Concurrent account switch or delayed validation cannot fill the new account with old values or display the old account’s QR; successful correction continues directly to that booking."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ProfileIdentityDraftTests.swift",
+          "line": 13,
+          "note": "Adjacent evidence only; not Events coverage. Missing display name and invalid handle are rejected."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1700,
+          "note": "Adjacent evidence only; not Events coverage. RecordingRPC verifies handle-availability request mapping, not concurrent live uniqueness."
+        },
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 1441,
+          "note": "Adjacent evidence only; not Events coverage. Observed account switch invalidates an older in-flight refresh."
+        }
+      ]
+    },
+    {
+      "id": "I09",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntrySetupTests.swift",
+        "WanderUITests/Events/EventEntrySetupUITests.swift"
+      ],
+      "assertions": [
+        "With valid name/username and confirmed booking, no photo, explicit Skip, picker cancel, corrupt image and failed upload all leave ticket access available.",
+        "The strong photo prompt stays optional; no endless retry or hidden required-avatar flag blocks QR or the authorized admission flow.",
+        "Failed upload is not labeled saved or persisted as a successful remote avatar; preserve original avatar where applicable.",
+        "Retrying an optional photo must not mutate booking state or issue a second ticket/admission record."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ProfileAvatarStorageTests.swift",
+          "line": 24,
+          "note": "Adjacent evidence only; not Events coverage. Invalid image data is rejected; no Events optional-photo gate test exists."
+        },
+        {
+          "file": "WanderTests/ProfileIdentityDraftTests.swift",
+          "line": 13,
+          "note": "Adjacent evidence only; not Events coverage. Missing display name and invalid handle are rejected."
+        }
+      ]
+    },
+    {
+      "id": "I10",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventEntrySetupTests.swift",
+        "WanderUITests/Events/EventEntrySetupUITests.swift"
+      ],
+      "assertions": [
+        "Use a confirmed returning account with valid name/username and each general tour/location/contacts/notifications step incomplete; request ticket via link and Events card.",
+        "Reach the event QR after the approved entry essentials; do not add location/contact/notification permission or general-tour completion as a gate.",
+        "Denied/restricted/not-determined permission controls and canceled general prompts do not invalidate RSVP or lose event intent.",
+        "Do not mark every unrelated onboarding step complete merely to bypass its UI. P13 exact later resumption/general deferral presentation stays proposed; D3A event-preserving essentials-only recovery is approved."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/OnboardingStateTests.swift",
+          "line": 196,
+          "note": "Adjacent evidence only; not Events coverage. Current ordinary onboarding resumes optional contacts; Events entry needs a dedicated tested route."
+        },
+        {
+          "file": "WanderTests/OnboardingStateTests.swift",
+          "line": 149,
+          "note": "Adjacent evidence only; not Events coverage. Onboarding progress persistence is isolated per user."
+        }
+      ]
+    },
+    {
+      "id": "I11",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRSVPConsentTests.swift",
+        "WanderUITests/Events/EventRSVPUITests.swift",
+        "AstirEventsClipUITests/EventRSVPUITests.swift",
+        "events-web/tests/guest/rsvp-consent.spec.ts"
+      ],
+      "assertions": [
+        "A new guest sees the approved future-event SMS checkbox unchecked by default, with its approved label and no trailing period.",
+        "Leave it unchecked and confirm a valid RSVP; service stores no future-event marketing consent while the agreed event-specific message program remains eligible.",
+        "Toggle on then off before submitting, retry after lost response and reopen the flow; no unchecked final submission fabricates consent.",
+        "Inspect controlled booking/consent records and message outbox, not just checkbox appearance; use only test recipients. Failure to save consent/RSVP is never shown as successful confirmation."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": []
+    },
+    {
+      "id": "I12",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRSVPRetryTests.swift",
+        "WanderUITests/Events/EventRSVPRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventRSVPRecoveryUITests.swift",
+        "events-web/tests/guest/rsvp-retries.spec.ts"
+      ],
+      "assertions": [
+        "Drop the successful submit response after commit; retry with the same operation identity, relaunch, and resolve the actual pending/offer/confirmed state for the account/event.",
+        "Two concurrent taps/clients and repeated response retries produce one logical booking, one seat/code effect where applicable and one logical confirmation-message intent.",
+        "Cover failure before commit, unknown completion, auth refresh and a booking canceled before an old retry arrives; no blind new mutation, stale confirmation or canceled-booking revival.",
+        "Bind persisted pending operation to account/event and reject delayed previous-account results after switching; transport errors must not be translated into no booking.",
+        "Assert durable server counts and outbox intent deduplication through controlled integration; UI request counts alone do not prove idempotency or delivery behavior."
+      ],
+      "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/AuthSessionTests.swift",
+          "line": 565,
+          "note": "Adjacent evidence only; not Events coverage. Injected activation-response loss recovers the expected session; this is not a real install/Clip handoff."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 682,
+          "note": "Adjacent evidence only; not Events coverage. A non-idempotent edge function does not blindly replay on auth failure; no Events mutation is tested."
+        },
+        {
+          "file": "WanderTests/RemoteRepositoryTests.swift",
+          "line": 1103,
+          "note": "Adjacent evidence only; not Events coverage. A mocked protected-photo response is discarded after the account changes."
+        }
+      ]
+    }
+  ],
+  "additional_risks": [
+    {
+      "id": "TN01",
+      "description": "D16 shared boundary is not proven by folder naming or full-app-only tests.",
+      "layers": [
+        "native XCTest",
+        "App Clip build/test target integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventsSourceBoundaryTests.swift",
+        "AstirEventsClipTests/EventsSharedCompositionTests.swift",
+        "project.yml"
+      ],
+      "assertions": [
+        "Build the actual thin Clip with its selected sources/resources and test host, without WanderStore/WanderBackend/root/map/history source membership.",
+        "Shared presentation composes with host-provided auth/navigation and small contract values; retain common fixtures without target-local copied policy.",
+        "Treat generated-project/source-set assertions as supporting checks; a successful full Clip build is the dependency-boundary evidence."
+      ],
+      "owner_package": "Entry/identity foundation; one shared project/auth owner",
+      "requires_real_device": false
+    },
+    {
+      "id": "TN02",
+      "description": "Generic transport errors can collapse denied, absent and uncertain operation states.",
+      "layers": [
+        "native XCTest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRepositoryOutcomeTests.swift",
+        "events-web/tests/guest/lookup-recovery.spec.ts",
+        "tests/fixtures/events/entry-states.json"
+      ],
+      "assertions": [
+        "Use typed outcomes for no booking, auth required, signed-in denial, expired/canceled/capacity result, transient failure and unknown completion; malformed/unknown values fail closed.",
+        "Exercise 401 refresh, signed-in 403 denial, refresh failure, stale-token replacement and a response crossing account switch; retain existing non-Events refresh behavior.",
+        "A mutation timeout after commit uses the same operation identity/current-state lookup; never infer replay safety from a human-readable error string."
+      ],
+      "owner_package": "Entry/identity foundation with Events data/rules contract owner",
+      "requires_real_device": false
+    },
+    {
+      "id": "TN03",
+      "description": "Public invocation/distribution and real provider continuity cannot be proved by fixtures.",
+      "layers": [
+        "physical-device integration",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Record actual public Clip invocation, associated-domain behavior, Apple and Google Clip/browser authentication, verified-current-phone proof, and full-app install/icon-launch recovery using controlled accounts.",
+        "Repeat relevant installed/not-installed/wrong-account/expired-session paths on intended TestFlight and public builds; a TestFlight result is not public App Clip publication proof.",
+        "Capture build/distribution, OS/device, link source, identity/booking continuity and safe failed-invocation recovery; identify unavailable variants as blocked, never passed."
+      ],
+      "owner_package": "Entry/identity foundation; release integrator validates distribution",
+      "requires_real_device": true
+    },
+    {
+      "id": "TN04",
+      "description": "Cold launch and account changes can adopt stale pending intent, request or protected presentation.",
+      "layers": [
+        "native XCTest",
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "controlled-service integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventAccountRecoveryTests.swift",
+        "WanderUITests/Events/EventAccountRecoveryUITests.swift",
+        "AstirEventsClipUITests/EventAccountRecoveryUITests.swift",
+        "events-web/tests/guest/account-recovery.spec.ts"
+      ],
+      "assertions": [
+        "Suspend token refresh, booking lookup or a mutation response, then sign out/switch accounts/terminate; releasing old work cannot publish protected state for the new account.",
+        "Keep safe event intent separate from account-owned booking/draft/operation identity; re-resolve the booking after legitimate recovery.",
+        "Control rapid valid links for different events and an invalid URL between them; the active intent and corresponding result remain correlated, without inventing a new product multi-event selection policy."
+      ],
+      "owner_package": "Entry/identity foundation; Before-event/door continuation owner",
+      "requires_real_device": false
+    },
+    {
+      "id": "TN05",
+      "description": "Nine-state visual parity can hide unusable identity/recovery controls or inaccessible protected text.",
+      "layers": [
+        "full-app XCUITest",
+        "App Clip XCUITest",
+        "guest-web Playwright",
+        "physical-device integration"
+      ],
+      "planned_files": [
+        "WanderUITests/Events/EventEntryAccessibilityUITests.swift",
+        "AstirEventsClipUITests/EventEntryAccessibilityUITests.swift",
+        "events-web/tests/guest/entry-accessibility.spec.ts",
+        "docs/testing/astir-events-device-entry.md"
+      ],
+      "assertions": [
+        "Exercise large text, long event/person names, keyboard-visible phone/code/username fields and a small supported phone; primary/retry/back actions remain reachable.",
+        "VoiceOver and web accessible names distinguish unknown/loading/failed/no-booking/confirmed without announcing protected guest-list/address data in ineligible states.",
+        "Perform a physical VoiceOver pass for real provider return and recovery focus; screenshots alone do not establish accessibility."
+      ],
+      "owner_package": "Before-event/door with entry foundation integration",
+      "requires_real_device": true
+    }
+  ],
+  "framework_evidence": [
+    {
+      "file": "CLAUDE.md",
+      "line": 3,
+      "note": "Adjacent evidence only; not Events coverage. Delegates shared workflow/contracts to AGENTS.md."
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 425,
+      "note": "Adjacent evidence only; not Events coverage. Testing rules require matching tests, full native tests for implementation, and honest recording of sandbox/runtime blockers."
+    },
+    {
+      "file": "project.yml",
+      "line": 43,
+      "note": "Adjacent evidence only; not Events coverage. Current scheme runs WanderTests and WanderUITests; new Clip tests/build and web harness need setup."
+    },
+    {
+      "file": "project.yml",
+      "line": 265,
+      "note": "Adjacent evidence only; not Events coverage. Existing native unit tests are a host-app bundle against Wander."
+    },
+    {
+      "file": "project.yml",
+      "line": 293,
+      "note": "Adjacent evidence only; not Events coverage. Existing native UI tests target Wander."
+    },
+    {
+      "file": "WanderTests/AuthSessionTests.swift",
+      "line": 1,
+      "note": "Adjacent evidence only; not Events coverage. XCTest with @testable import Wander; PreviewAuthSessionProvider underlies simulated social auth cases."
+    },
+    {
+      "file": "WanderUITests/OnboardingUITests.swift",
+      "line": 598,
+      "note": "Adjacent evidence only; not Events coverage. Current fixture auth deliberately survives relaunch; do not use that mode as proof of real identity/install continuity."
+    },
+    {
+      "file": "WanderTests/RemoteRepositoryTests.swift",
+      "line": 500,
+      "note": "Adjacent evidence only; not Events coverage. URLProtocol injection provides deterministic request/response/token retry testing, not live service behavior."
+    },
+    {
+      "file": "scripts/package.json",
+      "line": 5,
+      "note": "Adjacent evidence only; not Events coverage. Current scripts declare Node test/smoke helpers, not a guest-web Playwright application harness; Playwright is proposed new test infrastructure."
+    },
+    {
+      "file": "WanderTests/BuildConfigurationTests.swift",
+      "line": 166,
+      "note": "Adjacent evidence only; not Events coverage. Pinned Clerk 1.5.0 and app configuration checks exist; provider/Clip compatibility remains unproven."
+    }
+  ],
+  "notes": [
+    "All assertions and planned paths are future implementation/test work. This JSON syntax/ID validation is an artifact check only; no Events coverage pass, test execution, real provider verification or app/Clip build is claimed.",
+    "L01–L03 each cover exactly five named origin variants. L04–L11 run on app, Clip and browser where available. L17 compares nine explicit states. Do not multiply the inventory into an unexecuted exhaustive-combinations claim.",
+    "Use isolated Event A/public place and Event H/consented home, canonical fixture accounts, controlled clocks, test phone numbers and provider test identities. No real attendee messages, live events or production identity changes.",
+    "Existing evidence entries are adjacent regression seams or source constraints, never implemented Events coverage. No existing test is presumed passed in this review.",
+    "Native state/repository tests use deterministic fakes and URLProtocol; host XCUITests exercise actual app/Clip views and transitions. Guest-web Playwright needs a new harness, stubbed-state mode and a separate controlled-service integration mode. Provider OAuth and install/public invocation remain physical-device checks.",
+    "Backend ownership/RLS, seat/code concurrency and outbox deduplication assertions require the data/rules package’s authoritative service oracle. Stubbed UI/browser responses cannot satisfy those assertions; map shared case IDs to the service test ledger during integration.",
+    "P01 auth-interruption interaction, P02 SMS timings, P11 post-expiry presentation, P13 later general-onboarding resumption and P19 unavailable presentation retain their proposal status. Test agreed safety/continuity invariants now; finalize exact proposed expectations only against the reviewed baseline.",
+    "No phone-only sign-up, self-service provider linking, implicit identity merge, replacement reservation or no-app ticket access is introduced. Optional download remains optional until entry/app-only actions; profile photo remains optional.",
+    "The exact guest-web root is a proposed future path convention. Web/console consume language-neutral contract fixtures, not native Swift source. AstirEventsClipUITests/AstirEventsClipTests require explicit XcodeGen target setup; they do not exist today.",
+    "For each implemented run record case ID and parameter variant, build/version/distribution, host/OS/device, controlled clock/timezone, fixture IDs, visible outcome, server booking/proof state and outbox evidence where relevant; redact tokens, SMS codes, private phone values and protected payloads."
+  ]
+}

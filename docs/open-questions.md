@@ -1,8 +1,22 @@
 # Open Questions
 
-Last updated: 2026-09-03
+Last updated: 2026-09-15
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Astir Events product and implementation gates (REC-467)
+
+The September 15 [decision inventory](designs/astir-events/engineering-open-decisions.md)
+retains nine groups: registration/offer edits, event lifecycle edits, participation/door
+exceptions, reminder channels, preview/home/share presentation, personal media/editing,
+map treatment, post-ticket continuation, and navigation/saving. Each names the already
+approved invariant, exact remaining clauses and affected implementation tasks. These
+are unapproved portions of the existing draft, not nine newly added feature requests.
+
+Actual provider/App Clip continuity, current private-content access, offline persistence
+and compatible public distribution are engineering proofs, not product votes. Their
+checkpoints are in the [22-task handoff](designs/astir-events/implementation-tasks.md).
+The full experience is not release-cleared by merging this planning documentation.
 
 ## REC-409 Share Extension Background Import
 

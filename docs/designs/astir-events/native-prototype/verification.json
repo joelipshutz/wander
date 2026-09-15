@@ -1,0 +1,239 @@
+{
+  "verifiedAt": "2026-09-14T20:50:44.370296+00:00",
+  "xcode": "26.3 (17C529)",
+  "buildExitCode": 0,
+  "bundleID": "com.astir.eventsdesignsandbox",
+  "sourceSha256": "518bbdb60d3e9f38644b6d1419cd2694b4ed1f87055f331786ed6dfd960b809a",
+  "captureCount": 32,
+  "captures": [
+    {
+      "id": "event-app-unknown",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2304597
+    },
+    {
+      "id": "event-app-new",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2302994
+    },
+    {
+      "id": "event-app-confirmed",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2303279
+    },
+    {
+      "id": "event-clip-unknown",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2178322
+    },
+    {
+      "id": "event-clip-new",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2177271
+    },
+    {
+      "id": "event-clip-confirmed",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2169363
+    },
+    {
+      "id": "event-web-unknown",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1924414
+    },
+    {
+      "id": "event-web-new",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1923621
+    },
+    {
+      "id": "event-web-confirmed",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1923961
+    },
+    {
+      "id": "events",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1512942
+    },
+    {
+      "id": "checkin",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 309261
+    },
+    {
+      "id": "checkin-tags",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 323887
+    },
+    {
+      "id": "recap",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2232937
+    },
+    {
+      "id": "recap-gallery",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 2024408
+    },
+    {
+      "id": "place",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1749466
+    },
+    {
+      "id": "guests",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 265702
+    },
+    {
+      "id": "setup",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 208201
+    },
+    {
+      "id": "signup",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1236214
+    },
+    {
+      "id": "phone",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 192880
+    },
+    {
+      "id": "code",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 175939
+    },
+    {
+      "id": "ticket",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 178315
+    },
+    {
+      "id": "manage",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 172881
+    },
+    {
+      "id": "map-square",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1197064
+    },
+    {
+      "id": "map-round",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1220335
+    },
+    {
+      "id": "map-glow",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1301480
+    },
+    {
+      "id": "map-pulse",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1277349
+    },
+    {
+      "id": "map-reduced",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1220497
+    },
+    {
+      "id": "guests-clip",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 267314
+    },
+    {
+      "id": "manage-web",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 292370
+    },
+    {
+      "id": "event-app-unknown-compact",
+      "width": 1170,
+      "height": 2532,
+      "bytes": 2241123
+    },
+    {
+      "id": "checkin-compact",
+      "width": 1170,
+      "height": 2532,
+      "bytes": 299647
+    },
+    {
+      "id": "map-square-compact",
+      "width": 1170,
+      "height": 2532,
+      "bytes": 1154295
+    }
+  ],
+  "videoExists": true,
+  "videoBytes": 4922252,
+  "limits": [
+    "Visual local prototype, not a production App Clip or browser implementation",
+    "Local schematic map and illustrative bundled photos",
+    "No backend or external APIs",
+    "No automated native UI interaction suite",
+    "Light-mode visual checks only"
+  ],
+  "bundledAssetUnchanged": true,
+  "visuallyInspected": [
+    "event-app-unknown",
+    "event-clip-confirmed",
+    "event-web-new",
+    "checkin",
+    "recap",
+    "map-square",
+    "place",
+    "setup",
+    "event-app-unknown-compact",
+    "checkin-compact",
+    "map-square-compact"
+  ],
+  "mapRefresh": {
+    "changes": [
+      "Featured / You / Friends / Been filters",
+      "Smaller at in collapsed event title"
+    ],
+    "refreshedStills": 6,
+    "preservedOtherStills": 26,
+    "manifestEntriesPreserved": 32,
+    "pulseVideoRefreshed": true,
+    "visuallyInspectedAfterRefresh": [
+      "map-square",
+      "map-square-compact"
+    ]
+  }
+}
