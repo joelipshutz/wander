@@ -29,14 +29,6 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
-  Rating Colors:
-    build:
-      targets:
-        Wander: all
-    run:
-      config: Debug
-      commandLineArguments:
-        "-WanderRatingColorsMockup": true
   Wander:
     build:
       targets:

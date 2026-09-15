@@ -163,9 +163,7 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-WanderRatingColorsMockup") {
-                RatingColorsMockup()
-            } else if let motion = ProfileHeaderMotionVariant.resolved() {
+            if let motion = ProfileHeaderMotionVariant.resolved() {
                 ProfileHeaderMotionPreview(variant: motion)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingCommentsCapture") {
                 OnboardingCommentsCaptureView()
