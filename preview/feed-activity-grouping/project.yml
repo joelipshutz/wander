@@ -1,0 +1,30 @@
+name: FeedActivityMock
+options:
+  settingPresets: none
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    PRODUCT_NAME: $(TARGET_NAME)
+    SDKROOT: iphoneos
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    ALWAYS_SEARCH_USER_PATHS: NO
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_VERSION: "6.0"
+    GENERATE_INFOPLIST_FILE: YES
+    PRODUCT_BUNDLE_IDENTIFIER: com.grayline.feedactivitymock
+    TARGETED_DEVICE_FAMILY: "1"
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+targets:
+  FeedActivityMock:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - ../../Wander/Features/Feed/FeedActivityDisclosure.swift
+schemes:
+  FeedActivityMock:
+    build:
+      targets:
+        FeedActivityMock: all
