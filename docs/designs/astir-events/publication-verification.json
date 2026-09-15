@@ -1,0 +1,14 @@
+{
+  "planning_only": true,
+  "flowchart_screens": 172,
+  "flowchart_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "manifest_hashes_checked": 63,
+  "markdown_links_valid": true,
+  "immutable_app_source_links_checked": 58,
+  "tasks": 22,
+  "task_dag_acyclic": true,
+  "review_report_terminal": true,
+  "open_decision_groups": 9,
+  "application_tests_run": false,
+  "application_benchmarks_run": false
+}

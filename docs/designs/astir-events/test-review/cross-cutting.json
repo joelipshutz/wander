@@ -1,0 +1,142 @@
+{
+  "area": "cross-cutting",
+  "baseline": "f8d258e869503a28d70518a050dff36a344134c6",
+  "cases": [],
+  "additional_risks": [
+    {
+      "id": "TR01",
+      "description": "Cross-client schema and permission compatibility",
+      "layers": [
+        "native-unit",
+        "web-unit",
+        "api-integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventWireContractTests.swift",
+        "events-web/tests/contracts/event-wire-contract.spec.ts",
+        "supabase/tests/events_contract_compatibility.sql"
+      ],
+      "assertions": [
+        "Decode the same controlled response fixtures in Swift and web; compare canonical IDs, states, timestamps and permitted fields.",
+        "Unknown or missing security-relevant states/capabilities cannot default to confirmed or expose protected fields; distinguish optional additions from incompatible payloads.",
+        "Exercise older/newer contract fixtures and a failed decode without dropping event/account recovery context."
+      ],
+      "owner_package": "shared-contract",
+      "requires_real_device": false
+    },
+    {
+      "id": "TR02",
+      "description": "Migration and older-client regression boundary",
+      "layers": [
+        "database-integration",
+        "native-regression",
+        "release-integration"
+      ],
+      "planned_files": [
+        "supabase/tests/events_migration_compatibility.sql",
+        "WanderTests/Events/EventSnapshotCompatibilityTests.swift",
+        "docs/testing/astir-events-release-compatibility.md"
+      ],
+      "assertions": [
+        "Load existing ordinary place/visit/engagement data and older local snapshots, migrate and run ordinary saves/reads plus Events; retain ratings, audiences, notes, IDs and explicit save intent.",
+        "Test additive rollout with older app/new backend and newer app/preactivation configuration; fail safely when Events capability is unavailable.",
+        "Verify a rollback/feature-disable path does not erase confirmed bookings, queued door work or preexisting place history.",
+        "Against current REC-494 display grouping, preserve the canonical event visit/activity and original engagement route for comments, likes, sharing and deletion; grouping never merges distinct visits or replaces their IDs with the group container."
+      ],
+      "owner_package": "shared-integration",
+      "requires_real_device": true
+    },
+    {
+      "id": "TR03",
+      "description": "Analytics and error evidence excludes protected content",
+      "layers": [
+        "native-unit",
+        "worker-unit",
+        "web-unit"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventAnalyticsPrivacyTests.swift",
+        "supabase/functions/events-notification-worker/privacy.test.ts",
+        "events-web/tests/contracts/event-telemetry.spec.ts"
+      ],
+      "assertions": [
+        "Inject phone/address/private feedback/media/token-bearing failures and assert logs, analytics and user-visible generic errors contain none of those values.",
+        "Export delivery/frequency aggregates only; no recipient/event/actor/APNs IDs, message body, tokens or deep links in PostHog delivery analytics.",
+        "State transition metrics follow committed logical actions, not duplicate taps, failed writes, callbacks or resend retries."
+      ],
+      "owner_package": "shared-contract",
+      "requires_real_device": false
+    },
+    {
+      "id": "TR04",
+      "description": "Launch configuration and independent authorization",
+      "layers": [
+        "native-unit",
+        "api-integration",
+        "web-e2e",
+        "release-integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventFeatureConfigurationTests.swift",
+        "supabase/tests/events_launch_permissions.sql",
+        "events-web/tests/console/launch-configuration.spec.ts",
+        "docs/testing/astir-events-release-compatibility.md"
+      ],
+      "assertions": [
+        "Guest feature visibility or console preview flags cannot grant Team admin, recap, admission or exact-home permission through direct API requests.",
+        "Compatible app/Clip/browser/backend configuration is checked before public Events activation; main-app release alone is not a Clip release.",
+        "A normal app restart/account switch follows the existing typed flag behavior without revealing another account state; missing configuration is an explicit unavailable state."
+      ],
+      "owner_package": "shared-integration",
+      "requires_real_device": true
+    },
+    {
+      "id": "TR05",
+      "description": "Physical-clock and scheduler discontinuities",
+      "layers": [
+        "native-unit",
+        "database-integration",
+        "worker-integration",
+        "web-unit"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventTimeBoundaryTests.swift",
+        "supabase/tests/events_time_boundaries.sql",
+        "supabase/functions/events-notification-worker/time.test.ts",
+        "events-web/tests/contracts/event-time.spec.ts"
+      ],
+      "assertions": [
+        "Test before/at/after each deadline, fractional precision, event-local formatting and daylight-saving boundaries using absolute server instants.",
+        "Change event date/time or configured reveal/expiry/registration override and reject obsolete scheduled work without silently extending an offer.",
+        "Include a transaction blocked until after offer expiry; enforce current authoritative time after lock acquisition rather than client or transaction-start time."
+      ],
+      "owner_package": "shared-contract",
+      "requires_real_device": false
+    },
+    {
+      "id": "TR06",
+      "description": "Independent host build and source boundaries",
+      "layers": [
+        "build-contract",
+        "native-unit",
+        "release-integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventTargetBoundaryTests.swift",
+        "AstirEventsClipUITests/EventClipLaunchTests.swift",
+        "docs/testing/astir-events-release-compatibility.md"
+      ],
+      "assertions": [
+        "Build the full app and Clip with their real selected sources, signed dependencies and resources; Clip cannot obtain its auth helper by pulling in full-app store/map/root.",
+        "Check app/Clip association, entitlements, environment, supported OS and contract compatibility on exact release artifacts.",
+        "Shared source inclusion does not accidentally ship Team admin/service credentials or debug fixture bypasses."
+      ],
+      "owner_package": "entry-identity",
+      "requires_real_device": true
+    }
+  ],
+  "framework_evidence": [],
+  "notes": [
+    "All entries are planned requirements, not implemented or run tests. Paths name future repository files. These integration checks implement approved contracts; they do not select a web framework or new product policy."
+  ]
+}

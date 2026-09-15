@@ -1,0 +1,595 @@
+{
+  "planning_only": true,
+  "task_count": 22,
+  "unique_ids": true,
+  "dag_acyclic": true,
+  "topological_order": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T12",
+    "T09",
+    "T10",
+    "T11",
+    "T13",
+    "T14",
+    "T15",
+    "T16",
+    "T17",
+    "T18",
+    "T19",
+    "T20",
+    "T21",
+    "T22"
+  ],
+  "totals_alternative_active_hours": {
+    "human": {
+      "min": 488,
+      "max": 796
+    },
+    "agent": {
+      "min": 252,
+      "max": 490
+    }
+  },
+  "illustrative_fixed_lane_schedule": {
+    "human": {
+      "min": {
+        "elapsed_active_hours": 320,
+        "order": [
+          {
+            "id": "T01",
+            "lane": "shared",
+            "start": 0,
+            "finish": 12
+          },
+          {
+            "id": "T02",
+            "lane": "A",
+            "start": 12,
+            "finish": 36
+          },
+          {
+            "id": "T03",
+            "lane": "B",
+            "start": 12,
+            "finish": 36
+          },
+          {
+            "id": "T04",
+            "lane": "B",
+            "start": 36,
+            "finish": 56
+          },
+          {
+            "id": "T05",
+            "lane": "shared",
+            "start": 56,
+            "finish": 68
+          },
+          {
+            "id": "T06",
+            "lane": "joined",
+            "start": 68,
+            "finish": 80
+          },
+          {
+            "id": "T07",
+            "lane": "A",
+            "start": 80,
+            "finish": 100
+          },
+          {
+            "id": "T08",
+            "lane": "A",
+            "start": 100,
+            "finish": 132
+          },
+          {
+            "id": "T12",
+            "lane": "A",
+            "start": 132,
+            "finish": 164
+          },
+          {
+            "id": "T09",
+            "lane": "A",
+            "start": 164,
+            "finish": 196
+          },
+          {
+            "id": "T10",
+            "lane": "A",
+            "start": 196,
+            "finish": 216
+          },
+          {
+            "id": "T11",
+            "lane": "A",
+            "start": 216,
+            "finish": 240
+          },
+          {
+            "id": "T13",
+            "lane": "B",
+            "start": 80,
+            "finish": 104
+          },
+          {
+            "id": "T14",
+            "lane": "B",
+            "start": 104,
+            "finish": 144
+          },
+          {
+            "id": "T15",
+            "lane": "B",
+            "start": 164,
+            "finish": 188
+          },
+          {
+            "id": "T16",
+            "lane": "B",
+            "start": 188,
+            "finish": 212
+          },
+          {
+            "id": "T17",
+            "lane": "A",
+            "start": 240,
+            "finish": 260
+          },
+          {
+            "id": "T18",
+            "lane": "A",
+            "start": 260,
+            "finish": 292
+          },
+          {
+            "id": "T19",
+            "lane": "B",
+            "start": 260,
+            "finish": 280
+          },
+          {
+            "id": "T20",
+            "lane": "A",
+            "start": 292,
+            "finish": 312
+          },
+          {
+            "id": "T21",
+            "lane": "B",
+            "start": 280,
+            "finish": 292
+          },
+          {
+            "id": "T22",
+            "lane": "joined",
+            "start": 312,
+            "finish": 320
+          }
+        ]
+      },
+      "max": {
+        "elapsed_active_hours": 520,
+        "order": [
+          {
+            "id": "T01",
+            "lane": "shared",
+            "start": 0,
+            "finish": 20
+          },
+          {
+            "id": "T02",
+            "lane": "A",
+            "start": 20,
+            "finish": 60
+          },
+          {
+            "id": "T03",
+            "lane": "B",
+            "start": 20,
+            "finish": 68
+          },
+          {
+            "id": "T04",
+            "lane": "B",
+            "start": 68,
+            "finish": 100
+          },
+          {
+            "id": "T05",
+            "lane": "shared",
+            "start": 100,
+            "finish": 120
+          },
+          {
+            "id": "T06",
+            "lane": "joined",
+            "start": 120,
+            "finish": 140
+          },
+          {
+            "id": "T07",
+            "lane": "A",
+            "start": 140,
+            "finish": 172
+          },
+          {
+            "id": "T08",
+            "lane": "A",
+            "start": 172,
+            "finish": 220
+          },
+          {
+            "id": "T12",
+            "lane": "A",
+            "start": 220,
+            "finish": 268
+          },
+          {
+            "id": "T09",
+            "lane": "A",
+            "start": 268,
+            "finish": 316
+          },
+          {
+            "id": "T10",
+            "lane": "A",
+            "start": 316,
+            "finish": 348
+          },
+          {
+            "id": "T11",
+            "lane": "A",
+            "start": 348,
+            "finish": 388
+          },
+          {
+            "id": "T13",
+            "lane": "B",
+            "start": 140,
+            "finish": 180
+          },
+          {
+            "id": "T14",
+            "lane": "B",
+            "start": 180,
+            "finish": 244
+          },
+          {
+            "id": "T15",
+            "lane": "B",
+            "start": 268,
+            "finish": 308
+          },
+          {
+            "id": "T16",
+            "lane": "B",
+            "start": 308,
+            "finish": 348
+          },
+          {
+            "id": "T17",
+            "lane": "A",
+            "start": 388,
+            "finish": 420
+          },
+          {
+            "id": "T18",
+            "lane": "A",
+            "start": 420,
+            "finish": 468
+          },
+          {
+            "id": "T19",
+            "lane": "B",
+            "start": 420,
+            "finish": 452
+          },
+          {
+            "id": "T20",
+            "lane": "A",
+            "start": 468,
+            "finish": 504
+          },
+          {
+            "id": "T21",
+            "lane": "B",
+            "start": 452,
+            "finish": 472
+          },
+          {
+            "id": "T22",
+            "lane": "joined",
+            "start": 504,
+            "finish": 520
+          }
+        ]
+      }
+    },
+    "agent": {
+      "min": {
+        "elapsed_active_hours": 168,
+        "order": [
+          {
+            "id": "T01",
+            "lane": "shared",
+            "start": 0,
+            "finish": 6
+          },
+          {
+            "id": "T02",
+            "lane": "A",
+            "start": 6,
+            "finish": 18
+          },
+          {
+            "id": "T03",
+            "lane": "B",
+            "start": 6,
+            "finish": 18
+          },
+          {
+            "id": "T04",
+            "lane": "B",
+            "start": 18,
+            "finish": 26
+          },
+          {
+            "id": "T05",
+            "lane": "shared",
+            "start": 26,
+            "finish": 32
+          },
+          {
+            "id": "T06",
+            "lane": "joined",
+            "start": 32,
+            "finish": 38
+          },
+          {
+            "id": "T07",
+            "lane": "A",
+            "start": 38,
+            "finish": 48
+          },
+          {
+            "id": "T08",
+            "lane": "A",
+            "start": 48,
+            "finish": 64
+          },
+          {
+            "id": "T12",
+            "lane": "A",
+            "start": 64,
+            "finish": 80
+          },
+          {
+            "id": "T09",
+            "lane": "A",
+            "start": 80,
+            "finish": 96
+          },
+          {
+            "id": "T10",
+            "lane": "A",
+            "start": 96,
+            "finish": 106
+          },
+          {
+            "id": "T11",
+            "lane": "A",
+            "start": 106,
+            "finish": 118
+          },
+          {
+            "id": "T13",
+            "lane": "B",
+            "start": 38,
+            "finish": 50
+          },
+          {
+            "id": "T14",
+            "lane": "B",
+            "start": 50,
+            "finish": 70
+          },
+          {
+            "id": "T15",
+            "lane": "B",
+            "start": 80,
+            "finish": 92
+          },
+          {
+            "id": "T16",
+            "lane": "B",
+            "start": 92,
+            "finish": 104
+          },
+          {
+            "id": "T17",
+            "lane": "A",
+            "start": 118,
+            "finish": 128
+          },
+          {
+            "id": "T18",
+            "lane": "A",
+            "start": 128,
+            "finish": 148
+          },
+          {
+            "id": "T19",
+            "lane": "B",
+            "start": 128,
+            "finish": 138
+          },
+          {
+            "id": "T20",
+            "lane": "A",
+            "start": 148,
+            "finish": 162
+          },
+          {
+            "id": "T21",
+            "lane": "B",
+            "start": 138,
+            "finish": 144
+          },
+          {
+            "id": "T22",
+            "lane": "joined",
+            "start": 162,
+            "finish": 168
+          }
+        ]
+      },
+      "max": {
+        "elapsed_active_hours": 320,
+        "order": [
+          {
+            "id": "T01",
+            "lane": "shared",
+            "start": 0,
+            "finish": 12
+          },
+          {
+            "id": "T02",
+            "lane": "A",
+            "start": 12,
+            "finish": 36
+          },
+          {
+            "id": "T03",
+            "lane": "B",
+            "start": 12,
+            "finish": 40
+          },
+          {
+            "id": "T04",
+            "lane": "B",
+            "start": 40,
+            "finish": 58
+          },
+          {
+            "id": "T05",
+            "lane": "shared",
+            "start": 58,
+            "finish": 70
+          },
+          {
+            "id": "T06",
+            "lane": "joined",
+            "start": 70,
+            "finish": 82
+          },
+          {
+            "id": "T07",
+            "lane": "A",
+            "start": 82,
+            "finish": 100
+          },
+          {
+            "id": "T08",
+            "lane": "A",
+            "start": 100,
+            "finish": 128
+          },
+          {
+            "id": "T12",
+            "lane": "A",
+            "start": 128,
+            "finish": 158
+          },
+          {
+            "id": "T09",
+            "lane": "A",
+            "start": 158,
+            "finish": 186
+          },
+          {
+            "id": "T10",
+            "lane": "A",
+            "start": 186,
+            "finish": 204
+          },
+          {
+            "id": "T11",
+            "lane": "A",
+            "start": 204,
+            "finish": 228
+          },
+          {
+            "id": "T13",
+            "lane": "B",
+            "start": 82,
+            "finish": 106
+          },
+          {
+            "id": "T14",
+            "lane": "B",
+            "start": 106,
+            "finish": 146
+          },
+          {
+            "id": "T15",
+            "lane": "B",
+            "start": 158,
+            "finish": 182
+          },
+          {
+            "id": "T16",
+            "lane": "B",
+            "start": 182,
+            "finish": 206
+          },
+          {
+            "id": "T17",
+            "lane": "A",
+            "start": 228,
+            "finish": 248
+          },
+          {
+            "id": "T18",
+            "lane": "A",
+            "start": 248,
+            "finish": 280
+          },
+          {
+            "id": "T19",
+            "lane": "B",
+            "start": 248,
+            "finish": 268
+          },
+          {
+            "id": "T20",
+            "lane": "A",
+            "start": 280,
+            "finish": 308
+          },
+          {
+            "id": "T21",
+            "lane": "B",
+            "start": 268,
+            "finish": 282
+          },
+          {
+            "id": "T22",
+            "lane": "joined",
+            "start": 308,
+            "finish": 320
+          }
+        ]
+      }
+    }
+  },
+  "schedule_limits": "Estimates, not measurements. Shared/joined steps reserve both lanes; elapsed model conservatively treats their effort as full-stage time. Dedicated test devices/fixtures and serialized shared-file reviews are required. Human and agent models are alternatives, not additive; human supervision and external/provider/review waits are not estimated by dividing these totals."
+}
