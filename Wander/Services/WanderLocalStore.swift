@@ -1921,18 +1921,26 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshPlaceActivityEngagement(userPlaceIDs: [String], backend: WanderBackend?) async {
-        let remoteIDs = Array(Set(userPlaceIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        let requestUserID = currentUser.id
+        let remoteIDs = Array(Set(userPlaceIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })).sorted()
         guard !remoteIDs.isEmpty,
               let repository = backend?.activityEngagementRepository
         else { return }
 
         do {
-            let matches = try await repository.placeActivitySummaries(userPlaceIDs: remoteIDs)
+            var matches: [PlaceActivityEngagementMatch] = []
+            for start in stride(from: 0, to: remoteIDs.count, by: 100) {
+                matches += try await repository.placeActivitySummaries(
+                    userPlaceIDs: Array(remoteIDs[start..<min(start + 100, remoteIDs.count)])
+                )
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            }
             let refreshedIDs = Set(remoteIDs)
-            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID) }
+            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID.lowercased()) }
             placeActivityEngagementMatches.append(contentsOf: matches)
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
+            for id in remoteIDs { refreshedErrors["user-place:\(id)"] = nil }
             for match in matches where !pendingActivityLikeIDs.contains(match.activityID) {
                 refreshedEngagement[match.activityID] = match.engagement
                 refreshedErrors[match.activityID] = nil
@@ -1944,6 +1952,7 @@ final class WanderStore: ObservableObject {
                 activityEngagementErrorByID = refreshedErrors
             }
         } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
             let message = remoteErrorMessage(error)
             var refreshedErrors = activityEngagementErrorByID
             for userPlaceID in remoteIDs {
@@ -1961,9 +1970,9 @@ final class WanderStore: ObservableObject {
         preferredKinds: [FeedActivityKind]
     ) -> PlaceActivityEngagementMatch? {
         let candidates = placeActivityEngagementMatches.filter { match in
-            guard match.userPlaceID == userPlaceID else { return false }
+            guard match.userPlaceID.lowercased() == userPlaceID.lowercased() else { return false }
             if let visitID {
-                return match.visitID == visitID
+                return match.visitID?.lowercased() == visitID.lowercased() && preferredKinds.contains(match.kind)
             }
             // Remote place projections may not have materialized the explicit
             // visit locally yet. In that case the immutable event is still the

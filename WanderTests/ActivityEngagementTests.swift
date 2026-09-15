@@ -540,6 +540,84 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(resolvedWithoutMaterializedVisit, visitActivity)
     }
 
+    func testPlaceHistoryMatchesUUIDsRegardlessOfCase() async {
+        let parentID = "A0959FDE-2E2B-40AE-9969-88D0983A5BC8"
+        let visitID = "A940B2A4-605D-48D3-A5CD-B23D230B00CE"
+        let match = PlaceActivityEngagementMatch(
+            activityID: "a8778202-9fc3-4819-a66a-70bec42cd038",
+            userPlaceID: parentID.lowercased(), visitID: visitID.lowercased(),
+            kind: .placeBeen, occurredAt: .now,
+            engagement: .empty(activityID: "a8778202-9fc3-4819-a66a-70bec42cd038")
+        )
+        let store = WanderStore(fixtures: .empty())
+        await store.refreshPlaceActivityEngagement(
+            userPlaceIDs: [parentID],
+            backend: WanderBackend(activityEngagementRepository: ActivityEngagementRepositoryStub(placeMatches: [match]))
+        )
+        XCTAssertEqual(store.placeActivityEngagementMatch(
+            userPlaceID: parentID, visitID: visitID, preferredKinds: [.placeBeen]
+        ), match)
+        XCTAssertNil(store.placeActivityEngagementMatch(
+            userPlaceID: parentID, visitID: UUID().uuidString, preferredKinds: [.placeBeen]
+        ), "A missing or deleted repeat visit must never borrow another visit's conversation")
+    }
+
+    func testPlaceHistoryEngagementRetriesAndClearsLoadingError() async {
+        let id = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        let match = PlaceActivityEngagementMatch(activityID: UUID().uuidString,
+            userPlaceID: id, visitID: UUID().uuidString, kind: .placeBeen,
+            occurredAt: .now, engagement: .empty(activityID: "test"))
+        let repository = ActivityEngagementRepositoryStub(placeMatches: [match])
+        repository.placeFailuresRemaining = 1
+        let store = WanderStore(fixtures: .empty())
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: [id], backend: backend)
+        XCTAssertTrue(store.placeActivityEngagementMatches.isEmpty)
+        XCTAssertNotNil(store.activityEngagementError(for: "user-place:\(id)"))
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: [id], backend: backend)
+        XCTAssertEqual(store.placeActivityEngagementMatches, [match])
+        XCTAssertNil(store.activityEngagementError(for: "user-place:\(id)"))
+    }
+
+    func testPlaceHistoryEngagementBatchesWithinRPCLimit() async {
+        let repository = ActivityEngagementRepositoryStub()
+        let ids = (0..<201).map { _ in UUID().uuidString }
+        await WanderStore(fixtures: .empty()).refreshPlaceActivityEngagement(
+            userPlaceIDs: ids + ids,
+            backend: WanderBackend(activityEngagementRepository: repository)
+        )
+        XCTAssertEqual(repository.placeRequests.map(\.count), [100, 100, 1])
+        XCTAssertEqual(Set(repository.placeRequests.flatMap { $0 }), Set(ids.map { $0.lowercased() }))
+    }
+
+    func testPlaceHistoryEngagementDiscardsAccountChangesAndCancellation() async {
+        for changesAccount in [false, true] {
+            let parentID = UUID().uuidString.lowercased()
+            let repository = ActivityEngagementRepositoryStub(placeMatches: [
+                PlaceActivityEngagementMatch(activityID: UUID().uuidString,
+                    userPlaceID: parentID, visitID: UUID().uuidString, kind: .placeBeen,
+                    occurredAt: .now, engagement: .empty(activityID: "test"))
+            ])
+            repository.suspendPlaceRequests = true
+            let store = WanderStore(fixtures: .empty())
+            let task = Task { @MainActor in
+                await store.refreshPlaceActivityEngagement(userPlaceIDs: [parentID],
+                    backend: WanderBackend(activityEngagementRepository: repository))
+            }
+            for _ in 0..<100 where repository.placeRequests.isEmpty { await Task.yield() }
+            XCTAssertFalse(repository.placeRequests.isEmpty)
+            if changesAccount {
+                store.apply(authState: .signedOut)
+                store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
+            } else {
+                task.cancel()
+            }
+            repository.suspendPlaceRequests = false
+            await task.value
+            XCTAssertTrue(store.placeActivityEngagementMatches.isEmpty)
+        }
+    }
+
     func testEngagementContextUsesCheckInAndWannaLanguage() {
         let actor = ProfileShell(
             id: "user_friend",
@@ -1086,6 +1164,9 @@ private enum ActivityEngagementTestError: Error {
 @MainActor
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
+    var placeFailuresRemaining = 0
+    var suspendPlaceRequests = false
+    private(set) var placeRequests: [[String]] = []
     let summariesResult: [ActivityEngagementSummary]?
     let setLikeError: Error?
     let commentsPage: ActivityCommentsPage?
@@ -1156,7 +1237,13 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
-        placeMatches.filter { userPlaceIDs.contains($0.userPlaceID) }
+        placeRequests.append(userPlaceIDs)
+        while suspendPlaceRequests { await Task.yield() }
+        if placeFailuresRemaining > 0 {
+            placeFailuresRemaining -= 1
+            throw ActivityEngagementTestError.expected
+        }
+        return placeMatches.filter { userPlaceIDs.contains($0.userPlaceID) }
     }
 
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary {
