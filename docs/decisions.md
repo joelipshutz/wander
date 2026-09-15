@@ -1,8 +1,25 @@
 # Decisions
 
-Last updated: 2026-09-06
+Last updated: 2026-09-14
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Feed activity grouping (REC-494)
+
+The Feed combines already-visible check-in, Wanna, and list-addition events from
+the same actor and canonical place within 30 minutes of the first event. The
+window does not slide. A second check-in starts a new group; list creation,
+missing-place events, and ambiguous legacy social saves remain separate.
+Check-in leads over Wanna, then list addition. Group identity and Feed ordering
+stay anchored to the first event, so later organization does not bump the card.
+
+One card shows the place artwork and headline, with visible list context and an
+inline **View activity / Hide activity** disclosure. Expanded rows show the
+chronological action and timestamp and open the original post or visible list.
+Original event IDs, likes, comments, shares, and authorization remain intact;
+the main action row belongs to the headline event. No conversations or stored
+events are merged. Grouping covers the events loaded in the current Feed page,
+and a refresh recomputes it solely from currently visible events.
 
 ## Product Decisions
 

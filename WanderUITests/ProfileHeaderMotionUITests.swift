@@ -86,6 +86,31 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         capture("Pinned photo after full-screen return")
     }
 
+    func testPhotoRemainsVisibleThroughPartialReverseAndResnapsAtTop() {
+        let app = launch(["-ProfileHeaderMotion", "compact"])
+        let photo = app.buttons["profile.header.photo"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 15))
+        let originalFrame = photo.frame
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.65))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.40))
+        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertEqual(photo.frame.minY, originalFrame.minY, accuracy: 2)
+        capture("Photo above header after downward scroll")
+
+        // Short, slow steps stop inside the former bio-triggered disappearance
+        // interval instead of skipping directly back to the top with a fling.
+        for step in 0..<5 {
+            let reverseEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.45))
+            end.press(forDuration: 0.1, thenDragTo: reverseEnd, withVelocity: .slow, thenHoldForDuration: 0.5)
+            XCTAssertEqual(photo.frame.width, originalFrame.width, accuracy: 1)
+            XCTAssertEqual(photo.frame.minY, originalFrame.minY, accuracy: 2)
+            XCTAssertTrue(photo.isHittable)
+            capture("Photo returning step \(step)")
+        }
+        photo.tap()
+        XCTAssertTrue(app.buttons["Close profile photo"].waitForExistence(timeout: 5))
+    }
+
     private func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs"] + arguments
