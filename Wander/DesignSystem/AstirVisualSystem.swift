@@ -639,7 +639,11 @@ struct AstirPlacePhotoAsset: View {
     }
 }
 
+@MainActor
 private enum AstirPlacePhotoCropper {
+    // There are only four bundled crops. Reuse their images across view updates
+    // instead of creating new backing images during place-card animations.
+    private static let images = NSCache<NSNumber, UIImage>()
     private static let crops = [
         CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
         CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
@@ -651,7 +655,10 @@ private enum AstirPlacePhotoCropper {
         let stableValue = stableKey.unicodeScalars.reduce(0) { partial, scalar in
             (partial &* 31) &+ Int(scalar.value)
         }
-        let crop = crops[abs(stableValue) % crops.count]
+        let cropIndex = Int(stableValue.magnitude % UInt(crops.count))
+        let key = NSNumber(value: cropIndex)
+        if let image = images.object(forKey: key) { return image }
+        let crop = crops[cropIndex]
 
         guard let source = UIImage(named: "PlaceCarouselPhotos"),
               let sourceCGImage = source.cgImage
@@ -665,11 +672,13 @@ private enum AstirPlacePhotoCropper {
         ).integral
 
         guard let croppedImage = sourceCGImage.cropping(to: pixelRect) else { return nil }
-        return UIImage(
+        let image = UIImage(
             cgImage: croppedImage,
             scale: source.scale,
             orientation: source.imageOrientation
         )
+        images.setObject(image, forKey: key)
+        return image
     }
 }
 
