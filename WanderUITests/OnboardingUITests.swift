@@ -2024,7 +2024,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let checkInAgain = app.buttons["Check in again"].firstMatch
+        let checkInAgain = app.buttons["Check in"].firstMatch
         XCTAssertTrue(checkInAgain.waitForExistence(timeout: 3))
         checkInAgain.tap()
 
@@ -2433,7 +2433,7 @@ final class OnboardingUITests: XCTestCase {
             "One physical Save tap should commit and dismiss the Check-in editor."
         )
         XCTAssertTrue(
-            app.buttons["Check in again"].firstMatch.waitForExistence(timeout: 4),
+            app.buttons["Check in"].firstMatch.waitForExistence(timeout: 4),
             "The completed Check-in should update the place action exactly once."
         )
     }

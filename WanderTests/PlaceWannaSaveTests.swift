@@ -139,7 +139,7 @@ final class PlaceWannaSaveTests: XCTestCase {
         for state in [PlaceProfileSaveActionState.unsaved, .wanna, .checkInHistory] {
             let actions = PlaceProfileSaveActionPolicy.resolve(state: state).actions
             XCTAssertEqual(actions[0].kind, .checkIn)
-            XCTAssertEqual(actions[0].title, state == .checkInHistory ? "Check in again" : "Check in")
+            XCTAssertEqual(actions[0].title, "Check in")
             XCTAssertEqual(actions[1].kind, .wanna)
             XCTAssertEqual(actions[1].title, "Wanna")
             XCTAssertFalse(actions[1].isSelected)

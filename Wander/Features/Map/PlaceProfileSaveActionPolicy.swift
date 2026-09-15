@@ -225,7 +225,7 @@ enum PlaceProfileSaveActionPolicy {
             ])
         case .checkInHistory:
             PlaceProfileSaveActionPresentation(actions: [
-                action(.checkIn, title: "Check in again", destinationStatus: .been),
+                action(.checkIn, title: "Check in", destinationStatus: .been),
                 action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .sharedInvite:

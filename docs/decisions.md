@@ -137,7 +137,8 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 ## 2026-09-14 — Repeat Wanna saves preserve check-in state (REC-497)
 
 The place-profile right floating action always starts a fresh Wanna. The left
-Check in / Check in again action keeps its existing behavior. Repeated Wannas
+Check in action keeps its existing behavior and always displays “Check in”,
+including after earlier visits. Repeated Wannas
 are independent history and Feed events; they do not rewrite the parent save.
 Any existing check-in therefore remains authoritative for the map pin, place
 state, rating, and unique-place profile counters. Wanna → Check-in → Wanna

@@ -477,7 +477,7 @@ private struct PlacePhotoCarouselHero: View {
                     PlacePhotoCarouselRoundButton(systemImage: "chevron.left", accessibilityLabel: "Close place")
                     Spacer()
                     HStack(spacing: WanderTheme.spacing2) {
-                        PlacePhotoCarouselRoundButton(systemImage: "plus", isPrimary: true, accessibilityLabel: "Check in again")
+                        PlacePhotoCarouselRoundButton(systemImage: "plus", isPrimary: true, accessibilityLabel: "Check in")
                         PlacePhotoCarouselRoundButton(systemImage: "square.and.arrow.up", accessibilityLabel: "Share place")
                     }
                 }

@@ -310,7 +310,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
 
         XCTAssertEqual(refreshed.route, .floatingActions)
-        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Wanna"])
+        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in", "Wanna"])
         XCTAssertEqual(flagOffSnapshot.route, .legacy)
         XCTAssertEqual(snapshot.route, .floatingActions)
         let legacy = PlaceProfileSaveActionSnapshot(
@@ -669,7 +669,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.editWant.systemImage, "pencil")
         XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
-        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
+        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.editWant.displayTitle, "Edit Wanna")
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: false),
@@ -677,7 +677,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: true),
-            "Check in again"
+            "Check in"
         )
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
@@ -724,7 +724,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check in again",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 ),
