@@ -1414,6 +1414,7 @@ struct MapScreen: View {
     @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var featuredViewportAccountID: String?
     @State private var featuredPlacesRevision: UInt64 = 0
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportLoader = MapFeaturedViewportLoader()
@@ -1620,8 +1621,17 @@ struct MapScreen: View {
         _routedVisiblePlaceGroup = State(initialValue: nil)
     }
 
+    private var authorizedSelectionPlaces: [VisiblePlace] {
+        MapActivePinRetention.authorizationCorpus(
+            socialPlaces: store.visiblePlaces(),
+            featuredPlaces: featuredViewportPlaces ?? [],
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id
+        )
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -1672,7 +1682,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -1800,7 +1810,7 @@ struct MapScreen: View {
     private var mapFilterEmptyMessage: String? {
         guard MapActivePinRetention.authorizedPlace(
                   routedVisiblePlace,
-                  within: store.visiblePlaces()
+                  within: authorizedSelectionPlaces
               ) == nil,
               mapSearchCandidates.isEmpty,
               Self.normalized(mapQuery).isEmpty,
@@ -2809,7 +2819,7 @@ struct MapScreen: View {
     }
 
     private func handleMapSearchAuthorizationChange() {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -3402,6 +3412,7 @@ struct MapScreen: View {
 
     private func updateFeaturedViewportPlaces(_ places: [VisiblePlace]) {
         featuredViewportPlaces = places
+        featuredViewportAccountID = store.currentUser.id
         featuredPlacesRevision &+= 1
     }
 
@@ -10297,6 +10308,25 @@ enum MapPinSelectionMotionStyle {
 }
 
 enum MapActivePinRetention {
+    /// Featured's anonymous place aggregates are server-authorized separately
+    /// from personal/social saves. Use the unranked response so recentering or
+    /// the Featured presentation cap cannot revoke the selected place.
+    /// Named saves must still pass the store's current authorization checks.
+    static func authorizationCorpus(
+        socialPlaces: [VisiblePlace],
+        featuredPlaces: [VisiblePlace],
+        featuredAccountID: String?,
+        currentUserID: String
+    ) -> [VisiblePlace] {
+        guard featuredAccountID == currentUserID else { return socialPlaces }
+        var seen = Set(socialPlaces.map(\.userPlace.id))
+        return socialPlaces + featuredPlaces.filter {
+            $0.isCommunityAggregate
+                && $0.userPlace.deletedAt == nil
+                && seen.insert($0.userPlace.id).inserted
+        }
+    }
+
     static func authorizedPlace(
         _ retainedPlace: VisiblePlace?,
         within authorizedPlaces: [VisiblePlace]
@@ -17384,7 +17414,8 @@ struct PlaceActivitySection: View {
                         PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
                     }
 
-                    if entries.isEmpty {
+                    if entries.isEmpty,
+                       store.shouldShowLegacyCheckInSummary(for: userPlace.serverID ?? userPlace.id) {
                         entries.append(
                             PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
                         )
@@ -17440,8 +17471,8 @@ struct PlaceActivitySection: View {
         Array(
             Set(
                 saves.compactMap { summary in
-                    let serverID = summary.visiblePlace.userPlace.serverID
-                    return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                    let serverID = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
+                    return UUID(uuidString: serverID) == nil ? nil : serverID
                 }
             )
         )
@@ -17678,6 +17709,7 @@ private struct PlaceActivityCard: View {
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
                 isEngagementEnabled: isEngagementResolved,
+                resolveContext: resolveEngagementContext,
                 reportSubjectOverride: reportableUserPlaceSubject
             )
 
@@ -17766,7 +17798,7 @@ private struct PlaceActivityCard: View {
         let visiblePlace = entry.summary.visiblePlace
         let match = store.placeActivityEngagementMatch(
             userPlaceID: entry.userPlace.serverID ?? entry.userPlace.id,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         )
         let location = [visiblePlace.place.locality, visiblePlace.place.region]
@@ -17799,13 +17831,27 @@ private struct PlaceActivityCard: View {
         )
     }
 
+    @MainActor
+    private func resolveEngagementContext() async -> ActivityEngagementContext? {
+        if isEngagementResolved { return engagementContext }
+        let requestUserID = store.currentUser.id
+        let userPlaceID = entry.userPlace.serverID ?? entry.userPlace.id
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: [userPlaceID], backend: backend)
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return nil }
+        if isEngagementResolved { return engagementContext }
+        // Refresh the source as well: an owner deletion removes the tile instead
+        // of leaving an unresolved action row attached to stale visit data.
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [userPlaceID], backend: backend)
+        return nil
+    }
+
     private var isEngagementResolved: Bool {
-        guard let serverID = entry.userPlace.serverID,
-              UUID(uuidString: serverID) != nil
+        let serverID = entry.userPlace.serverID ?? entry.userPlace.id
+        guard UUID(uuidString: serverID) != nil
         else { return true }
         return store.placeActivityEngagementMatch(
             userPlaceID: serverID,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         ) != nil
     }

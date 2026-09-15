@@ -290,6 +290,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var activityCommentsByID: [String: [ActivityComment]] = [:]
     @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
     @Published private(set) var activityEngagementErrorByID: [String: String] = [:]
+    private var loadedRemotePlaceActivityIDs = Set<String>()
     private var pendingActivityLikeIDs = Set<String>()
     private var pendingActivityCommentDeletionIDs = Set<String>()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
@@ -1181,6 +1182,7 @@ final class WanderStore: ObservableObject {
             || !activityEngagementByID.isEmpty
             || !activityCommentsByID.isEmpty
             || !placeActivityEngagementMatches.isEmpty
+            || !loadedRemotePlaceActivityIDs.isEmpty
             || lastRemoteError != nil
             || profiles.contains { $0.id != currentUser.id }
             || !follows.isEmpty
@@ -1209,6 +1211,7 @@ final class WanderStore: ObservableObject {
             activityEngagementByID = [:]
             activityCommentsByID = [:]
             placeActivityEngagementMatches = []
+            loadedRemotePlaceActivityIDs = []
             activityEngagementErrorByID = [:]
             pendingActivityLikeIDs = []
             pendingActivityCommentDeletionIDs = []
@@ -1495,6 +1498,7 @@ final class WanderStore: ObservableObject {
         activityEngagementByID = [:]
         activityCommentsByID = [:]
         placeActivityEngagementMatches = []
+        loadedRemotePlaceActivityIDs = []
         activityEngagementErrorByID = [:]
         pendingActivityLikeIDs = []
         pendingActivityCommentDeletionIDs = []
@@ -1917,18 +1921,26 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshPlaceActivityEngagement(userPlaceIDs: [String], backend: WanderBackend?) async {
-        let remoteIDs = Array(Set(userPlaceIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        let requestUserID = currentUser.id
+        let remoteIDs = Array(Set(userPlaceIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })).sorted()
         guard !remoteIDs.isEmpty,
               let repository = backend?.activityEngagementRepository
         else { return }
 
         do {
-            let matches = try await repository.placeActivitySummaries(userPlaceIDs: remoteIDs)
+            var matches: [PlaceActivityEngagementMatch] = []
+            for start in stride(from: 0, to: remoteIDs.count, by: 100) {
+                matches += try await repository.placeActivitySummaries(
+                    userPlaceIDs: Array(remoteIDs[start..<min(start + 100, remoteIDs.count)])
+                )
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            }
             let refreshedIDs = Set(remoteIDs)
-            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID) }
+            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID.lowercased()) }
             placeActivityEngagementMatches.append(contentsOf: matches)
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
+            for id in remoteIDs { refreshedErrors["user-place:\(id)"] = nil }
             for match in matches where !pendingActivityLikeIDs.contains(match.activityID) {
                 refreshedEngagement[match.activityID] = match.engagement
                 refreshedErrors[match.activityID] = nil
@@ -1940,6 +1952,7 @@ final class WanderStore: ObservableObject {
                 activityEngagementErrorByID = refreshedErrors
             }
         } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
             let message = remoteErrorMessage(error)
             var refreshedErrors = activityEngagementErrorByID
             for userPlaceID in remoteIDs {
@@ -1957,9 +1970,9 @@ final class WanderStore: ObservableObject {
         preferredKinds: [FeedActivityKind]
     ) -> PlaceActivityEngagementMatch? {
         let candidates = placeActivityEngagementMatches.filter { match in
-            guard match.userPlaceID == userPlaceID else { return false }
+            guard match.userPlaceID.lowercased() == userPlaceID.lowercased() else { return false }
             if let visitID {
-                return match.visitID == visitID
+                return match.visitID?.lowercased() == visitID.lowercased() && preferredKinds.contains(match.kind)
             }
             // Remote place projections may not have materialized the explicit
             // visit locally yet. In that case the immutable event is still the
@@ -4672,6 +4685,10 @@ final class WanderStore: ObservableObject {
         return placeAttributes
             .filter { userPlaceIDs.contains($0.userPlaceID) }
             .sorted { $0.questionKey < $1.questionKey }
+    }
+
+    func shouldShowLegacyCheckInSummary(for userPlaceID: String) -> Bool {
+        !loadedRemotePlaceActivityIDs.contains(userPlaceID.lowercased())
     }
 
     func visits(for userPlaceID: String) -> [LocalPlaceVisit] {
@@ -8364,6 +8381,7 @@ final class WanderStore: ObservableObject {
         backend: WanderBackend?
     ) async -> Bool {
         guard let backend, backend.visitRepository != nil else { return true }
+        let requestUserID = currentUser.id
 
         let requestedUserPlaceIDs = Array(
             Set(
@@ -8480,6 +8498,8 @@ final class WanderStore: ObservableObject {
             guard !wasCancelled else { return false }
         }
 
+        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        loadedRemotePlaceActivityIDs.formUnion(refreshedUserPlaceIDs.map { $0.lowercased() })
         let hydratedVisitIDs = Set(hydratedVisits.map(\.visitID))
         let staleVisitIDs = Set<String>(
             placeVisits.compactMap { visit in
