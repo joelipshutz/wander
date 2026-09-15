@@ -98,6 +98,9 @@ final class CommonGroundMockupUITests: XCTestCase {
         let personalNote = "This looks like a good spot for our next catch-up."
         let noteField = identifiedElement("common-ground.invitation.message", in: app)
         XCTAssertTrue(scrollTo(noteField, in: app))
+        // Bring the form above the bottom inset before editing; a just-visible
+        // field can be hittable while the scroll view is still settling.
+        app.swipeUp()
         noteField.tap()
         noteField.typeText(personalNote)
         XCTAssertTrue(scrollTo(whenButton, in: app))
