@@ -299,6 +299,31 @@ struct ParsedTag: Hashable {
     let displayTitle: String
 }
 
+enum PlaceProfileAttributePresentation {
+    static func displayValues(from attribute: LocalPlaceAttribute) -> [String] {
+        let values = PlaceAttributeValuePresentation.strings(from: attribute.valueJSON)
+        guard PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey) else {
+            return values
+        }
+
+        let label = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey)?.displayLabel
+            ?? "Saved detail"
+        return values.map { "\(label): \($0)" }
+    }
+
+    /// Only the catalog's explicit meaning is eligible for matching. Display
+    /// text remains separate so an answer such as "No" never matches "outlets".
+    static func searchTerms(from attribute: LocalPlaceAttribute) -> [String] {
+        guard attribute.valueType == "single_choice",
+              let question = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey),
+              let data = attribute.valueJSON.data(using: .utf8),
+              let answer = try? JSONDecoder().decode(String.self, from: data)
+        else { return [] }
+
+        return question.searchTerms(for: answer)
+    }
+}
+
 enum PlaceProfileTagParser {
     static func tags(from attribute: LocalPlaceAttribute) -> [ParsedTag] {
         guard shouldSurface(attribute.questionKey) else { return [] }
@@ -306,6 +331,8 @@ enum PlaceProfileTagParser {
     }
 
     private static func shouldSurface(_ questionKey: String) -> Bool {
+        // These are contextual answers, not shared tastes or standalone tags.
+        guard !PlaceCheckInQuestionCatalog.isDetailQuestion(questionKey) else { return false }
         switch questionKey {
         case "interest_signal", "rating_signal", PlaceMemoryAttributeKeys.restaurantCuisine:
             return false

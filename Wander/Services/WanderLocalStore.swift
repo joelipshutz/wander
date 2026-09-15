@@ -4300,9 +4300,11 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionPlacePayload(_ visiblePlace: VisiblePlace) -> ListSuggestionPlacePayload {
-        let attributesText = attributes(for: visiblePlace.userPlace.id)
-            .map(\.valueJSON)
-            .joined(separator: " ")
+        let attributesText = visiblePlace.attributes.flatMap { attribute in
+            PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey)
+                ? PlaceProfileAttributePresentation.searchTerms(from: attribute)
+                : [attribute.valueJSON]
+        }.joined(separator: " ")
         return ListSuggestionPlacePayload(
             visiblePlaceID: visiblePlace.id,
             placeID: visiblePlace.place.id,
@@ -4328,7 +4330,18 @@ final class WanderStore: ObservableObject {
         #endif
         let localProjection = localVisiblePlaces(filters: filters)
         let remoteProjection = remoteVisiblePlaces(filters: filters)
-        let projected = mergeVisiblePlaces(localProjection.places + remoteProjection)
+        let visitsByUserPlaceID = Dictionary(grouping: placeVisits, by: \.userPlaceID)
+        let projected = mergeVisiblePlaces(localProjection.places + remoteProjection).map { visiblePlace in
+            var projected = visiblePlace
+            let ids = Set([visiblePlace.userPlace.localID, visiblePlace.userPlace.id])
+            projected.attributes = PlaceCheckInObservationProjection.attributes(
+                base: visiblePlace.attributes,
+                visits: ids.flatMap { visitsByUserPlaceID[$0] ?? [] },
+                userPlaceID: visiblePlace.userPlace.id,
+                status: visiblePlace.userPlace.status
+            )
+            return projected
+        }
         if filters == PlaceFilters() {
             var lookup = localProjection.listLookup
             for (offset, visiblePlace) in remoteProjection.enumerated() {
@@ -4773,6 +4786,7 @@ final class WanderStore: ObservableObject {
             existingVisit.note = draft.note
             existingVisit.ratingScore = PlaceRating.normalized(draft.ratingScore)
             existingVisit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: draft.attributes)
+            existingVisit.attributeAnswersAreComplete = true
             existingVisit.setDerivedTags(VisitAttributeAnswers.tags(from: draft.attributes))
             existingVisit.backfilledFromUserPlace = result.backfilledFromUserPlace
             existingVisit.syncStateRaw = SyncState.synced.rawValue
@@ -5370,6 +5384,21 @@ final class WanderStore: ObservableObject {
         return visit
     }
 
+    func canEditVisitAnswers(visitID: String) -> Bool {
+        guard let visit = currentUserVisit(matching: visitID) else { return false }
+        return hasEditableVisitAnswers(visit)
+    }
+
+    private func hasEditableVisitAnswers(_ visit: LocalPlaceVisit) -> Bool {
+        if let complete = visit.attributeAnswersAreComplete { return complete }
+        // Older local drafts already assigned a UUID before their first sync.
+        // Only their known local provenance permits an empty legacy answer set.
+        let isUnsentLocalDraft = visit.localID.hasPrefix("local_visit_")
+            && visit.serverUpdatedAt == nil
+            && [.localOnly, .pendingCreate, .failed].contains(visit.syncState)
+        return visit.serverID == nil || isUnsentLocalDraft || visit.attributeAnswersJSON != "[]"
+    }
+
     @discardableResult
     func updateVisit(
         visitID: String,
@@ -5382,7 +5411,8 @@ final class WanderStore: ObservableObject {
         replacesNote: Bool = false,
         replacesRating: Bool = false
     ) -> LocalPlaceVisit? {
-        guard let visit = currentUserVisit(matching: visitID) else { return nil }
+        guard let visit = currentUserVisit(matching: visitID),
+              hasEditableVisitAnswers(visit) else { return nil }
 
         let now = Date.now
         if let visitedAt {
@@ -5400,6 +5430,7 @@ final class WanderStore: ObservableObject {
         }
         if let attributes {
             visit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+            visit.attributeAnswersAreComplete = true
             visit.setDerivedTags(VisitAttributeAnswers.tags(from: attributes))
             if let userPlace = currentUserPlace(matching: visit.userPlaceID) {
                 updatePlaceClassificationAttributes(
@@ -5452,11 +5483,25 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func deleteVisit(visitID: String) -> Bool {
+    func deleteVisit(
+        visitID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> Bool {
         guard let visit = currentUserVisit(matching: visitID) else { return false }
         let remoteOwnerPlace = remoteCurrentUserVisiblePlace(
             matching: visit.userPlaceID
         )
+        do {
+            try privateQuestionPreferences.removeAnswers(
+                ownerUserID: currentUser.id,
+                userPlaceID: currentUserPlace(matching: visit.userPlaceID)?.localID
+                    ?? remoteOwnerPlace?.userPlace.localID ?? visit.userPlaceID,
+                visitID: visit.serverID ?? visit.localID
+            )
+        } catch {
+            lastRemoteError = "This check-in couldn’t be deleted because its private answers couldn’t be removed from this device."
+            return false
+        }
 
         let now = Date.now
         let visitIDs = matchingVisitIDs(visit.id)
@@ -6595,8 +6640,11 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removeSave(userPlaceID: String) -> RemoveSaveResult? {
-        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+    func removeSave(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences) else {
             return nil
         }
 
@@ -6604,8 +6652,12 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removeSave(userPlaceID: String, backend: WanderBackend?) async -> RemoveSaveResult? {
-        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+    func removeSave(
+        userPlaceID: String,
+        backend: WanderBackend?,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) async -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences) else {
             return nil
         }
 
@@ -6891,6 +6943,11 @@ final class WanderStore: ObservableObject {
             return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
         }
 
+        guard hasEditableVisitAnswers(visit) else {
+            lastRemoteError = "Load this check-in's saved details before editing. Connect and try again."
+            return false
+        }
+
         if visit.serverID == nil {
             markPlaceVisit(localOrServerID: visit.id, serverID: UUID().uuidString.lowercased(), syncState: .pendingCreate)
         } else {
@@ -6922,7 +6979,7 @@ final class WanderStore: ObservableObject {
                 syncState: .synced,
                 result: result.visitResult
             )
-            lastRemoteError = nil
+            lastRemoteError = visit.lastSyncError
             return true
         } catch {
             let message = remoteErrorMessage(error)
@@ -7079,11 +7136,15 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func deleteVisit(visitID: String, backend: WanderBackend?) async -> Bool {
+    func deleteVisit(
+        visitID: String,
+        backend: WanderBackend?,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) async -> Bool {
         let existingVisit = placeVisits.first { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }
         let remoteVisitID = existingVisit?.serverID
         let requiresRemoteDelete = existingVisit?.serverUpdatedAt != nil || existingVisit?.syncState != .pendingCreate
-        let didDeleteLocally = deleteVisit(visitID: visitID)
+        let didDeleteLocally = deleteVisit(visitID: visitID, privateQuestionPreferences: privateQuestionPreferences)
         guard didDeleteLocally else { return false }
         guard requiresRemoteDelete, let backend, let remoteVisitID else {
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
@@ -8308,9 +8369,13 @@ final class WanderStore: ObservableObject {
                     visitedAt: result.visitedAt,
                     note: result.note,
                     ratingScore: result.ratingScore,
+                    attributeAnswersJSON: result.attributeAnswersJSON ?? "[]",
                     tags: result.tags,
                     backfilledFromUserPlace: result.backfilledFromUserPlace,
-                    syncState: .synced
+                    syncState: .synced,
+                    createdAt: result.createdAt ?? result.visitedAt,
+                    updatedAt: result.updatedAt ?? result.visitedAt,
+                    attributeAnswersAreComplete: result.attributeAnswersJSON != nil
                 )
             )
         }
@@ -8323,18 +8388,24 @@ final class WanderStore: ObservableObject {
         to visit: LocalPlaceVisit
     ) {
         let now = Date.now
+        let privateMigrationWarning = migratePrivateQuestionAnswers(for: visit, to: result.visitID)
         visit.serverID = result.visitID
         visit.userPlaceID = result.userPlaceID
         visit.visitedAt = result.visitedAt
         visit.note = result.note
         visit.ratingScore = PlaceRating.normalized(result.ratingScore)
+        if let answers = result.attributeAnswersJSON {
+            visit.attributeAnswersJSON = answers
+            visit.attributeAnswersAreComplete = true
+        }
+        if let createdAt = result.createdAt { visit.createdAt = createdAt }
         visit.setDerivedTags(result.tags)
         visit.backfilledFromUserPlace = result.backfilledFromUserPlace
         visit.syncStateRaw = SyncState.synced.rawValue
         visit.localUpdatedAt = now
         visit.serverUpdatedAt = now
-        visit.lastSyncError = nil
-        visit.updatedAt = now
+        visit.lastSyncError = privateMigrationWarning
+        visit.updatedAt = result.updatedAt ?? now
         visit.deletedAt = nil
     }
 
@@ -8489,9 +8560,13 @@ final class WanderStore: ObservableObject {
                         visitedAt: result.visitedAt,
                         note: result.note,
                         ratingScore: result.ratingScore,
+                        attributeAnswersJSON: result.attributeAnswersJSON ?? "[]",
                         tags: result.tags,
                         backfilledFromUserPlace: result.backfilledFromUserPlace,
-                        syncState: .synced
+                        syncState: .synced,
+                        createdAt: result.createdAt ?? result.visitedAt,
+                        updatedAt: result.updatedAt ?? result.visitedAt,
+                        attributeAnswersAreComplete: result.attributeAnswersJSON != nil
                     )
                 )
             }
@@ -9107,7 +9182,16 @@ final class WanderStore: ObservableObject {
             actionLinksJSON: place.actionLinksJSON
         )
 
-        let attributeDrafts = attributes(for: userPlace.id).map { attribute in
+        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+        let effectiveAttributes = userPlace.status == .been
+            ? PlaceCheckInObservationProjection.attributes(
+                base: attributes(for: userPlace.id),
+                visits: placeVisits.filter { userPlaceIDs.contains($0.userPlaceID) },
+                userPlaceID: userPlace.id,
+                status: userPlace.status
+            )
+            : attributes(for: userPlace.id)
+        let attributeDrafts = effectiveAttributes.map { attribute in
             PlaceAttributeDraft(
                 questionKey: attribute.questionKey,
                 valueType: attribute.valueType,
@@ -9367,6 +9451,7 @@ final class WanderStore: ObservableObject {
             existing.note = userPlace.note
             existing.ratingScore = userPlace.ratingScore
             existing.attributeAnswersJSON = attributeAnswersJSON
+            existing.attributeAnswersAreComplete = true
             existing.setDerivedTags(tags)
             existing.deletedAt = nil
             existing.updatedAt = now
@@ -9564,6 +9649,29 @@ final class WanderStore: ObservableObject {
         persist()
     }
 
+    @discardableResult
+    func migratePrivateQuestionAnswers(
+        for visit: LocalPlaceVisit,
+        to stableVisitID: String,
+        preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> String? {
+        guard currentUserVisit(matching: visit.id) != nil else { return nil }
+        let priorIDs = [visit.serverID, visit.localID].compactMap { $0 }
+        do {
+            for priorID in priorIDs where priorID != stableVisitID {
+                try preferences.migrateAnswers(ownerUserID: currentUser.id, fromVisitID: priorID, toVisitID: stableVisitID)
+            }
+            return nil
+        } catch {
+            // Preserve the original record and retain the accepted server ID
+            // so retrying cannot create a duplicate remote check-in. A later
+            // reconciliation retries promotion from the still-known local ID.
+            let warning = "Your private answers couldn’t be linked to this check-in on this device. The original private answers are still stored."
+            lastRemoteError = warning
+            return warning
+        }
+    }
+
     private func markPlaceVisit(
         localOrServerID: String,
         serverID: String? = nil,
@@ -9576,6 +9684,9 @@ final class WanderStore: ObservableObject {
         }
 
         let previousIDs = matchingVisitIDs(localOrServerID)
+        let privateMigrationWarning = (result?.visitID ?? serverID ?? visit.serverID).flatMap {
+            migratePrivateQuestionAnswers(for: visit, to: $0)
+        }
         if let serverID {
             visit.serverID = serverID
         }
@@ -9585,14 +9696,19 @@ final class WanderStore: ObservableObject {
             visit.visitedAt = result.visitedAt
             visit.note = result.note
             visit.ratingScore = result.ratingScore
+            if let answers = result.attributeAnswersJSON {
+                visit.attributeAnswersJSON = answers
+                visit.attributeAnswersAreComplete = true
+            }
+            if let createdAt = result.createdAt { visit.createdAt = createdAt }
             visit.setDerivedTags(result.tags)
             visit.backfilledFromUserPlace = result.backfilledFromUserPlace
         }
         visit.syncStateRaw = syncState.rawValue
-        visit.lastSyncError = error
+        visit.lastSyncError = error ?? privateMigrationWarning
         visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
         visit.localUpdatedAt = .now
-        visit.updatedAt = .now
+        visit.updatedAt = result?.updatedAt ?? .now
 
         let canonicalVisitID = visit.serverID ?? visit.id
         for photo in visitPhotos where previousIDs.contains(photo.visitID) {
@@ -9704,6 +9820,7 @@ final class WanderStore: ObservableObject {
                 return false
             }
             markPlaceVisit(localOrServerID: visit.id, serverID: result.visitID, syncState: .synced, result: result)
+            lastRemoteError = visit.lastSyncError
             return true
         } catch {
             let message = remoteErrorMessage(error)
@@ -9728,13 +9845,16 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func removeSaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+    private func removeSaveLocally(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore
+    ) -> LocalRemoveSaveChange? {
         guard let userPlace = userPlaces.first(where: { userPlace in
             userPlace.userID == currentUser.id
                 && userPlace.deletedAt == nil
                 && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
         }) else {
-            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID)
+            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences)
         }
 
         let targetPlace = places.first { place in
@@ -9758,6 +9878,21 @@ final class WanderStore: ObservableObject {
                     || candidate.serverID.map { previousUserPlaceIDs.contains($0) } == true)
         }
         guard !userPlacesToRemove.isEmpty else {
+            return nil
+        }
+
+        do {
+            for visit in placeVisits where previousUserPlaceIDs.contains(visit.userPlaceID) {
+                try privateQuestionPreferences.removeAnswers(
+                    ownerUserID: currentUser.id, userPlaceID: visit.userPlaceID,
+                    visitID: visit.serverID ?? visit.localID
+                )
+            }
+            for alias in previousUserPlaceIDs {
+                try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
+            }
+        } catch {
+            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
             return nil
         }
 
@@ -9815,7 +9950,10 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    private func removeRemoteOnlySaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+    private func removeRemoteOnlySaveLocally(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore
+    ) -> LocalRemoveSaveChange? {
         guard let targetVisiblePlace = remoteVisiblePlaceCache.first(where: { visiblePlace in
             visiblePlace.owner.id == currentUser.id
                 && (visiblePlace.userPlace.id == userPlaceID
@@ -9830,6 +9968,24 @@ final class WanderStore: ObservableObject {
                 && VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
         }
         guard !matchingVisiblePlaces.isEmpty else {
+            return nil
+        }
+
+        let privateParentAliases = matchingVisiblePlaces.reduce(into: Set<String>()) { aliases, visible in
+            aliases.formUnion(Self.referenceIDs(for: visible.userPlace))
+        }
+        do {
+            for visit in placeVisits where privateParentAliases.contains(visit.userPlaceID) {
+                try privateQuestionPreferences.removeAnswers(
+                    ownerUserID: currentUser.id, userPlaceID: visit.userPlaceID,
+                    visitID: visit.serverID ?? visit.localID
+                )
+            }
+            for alias in privateParentAliases {
+                try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
+            }
+        } catch {
+            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
             return nil
         }
 
@@ -11214,9 +11370,13 @@ final class WanderStore: ObservableObject {
 
     private func matchesTags(_ tags: Set<String>, visiblePlace: VisiblePlace) -> Bool {
         guard !tags.isEmpty else { return true }
-        let attributeText = attributes(for: visiblePlace.userPlace.id)
-            .map(\.valueJSON)
-            .joined(separator: " ")
+        let attributeText = visiblePlace.attributes.flatMap { attribute in
+            if PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey) {
+                return visiblePlace.userPlace.status == .been
+                    ? PlaceProfileAttributePresentation.searchTerms(from: attribute) : []
+            }
+            return [attribute.valueJSON]
+        }.joined(separator: " ")
         let haystack = [
             visiblePlace.userPlace.note,
             attributeText

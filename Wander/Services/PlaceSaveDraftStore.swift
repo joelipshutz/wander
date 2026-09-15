@@ -31,6 +31,7 @@ struct PlaceSaveDraftForm: Codable, Equatable {
     var photoAttachments: [PlaceSaveDraftPhoto]
     var selectedInviteeUserIDs: [String]
     var isShowingOptionalDetails: Bool
+    var customQuestionAnswers: [String: String]? = nil
 }
 
 struct PlaceSaveDraftUpdate: Equatable {

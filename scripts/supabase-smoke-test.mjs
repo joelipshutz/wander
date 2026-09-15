@@ -28,6 +28,13 @@ async function main() {
     return;
   }
 
+  if (options.writeLinkedSQL) {
+    runLinkedSmokeChecks(DEFAULT_SMOKE_USER_ID, DEFAULT_SMOKE_COLLABORATOR_ID,
+      DEFAULT_SMOKE_STRANGER_ID, options.migrationPreviews ?? [], options.migrationTest,
+      options.writeLinkedSQL);
+    return;
+  }
+
   loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? DEFAULT_ENV_FILE);
 
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
@@ -67,7 +74,7 @@ async function main() {
       }
       if (options.migrationTest) {
         const testSQL = transactionBody(
-          readFileSync(new URL(resolve(options.migrationTest), "file:"), "utf8"),
+          loadStrictPgTapSQL(new URL(resolve(options.migrationTest), "file:")),
           "rollback",
         );
         const results = await client.query(testSQL);
@@ -92,6 +99,10 @@ async function main() {
           strangerUserID,
         );
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await client.query(readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8"));
+        console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
+        await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
+        console.log("ok - owner visit details preserve answers without exposing another user’s history");
         await runCalendarReservationNotificationSmokeChecks(
           client,
           smokeUserID,
@@ -1062,6 +1073,10 @@ function parseArgs(args) {
         parsed.dbURL = requiredValue(args, index, arg);
         index += 1;
         break;
+      case "--write-linked-sql":
+        parsed.writeLinkedSQL = requiredValue(args, index, arg);
+        index += 1;
+        break;
       case "--linked":
         parsed.linked = true;
         break;
@@ -1102,6 +1117,7 @@ Usage:
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
+  --write-linked-sql <path>        Write the same rollback-only linked suite for an authorized SQL runner; reads no credentials.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
   --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
   --migration-test <path>          Run one strict rollback-only pgTAP file against the current schema and any supplied previews.
@@ -1144,13 +1160,14 @@ function runLinkedSmokeChecks(
   strangerUserID,
   migrationPreviewPaths,
   migrationTestPath,
+  outputSQLPath,
 ) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
   const migrationPreviewSQL = migrationPreviewPaths
     .map(loadMigrationPreview)
     .join("\n\n");
-  const migrationPreviewTestSQL = migrationPreviewPaths.length > 0
+  const migrationPreviewTestSQL = migrationTestPath || migrationPreviewPaths.length > 0
     ? transactionBody(
       loadStrictPgTapSQL(
         migrationTestPath
@@ -1184,6 +1201,11 @@ function runLinkedSmokeChecks(
         migrationPreviewSQL,
         migrationPreviewTestSQL,
       )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}`;
+    if (outputSQLPath) {
+      writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
+      console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
+      return;
+    }
     writeFileSync(filePath, linkedSQL, {
       encoding: "utf8",
       mode: 0o600,
@@ -2478,6 +2500,8 @@ $user_place_soft_delete$;
 ${migrationPreviewTestSQL}
 
 reset role;
+${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}
+${readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8")}
 rollback;
 `;
 }

@@ -1262,7 +1262,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "art supply store"), WanderPlaceCategory.shopping)
 
         let restaurantBlocks = AddQuestionTemplates.blocks(category: "thai restaurant", status: .been)
-        XCTAssertEqual(restaurantBlocks.map(\.key), ["price", "occasion", "restaurant_tags"])
+        XCTAssertEqual(restaurantBlocks.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.key) }.count, 3)
+        XCTAssertEqual(restaurantBlocks.last?.key, "restaurant_tags")
         XCTAssertFalse(restaurantBlocks.contains { $0.key == PlaceMemoryAttributeKeys.personalLabels })
     }
 

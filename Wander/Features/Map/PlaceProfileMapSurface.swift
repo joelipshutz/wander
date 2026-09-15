@@ -3618,7 +3618,7 @@ private enum PlaceProfileCopy {
     }
 
     static func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+        PlaceProfileAttributePresentation.displayValues(from: attribute).map { value in
             PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
     }
