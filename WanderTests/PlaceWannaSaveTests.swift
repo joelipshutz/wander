@@ -146,6 +146,84 @@ final class PlaceWannaSaveTests: XCTestCase {
         XCTAssertEqual(repository.attempts.count, 2)
     }
 
+    func testWannaSubmissionReturnsAfterLocalPersistenceWhileServerIsStillWaiting() async throws {
+        var snapshot: WanderStoreSnapshot?
+        var flushed = false
+        let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 },
+                                                 flush: { flushed = true })
+        let store = WanderStore(fixtures: .seed(), persistence: persistence)
+        let saved = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                        note: "Visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        parent.syncStateRaw = SyncState.synced.rawValue
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let networkStarted = expectation(description: "Server request started")
+        let formCompleted = expectation(description: "Form completed without waiting for server")
+        var releaseResponse: CheckedContinuation<Void, Never>?
+        repository.onSave = {
+            await withCheckedContinuation { continuation in
+                releaseResponse = continuation
+                networkStarted.fulfill()
+            }
+        }
+        let operationID = UUID()
+        let context = MapPlaceSaveContext.addCandidate(candidate, sourceType: .manual,
+                                                       defaultVisibility: .followers).freshWannaContext()
+        let submission = MapPlaceSaveSubmission(context: context, candidate: candidate, status: .wannaGo,
+            visibility: .followers, ratingScore: nil, note: "Queued Wanna", attributes: [],
+            photoAttachments: [], inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+            visitedAt: .now, plannedDate: nil, wannaOperationID: operationID)
+        let saveTask = Task { @MainActor in
+            let result = await persistNewPlaceSaveSubmission(submission, store: store, backend: backend)
+            XCTAssertEqual(result?.syncState, .pendingCreate)
+            formCompleted.fulfill()
+        }
+        await fulfillment(of: [networkStarted, formCompleted], timeout: 2)
+        XCTAssertTrue(flushed, "The outbox must be flushed before closing the form")
+        XCTAssertEqual(snapshot?.placeWannaSaves?.map(\.id), [operationID.uuidString.lowercased()])
+        XCTAssertFalse(store.placeWannaSaves[0].isSynced)
+        releaseResponse?.resume()
+        await saveTask.value
+        for _ in 0..<100 where !store.placeWannaSaves[0].isSynced { await Task.yield() }
+        XCTAssertTrue(store.placeWannaSaves[0].isSynced)
+        XCTAssertEqual(repository.attempts, [operationID.uuidString.lowercased()])
+        XCTAssertEqual(repository.parentWriteCount, 0)
+        XCTAssertEqual(parent.status, .been)
+    }
+
+    func testFirstWannaBackgroundDeliveryCreatesParentWithoutARepeatEvent() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let repository = RepeatWannaTestRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let parentSaved = expectation(description: "First Wanna delivered")
+        repository.onParentSave = { draft in
+            XCTAssertEqual(draft.status, .wannaGo)
+            XCTAssertEqual(draft.note, "First Wanna")
+            parentSaved.fulfill()
+            return SaveResult(userPlaceID: "22222222-2222-4222-8222-222222222222", syncState: .synced)
+        }
+        let context = MapPlaceSaveContext.addCandidate(candidate, sourceType: .manual,
+                                                       defaultVisibility: .followers).freshWannaContext()
+        let submission = MapPlaceSaveSubmission(context: context, candidate: candidate, status: .wannaGo,
+            visibility: .followers, ratingScore: nil, note: "First Wanna", attributes: [],
+            photoAttachments: [], inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+            wannaOperationID: UUID())
+        let saved = await persistNewPlaceSaveSubmission(submission, store: store, backend: backend)
+        XCTAssertEqual(saved?.syncState, .pendingCreate)
+        await fulfillment(of: [parentSaved], timeout: 2)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }?.userPlace)
+        XCTAssertEqual(parent.syncState, .synced)
+        XCTAssertEqual(parent.serverID, "22222222-2222-4222-8222-222222222222")
+        XCTAssertTrue(store.placeWannaSaves.isEmpty)
+        XCTAssertTrue(repository.attempts.isEmpty)
+        XCTAssertEqual(repository.parentWriteCount, 1)
+    }
+
     func testHistoryRefreshDoesNotEvictAWannaSyncedWhileTheReadWasInFlight() async throws {
         let store = WanderStore(fixtures: .seed())
         let result = store.saveCandidate(candidate, status: .been, visibility: .followers,
@@ -214,8 +292,11 @@ private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRep
     var attempts: [String] = []
     var parentWriteCount = 0
     var onRead: (() async -> [PlaceWannaSave])?
+    var onSave: (() async -> Void)?
+    var onParentSave: ((UserPlaceDraft) async throws -> SaveResult)?
     func saveWanna(_ wanna: PlaceWannaSave) async throws {
         attempts.append(wanna.id)
+        await onSave?()
         if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
     }
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
@@ -224,6 +305,7 @@ private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRep
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] { [] }
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
         parentWriteCount += 1
+        if let onParentSave { return try await onParentSave(draft) }
         throw WanderRemoteError.invalidResponse("Parent must stay unchanged")
     }
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}

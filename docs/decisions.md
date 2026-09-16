@@ -143,6 +143,9 @@ events; they do not rewrite the parent save. Each completed form creates a new
 record with its own date and details, retained until explicitly deleted. New Wanna
 events sort by their own save time in ALL; only the original pre-check-in Wanna
 summary is grouped as historical.
+Completing a Wanna form flushes the local save before dismissing the editor.
+Remote delivery and reminder reconciliation continue afterward; failed delivery
+retains the same record identity for retry instead of holding the form open.
 Any existing check-in therefore remains authoritative for the map pin, place
 state, rating, and unique-place profile counters. Wanna → Check-in → Wanna
 stays Been and does not increase the profile Wanna count. Repeat Wanna-only

@@ -6405,6 +6405,17 @@ final class WanderStore: ObservableObject {
                           placeID: existing.place.serverID)
     }
 
+    /// Deliver one already-persisted form without making its dismissal wait on
+    /// the network. A first Wanna creates the parent; repeats append only an event.
+    func syncSavedWanna(operationID: String, userPlaceID: String, backend: WanderBackend) async {
+        if let wanna = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            if !wanna.isSynced { _ = await syncWannaSave(id: wanna.id, backend: backend) }
+        } else if let parent = currentUserPlace(matching: userPlaceID),
+                  parent.deletedAt == nil, parent.syncState != .synced {
+            _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .directSave)
+        }
+    }
+
     @discardableResult
     func syncPendingWannaSaves(backend: WanderBackend?) async -> Int {
         let pending = placeWannaSaves.filter { !$0.isSynced && $0.ownerID == currentUser.id }

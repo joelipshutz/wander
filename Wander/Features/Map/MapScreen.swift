@@ -5489,12 +5489,16 @@ struct MapScreen: View {
             }
 
             if let userID = auth.state.session?.userID {
-                await pushNotifications.reconcileWannaGoReminders(
-                    store.wannaGoReminderItems,
-                    backend: backend,
-                    userID: userID,
-                    authSession: auth
-                )
+                // Reminder reconciliation must not hold the completed form open.
+                Task { @MainActor in
+                    guard auth.state.session?.userID == userID else { return }
+                    await pushNotifications.reconcileWannaGoReminders(
+                        store.wannaGoReminderItems,
+                        backend: backend,
+                        userID: userID,
+                        authSession: auth
+                    )
+                }
             }
             return result
         case .sharedVisit(let invitation):
@@ -11856,16 +11860,29 @@ func persistNewPlaceSaveSubmission(
     }
 
     if submission.status == .wannaGo {
-        return await store.saveNewWanna(
+        let operationID = (submission.wannaOperationID ?? submission.context.id).uuidString.lowercased()
+        let result = await store.saveNewWanna(
             submission.candidate,
-            operationID: (submission.wannaOperationID ?? submission.context.id).uuidString.lowercased(),
+            operationID: operationID,
             visibility: submission.visibility,
             note: submission.note,
             plannedDate: submission.plannedDate,
             attributes: submission.attributes,
             sourceType: sourceType,
-            backend: backend
+            backend: nil
         )
+        // Closing the form acknowledges durable local storage. The same UUID
+        // stays in the outbox until remote delivery succeeds, including offline.
+        store.flushPersistence()
+        if let backend {
+            let ownerID = store.currentUser.id
+            Task { @MainActor [weak store] in
+                guard let store, store.currentUser.id == ownerID else { return }
+                await store.syncSavedWanna(operationID: operationID,
+                                          userPlaceID: result.userPlaceID, backend: backend)
+            }
+        }
+        return result
     }
 
     let result = await store.saveCandidate(
