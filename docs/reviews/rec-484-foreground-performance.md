@@ -71,7 +71,7 @@ process took 29.9 ms before and 34.8 ms after; the index has a one-time setup
 cost. These figures do not measure iOS snapshot restore, cold launch, FPS,
 MapKit rendering, or network performance.
 
-## Validation status
+## Earlier validation
 
 The first focused simulator run passed all 299 `WanderStoreTests` and
 `ForegroundPerformanceTests`, including the seven new store regressions and
@@ -160,9 +160,104 @@ and after further mutations. Existing calendar hydration, stale-response,
 account-switch, list deletion, and authorization tests remain part of the
 required validation. No schema, analytics event, or splash behavior changes.
 
-Keep the implementation PR in draft while validation is incomplete. The focused
-checks and failing previous-store comparison are complete. Resume with the three
-failed unit tests against the already-built candidate on a quiet host, then
-finish the UI suite. A matching device capture is still required to quantify
-the remaining hangs and decide whether the next pass should address
-presentation work or launch readiness.
+The implementation PR remains in draft. The following verified device captures
+supersede the earlier request for a matching capture and identify the next
+presentation work. Previous incomplete automated validation remains documented
+above; it is not a passing full-suite result.
+
+## Verified September 16 device comparison
+
+The accepted cold, short-return, and long-return recordings all matched the
+Debug binary built from `dc06bd73d` on the iPhone 15 Pro running iOS 26.5.
+Two intervening recordings used another branch's binary and are excluded.
+Every window below starts at Foreground-Active and lasts 30 seconds.
+
+| Scenario | Actual background interval | Stalls over 250 ms | Time overlapping stalls | Longest stall | Sampled main-thread CPU |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cold launch | n/a | 17 | 5.896 s | 0.713 s | 12.709 s |
+| Short return | 5.975 s | 9 | 3.698 s | 0.628 s | 11.483 s |
+| Long return | 33.979 s | 11 | 3.892 s | 0.455 s | 13.781 s |
+
+The cold window was thermally nominal; both returns were fair. On the long
+return, the successive ten-second windows contained 7, 4, and 0 stalls over
+250 ms, with 2.512, 1.380, and 0 seconds overlapping those stalls. This supports
+the observation that interaction improves while the resumed app catches up.
+It does not measure FPS or establish a controlled percentage improvement.
+
+In the long-return window, inclusive application stacks attributed 3.000
+seconds to grouping, 2.863 seconds to grouping-key work, 1.659 seconds to
+available list suggestions, and 2.275 seconds to list-detail body work.
+Profile body work remained visible in the cold and short-return samples.
+These stacks overlap and must not be added together. The capture does not
+establish whether the list-detail work was offscreen.
+
+## Grouping and presentation follow-up
+
+- Grouping now normalizes each distinct `LocalPlace` object once per invocation.
+  The key array supplies the initial and primary group keys. It is discarded
+  at the end of that call because SwiftData models are mutable. Transitive
+  alias merging, primary selection, ordering, and group membership are unchanged.
+- List-suggestion eligibility retains the candidate array and ID set for the
+  four most recently read lists. Keys include presentation revision, viewer,
+  and resolved local/server list references. Each presentation invalidation
+  clears the cache immediately, including inside deferred persistence batches.
+  Existing tombstone exclusions and displayed suggestion ordering are preserved.
+- Both profile-map navigation destinations prepare their dataset and camera
+  only while presented. Unchanged datasets are reused for the same store,
+  viewer, profile, and revision. Returned datasets refresh the clock while
+  sharing their prepared collections. Both profile caches also check the actual
+  store instance, preventing reuse of models from a replaced store with matching
+  IDs and revision numbers.
+
+Seven new tests cover normalization work, mutation between grouping calls,
+repeated suggestion reads, list add/remove, blocks, account changes, bounded
+retention, profile-map date freshness, save removal, and store/profile identity.
+Three were first run against instrumented pre-fix behavior. They failed only
+their work-count assertions; membership, aliases, ordering, and updated data
+assertions passed.
+
+| Regression fixture | Pre-fix work | Required work |
+| --- | ---: | ---: |
+| Grouping repeated saves for 8 distinct place objects | 52 key builds | 8 |
+| Initial suggestions plus 30 unchanged eligibility reads | 31 candidate builds | 1 |
+| Initial profile map plus 20 unchanged reads | 21 dataset builds | 1 |
+
+### Validation of the presentation follow-up
+
+The complete simulator run finished with 2,091 passes, 20 failures, and two
+skips: 1,973 unit tests passed and one failed; 118 UI tests passed and 19
+failed. All 16 foreground regressions passed, including the seven new cases.
+The profile-map navigation/sharing tests passed, as did the list lifecycle,
+large-map selection/dismissal, selected-pin camera work, warm source switching,
+launch-cover readiness, and first-feed-scroll checks. The previously failing
+high-data projection timing and feed-photo fallback tests passed in this run.
+
+The full run failed the trusted-search p95 budget at 55.72 ms against 50 ms,
+the first dense-map zoom at a 672 ms maximum frame gap against 100 ms, and the
+cold-list first-swipe movement assertion. Other failures involved map search
+focus, pin selection, filter dismissal, import interactions, and place-sheet
+navigation/latency. These failures are not established to be pre-existing.
+
+Six relevant failures were rerun with the same built app and original limits,
+after the signed build completed. Five passed: trusted-search timing, trusted
+search UI, dense-map zoom, cold-list first swipe, and place-profile Back
+navigation. The three zoom interactions measured maximum frame gaps of 79,
+48, and 53 ms. `testVisiblePlacePinSelectsOnFirstTap` still failed the expected
+selected-card label assertion after a coordinate tap. The other 14 failures
+were not rerun. The full suite therefore remains non-green; isolated passes
+do not establish why the initial runs failed.
+
+XcodeGen and whitespace validation passed without generated-project changes.
+The signed Debug build for physical iOS succeeded, and its signature verified.
+Build 173 has arm64 debug UUID `79D7C703-3079-3DE0-89A3-F4DE0AE8DE05`.
+Simulator validation used a dedicated iPhone 17 on iOS 26.5 because the
+documented iOS 18.6 runtime is not installed.
+
+This is a phone-test candidate, not a merge-ready performance claim. Keep the
+PR in draft. Run the candidate from the REC-484 Xcode project, verify the binary
+UUID, and capture cold launch plus 5-second and 35-second background returns.
+Also open/reopen a list and the profile map, then check suggestion freshness
+after a list edit. Investigate the persistent pin-selection assertion and
+remaining full-suite failures before merge. The operation counts establish
+avoided work; a new matching phone trace must establish the effect on stalls.
+No splash duration, analytics contract, or backend behavior changes in this pass.

@@ -6,6 +6,177 @@ import XCTest
 
 @MainActor
 final class ForegroundPerformanceTests: XCTestCase {
+
+    func testGroupingBuildsKeysOncePerDistinctPlaceInstance() {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let visible = store.visiblePlaces()
+        let input = visible + visible
+        var builds = 0
+        let groups = VisiblePlaceGrouping.groups(from: input, currentUserID: store.currentUser.id) {
+            builds += 1
+        }
+        XCTAssertFalse(input.isEmpty)
+        XCTAssertEqual(builds, Set(input.map { ObjectIdentifier($0.place) }).count)
+        XCTAssertEqual(groups.flatMap(\.places).count, input.count)
+        for group in groups {
+            XCTAssertEqual(group.key, VisiblePlaceGrouping.key(for: group.primary))
+            for place in group.places {
+                XCTAssertTrue(group.aliases.contains(VisiblePlaceGrouping.key(for: place)))
+            }
+        }
+    }
+
+    func testGroupingKeyReuseDoesNotOutliveMutablePlaceInputs() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let visible = try XCTUnwrap(store.visiblePlaces().first)
+        let before = VisiblePlaceGrouping.groups(from: [visible], currentUserID: store.currentUser.id)
+        visible.place.canonicalName = "Renamed grouping fixture"
+        let after = VisiblePlaceGrouping.groups(from: [visible], currentUserID: store.currentUser.id)
+        XCTAssertNotEqual(before.first?.key, after.first?.key)
+        XCTAssertEqual(after.first?.key, VisiblePlaceGrouping.key(for: visible))
+    }
+
+    func testSuggestionEligibilityReusesReadsAndRefreshesAfterListEdits() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
+        let batch = store.listSuggestions(for: list, limit: 5)
+        let added = try XCTUnwrap(batch.first)
+        XCTAssertGreaterThan(batch.count, 1)
+        let initialBuilds = store.listSuggestionCandidateBuildCount
+        for _ in 0..<30 {
+            XCTAssertEqual(store.availableListSuggestions(batch, for: list).map(\.id), batch.map(\.id))
+        }
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds)
+
+        let result = await store.addVisiblePlace(added.visiblePlace, to: list, backend: nil)
+        XCTAssertEqual(result.outcome, .added)
+        let afterEdit = store.listSuggestionCandidateBuildCount
+        for _ in 0..<10 {
+            XCTAssertEqual(
+                store.availableListSuggestions(batch, for: list).map(\.id),
+                batch.dropFirst().map(\.id)
+            )
+        }
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, afterEdit + 1)
+
+        XCTAssertTrue(store.removePlace(placeID: added.visiblePlace.place.id, from: list))
+        let afterRemoval = store.listSuggestionCandidateBuildCount
+        for _ in 0..<10 {
+            XCTAssertFalse(store.availableListSuggestions(batch, for: list).contains { $0.id == added.id })
+        }
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, afterRemoval + 1)
+        XCTAssertTrue(store.availableListSuggestions([], for: list).isEmpty)
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, afterRemoval + 1)
+    }
+
+    func testSuggestionEligibilityRefreshesAfterBlockAndAccountChange() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let list = try XCTUnwrap(store.createPlaceList(name: "Eligibility fixture", description: "", visibility: .followers))
+        let batch = store.visiblePlaces().map { ListPlaceSuggestion(visiblePlace: $0, reason: "Fixture", score: 1) }
+        let initial = store.availableListSuggestions(batch, for: list)
+        let friend = try XCTUnwrap(initial.first { $0.visiblePlace.owner.id != store.currentUser.id })
+        let initialBuilds = store.listSuggestionCandidateBuildCount
+        store.block(userID: friend.visiblePlace.owner.id)
+        let afterBlock = store.availableListSuggestions(batch, for: list)
+        XCTAssertFalse(afterBlock.contains { $0.visiblePlace.owner.id == friend.visiblePlace.owner.id })
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + 1)
+        XCTAssertEqual(store.availableListSuggestions(batch, for: list).map(\.id), afterBlock.map(\.id))
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + 1)
+
+        store.apply(authState: .signedIn(AuthSession(userID: "eligibility_new_account", displayName: "Fixture", handle: "fixture")))
+        let newAccount = store.availableListSuggestions(batch, for: list)
+        let authorized = Set(store.visiblePlaces().map(\.id))
+        XCTAssertTrue(newAccount.allSatisfy { authorized.contains($0.id) })
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + 2)
+    }
+
+    func testSuggestionEligibilityCacheIsBoundedAcrossLists() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let lists = try (0..<5).map { index in
+            try XCTUnwrap(store.createPlaceList(name: "Eligibility \(index)", description: "", visibility: .followers))
+        }
+        let batch = store.visiblePlaces().map { ListPlaceSuggestion(visiblePlace: $0, reason: "Fixture", score: 1) }
+        XCTAssertFalse(batch.isEmpty)
+        let initialBuilds = store.listSuggestionCandidateBuildCount
+        for list in lists { _ = store.availableListSuggestions(batch, for: list) }
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + lists.count)
+        for list in lists.suffix(4) { _ = store.availableListSuggestions(batch, for: list) }
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + lists.count)
+        _ = store.availableListSuggestions(batch, for: lists[0])
+        XCTAssertEqual(store.listSuggestionCandidateBuildCount, initialBuilds + lists.count + 1)
+    }
+
+    func testProfileMapReusesPreparationButRefreshesClockAndSavedPlaces() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let cache = ProfilePresentationCache()
+        let firstTime = Date(timeIntervalSince1970: 1_787_623_200)
+        var builds = 0
+        func read(now: Date) -> YourMapPrototypeDataset {
+            cache.mapDataset(store: store, profileID: store.currentUser.id, now: now) {
+                builds += 1
+                let projection = store.currentUserCalendarProjection
+                return .make(ownerID: store.currentUser.id, userPlaces: projection.userPlaces,
+                             visits: projection.visits, places: projection.places,
+                             visiblePlaces: projection.visiblePlaces)
+            }
+        }
+        let initial = read(now: firstTime)
+        XCTAssertFalse(initial.places.isEmpty)
+        for index in 1...20 {
+            let time = firstTime.addingTimeInterval(Double(index) * 86_400)
+            let next = read(now: time)
+            XCTAssertEqual(next.now, time, "A warm dataset must not freeze date-relative map lenses")
+            XCTAssertEqual(next.places.map(\.id), initial.places.map(\.id))
+        }
+        XCTAssertEqual(builds, 1)
+        let ownPlace = try XCTUnwrap(store.currentUserCalendarProjection.visiblePlaces.first)
+        XCTAssertNotNil(store.removeSave(userPlaceID: ownPlace.userPlace.id))
+        let refreshed = read(now: firstTime)
+        let projection = store.currentUserCalendarProjection
+        let expected = YourMapPrototypeDataset.make(
+            ownerID: store.currentUser.id, userPlaces: projection.userPlaces,
+            visits: projection.visits, places: projection.places, visiblePlaces: projection.visiblePlaces
+        )
+        XCTAssertEqual(refreshed.places.map(\.id), expected.places.map(\.id))
+        XCTAssertEqual(Set(refreshed.visiblePlaceByPlaceID.keys), Set(expected.visiblePlaceByPlaceID.keys))
+        XCTAssertEqual(builds, 2)
+    }
+
+    func testProfileCachesSeparateStoreInstancesAndProfileIdentities() throws {
+        let first = WanderStore(fixtures: WanderFixtures.seed())
+        let second = WanderStore(fixtures: WanderFixtures.seed())
+        XCTAssertEqual(first.presentationRevision, second.presentationRevision)
+        let cache = ProfilePresentationCache()
+        let firstPresentation = cache.present(store: first, profileID: first.currentUser.id)
+        let secondPresentation = cache.present(store: second, profileID: second.currentUser.id)
+        let firstPlace = try XCTUnwrap(firstPresentation.visiblePlaces.first?.place)
+        let secondPlace = try XCTUnwrap(secondPresentation.visiblePlaces.first?.place)
+        XCTAssertFalse(firstPlace === secondPlace, "A replacement store must not retain previous account model instances")
+        var builds = 0
+        func read(store: WanderStore, profileID: String) {
+            _ = cache.mapDataset(store: store, profileID: profileID) {
+                builds += 1
+                let presentation = cache.present(store: store, profileID: profileID)
+                return .make(ownerID: profileID, userPlaces: presentation.visiblePlaces.map(\.userPlace),
+                             visits: presentation.visits, places: presentation.visiblePlaces.map(\.place),
+                             visiblePlaces: presentation.visiblePlaces)
+            }
+        }
+        read(store: first, profileID: first.currentUser.id)
+        read(store: first, profileID: first.currentUser.id)
+        XCTAssertEqual(builds, 1)
+        read(store: second, profileID: second.currentUser.id)
+        XCTAssertEqual(builds, 2)
+        let friend = try XCTUnwrap(second.visiblePlaces().first { $0.owner.id != second.currentUser.id })
+        read(store: second, profileID: friend.owner.id)
+        read(store: second, profileID: friend.owner.id)
+        XCTAssertEqual(builds, 3)
+        second.block(userID: friend.owner.id)
+        read(store: second, profileID: friend.owner.id)
+        XCTAssertTrue(cache.present(store: second, profileID: friend.owner.id).visiblePlaces.isEmpty)
+        XCTAssertEqual(builds, 4)
+    }
+
     func testRootDescriptionsDoNotRestoreStoresBeforeSwiftUIMountsThem() {
         let probe = RootStoreProbe()
         let descriptions = (0..<100).map { index in

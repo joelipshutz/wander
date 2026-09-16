@@ -522,6 +522,18 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private struct ListSuggestionCandidateProjection {
+        let places: [VisiblePlace]
+        let ids: Set<String>
+    }
+    // Keep only the four most recently read lists. A presentation mutation
+    // discards every entry, including membership tombstones and authorization.
+    private var listSuggestionCandidateCache: [(
+        revision: UInt64,
+        userID: String,
+        listIDs: Set<String>,
+        projection: ListSuggestionCandidateProjection
+    )] = []
     private var visiblePlaceListLookupCache: VisiblePlaceListLookup?
     private var visibleListFallbackResolutionCount = 0
     #if DEBUG
@@ -531,6 +543,7 @@ final class WanderStore: ObservableObject {
     private(set) var currentUserCalendarFingerprintBuildCount = 0
     private(set) var visiblePlacesByOwnerProjectionBuildCount = 0
     private(set) var placesInCommonProjectionBuildCount = 0
+    private(set) var listSuggestionCandidateBuildCount = 0
     #endif
     private struct CachedDiscoverParse {
         let filters: DiscoverFilters
@@ -770,6 +783,7 @@ final class WanderStore: ObservableObject {
         placeGroupingKeyByReferenceIDCache = nil
         visiblePlaceGroupsCache = nil
         visiblePlaceListLookupCache = nil
+        listSuggestionCandidateCache.removeAll(keepingCapacity: true)
         presentationRevision &+= 1
     }
 
@@ -2770,7 +2784,7 @@ final class WanderStore: ObservableObject {
         for list: LocalPlaceList
     ) -> [ListPlaceSuggestion] {
         guard !suggestions.isEmpty else { return [] }
-        let candidateIDs = Set(listSuggestionCandidates(for: list).map(\.id))
+        let candidateIDs = listSuggestionCandidateProjection(for: list).ids
         return suggestions.filter { candidateIDs.contains($0.id) }
     }
 
@@ -4205,7 +4219,21 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {
+        listSuggestionCandidateProjection(for: list).places
+    }
+
+    private func listSuggestionCandidateProjection(for list: LocalPlaceList) -> ListSuggestionCandidateProjection {
         let listIDs = listReferenceIDs(for: list)
+        if let index = listSuggestionCandidateCache.firstIndex(where: {
+            $0.revision == presentationRevision && $0.userID == currentUser.id && $0.listIDs == listIDs
+        }) {
+            let cached = listSuggestionCandidateCache.remove(at: index)
+            listSuggestionCandidateCache.append(cached)
+            return cached.projection
+        }
+        #if DEBUG
+        listSuggestionCandidateBuildCount += 1
+        #endif
         let groupingKeyByReferenceID = placeGroupingKeyByReferenceID()
         var excludedReferenceIDs = Set<String>()
         var excludedGroupingKeys = Set<String>()
@@ -4232,10 +4260,16 @@ final class WanderStore: ObservableObject {
             }
             return !excludedGroupingKeys.contains(groupingKey)
         }
-        return VisiblePlaceGrouping.representativePlaces(
+        let candidates = VisiblePlaceGrouping.representativePlaces(
             from: addablePlaces,
             currentUserID: currentUser.id
         )
+        let projection = ListSuggestionCandidateProjection(places: candidates, ids: Set(candidates.map(\.id)))
+        listSuggestionCandidateCache.append((presentationRevision, currentUser.id, listIDs, projection))
+        if listSuggestionCandidateCache.count > 4 {
+            listSuggestionCandidateCache.removeFirst()
+        }
+        return projection
     }
 
     /// A list with a clear category family should not drift because one
