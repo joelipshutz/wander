@@ -1,8 +1,24 @@
 # Decisions
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Astir Events engineering direction (REC-467)
+
+The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
+plans the complete Events journey with two changing work lanes: parallel backend/history
+and native/Clip/web foundations, then before-event/admission and after-event/history.
+Keep the existing Supabase identity, canonical place and visit history. App Clip/browser
+RSVP and management precede the required app QR at the door. Admission, explicit
+check-in and historical completion remain distinct. Issued waitlist offers hold seats;
+manual pending review and phone verification do not. Use one full-access Team admin
+console role and a prepared offline roster with durable reconciliation.
+
+The [engineering plan](designs/astir-events/engineering-plan.md) records exact D1–D19
+approvals, including code allowance, rescheduling and registration deadlines. This
+entry approves no additional operating default and claims no implemented Events code.
+[Open decisions](designs/astir-events/engineering-open-decisions.md) remain explicit.
 
 ## Feed activity grouping (REC-494)
 

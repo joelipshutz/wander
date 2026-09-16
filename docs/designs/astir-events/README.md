@@ -1,12 +1,14 @@
-# Astir Events — flowchart and screen review
+# Astir Events — flowchart and engineering handoff
 
-Open **[astir-events-flowchart.html](astir-events-flowchart.html)** locally in a browser. This is the September 14 review snapshot: all 165 screen states in 12 continuous sections, with the screens visible inside the flowchart and expandable in place.
+Start with the **[Joe/Ryan engineering handoff](engineering-handoff.md)** for the two-agent work split, shared checkpoints and estimates. Open the **[decision-tree canvas](astir-events-flowchart.html)** to pan and zoom around all **172 screen states in 13 groups**, with previews visible and expandable in place. Each stage reads top to bottom: question diamonds connect labeled Yes/No or actual-state outcomes to visible screens. All 13 stage boards remain on one pannable canvas. Offline admission, home-location rules and staff operations have their own trees.
 
-## Open the actual screens
+Drag the board or use two-finger scrolling to pan; pinch or Ctrl+scroll to zoom. Double-click a decision to frame its branches, or a screen to focus; click a preview to expand, or use search, Fit all and the minimap. The **[original linear view](astir-events-linear.html)** remains available for scrolling and print review.
 
-GitHub shows HTML source rather than running this page. Download the HTML using **Download raw file**, then open the downloaded file in Safari or Chrome. All screen images and the short motion preview are embedded, so the HTML works by itself without installation, a server, sign-in, or an internet connection.
+## Open the screens
 
-For the supporting specification and diagram links, keep this entire directory together. From an existing checkout, open the copy on `main` in a separate worktree to avoid disturbing application work:
+GitHub displays HTML source. Choose **Download raw file**, then open the downloaded HTML in Safari or Chrome. All preview images and the short motion comparison are embedded: no server, sign-in, Xcode build or network connection is needed. The file is about 35 MB; let its download finish.
+
+Keep this directory together to use its specification and supplemental-diagram links. From an existing checkout, a separate review worktree avoids disturbing app work:
 
 ```sh
 git fetch origin main
@@ -14,26 +16,30 @@ git worktree add --detach ../astir-events-review origin/main
 open ../astir-events-review/docs/designs/astir-events/astir-events-flowchart.html
 ```
 
-The HTML is about 35 MB because it includes every preview. Allow the initial download to finish. No Xcode build is needed.
+## Build plan
 
-## Review status
+- [22 implementation tasks](implementation-tasks.md): dependencies, two work lanes, verification and alternative human/agent effort estimates.
+- [Shared contracts](engineering-contracts.md): state machines, operations, permissions and cross-surface continuity.
+- [Engineering plan and review report](engineering-plan.md): selected D1–D19 decisions and source evidence.
+- [Nine remaining decision groups](engineering-open-decisions.md): affected clauses and tasks, with approved behavior kept separate.
+- [Test plan](engineering-test-plan.md), [121-case mapping + 24 risk groups](test-review/coverage-map.md), [failure handling](engineering-failure-modes.md) and [QA journeys](events-qa-test-plan.md).
+- [Performance review](performance-review/README.md) and [rollout/rollback](engineering-rollout.md).
+- [Product specification](product-spec-draft.md), [requirements ledger](audit/requirements.md) and [September 14 amendments](revision-20260914/review-notes.md).
 
-This is a product/design review artifact for [REC-467](https://linear.app/recme/issue/REC-467/define-place-centered-events-guest-rsvp-attendance-and-follow-up). Joe and Ryan are still reviewing it. Engineering planning is in progress; committing these files does not approve unresolved layouts or operating proposals.
+## Approval and validation status
 
-- Each screen identifies its surface: full app, App Clip, browser, text, or internal console.
-- There are 26 primary native mock previews and 139 primary wireframe previews, plus supplementary native variants. Native images come from an isolated SwiftUI design sandbox with sample event data.
-- Confirmed guests can view the guest list and manage their RSVP in App Clip or browser without downloading. Installation is optional after RSVP and required for the entry QR and admission.
-- Door admission and the later explicit event check-in are separate. An event check-in creates one event-labeled visit at the linked place.
-- Reconnection and expanded privacy controls remain deferred. Photo ordering, pin treatments, and other marked proposals remain open where labeled.
+This is the September 15 conditional engineering handoff for [REC-467](https://linear.app/recme/issue/REC-467/define-place-centered-events-guest-rsvp-attendance-and-follow-up). The issue was observed as Done; that status and this documentation merge do not approve open policies or prove Events is implemented. Joe and Ryan's product/design review remains in progress.
 
-See the **[product spec draft](product-spec-draft.md)** for approved requirements versus proposed operating rules. Links to working notes that are not included here are labeled as authoring references. Earlier planning tickets may contain superseded product direction; use the dated amendments in this specification for this review.
+The full loop remains in scope. App Clip/browser RSVP, confirmation texts, guest-list access and RSVP management do not require a download. The installed app is required for the door QR. Staff admission and later explicit event check-in are distinct; the check-in creates one event-labeled canonical place visit. D9B adds prepared offline staff rosters, durable pending admission and server reconciliation before recap rights.
 
-## Files and validation
+The HTML has 26 primary native mocks and 146 wireframe previews; 32 native variants appear in comparisons. Native images are fixtures from a separate design sandbox, not production feasibility evidence. The linear HTML preserves the previously reviewed artifact byte for byte. The new canvas preserves all 172 screen contents and embedded assets; it changes the review layout, adds 129 explicit decisions and 489 labeled connections, and reserves media dimensions to keep the board stable. Cross-stage outcomes repeat the same screen preview where a concrete destination is known. Open policies remain amber; historical comparisons stay labeled. [Coverage](flowchart/continuous-coverage.json), [preview checks](flowchart/inline-preview-verification.json), [offline changes](flowchart/offline-door-update-verification.json) and [approval annotations](flowchart/approval-annotations-update-verification.json) document artifact validation. Canvas source, asset preservation, camera gesture math and syntax checks passed; [canvas verification](flowchart/canvas-verification.json) records the earlier checks. [Decision-tree verification](flowchart/decision-tree-verification.json) adds exact screen/asset preservation and graph validation; synthetic layout checks cover compact, variable and expanded cards with no node/label overlaps or detached labels. **The canvas has not passed a visual browser test:** the available browser blocked local-file access, and no workaround was attempted. The earlier browser checks apply to the preserved linear view. No Events runtime tests, benchmarks, migrations or releases were performed.
 
-The main HTML is byte-for-byte identical to the reviewed workspace copy. [Coverage](flowchart/continuous-coverage.json) verifies 165 unique screens with no omissions or duplicates. [Browser verification](flowchart/inline-preview-verification.json) records decoded previews, desktop/mobile expansion, search, printing, motion playback, and zero external requests. These checks validate the artifact, not the future Events implementation.
+[Publication manifest](publication-manifest.json) records source and published hashes. Markdown source links use the immutable reviewed app baseline; local authoring-only references are labeled. Historical design audits retain their dated conclusions; later explicit amendments and the current decision inventory take precedence. The checked task graph has 22 unique packages and no dependency cycle. The 121-case mapping is complete as planning, not executed test coverage.
+
+## Supplemental diagrams
+
+These exports are the **earlier 165-screen snapshot**. They do not include the seven later offline-door states; use the HTML as the complete current review.
 
 - [Compact overview](flowchart/astir-events-overview.svg)
 - [Editable compact overview](flowchart/astir-events-overview.excalidraw)
 - [All-screen connection map](flowchart/astir-events-all-screens.svg)
-
-The complete HTML is the review entry point. The large connection map is a supplemental reference.

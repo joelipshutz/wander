@@ -1,0 +1,1851 @@
+{
+  "area": "Recap, personal event history, media/privacy, map/home and integrated journeys",
+  "baseline": {
+    "repository": "wander-events-flowchart-review",
+    "commit": "f8d258e869503a28d70518a050dff36a344134c6",
+    "app_code_ancestor": "a0117cff6ed55a967f4212b45bb28d8c39ca1488",
+    "criteria": "astir-events-spec/events-exit-criteria.md",
+    "decisions": "Engineering D2, D9B, D13A, D16A and approved product clauses; D17A test review",
+    "execution_status": "PLANNED ONLY — no Events tests implemented or executed by this audit"
+  },
+  "cases": [
+    {
+      "id": "P01",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "Given server-recorded valid admission, published recap and no completion, every app recap entry returns needs-check-in; no protected gallery/comment payload accompanies this state.",
+        "Composer exposes this event’s configured tags, optional note/photos/private feedback and no public-rating input; tags from Event B never appear for Event A.",
+        "Completion remains absent until explicit submit; opening the event or composer is not attendance or completion."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 3889,
+          "note": "Ordinary Been save intentionally defaults a missing rating; retain that existing behavior while testing a separate Events path."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 493,
+          "note": "Place-history engagement resolves the explicit visit before the parent conversation; Events recap conversation must stay distinct."
+        }
+      ]
+    },
+    {
+      "id": "P02",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "supabase/tests/events_completion_history.sql"
+      ],
+      "assertions": [
+        "Submit every optional field absent: server commits exactly one historical completion and one event-labeled visit joined to Event A’s canonical place; venue rating remains null for this visit.",
+        "Assert prior ordinary visit IDs, note, rating, audience, explicit save intent and aggregate rating are unchanged; never substitute the ordinary save path’s default rating.",
+        "Server result and app adapter share the same visit ID; navigation resolves to the recap, not map. Inject visit-write failure and assert completion/visit transaction rolls back together."
+      ],
+      "owner_package": "Events data and rules foundation; after-event shared-history integrator",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/place_visits_visit_photos.sql",
+          "line": 629,
+          "note": "Database permits an explicit unrated visit. Contrast native ordinary Been default-rating behavior; no Events adapter exists."
+        },
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 3889,
+          "note": "Ordinary Been save intentionally defaults a missing rating; retain that existing behavior while testing a separate Events path."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        }
+      ]
+    },
+    {
+      "id": "P03",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "isolated hosted HTTP/storage integration",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_media_references.sql",
+        "scripts/events/media-access-smoke.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Select own local photos before completion; request protected shared-gallery metadata/bytes before submit and assert denial rather than merely hidden picker controls.",
+        "On successful submit, server media IDs and stored bytes correspond to the selected files and the same event post/visit; no extra visit is created by attachment finalization.",
+        "Exercise real Photos permission denial/cancel/select; canceled selection is not falsely saved. Failure recovery UI follows the reviewed policy, without claiming unuploaded selections succeeded."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        }
+      ]
+    },
+    {
+      "id": "P04",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "Parameterize empty feedback, stars only, comment only and both; no default star is submitted.",
+        "Verify only authorized Team admins can read private feedback; guest recap, personal post, activity, export/preview and ordinary visit responses contain neither private comment nor rating.",
+        "Private stars never modify the event visit rating, prior venue rating, public attribute answers or public note; updating public content does not overwrite private feedback."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 3889,
+          "note": "Ordinary Been save intentionally defaults a missing rating; retain that existing behavior while testing a separate Events path."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        }
+      ]
+    },
+    {
+      "id": "P05",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests",
+        "isolated hosted HTTP/storage integration",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_media_references.sql",
+        "supabase/functions/events-media/handler.test.ts",
+        "supabase/functions/events-media-worker/index.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Repeat the same operation after double tap, lost committed response, process termination and concurrent retry: query one completion and one canonical visit with the same IDs; no duplicate public activity.",
+        "Fail before commit, during upload, after byte storage and before metadata finalization; preserve submitted media intent and distinguish acknowledged content from pending/failed content.",
+        "Retry uses stable operation/source identities; neither upload retries nor restored drafts duplicate attachment rows/bytes or create another visit. Exact retry versus explicit-omission interaction remains a P06 proposal until reviewed."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        }
+      ]
+    },
+    {
+      "id": "P06",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCUITest"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "A valid admitted/completed account reopens directly to recap before and after deleting its personal post; absence of a post/visit does not erase historical completion.",
+        "Attempt a second required-completion mutation and assert it does not create a replacement event visit merely because the original post was deleted.",
+        "Revoke admission separately and verify current recap eligibility changes without conflating it with post deletion."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 944,
+          "note": "Adjacent failure evicts previously visible activity; Events access must independently revalidate and clear protected projections."
+        }
+      ]
+    },
+    {
+      "id": "P07",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "browser E2E (planned Playwright)",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "supabase/tests/events_recap_access.sql",
+        "events-web/tests/guest/recap-lock.spec.ts",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "For confirmed no-show, unknown admission, pending/waitlisted and unknown account, requests return only the permitted preview and non-content locked-comment teaser.",
+        "Direct comment listing, full gallery metadata and photo/video byte requests fail; self-reported attendance cannot insert an authoritative admission or grant completion eligibility.",
+        "Authorized Team-admin correction changes eligibility only through the server admission path; correction/retry creates no duplicate admission."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        }
+      ]
+    },
+    {
+      "id": "P08",
+      "layers": [
+        "browser E2E (planned Playwright)",
+        "physical-device verification",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP"
+      ],
+      "planned_files": [
+        "events-web/tests/guest/post-event-handoff.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "On a physical device uninstall after admission, then open the actual post-event link in Clip and browser fallback; permitted event detail remains usable but check-in/upload route to full-app installation/opening.",
+        "After real authentication recovery query the same account, booking and admission IDs; installing/reopening never creates a replacement RSVP or admission.",
+        "If historical completion already exists, reopen recap; otherwise show the event composer. Test original account recovery and a wrong-account attempt without revealing the owner."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        }
+      ]
+    },
+    {
+      "id": "P09",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventRecapPresentationTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "supabase/tests/events_conversation.sql",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Assert event-focused cover, comments near top, working comment/reply/like controls, photos/videos plus, personal check-ins and upper-right Share using UI accessibility identifiers and layout checks.",
+        "Read back stored comment/reply parent and like state under the event recap conversation ID; personal-post activity conversations remain distinct; unauthorized direct mutations fail.",
+        "Actual device playback and accessible navigation work for Astir-provided and attendee-provided gallery content. Exact new editing/reporting controls remain proposed, not acceptance assertions."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 493,
+          "note": "Place-history engagement resolves the explicit visit before the parent conversation; Events recap conversation must stay distinct."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        }
+      ]
+    },
+    {
+      "id": "P10",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "browser E2E (planned Playwright)"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "supabase/tests/events_tags.sql",
+        "events-web/tests/console/event-tags.spec.ts"
+      ],
+      "assertions": [
+        "A Team admin updates Event A tag suggestions; fetching composers A/B returns each event’s correct configured options, including empty suggestions without blocking submit.",
+        "Submitted optional choices map to canonical existing tag/attribute identities as agreed by the contract; they do not create unrelated venue ratings or another event’s selections.",
+        "A nonadmin cannot alter suggestions; stale fetched choices follow an explicitly defined contract outcome instead of silently claiming a different selection. No fixed tag count is assumed."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/place_visits_visit_photos.sql",
+          "line": 629,
+          "note": "Database permits an explicit unrated visit. Contrast native ordinary Been default-rating behavior; no Events adapter exists."
+        }
+      ]
+    },
+    {
+      "id": "P11",
+      "layers": [
+        "XCUITest",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests",
+        "isolated hosted HTTP/storage integration",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderUITests/Events/EventRecapTests.swift",
+        "supabase/tests/events_media_references.sql",
+        "supabase/functions/events-media/handler.test.ts",
+        "supabase/functions/events-media-worker/index.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "A completed eligible attendee uploads own photo and video through gallery plus; successful finalized content is immediately returned to eligible viewers without a preapproval state.",
+        "Server verifies current admission/completion and ownership at upload/finalize, not only when the picker opened; ineligible and revoked callers cannot publish or retrieve protected bytes.",
+        "Real photo/video selection, orientation, playback and retry leave one media source per successful upload. Gallery upload does not create another event completion/visit."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "supabase/functions/place-photo/handler.test.ts",
+          "line": 5,
+          "note": "Existing Deno handler test injects clock and request dependencies; provider-photo cache behavior is not a protected Events-media policy."
+        }
+      ]
+    },
+    {
+      "id": "P12",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "supabase/tests/events_media_references.sql",
+        "supabase/tests/events_recap_access.sql",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "A completed attendee selects a shared gallery photo: one reference attaches to the same event post/visit and respects that post’s audience; UI retains the small eye indicator.",
+        "An allowed viewer of the selected public-post photo can fetch that authorized selection only; requesting the source’s surrounding gallery/comments/other derivatives does not inherit attendee access.",
+        "No extra approval/reuse disclosure is added. Account switch, source removal or revoked post audience cannot be bypassed with a cached selection/reference."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        },
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        }
+      ]
+    },
+    {
+      "id": "P13",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests",
+        "isolated hosted HTTP/storage integration",
+        "XCTest unit/adapter"
+      ],
+      "planned_files": [
+        "supabase/tests/events_media_references.sql",
+        "supabase/functions/events-media-worker/index.test.ts",
+        "supabase/functions/events-media/handler.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "WanderTests/Events/EventProtectedCacheTests.swift"
+      ],
+      "assertions": [
+        "Create one source referenced by multiple event posts plus unrelated media; uploader and Team admin removal each retire the source, all references and every generated derivative.",
+        "After acknowledged removal, new full/range/thumbnail requests, including requests with stale signed URLs through the delivered product surface, return no protected source bytes. Revalidated warm edge/client caches must not resurrect it. Invalidate local references when removal is learned and fail closed before protected redisplay when entitlement is uncertain; no claim to erase copies already seen, exported or held on a disconnected device.",
+        "Repeated removal and worker retries are idempotent; cleanup failure remains observable/retryable without making a tombstoned source readable. Assert other photos, notes, post/visit IDs, prior ratings and conversations survive."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/PlacePhotoGalleryTests.swift",
+          "line": 107,
+          "note": "Adjacent presenter suppresses locally deleted media from a stale remote page; useful Events tombstone regression pattern."
+        },
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        }
+      ]
+    },
+    {
+      "id": "P14",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCUITest"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_media_references.sql",
+        "WanderUITests/Events/EventRecapTests.swift"
+      ],
+      "assertions": [
+        "With independent older visit/rating/note/audience and explicit saved-place intent, delete the event personal post: only event-derived post/visit disappears; compare every independent record before and after.",
+        "Admission and historical completion persist and still authorize recap; event-derived attachment references disappear without deleting another uploader’s source or other posts’ references.",
+        "Repeat deletion, relaunch, refresh stale feed/place/history pages and run existing history repair: deleted event activity does not return and no replacement visit is synthesized."
+      ],
+      "owner_package": "Events data and rules foundation; after-event shared-history integrator",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "WanderTests/PlacePhotoGalleryTests.swift",
+          "line": 107,
+          "note": "Adjacent presenter suppresses locally deleted media from a stale remote page; useful Events tombstone regression pattern."
+        }
+      ]
+    },
+    {
+      "id": "P15",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "isolated hosted HTTP/storage integration",
+        "Deno handler/worker tests",
+        "XCTest unit/adapter",
+        "XCUITest",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_media_references.sql",
+        "supabase/functions/events-media/handler.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "WanderTests/Events/EventProtectedCacheTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "events-web/tests/guest/recap-privacy.spec.ts",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Parameterize unauthorized/no-show/revoked/blocked viewers: inspect raw API bodies, DOM/accessibility tree, native accessibility output, direct bytes and range responses; blur must not conceal delivered protected comment text or gallery URLs.",
+        "Warm memory/disk/browser/CDN caches while authorized, then revoke access or switch accounts with a request in flight; stale responses do not render, cache under the new account or bypass current server permission.",
+        "Public selected-post media uses its independent audience and grants no wider recap entitlement. A failed permission refresh returns locked/unavailable, never stale private content."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 989,
+          "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 944,
+          "note": "Adjacent failure evicts previously visible activity; Events access must independently revalidate and clear protected projections."
+        },
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        }
+      ]
+    },
+    {
+      "id": "P16",
+      "layers": [
+        "XCTest unit/adapter",
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventCheckInTests.swift",
+        "WanderTests/Events/EventProtectedCacheTests.swift",
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_delivery_intents.sql",
+        "supabase/functions/events-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "For temporary server failure/unpublication then restoration, historical admission/completion and valid local account-bound draft remain intact; retry cannot create a second completion/visit.",
+        "Republishing the same unchanged recap revision does not enqueue another logical invitation under the delivery identity contract; failed reads never manufacture new publication.",
+        "Exact unavailable copy, republish/no-new-content invitation policy and upload draft recovery remain proposed P14/P06 portions: record as conditional assertions awaiting review, not approved behavior."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 944,
+          "note": "Adjacent failure evicts previously visible activity; Events access must independently revalidate and clear protected projections."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        }
+      ]
+    },
+    {
+      "id": "P17",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventShareTests.swift",
+        "WanderUITests/Events/EventRecapTests.swift",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Upper-right Share resolves the canonical Event A link and only permitted public preview; it contains no booking credentials, exact-home payload or protected recap media.",
+        "Cancel the native share sheet and return to the same event/account/state with no external post or server content mutation.",
+        "On a physical device exercise Instagram availability and absence if supported by the selected share design; exact exported payload/format remains design work and must not be assumed."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        }
+      ]
+    },
+    {
+      "id": "V01",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter"
+      ],
+      "planned_files": [
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventMapPresentationTests.swift",
+        "supabase/tests/events_home_projections.sql"
+      ],
+      "assertions": [
+        "At controlled styling-window boundaries, Featured on returns the eligible published event pin for permitted attendees and nonattendees; disallowed/draft events remain absent.",
+        "Private-home pin payload supplies approved approximate geometry only for viewers lacking exact rights, regardless of Featured styling.",
+        "Server and native projection preserve a distinct event identity connected to exactly one canonical place, without changing ordinary place permissions."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "WanderTests/MapAnnotationVisibilityTests.swift",
+          "line": 65,
+          "note": "Existing pin-selection tests distinguish collision-hidden, detached and visible annotations."
+        }
+      ]
+    },
+    {
+      "id": "V02",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter"
+      ],
+      "planned_files": [
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventMapPresentationTests.swift"
+      ],
+      "assertions": [
+        "You filter includes own qualifying authoritative attendance within current filters/window; confirmed-only, waitlisted, featured-only and no-show records do not become own attendance.",
+        "D9 offline-only admission remains awaiting reconciliation and does not appear as server-validated attendance or unlock recap; after valid reconciliation it can qualify once.",
+        "Changing filters/attendance returns current projection without duplicating ordinary-place or event identity."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/MapAnnotationVisibilityTests.swift",
+          "line": 65,
+          "note": "Existing pin-selection tests distinguish collision-hidden, detached and visible annotations."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        }
+      ]
+    },
+    {
+      "id": "V03",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter"
+      ],
+      "planned_files": [
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventMapPresentationTests.swift",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "Friends projection includes events from a qualifying visible friend’s authoritative attendance; no qualifying visible activity means no Friends-derived pin.",
+        "Repeat with block/unblock, restricted/private profile and follow-relationship changes; existing allowed audience semantics govern projection, not Featured eligibility.",
+        "Do not infer new second-degree access from mutual counts or introduce an unapproved social expansion."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        }
+      ]
+    },
+    {
+      "id": "V04",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventMapPresentationTests.swift",
+        "WanderUITests/Events/EventMapTests.swift",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Tap an event annotation: map stays underneath a collapsed event card; first tap must not navigate directly to full event or unrelated recommendations.",
+        "Card names the event at its canonical place with visually secondary at; expand opens that same event, then place action opens the one canonical place ID.",
+        "Back/collapse preserves normal map state and selection; follow with another event at the same place to detect reused-card identity bugs."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/MapAnnotationVisibilityTests.swift",
+          "line": 65,
+          "note": "Existing pin-selection tests distinguish collision-hidden, detached and visible annotations."
+        }
+      ]
+    },
+    {
+      "id": "V05",
+      "layers": [
+        "XCTest unit/adapter",
+        "XCUITest",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "WanderTests/Events/EventMapPresentationTests.swift",
+        "WanderUITests/Events/EventMapTests.swift",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Parameterize long event/place titles, dark/light appearance and largest supported Dynamic Type; card identity remains readable, controls reachable and tap targets distinct.",
+        "With Reduce Motion enabled, selected event pin remains distinguishable using the selected static design; animation is not required to understand state.",
+        "Verify VoiceOver label/order and contrast on physical device. Exact square/round/glow/pulse selection is design acceptance, not an approved test baseline until selected."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/MapAnnotationVisibilityTests.swift",
+          "line": 65,
+          "note": "Existing pin-selection tests distinguish collision-hidden, detached and visible annotations."
+        }
+      ]
+    },
+    {
+      "id": "V06",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "XCUITest"
+      ],
+      "planned_files": [
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventMapPresentationTests.swift",
+        "WanderUITests/Events/EventMapTests.swift"
+      ],
+      "assertions": [
+        "Turn Featured off and advance controlled clock across styling end: subsequent server/native projection removes temporary treatment at the configured boundary.",
+        "Current visible screen/refresh updates treatment without deleting canonical place, prior visits, admission/completion or persistent event history.",
+        "Open past event through Events/place history after styling ends; current authorized recap remains reachable."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "WanderTests/MapAnnotationVisibilityTests.swift",
+          "line": 65,
+          "note": "Existing pin-selection tests distinguish collision-hidden, detached and visible annotations."
+        }
+      ]
+    },
+    {
+      "id": "V07",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "XCUITest"
+      ],
+      "planned_files": [
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "WanderUITests/Events/EventPlaceHistoryTests.swift"
+      ],
+      "assertions": [
+        "Create Events A/B at one canonical place and a second unrelated place: each event has one place association; place history lists both correct events without duplicate place identity.",
+        "Open older event through an inline place-history row, resolve current viewer’s state and preserve normal place-profile actions/layout.",
+        "Assert no replacement floating event CTA, Explore nearby or invented next-place screen; ordinary independent place history remains present."
+      ],
+      "owner_package": "Events data and rules foundation; after-event shared-history integrator",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 493,
+          "note": "Place-history engagement resolves the explicit visit before the parent conversation; Events recap conversation must stay distinct."
+        }
+      ]
+    },
+    {
+      "id": "V08",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "XCUITest"
+      ],
+      "planned_files": [
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_map_history.sql",
+        "WanderTests/Events/EventHistoryAdapterTests.swift",
+        "WanderUITests/Events/EventPlaceHistoryTests.swift"
+      ],
+      "assertions": [
+        "Query feed/profile/place history after completion: each event post leads with event identity/date and points to the single canonical event visit; every personal event post exposes its audience eye control/label.",
+        "Compare older ordinary visits’ notes, ratings, audiences and conversation IDs before/after event completion and feed refresh; a public event post does not broaden earlier records.",
+        "Duplicate server results, UUID normalization and stale snapshot hydration do not synthesize another visit/activity."
+      ],
+      "owner_package": "Events data and rules foundation; after-event shared-history integrator",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 3889,
+          "note": "Ordinary Been save intentionally defaults a missing rating; retain that existing behavior while testing a separate Events path."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 493,
+          "note": "Place-history engagement resolves the explicit visit before the parent conversation; Events recap conversation must stay distinct."
+        }
+      ]
+    },
+    {
+      "id": "H01",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "browser E2E (planned Playwright)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts"
+      ],
+      "assertions": [
+        "Across unknown/nonconfirmed/pending/waitlisted/offered booking states and all event times, event/place/map read projections exclude exact address, coordinates, nav target and hidden metadata unless independent rights apply. A confirmed no-show is tested separately by its booking/window rights, not mislabeled nonconfirmed.",
+        "Approximate geometry is supplied without shipping exact geometry behind client styling; direct canonical-place lookup cannot bypass the event-location gate.",
+        "Full guest-list and recap gates are independently asserted; approximate location availability grants neither."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 989,
+          "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+        }
+      ]
+    },
+    {
+      "id": "H02",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts",
+        "WanderUITests/Events/EventHomeTests.swift",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Using server-controlled time, confirmed guest at start minus 24h minus epsilon receives approximate only; at threshold and after receives exact under current entitlement.",
+        "A later confirmation inside the reveal window gains exact access immediately without replacing booking; unconfirmed viewer at the same time remains approximate.",
+        "Run actual recognized Clip, browser and full app reads; inspect payload/navigation target as well as UI. Client clock/timezone changes cannot reveal early."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        }
+      ]
+    },
+    {
+      "id": "H03",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts",
+        "WanderUITests/Events/EventHomeTests.swift",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "For exact address expiry at end plus 24h, test before/at/after with authorized guest; event/place/map/nav return approximate at cutoff while valid recap/history persist.",
+        "Warm exact caches then leave screen open/background, advance clock and resume/relaunch; stale screen, accessibility output or delayed response cannot restore expired event-only exact rights.",
+        "Independent location rights remain valid in their own authorized context; event expiry must neither erase them nor invent them."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 989,
+          "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+        },
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        }
+      ]
+    },
+    {
+      "id": "H04",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "browser E2E (planned Playwright)",
+        "XCTest unit/adapter",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts",
+        "events-web/tests/console/home-settings.spec.ts",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Team admin changes reveal/expiry; all three surfaces enforce the current server schedule on next read and retire stale exact presentation when rights end.",
+        "Parameterize relative offsets versus explicitly configured absolute overrides; D13 reschedule recomputes only relative boundaries and preserves booking/admission/history.",
+        "Unconfirmed viewer remains approximate even while styling is on; independently established location rights remain separate. Exact console capture interaction is not newly approved here."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 989,
+          "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+        }
+      ]
+    },
+    {
+      "id": "H05",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "browser E2E (planned Playwright)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "events-web/tests/console/home-consent.spec.ts"
+      ],
+      "assertions": [
+        "Attempt to publish/use a private-home event without the required recorded consent fact: server mutation fails with no public pin or exact-address publication side effect.",
+        "Once the reviewed workflow records valid consent, eligible Team admin can publish under all normal event/location gates; a guest cannot assert consent or bypass publication validation.",
+        "Consent capture procedure/evidence form remains proposed; tests must bind to the approved representation once reviewed rather than inventing a legal document or new policy."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 68,
+          "note": "Existing migration-test runner checks pgTAP failures in rollback-only hosted SQL; HTTP/storage journeys require separate committed isolated fixtures."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        }
+      ]
+    },
+    {
+      "id": "H06",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests",
+        "isolated hosted HTTP/storage integration",
+        "XCTest unit/adapter",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts",
+        "supabase/functions/events-media/handler.test.ts",
+        "supabase/functions/events-message-worker/index.test.ts",
+        "supabase/functions/events-share-preview/handler.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "For unauthorized/exact-expired viewer, enumerate search, OG/share/SMS/push preview, calendar export, media metadata/EXIF, map/place cache and direct nav requests; none includes exact address/coordinate/navigation target.",
+        "Private originals and derivatives cannot expose exact metadata through a permitted public preview/post; validate actual returned file metadata and bytes, not only database fields.",
+        "Cache warm-up, access loss and old links do not leak alternate projections. Calendar delivery/update mechanics are conditional P20 proposal; no claim to recall copies already exported or seen."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/functions/place-photo/handler.test.ts",
+          "line": 5,
+          "note": "Existing Deno handler test injects clock and request dependencies; provider-photo cache behavior is not a protected Events-media policy."
+        },
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        }
+      ]
+    },
+    {
+      "id": "H07",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_completion_history.sql",
+        "WanderTests/Events/EventProtectedCacheTests.swift",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "Cross product of post present/deleted, admission valid/revoked, completion absent/present, booking confirmed/canceled, window active/expired and independent location right: assert each endpoint’s documented gate independently.",
+        "Deleting personal post retains completion and valid attendee recap; cancellation/expiry removes only event-based exact-location rights as specified; revoked admission removes protected recap even if old post or completion remains.",
+        "Independent earlier visit/rating/audience/save survives every event mutation; permitted selected-post media is evaluated under its own audience and cannot unlock surrounding gallery."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 944,
+          "note": "Adjacent failure evicts previously visible activity; Events access must independently revalidate and clear protected projections."
+        }
+      ]
+    },
+    {
+      "id": "E01",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e01.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_map_history.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "On a fresh physical iPhone invoke actual canonical invitation into Clip, choose Apple/Google in separate runs, verify controlled phone, confirm without download, consume actual test confirmation/reminder and exercise no-app guest list/manage.",
+        "Install/open real full app, complete only required identity fields, present QR to another authenticated operator surface, publish recap through console, receive test invitation and submit empty check-in.",
+        "Assert one booking/admission/completion/event visit, null event-visit venue rating, retained independent history, unlocked recap and correct temporary pin/persistent place route."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        },
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E02",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e02.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_completion_history.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Make actual Clip invocation unavailable, complete browser RSVP, close the session and recover the original account/reservation before installation. Run install-to-link and install-to-app-icon branches.",
+        "Continue through real QR/admission/publication/empty completion using the same server IDs; no forced early download, duplicate booking or copied sender/session authority.",
+        "Verify the final record counts and access match E01; capture actual platform fallback/handoff results rather than simulated route flags."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        },
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 63,
+          "note": "Adjacent regression pattern: idempotent history repair preserves visit timestamp and existing conversation; not Events coverage."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E03",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e03.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_media_references.sql",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Start with a real installed recognized member and verified phone, navigate Events discovery, RSVP and verify no redundant signup, verification or install gate.",
+        "Receive controlled notifications/texts, use QR at door, publish recap, submit own optional content and independently upload gallery photo/video through the plus.",
+        "Read back one visit/completion and correct source/attachment records; own content and immediate eligible shared-gallery playback obey current permissions."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E04",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e04.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "With an existing server RSVP, sign out or remove required name/username in isolated fixtures; open real reminder, recover original provider identity and preserve event context.",
+        "Fill only missing valid identity essentials, skip/fail optional photo and reach QR without a general tour or location/contacts/notification gate.",
+        "Scan through actual operator console; query original booking and one admission, with no replacement RSVP or entry under a different account."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        },
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E05",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e05.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_capacity_codes.sql",
+        "supabase/tests/events_completion_history.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Forward one actual invite to an unknown viewer, authenticate to a genuine no-booking result, use capped code, encounter full capacity and explicitly join waitlist.",
+        "Team admin issues held offer; guest accepts before deadline, then later installs, enters and completes recap path. Include response-loss retry during acceptance.",
+        "Query sender and recipient separately: no inherited privileges; one confirmation consumes one use/seat, valid holds respected, one admission/completion/visit; prior offer identity/deadline recorded."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 68,
+          "note": "Existing migration-test runner checks pgTAP failures in rollback-only hosted SQL; HTTP/storage journeys require separate committed isolated fixtures."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E06",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e06.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_booking_transitions.sql",
+        "supabase/tests/events_recap_access.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Create two real verified pending applications without seat holds; approve one through Team-admin console with available capacity and reject the other.",
+        "Approved guest traverses install/identity/QR/server admission; rejected guest opens the old canonical link in browser/Clip and receives current rejected/unconfirmed state.",
+        "Query capacity and booking transition records plus actual guest-list, ticket and private-address API responses: no privileges for rejected applicant, one booking/admission for approved guest."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E07",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e07.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_capacity_codes.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Confirmed guest uses Clip/browser View or change RSVP before start to cancel without installing; query canceled booking and exactly-once seat/code release.",
+        "Coordinate separate real clients for new request versus Team-admin issuance/acceptance of a held waitlist offer at the released capacity; assert serializable inventory outcome.",
+        "Old ticket/booking cannot admit, stale cancellation/RSVP retries do not resurrect it, and delivery intents describe committed outcomes only; complete the successful guest’s door flow."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 68,
+          "note": "Existing migration-test runner checks pgTAP failures in rollback-only hosted SQL; HTTP/storage journeys require separate committed isolated fixtures."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E08",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e08.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_home_projections.sql",
+        "supabase/tests/events_completion_history.sql",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Use consented private-home event, recognized confirmed Clip guest and controlled server time: capture approximate before reveal, exact at reveal, then actual installed QR/admission and recap completion.",
+        "Cross expiry while app/browser has warm private data, verify approximate data/nav, then delete own event post and refresh actual place/feed/history routes.",
+        "Read server and delivered payloads: valid admission/completion/recap and independent visit/rating/save remain; exact event-only address cannot return from caches or old links."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/PlacePhotoDeliveryTests.swift",
+          "line": 53,
+          "note": "Ordinary photo cache deliberately ignores signed-URL token churn; Events permission/source version isolation needs new coverage."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 112,
+          "note": "Role/JWT-switched tests verify relationship, blocked-viewer and profile-shell visibility."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E09",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e09.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/tests/events_media_references.sql"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "After real admission uninstall app; consume post-event test SMS link via Clip/browser, reinstall/open, authenticate original account and submit check-in/upload.",
+        "Uninstall/reinstall again, reopen same canonical event and obtain existing completed recap without a second required check-in or restored deleted post.",
+        "Compare server booking/admission/completion/visit/media IDs across both reinstall boundaries; first successful uploads remain accessible only under current permissions."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "Wander/Services/Remote/WanderSupabaseClient.swift",
+          "line": 230,
+          "note": "Transport validates expected account before and after obtaining a token; exercise it through the real integration too."
+        },
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        },
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E10",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e10.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_media_references.sql",
+        "supabase/tests/events_completion_history.sql",
+        "supabase/functions/events-media-worker/index.test.ts",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Induce actual QR retrieval failure for a confirmed full-app guest with valid name/username; Team admin verifies through lookup and repeats manual admission with stable operation identity.",
+        "Publish recap, complete once, reuse a source across multiple real personal posts, then remove it through uploader/admin controls.",
+        "Assert one admission/visit per participating guest, no waiver of installed-account gate, all source references/derivatives inaccessible after removal, and other notes/media/history preserved. Exercise approved offline variant separately in TP03."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/PlacePhotoGalleryTests.swift",
+          "line": 107,
+          "note": "Adjacent presenter suppresses locally deleted media from a stale remote page; useful Events tombstone regression pattern."
+        },
+        {
+          "file": "WanderTests/WanderStoreTests.swift",
+          "line": 8853,
+          "note": "Adjacent metadata-finalization failure test avoids reuploading already-stored photo bytes."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 99,
+          "note": "Adjacent owner-deletion test verifies history removal and no resurrection through repair; not Events coverage."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E11",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions",
+        "isolated hosted HTTP/storage integration"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e11.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_home_projections.sql",
+        "supabase/tests/events_media_references.sql",
+        "scripts/events/media-access-smoke.mjs"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Drive no-show and corrected-then-revoked attendance through actual link, Events, map, place, notification and direct-media paths; try self-report and stale cached/page responses.",
+        "Create real restricted/blocked relation after permitted view; protected gallery/comments/range bytes and exact-home data must follow current independent gates on every entry route.",
+        "Read server permission outcomes and delivered payloads/accessibility content; retained historical completion or public selected photo never becomes a recap entitlement bypass."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 944,
+          "note": "Adjacent failure evicts previously visible activity; Events access must independently revalidate and clear protected projections."
+        },
+        {
+          "file": "WanderTests/ActivityEngagementTests.swift",
+          "line": 989,
+          "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+        },
+        {
+          "file": "supabase/tests/visible_place_photo_gallery.sql",
+          "line": 429,
+          "note": "Adjacent gallery RLS test excludes blocked contributors; does not implement admission/completion access."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    },
+    {
+      "id": "E12",
+      "layers": [
+        "integrated staged journey",
+        "browser E2E (planned Playwright)",
+        "physical-device app/Clip verification",
+        "server-state assertions"
+      ],
+      "planned_files": [
+        "events-web/tests/journeys/e12.spec.ts",
+        "WanderUITests/Events/EventsIntegratedJourneyTests.swift",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md",
+        "supabase/tests/events_delivery_intents.sql",
+        "supabase/functions/events-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "One run ID binds actual surface actions, canonical user/event/booking/admission/completion/visit/media IDs, build versions and delivery intents. Bootstrap only starting fixtures; do not seed later happy states, inject fake session tokens into UI or stitch separate mocked stage results.",
+        "Use isolated committed staging fixtures for HTTP/app/browser/worker interactions, real production-shape APIs and operator console; assert server facts through a read-only verifier after each boundary. SQL rollback tests are complementary, not this journey.",
+        "Physically deny notifications, record actual event-SMS opt-out, and exercise controlled failed delivery separately; then reschedule through console and publish recap.",
+        "Open Events/canonical link directly at each stage and recover current schedule/booking/eligible recap actions without depending on any delivery.",
+        "Assert obsolete schedule jobs do not dispatch, opt-out is respected, delivery state distinguishes queued/sent/failed, and recap invitation is not generated before publication plus valid admission."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+        },
+        {
+          "file": "Wander/App/AppEntryView.swift",
+          "line": 214,
+          "note": "Existing universal-link entry seam; Events/Clip route and actual platform invocation still require implementation."
+        },
+        {
+          "file": "Wander/App/WanderApp.swift",
+          "line": 33,
+          "note": "Verify live auth/backend mode; existing Simulator fixture session is not integrated journey evidence."
+        }
+      ]
+    }
+  ],
+  "additional_risks": [
+    {
+      "id": "TP01",
+      "description": "Protected media must enforce current permission/source version for bytes, derivatives and video ranges despite signed URLs and warm caches.",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "Deno handler/worker tests",
+        "isolated hosted HTTP/storage integration",
+        "XCTest unit/adapter"
+      ],
+      "planned_files": [
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_media_references.sql",
+        "supabase/functions/events-media/handler.test.ts",
+        "supabase/functions/events-media-worker/index.test.ts",
+        "scripts/events/media-access-smoke.mjs",
+        "WanderTests/Events/EventProtectedCacheTests.swift"
+      ],
+      "assertions": [
+        "Test GET, HEAD and single/multi-range or explicitly rejected unsupported Range requests; every successful 200/206 carries only authorized bytes, and 304/cache validation cannot reuse a forbidden representation.",
+        "Warm CDN, browser, memory and disk caches; revoke admission, block/limit post audience, remove source and switch accounts while a download/derivative job is suspended. Recheck authorization at delivery/finalization and reject stale results.",
+        "Simulate object-deletion/worker failure and retry: acknowledged tombstone immediately prevents product-surface delivery while cleanup retries; derivative completion after removal cannot resurrect the source. No promise to recall previously copied bytes."
+      ],
+      "owner_package": "After the event and on the map",
+      "requires_real_device": true
+    },
+    {
+      "id": "TP02",
+      "description": "D13 rescheduling can move home reveal/expiry backward while exact data is already cached; relative and absolute rules need boundary regression.",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "XCTest unit/adapter",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_home_projections.sql",
+        "WanderTests/Events/EventHomeProjectionTests.swift",
+        "events-web/tests/guest/home-privacy.spec.ts",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Change event revision after home reveal; move relative reveal later and confirm exact event-only projection retires until eligible again, while explicit absolute overrides are not reinterpreted.",
+        "A delayed response from the prior schedule/version cannot restore exact address/nav; before/at/after boundaries use authoritative time including time-zone and daylight-saving cases.",
+        "Booking/admission/completion, independent location rights and ordinary place history remain unchanged; already exported calendar/address copies are not claimed recalled."
+      ],
+      "owner_package": "After the event and on the map; before-event schedule contract owner",
+      "requires_real_device": true
+    },
+    {
+      "id": "TP03",
+      "description": "D9 offline admission must not prematurely grant completion/recap or corrupt history when reconciliation rejects or duplicates an operation.",
+      "layers": [
+        "PostgreSQL pgTAP",
+        "hosted rollback pgTAP",
+        "browser E2E (planned Playwright)",
+        "physical-device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_offline_admission_reconciliation.sql",
+        "supabase/tests/events_recap_access.sql",
+        "supabase/tests/events_completion_history.sql",
+        "events-web/tests/console/offline-admission-recap.spec.ts",
+        "scripts/events/integrated-journey.mjs",
+        "docs/testing/astir-events-device-matrix.md"
+      ],
+      "assertions": [
+        "Admit offline using a previously authorized roster, reopen operator browser and retain same durable operation ID; guest recap remains locked until actual server validation.",
+        "Reconnect with duplicate operation, canceled booking, removed admin, rescheduled event and conflicting second-device admission; valid result records once, conflicts remain visible without phantom admission/completion/visit.",
+        "After valid reconciliation continue into actual check-in; one visit preserves prior rating/note/audience/save. Offline queue belongs to original account/event and is not reassigned or silently deleted on account change."
+      ],
+      "owner_package": "Joined release: before-event/door + after-event/map, with entry/identity foundation",
+      "requires_real_device": true
+    }
+  ],
+  "framework_evidence": [
+    {
+      "file": "project.yml",
+      "line": 265,
+      "note": "Existing WanderTests target is an app-hosted unit-test bundle; extend this and existing WanderUITests. Clip/shared selected-source coverage needs explicit target wiring."
+    },
+    {
+      "file": "WanderTests/VisibilityPolicyTests.swift",
+      "line": 4,
+      "note": "Existing native tests use XCTest."
+    },
+    {
+      "file": "supabase/tests/checkin_history_engagement.sql",
+      "line": 1,
+      "note": "Existing SQL contracts use pgTAP inside begin/rollback, with role/JWT fixtures."
+    },
+    {
+      "file": "scripts/supabase-smoke-test.mjs",
+      "line": 68,
+      "note": "Existing migration-test runner checks pgTAP failures in rollback-only hosted SQL; HTTP/storage journeys require separate committed isolated fixtures."
+    },
+    {
+      "file": "supabase/functions/place-photo/handler.test.ts",
+      "line": 5,
+      "note": "Existing Deno handler test injects clock and request dependencies; provider-photo cache behavior is not a protected Events-media policy."
+    },
+    {
+      "file": "supabase/functions/push-notification-worker/index.test.ts",
+      "line": 23,
+      "note": "Existing Deno tests distinguish APNs permanent and retryable failures; Events delivery/revision guards are new."
+    },
+    {
+      "file": "WanderTests/ActivityEngagementTests.swift",
+      "line": 989,
+      "note": "Suspended-response test rejects a result arriving after an account switch; reuse this test pattern, not as Events coverage."
+    },
+    {
+      "file": "project.yml",
+      "line": 293,
+      "note": "Existing WanderUITests is an XCUITest bundle against Wander; extend it for Events rather than invent another full-app UI framework. Clip target/runtime coverage is new work."
+    },
+    {
+      "file": "WanderTests/AuthSessionTests.swift",
+      "line": 159,
+      "note": "Current auth unit tests use PreviewAuthSessionProvider; do not count them as real Apple/Google/phone or cross-surface booking proof."
+    },
+    {
+      "file": "Wander/App/WanderApp.swift",
+      "line": 33,
+      "note": "Live-auth launch clears persisted Simulator fixture selection; integrated runs must verify actual Clerk/backend rather than PreviewAuthSessionProvider."
+    },
+    {
+      "file": "docs/setup.md",
+      "line": 502,
+      "note": "Signed physical device guidance covers new/existing Apple accounts, Hide My Email, cancellation and relaunch; line 508 explicitly makes physical credential exchange a release gate."
+    },
+    {
+      "file": "WanderTests/WanderWidgetIntegrationTests.swift",
+      "line": 103,
+      "note": "Existing link tests hold pending routes until session validation; retain as regressions but they do not exercise Safari/Clip/install/server-reservation continuity."
+    }
+  ],
+  "notes": [
+    "Exactly P01–P17, V01–V08, H01–H07 and E01–E12: 44 criterion mappings. Existing adjacent tests are evidence for patterns/regression obligations, never passing Events coverage.",
+    "All planned_files are proposed repository-relative implementation/test locations. Extend existing XCTest/XCUITest targets; browser E2E runner, Clip/shared-source test wiring and physical journey coordination are new work, not existing cross-surface infrastructure.",
+    "Native unit tests can use deterministic fakes for local state. SQL/worker tests use controlled clocks and isolated identities; preserve ordinary Astir tests for existing history/ratings/audiences.",
+    "Hosted rollback SQL proves database contracts only. Real HTTP/storage/worker and integrated journeys need isolated committed staging fixtures plus explicit cleanup and controlled recipient endpoints; do not claim external delivery or byte-cache effects rolled back with PostgreSQL.",
+    "Every E case is one integrated run. Steps may combine browser automation, native automation and documented human platform actions, but they preserve the same test identities/records and record server assertions. Do not seed admission/completion after earlier stages or substitute standalone mock captures.",
+    "Keep proposed P06/P14/P20 behavior, exact sharing payload, own-video-in-personal-composer and pin styling selection conditional. Gallery photo/video support is approved; own personal-composer video is not inferred.",
+    "No runtime tests, hosted changes, provider calls or application edits were performed. Physical-device checks require a signed/distributed app and App Clip with working associated domains; Simulator mocks cannot satisfy that gate."
+  ]
+}

@@ -1,0 +1,639 @@
+{
+  "schema_version": 1,
+  "title": "Astir Events — one event link, state-dependent destination",
+  "status": "Product decision model for design and engineering; not implemented routing code or passed tests",
+  "updated": "2026-09-14",
+  "sources": {
+    "BASE": "working-product-record.md; approved D1–D35 and amendments, with D7 deferred",
+    "NEW1": "/Users/joelipshutz/.codex/attachments/8bd0dd83-5b99-400d-bffd-dbe08f07e37d/pasted-text.txt",
+    "NEW2": "/Users/joelipshutz/.codex/attachments/3efb9496-b31f-4d2e-abe0-222e40720bc4/pasted-text.txt",
+    "INLINE": "revision-20260914/inline-transcript.txt; earlier upsell brainstorm",
+    "CLARIFICATION": "Latest user clarification relayed by root in this audit: recognized, signed-in confirmed guests may see guest list and manage RSVP in App Clip/web without downloading; supersedes conflicting INLINE brainstorm",
+    "PROPOSALS": "product-spec-draft.md section 8; detailed operating defaults still require review where not superseded by NEW1/NEW2/CLARIFICATION"
+  },
+  "canonical_link": {
+    "pattern": "https://{event_link_domain}/events/{event_id}",
+    "domain_status": "Placeholder; engineering must use the actual configured domain",
+    "label": "View event",
+    "same_destination_identity_for": [
+      "initial_invitation",
+      "confirmation_sms",
+      "reminder_sms",
+      "important_change_sms",
+      "event_share",
+      "event_notification"
+    ],
+    "observational_only": [
+      "link_source",
+      "campaign_attribution"
+    ],
+    "never_infers": [
+      "current_viewer_is_original_recipient",
+      "current_viewer_has_rsvped",
+      "current_viewer_is_confirmed",
+      "current_viewer_attended",
+      "current_viewer_completed_checkin"
+    ],
+    "invitation_code": "Optional separate campaign/event code, possibly included with invitation text; never an identity or booking credential. Exact URL encoding remains engineering design."
+  },
+  "inputs": {
+    "surface": {
+      "values": [
+        "full_app",
+        "app_clip",
+        "web"
+      ],
+      "meaning": "Actual successfully opened surface, not an assumption inferred from user agent or link source"
+    },
+    "full_app_installed": {
+      "values": [
+        true,
+        false,
+        "unknown"
+      ],
+      "meaning": "Use for Open Astir versus Get Astir affordance only; actual route and server eligibility still govern"
+    },
+    "session": {
+      "values": [
+        "valid_recognized",
+        "missing",
+        "expired",
+        "recovering",
+        "failed"
+      ],
+      "meaning": "Only valid_recognized supplies a trusted current identity"
+    },
+    "reservation_lookup": {
+      "values": [
+        "not_started",
+        "loading",
+        "succeeded",
+        "failed"
+      ],
+      "meaning": "Only a successful lookup for the trusted current identity can classify the real booking"
+    },
+    "booking": {
+      "values": [
+        "unknown",
+        "none",
+        "pending",
+        "waitlisted",
+        "offered",
+        "confirmed",
+        "canceled",
+        "declined"
+      ],
+      "meaning": "unknown is not none; none means verified lookup found no active booking for this current identity"
+    },
+    "event_access": {
+      "values": [
+        "permitted",
+        "requires_identity",
+        "denied",
+        "unavailable"
+      ],
+      "meaning": "The actual event visibility policy, including unpublished/not-found handling"
+    },
+    "phase": {
+      "values": [
+        "before_start",
+        "in_progress",
+        "ended"
+      ],
+      "meaning": "Event time and configured state, not the timestamp of the link"
+    },
+    "recap": {
+      "values": [
+        "unpublished",
+        "published",
+        "temporarily_unavailable"
+      ]
+    },
+    "admission": {
+      "values": [
+        "unknown",
+        "absent",
+        "valid",
+        "revoked"
+      ],
+      "meaning": "Authenticated event-specific server record; RSVP or self-report is insufficient"
+    },
+    "checkin_completion": {
+      "values": [
+        "unknown",
+        "never_completed",
+        "completed"
+      ],
+      "meaning": "Historical event-specific completion remains completed after personal post deletion"
+    },
+    "profile": {
+      "name_valid": "boolean",
+      "username_valid": "boolean",
+      "photo_present": "boolean"
+    },
+    "phone": {
+      "verified_for_current_number": "boolean"
+    },
+    "offer": {
+      "current_valid_offer_for_identity": "boolean",
+      "deadline_passed": "boolean"
+    },
+    "home": {
+      "is_home": "boolean",
+      "consent_recorded": "boolean",
+      "inside_configured_exact_address_window": "boolean",
+      "independent_location_right": "boolean"
+    },
+    "requested_action": {
+      "values": [
+        "view_event",
+        "rsvp",
+        "recover_rsvp",
+        "view_guest_list",
+        "view_or_change_rsvp",
+        "show_entry_qr",
+        "check_in",
+        "upload_gallery",
+        "open_recap"
+      ]
+    }
+  },
+  "invariants": [
+    {
+      "id": "INV-01",
+      "rule": "All View event links resolve the same event and then evaluate the current viewer state. A forwarded reminder grants no recipient privileges.",
+      "trace": [
+        "NEW1"
+      ]
+    },
+    {
+      "id": "INV-02",
+      "rule": "Unknown, expired, recovering, or failed identity/lookup is never displayed as confirmed not-RSVPed. Show neutral event content and identity recovery; do not create another RSVP until identity and its existing booking are resolved.",
+      "trace": [
+        "NEW1",
+        "BASE:D14",
+        "PROPOSALS:P01"
+      ]
+    },
+    {
+      "id": "INV-03",
+      "rule": "App Clip and browser mimic the event-specific in-app experience, without full-app tabs. Account, booking, code, event, and return context survive surface handoff.",
+      "trace": [
+        "NEW1",
+        "BASE:D14"
+      ]
+    },
+    {
+      "id": "INV-04",
+      "rule": "A recognized confirmed RSVP can view the full guest list and View or change RSVP in App Clip/web. Download remains optional until an app-only action.",
+      "trace": [
+        "CLARIFICATION",
+        "BASE:D30",
+        "BASE:D24"
+      ]
+    },
+    {
+      "id": "INV-05",
+      "rule": "Full-app installation, a valid confirmed booking, and valid name plus username are required for the entry QR/entry. Photo remains optional.",
+      "trace": [
+        "NEW2",
+        "BASE:D15",
+        "BASE:D18",
+        "BASE:D25"
+      ]
+    },
+    {
+      "id": "INV-06",
+      "rule": "No-app post-event check-in and upload actions require opening/installing Astir, then recovering the same identity/event and rechecking eligibility. Uninstall/reinstall does not erase the server booking, attendance, or completion.",
+      "trace": [
+        "NEW1",
+        "BASE:D5",
+        "BASE:D33"
+      ]
+    },
+    {
+      "id": "INV-07",
+      "rule": "Recap access requires valid admission plus historical completion for this event; gallery upload additionally occurs in the full app. A personal post, another event, RSVP or self-report never substitutes.",
+      "trace": [
+        "BASE:D1",
+        "BASE:D3",
+        "BASE:D5",
+        "BASE:D27",
+        "BASE:D33",
+        "NEW1"
+      ]
+    },
+    {
+      "id": "INV-08",
+      "rule": "Every event has one canonical place. Address permission, map visibility, full guest list, public post audience, and protected recap are independent.",
+      "trace": [
+        "BASE:D4",
+        "BASE:D8",
+        "BASE:D9",
+        "BASE:D13",
+        "BASE:D35"
+      ]
+    },
+    {
+      "id": "INV-09",
+      "rule": "Optional codes and code-use limits never override account verification, capacity, approval, offer acceptance, or installed-entry requirements.",
+      "trace": [
+        "NEW2",
+        "BASE:D17",
+        "BASE:D21",
+        "BASE:D23"
+      ]
+    }
+  ],
+  "surface_rules": [
+    {
+      "id": "S-01",
+      "when": "Platform opens the installed full app successfully",
+      "result": "full_app",
+      "view_chrome": "Astir navigation/tab context remains available"
+    },
+    {
+      "id": "S-02",
+      "when": "Full app is absent and the App Clip invocation succeeds",
+      "result": "app_clip",
+      "view_chrome": "Event-specific App Clip, no full-app tabs"
+    },
+    {
+      "id": "S-03",
+      "when": "App Clip is unsupported, unavailable, dismissed, or fails to open",
+      "result": "web",
+      "view_chrome": "Event-specific browser fallback, no full-app tabs"
+    },
+    {
+      "id": "S-04",
+      "when": "An installed-app universal link unexpectedly remains in a browser",
+      "result": "web",
+      "view_chrome": "Usable browser event plus explicit Open Astir affordance; do not classify the guest as not installed or not RSVPed",
+      "authority": "derived recovery requirement; platform implementation to validate"
+    }
+  ],
+  "view_rules_ordered": [
+    {
+      "id": "V-01",
+      "when": {
+        "event_access": [
+          "denied",
+          "unavailable"
+        ]
+      },
+      "destination": "event_unavailable",
+      "effect": "No booking or protected data; preserve safe back/help route"
+    },
+    {
+      "id": "V-02",
+      "when": {
+        "session": [
+          "missing",
+          "expired",
+          "recovering",
+          "failed"
+        ]
+      },
+      "destination": "event_identity_unknown",
+      "effect": "Permitted event detail or identity-required shell. Booking unknown; public face/count hook only. RSVP and Already RSVPed lead to identity recovery/lookup."
+    },
+    {
+      "id": "V-03",
+      "when": {
+        "reservation_lookup": [
+          "not_started",
+          "loading"
+        ]
+      },
+      "destination": "event_reservation_loading",
+      "effect": "Keep event visible; never flash not-RSVPed or duplicate RSVP"
+    },
+    {
+      "id": "V-04",
+      "when": {
+        "reservation_lookup": [
+          "failed"
+        ]
+      },
+      "destination": "event_reservation_retry",
+      "effect": "Failed lookup is not absence; retry without inventing booking state"
+    },
+    {
+      "id": "V-11",
+      "when": {
+        "booking": [
+          "unknown"
+        ]
+      },
+      "destination": "event_reservation_retry",
+      "effect": "Unresolved or inconsistent lookup result never becomes no booking; resolve/retry before a state-changing action"
+    },
+    {
+      "id": "V-05",
+      "when": {
+        "session": [
+          "valid_recognized"
+        ],
+        "reservation_lookup": [
+          "succeeded"
+        ],
+        "booking": [
+          "none"
+        ]
+      },
+      "destination": "event_known_not_rsvped",
+      "effect": "Show real not-RSVPed action subject to event availability/code/capacity/approval; retain a recovery path if they booked under another account"
+    },
+    {
+      "id": "V-06",
+      "when": {
+        "booking": [
+          "pending"
+        ]
+      },
+      "destination": "event_pending",
+      "effect": "Pending approval; no QR, exact-home booking entitlement, or full guest list"
+    },
+    {
+      "id": "V-07",
+      "when": {
+        "booking": [
+          "waitlisted"
+        ]
+      },
+      "destination": "event_waitlisted",
+      "effect": "Waiting; no queue rank promise or automatic confirmation"
+    },
+    {
+      "id": "V-08",
+      "when": {
+        "booking": [
+          "offered"
+        ]
+      },
+      "destination": "event_offer",
+      "effect": "Show this identity’s current offer and its deadline; stale offer becomes expired presentation, never a confirmed ticket"
+    },
+    {
+      "id": "V-09",
+      "when": {
+        "booking": [
+          "confirmed"
+        ]
+      },
+      "destination": "event_confirmed",
+      "effect": "Confirmed reservation; full guest list and View or change RSVP available on every recognized surface; entry QR remains app-only"
+    },
+    {
+      "id": "V-10",
+      "when": {
+        "booking": [
+          "canceled",
+          "declined"
+        ]
+      },
+      "destination": "event_inactive_reservation",
+      "effect": "Display actual prior state; no active ticket. Rebooking, where allowed, re-evaluates current requirements."
+    }
+  ],
+  "post_event_overlay_ordered": [
+    {
+      "id": "P-01",
+      "when": "phase != ended",
+      "result": "No post-event overlay"
+    },
+    {
+      "id": "P-02",
+      "when": "phase == ended and identity or reservation lookup is unresolved",
+      "result": "Neutral event/identity recovery; do not assume attendee or nonattendee"
+    },
+    {
+      "id": "P-03",
+      "when": "phase == ended and recap == unpublished",
+      "result": "recap_coming_soon",
+      "authority": "publication gate approved; exact waiting-screen behavior proposed"
+    },
+    {
+      "id": "P-04",
+      "when": "phase == ended and recap == temporarily_unavailable",
+      "result": "recap_retry",
+      "authority": "proposed recovery; completion must remain intact"
+    },
+    {
+      "id": "P-09",
+      "when": "phase == ended and recap == published and (admission == unknown or (admission == valid and checkin_completion == unknown))",
+      "result": "event_access_loading",
+      "effect": "Never treat unknown entitlement as either permission or a completed negative decision"
+    },
+    {
+      "id": "P-05",
+      "when": "phase == ended and recap == published and admission != valid",
+      "result": "event_preview_locked",
+      "effect": "Unreadable locked comments and permitted public content; confirmed missing-admission guest can ask Astir to review attendance, not self-unlock"
+    },
+    {
+      "id": "P-06",
+      "when": "phase == ended and recap == published and admission == valid and surface != full_app",
+      "result": "event_post_event_app_handoff",
+      "effect": "Keep the event context; Open/Get Astir for check-in or event content contribution. Do not fabricate a no-app protected-gallery permission."
+    },
+    {
+      "id": "P-07",
+      "when": "phase == ended and recap == published and admission == valid and surface == full_app and checkin_completion == never_completed",
+      "result": "event_checkin_required"
+    },
+    {
+      "id": "P-08",
+      "when": "phase == ended and recap == published and admission == valid and surface == full_app and checkin_completion == completed",
+      "result": "event_recap_unlocked",
+      "effect": "Open directly even if the personal post was deleted"
+    }
+  ],
+  "action_rules": {
+    "rsvp": {
+      "ordered_steps": [
+        "Recover/validate current identity with Apple or Google as needed",
+        "Lookup current booking; return that state when one exists",
+        "Collect only missing name/phone; SMS-verify current phone when unverified",
+        "If optional event code feature is enabled, validate required/prefilled code according to configured rules",
+        "Atomically evaluate code quota, capacity, protected waitlist inventory and approval mode",
+        "Display actual result: confirmed, pending, waitlisted or rejection/retry"
+      ],
+      "never": "An unknown identity or SMS success alone does not establish confirmation",
+      "trace": [
+        "NEW1",
+        "NEW2",
+        "BASE:D17",
+        "BASE:D21",
+        "BASE:D22",
+        "BASE:D31"
+      ]
+    },
+    "view_guest_list": {
+      "allow_when": "valid recognized identity + successful booking lookup + confirmed RSVP",
+      "surfaces": [
+        "full_app",
+        "app_clip",
+        "web"
+      ],
+      "result": "Full guest list; people followed first and mutual counts where viewer is allowed to see them",
+      "otherwise": "Recover identity when unknown; otherwise retain hook and actual booking state",
+      "trace": [
+        "CLARIFICATION",
+        "NEW2",
+        "BASE:D30"
+      ]
+    },
+    "view_or_change_rsvp": {
+      "allow_when": "valid recognized identity + confirmed RSVP",
+      "surfaces": [
+        "full_app",
+        "app_clip",
+        "web"
+      ],
+      "result": "View or change RSVP, including self-cancellation before start; keep the calling surface",
+      "otherwise": "Recover identity or show actual pending/waitlist/offer state",
+      "trace": [
+        "CLARIFICATION",
+        "NEW1",
+        "BASE:D24"
+      ]
+    },
+    "show_entry_qr": {
+      "ordered_guards": [
+        "full app is active; otherwise Open/Get Astir with event preserved",
+        "recognized identity and server-confirmed booking",
+        "valid name and username; collect only genuinely missing fields",
+        "Current server-confirmed booking remains eligible for entry; do not invent a new phone-reverification gate after an already valid RSVP"
+      ],
+      "result": "Entry QR in Events",
+      "photo_required": false,
+      "trace": [
+        "NEW2",
+        "BASE:D15",
+        "BASE:D17",
+        "BASE:D18"
+      ]
+    },
+    "check_in": {
+      "ordered_guards": [
+        "full app is active; otherwise Open/Get Astir and recover same event",
+        "recognized identity",
+        "recap published and valid admission for this event",
+        "if historical completion already exists return existing completion/recap"
+      ],
+      "result": "Existing-style event check-in; optional note/photos/tags/private feedback; explicit empty submission remains valid; one event-labeled place visit then recap",
+      "trace": [
+        "NEW1",
+        "NEW2",
+        "BASE:D1",
+        "BASE:D2",
+        "BASE:D4",
+        "BASE:D5",
+        "BASE:D34"
+      ]
+    },
+    "upload_gallery": {
+      "ordered_guards": [
+        "full app active",
+        "recognized identity",
+        "published recap + valid admission + historical event check-in completion"
+      ],
+      "result": "Photos/videos may be added from event gallery plus; upload appears immediately to eligible attendees",
+      "trace": [
+        "NEW1",
+        "BASE:D27"
+      ]
+    },
+    "accept_offer": {
+      "ordered_guards": [
+        "recognized offer-owner identity",
+        "current valid unexpired offer",
+        "atomic offer/capacity/code-policy check",
+        "repeat acceptance returns original outcome"
+      ],
+      "result": "Confirmed reservation, with no no-app download requirement",
+      "trace": [
+        "NEW2",
+        "BASE:D23",
+        "BASE:D31"
+      ],
+      "proposal_notes": "Exact hold/cutoff/code-consumption accounting is not newly approved by this model"
+    },
+    "cancel_rsvp": {
+      "ordered_guards": [
+        "recognized booking-owner identity",
+        "confirmed booking",
+        "current time before event start"
+      ],
+      "result": "Release active spot; protected staff waitlist allocation while waitlist exists",
+      "surfaces": [
+        "full_app",
+        "app_clip",
+        "web"
+      ],
+      "proposal_notes": "Exact confirmation copy, canceled-message behavior, and address-revocation implementation remain reviewed operating details",
+      "trace": [
+        "CLARIFICATION",
+        "BASE:D24",
+        "BASE:D31"
+      ]
+    }
+  },
+  "independent_location_guard": {
+    "exact_home_address": "Only an independently entitled viewer OR a recognized confirmed guest inside the effective configured reveal/expiry window",
+    "default_reveal": "event_start - 24h",
+    "default_expiry": "event_end + 24h",
+    "otherwise": "Approximate event/place location; no exact pin, coordinates, route target, hidden payload, cached projection or calendar/share leak",
+    "post_event_access": "Address expiry does not erase event history, personal check-ins, or otherwise valid recap entitlement",
+    "trace": [
+      "BASE:D8",
+      "BASE:D13",
+      "BASE:D35"
+    ]
+  },
+  "destination_binding_contract": {
+    "mode": "Bind semantic destination + actual surface + event phase to a wireframe ID; do not hard-code shared Back links to the wrong surface",
+    "required_side_by_side": [
+      "event_identity_unknown",
+      "event_known_not_rsvped",
+      "event_confirmed"
+    ],
+    "required_surfaces": [
+      "full_app",
+      "app_clip",
+      "web"
+    ],
+    "additional_variants": [
+      "event_reservation_loading",
+      "event_reservation_retry",
+      "event_pending",
+      "event_waitlisted",
+      "event_offer",
+      "event_inactive_reservation",
+      "event_post_event_app_handoff",
+      "event_checkin_required",
+      "event_recap_unlocked",
+      "event_preview_locked"
+    ],
+    "new_booking_warning": "A no-RSVP variant is only valid after a successful lookup for a recognized identity",
+    "root_owns": "Actual screen IDs, flowchart layout, high-fidelity front-end mocks and their verification"
+  },
+  "policy_status": {
+    "no_app_guest_list_and_rsvp_management": "Resolved by latest clarification; supported for recognized confirmed guests",
+    "download_timing": "Optional upsell after RSVP; hard gate only for app-only actions/entry",
+    "name_and_username_at_entry": "Required; photo optional",
+    "pending_design": [
+      "Exact special-pin appearance/motion and default window",
+      "Detailed notification cadence/deduplication and fallback defaults",
+      "Code usage consumption moment/changes to active invitations",
+      "Any new own-video support in personal check-ins"
+    ],
+    "deferred": [
+      "D7 reconnection",
+      "Expanded profile/check-in privacy controls"
+    ]
+  },
+  "acceptance_spec": "events-exit-criteria.md",
+  "execution_status": "Not executed. This declarative product model is not an implemented app router."
+}

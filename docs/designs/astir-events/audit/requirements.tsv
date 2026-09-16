@@ -1,0 +1,157 @@
+id	authority	sources	requirement	screens	coverage
+R001	approved	M005	An event is a time-specific happening associated with exactly one canonical place.	console-event,after_post,map_place_history	specified_constraint
+R002	approved	M005	A place may have no events or many events; preserve a lasting place-to-event relationship.	map_place_history	shown
+R003	approved	M005,M022	A home is a special place type; linking an event does not automatically expose exact location or hide the entire place profile.	home-before,home-expired	shown
+R004	approved	M005,U-0914-TIMING,T3,T4	Introduce Astir progressively: no-install RSVP, optional download offer, texts, installed-app entry, content/check-in and event-linked map/place history.	discover-rsvp,texts-before-install,install-onboarding,after_event,map_place,ordinary-map	shown
+R005	approved	M005,M007,M051	Resolve product behavior and exceptions before engineering specification and implementation; use gstack specification/design review.		specified_constraint
+R006	approved	M003	Keep the September roadmap and session objective in view.		specified_constraint
+R007	approved	M054,M055,U-0914-TIMING	Show the complete journey with options, alternate paths, and explicit browser/App Clip/app distinctions.		specified_constraint
+R008	approved	U-0914-AUDIT	Maintain a requirement-by-requirement internal audit; do not silently replace user intent with assumptions.		specified_constraint
+R009	approved	M005	Provide a new Events tab in the full app.	events-list	shown
+R010	approved	M005	Show confirmed events first when they exist.	events-list,events-discover	shown
+R011	approved	M005	Show a simple list of upcoming nearby events.	events-list,events-discover	shown
+R012	approved	M005	When no local events exist, keep the coming-soon state simple; do not treat the earlier city waitlist idea as settled.	events-empty	shown
+R013	approved	M005,T1	Use an immersive event cover with overlaid title/description and the requested glass/floating-action direction.	event-detail,noapp-confirmed-detail,confirmed-detail,event-state-matrix	shown
+R014	approved	M005,T1	Event details include a strong title, short description, date/time, location under its rules, and social proof.	event-detail,full-guest-list,event-state-matrix	shown
+R015	approved	M005,T1	RSVP is the primary action; Share remains prominent.	event-detail	shown
+R016	open	M005,T1	Whether a separate Save event/bookmark action belongs in scope is unselected.		open
+R017	approved	M005	A shared event link leads to the event detail; the installed app has equivalent applicable functionality.	event-detail,confirmed-detail,existing-member,member-confirmed,installed-entry,event-state-matrix	shown
+R018	approved	M005,D14	Use the App Clip for the preferred no-full-install RSVP; support equivalent browser RSVP when it cannot open.	event-detail,browserfallback,event-state-matrix	shown
+R019	approved	M005,U-0914-TIMING	Apple/Google sign-up occurs within the no-install RSVP before phone collection; it is not a download step.	rsvp-auth,rsvp-phone	shown
+R020	approved	M005	Provide clear Apple and Google sign-up buttons.	rsvp-auth	shown
+R021	approved	M005	Collect a name and phone number for RSVP without unnecessary repetition.	rsvp-phone,existing-member,rsvp-phone-app,app-event-auth	shown
+R022	approved	D17	Verify phone control by SMS before confirming RSVP; a stored number alone is insufficient.	rsvp-code,existing-member,rsvp-code-app,rsvp-phone-app	shown
+R023	derived	D17	Pending, failed, or expired phone verification must not show a confirmed reservation.	rsvp-code,verification-error	specified_constraint
+R024	approved	D19	Explain event-specific texts at RSVP.	rsvp-phone	shown
+R025	approved	D19	Future-event texts have a separate optional checkbox initially unchecked; declining it does not prevent RSVP/event updates.	rsvp-phone	shown
+R026	superseded	M005,D19	The original combined this-event-and-future-events checkbox was replaced by D19A.		superseded
+R027	approved	T1	Support a required event access code when the event uses one.	enter-code,codeinvalid,installed-code,installed-code-invalid	shown
+R028	approved	D20	First-release RSVP is free; do not introduce payment/checkout/refund flows.	event-detail	shown
+R029	approved	D22	Eligible RSVPs automatically confirm if space is available by default.	rsvp-confirmed,existing-member	shown
+R030	approved	D22	Astir can enable manual RSVP approval internally.	manualpending,console-registration,console-review-request,console-request-approved,installed-pending	shown
+R031	approved	D21	At capacity, offer an event-specific waitlist; Astir chooses recipients of available spots.	waitlist,console-guests,console-offer,installed-waitlist	shown
+R032	approved	D23	Selection creates an offer that the guest must accept; it is not automatic confirmation.	offer,console-offer-sent,installed-offer	shown
+R033	approved	D23	Offers default to 24-hour expiry, adjustable in the console.	offer,console-registration,installed-offer-expired	shown
+R034	approved	D24	Guests may cancel their own confirmed RSVP before event start, releasing their spot.	noapp-confirmed-detail,confirmed-detail,cancel-confirm,rsvp-canceled,cancel-after-start,manage-rsvp	shown
+R035	approved	D31	While a waitlist exists, protect released spaces for Astir selection; new guests join the waitlist.	waitlist,console-guests	specified_constraint
+R036	derived	D21,D22,D23,D31	Pending, waiting, offered, confirmed, canceled, and admitted are distinct states; no implicit promotion.	manualpending,waitlist,offer,offerexpired,rsvp-confirmed,rsvp-canceled,staff-admitted	shown
+R037	approved	T1	Show both RSVP confirmation and the event detail in its confirmed state.	rsvp-confirmed,noapp-confirmed-detail	shown
+R038	approved	T1	Offer Add to calendar after confirmation.	rsvp-confirmed	shown
+R039	approved	D30,M040	Use a face pile and count as an explicit RSVP conversion hook before confirmation.	event-detail	shown
+R040	approved	D30	Only confirmed guests unlock the full guest list; preview and attendee recap remain distinct gates.	full-guest-list	shown
+R041	approved	M005,U-0914-TIMING	RSVP confirmation and event texts do not require a full-app download.	rsvp-confirmed,confirmation-text,pre-event-text	shown
+R042	approved	D29	Automatically text confirmation, 24-hour and 2-hour reminders, important changes, and recap invitation.	confirmation-text,pre-event-text,after_text,console-messages	shown
+R043	approved	D29	Message timing and templates are configurable from the console.	console-messages	shown
+R044	approved	M005,D14,D15,U-0914-TIMING	Full-app installation and the event QR are a hard admission requirement, later than RSVP.	entry-download,arrival-ticket,ticket-after-profile,staff-scan	shown
+R045	approved	D15	Disclose compatible-phone/full-app entry requirements before RSVP; browser access does not waive admission rules.	event-detail,unsupportedphone	shown
+R046	approved	M005	The entry QR is accessible in the Events tab.	events-list,arrival-ticket	shown
+R047	approved	T1	Guests arriving from RSVP receive shortened onboarding that preserves their event/booking context.	recover-booking,app-recovery-auth	shown
+R048	approved	D18	Strongly prompt for a profile photo during app setup, but keep it optional.	optional-photo,profile-before-ticket,ticket-first,ticket-after-profile	shown
+R049	approved	D18	No missing/failed profile photo may block RSVP, QR access, or later check-in.	optional-photo,photouploadfailure	shown
+R050	open	U-0914-TIMING,U-0914-REVIEW,T3	Initial optional download upsell is selected after confirmation; exact later reminder timing and near-arrival QR prominence remain unselected.	entry-download	open
+R051	open	M051,M054,M055	Ticket-first versus optional profile-before-ticket remains an unselected A/B layout choice after installation.	ticket-option-a,profile-before-ticket	open
+R052	approved	D16,M030	Assume App Store availability before live Events; keep TestFlight as a separate testing path, not a claim of current release.	install	specified_constraint
+R053	approved	D25	For an installed-app guest whose QR fails, staff can verify the confirmed booking and manually admit.	qrfailure,door-help,stafffindguest,staff-guest-search,staff-no-match,scan-rejected	shown
+R054	approved	D5	Recorded admission establishes recap eligibility; staff can correct a missed scan.	recap_missing_admission,console-attendance,console-attendance-corrected	shown
+R055	approved	D5	RSVP alone, a no-show, or self-report cannot unlock protected attendee content.	recap_missing_admission,recap_locked_preview	shown
+R056	approved	M005,T2,D4,D5	Door admission is separate from the personal post-event check-in and does not itself create a place visit/public post.	staff-admitted,after_composer	specified_constraint
+R057	approved	D26	Astir publishes the recap when ready in the console; invitations follow publication.	console-recap-preview,console-recap-live	shown
+R058	approved	M005,D26,D29	A content notice and text bring eligible attendees back after publication.	after_text,recap-notice	shown
+R059	approved	M005,T2,D2	Require explicit personal event check-in submission to unlock full content.	after_composer	shown
+R060	approved	T2,M018	The check-in is a personal event post, distinct from a shared-event comment.	after_composer,after_post,after_recap	shown
+R061	approved	T2,D2	Public note is optional.	after_composer	shown
+R062	approved	T2,D2	Personal photos are optional.	after_composer	shown
+R063	approved	D2,D34	Private feedback is optional; a completely empty submission is valid.	after_composer	shown
+R064	approved	T2,D34	There is no public venue rating on an event check-in.	after_composer,after_post	shown
+R065	approved	D34	Private feedback offers optional 1–5 stars and an independently optional comment to Astir.	after_composer	shown
+R066	approved	T2,D34	Private feedback must not appear in the public post or alter a public venue rating.	after_post	specified_constraint
+R067	approved	T2	Successful personal check-in lands on the attendee recap, not immediately on the map.	after_composer,after_recap	shown
+R068	approved	T2	The recap contains an event summary and Astir-provided photos/videos.	after_recap,event-video	shown
+R069	approved	T2	The recap also contains attendee-provided photos/videos.	after_recap,gallery-posted	shown
+R070	approved	T2	Comments and social conversation appear prominently near the top.	after_recap,recap-comment,recap-comment-posted	shown
+R071	approved	T2	Personal event check-ins appear in the shared event experience.	after_recap	shown
+R072	approved	D3	Nonattending Astir members can see an event preview across Astir, not just social connections.	recap_locked_preview,map-event-preview	shown
+R073	approved	D3,D5	Full gallery and conversation require this event's admission and completed check-in.	recap_locked_preview,after_recap	specified_constraint
+R074	approved	M017	The preview shows a gray/blurred locked comment section with unreadable text.	recap_locked_preview	shown
+R075	open	M017	A profile photo in the locked-comment teaser was tentative, not approved.	recap_locked_preview	open
+R076	derived	M017,D3,D5	Locked placeholders must not include protected text; copy must not promise future attendance unlocks an unattended past event.	recap_locked_preview	specified_constraint
+R077	approved	D6	Before check-in, guests may add their own photos; protected event photos are available only after unlock.	after_composer,after_gallery	shown
+R078	approved	D6,D28	After unlock, gallery photos may be added to the same personal check-in without a new visit.	after_gallery,after_post	specified_constraint
+R079	approved	D27	Eligible attendee shared-gallery uploads are visible immediately to eligible viewers.	gallery-add,gallery-posted	shown
+R080	approved	D27	Uploaders may remove their content and Astir may moderate shared uploads.	gallery-manage,console-moderation,console-photo-removed	shown
+R081	approved	D28,M038	Shared-gallery photos may appear in public Astir event check-ins; omit every reuse explanation or extra approval prompt.	after_gallery,after_post,gallery-add	specified_constraint
+R082	approved	D32	Removing a source gallery photo removes it from all referencing personal check-ins.	recap_photo_removed,recap-after-photo-removal,gallery-after-photo-removal	specified_constraint
+R083	approved	D32	Source-photo removal preserves surrounding notes, other media, and place visits.	recap_photo_removed	shown
+R084	approved	D33	Deleting a personal check-in removes that post/event visit while retaining valid-attendee recap access.	recap_removal_results,manage-personal-post,recap-after-deletion,place-after-post-deletion	shown
+R085	derived	D4,D9,D33	Do not erase independent place history, ratings, saved intent, existing restrictions, or staff admission when managing event posts.	recap_removal_results	specified_constraint
+R086	approved	M018,D4	Show event title/date as the identity of the special check-in while preserving its canonical place association.	after_post,recap_photo_removed	shown
+R087	approved	D4	Event check-in marks the place Been as an event-labeled visit without a venue rating.	after_post,map_place_history	shown
+R088	derived	M018,D4,D6	One event check-in is one logical visit across event and place views; editing or retry does not duplicate it.	after_gallery,after_post	specified_constraint
+R089	approved	D9,M022	Personal event posts default to Everyone in Astir and show a small eye audience icon.	after_composer,after_post,recap_photo_removed	shown
+R090	deferred	D9,M022	Later profile-level and per-check-in audience controls, including followers-only, apply consistently to places and events.		deferred
+R091	derived	D9	The Everyone default does not grant the full shared gallery, private feedback, exact home address, or anonymous-web access.		specified_constraint
+R092	approved	T2	The place profile offers a lasting route back to past events and the viewer's permitted recap/preview.	map_place_history,map_place_preview,past-events,ended-unpublished	shown
+R093	approved	D10	Special pins identify discoverable upcoming/recent events for permitted viewers, not only attendees or completed memories.	map_special_event,map-event-preview	shown
+R094	approved	D11	Console controls special map styling on/off, start/end, presets, and preview.	console-map-controls	shown
+R095	approved	D12,T3,T4	Tapping a special event pin opens a collapsed event card over the standard map; expanding opens the event, which links to its place.	map_special_event,map-event-collapsed,map-event-collapsed-preview,after_recap,map_place_history	shown
+R096	approved	T2	After temporary pin styling ends, place access and event history persist.	map_place_history	specified_constraint
+R097	superseded	M005,T4	Remove the invented event-to-nearby-recommendations screen (old31) and Explore nearby from old30; ordinary Astir map/place discovery remains.		superseded
+R098	approved	D8,M022	A home event/place may remain visible at an approximate area or radius.	home-before,home-expired,home-event-preview,home-place-preview,home-place-before	shown
+R099	approved	M005	The owner or renter of a home venue must consent to its use.	console-home	shown
+R100	approved	D13	Default exact-home-address reveal is event start minus 24 hours for confirmed guests.	home-before,home-revealed,home-event-confirmed,home-place-confirmed,home-exact-details	shown
+R101	approved	D13	A guest confirmed within the active reveal window receives address access immediately.	home-revealed,home-exact-details	specified_constraint
+R102	approved	D13,M024	Astir can adjust home-address reveal timing in the console.	console-home	shown
+R103	approved	D35	Exact-home-address access expires event end plus 24 hours for all guests by default.	home-expired	shown
+R104	approved	D35	Astir can change the address-expiry cutoff per event; approximate event/place history remains after expiry.	console-home,home-expired	shown
+R105	derived	D8,D13,D35	Apply home location access consistently across event, place, map, navigation and links; recap eligibility remains separate.	home-before,home-revealed,home-expired,home-place-before,home-event-preview,home-place-preview,home-exact-details,home-event-confirmed,home-place-confirmed	specified_constraint
+R106	deferred	D7,M020	Capture reconnection, missed connections, people met, and solo/single/private ideas for the next joint discussion; do not spec them now.		deferred
+R107	proposal	P01	Preserve event context through retry; recover the same account and booking without silent merge or replacement.	app-recovery-auth,wrongaccount,auth-canceled,alreadyRSVPed,recoveringmatchingbooking,app-rsvp-auth,app-event-auth,installed-event-signedout,clip-recover-auth,browser-recover-auth,postevent-recover	proposal
+R108	proposal	P02	Use a 60-second SMS resend delay with editable number and explicit failure states; provider timing still needs validation.	verification-error	proposal
+R109	proposal	P03	Cancel with one confirmation, invalidate QR and event-provided exact location, and rebook under current rules.	cancel-confirm,rsvp-canceled	proposal
+R110	proposal	P04	Apply approval-mode/duration changes prospectively; notify guests when changing issued offers.	console-registration	proposal
+R111	proposal	P05	For event cancellation/rescheduling, show changed state, preserve or invalidate booking as specified, adjust reminders/address windows.	event-rescheduled,event-canceled,rescheduled-cancel,rescheduled-canceled,rescheduled-unreserved	proposal
+R112	proposal	P06	Retain failed check-in drafts, make retries idempotent, and offer explicit submission without a failed optional photo.	recap_upload_error	proposal
+R113	proposal	P07	Edit public post media/note and private feedback separately; use neutral removed-photo states.	recap_photo_removed	proposal
+R114	proposal	P08	Use a stable non-house-centered approximate area and require recorded consent before publication.	home-before,console-home	proposal
+R115	proposal	P09	Use event-local time zones and explicit draft/preview/publish operator semantics with failure states.	console-preview,console-live,console-publish,console-publish-failed,console-invite-failed	proposal
+R116	proposal	P10	Skip elapsed reminders, keep retries distinct from successful sends, and stop SMS on opt-out without canceling RSVP.	console-messages	proposal
+R117	proposal	P11	Active offers hold capacity; pending verification/approval do not. Expired/declined offers return to deliberate reselection.	offerexpired,console-registration	proposal
+R118	proposal	P12	Use permitted confirmed-guest photos/count, then names/photos without phone numbers in the full list.	full-guest-list	proposal
+R119	proposal	P13	Repair only truly missing required identity and defer general permissions/tour on the event return path.	missingidentity,location-primer,notification-primer,location-denied,account-entry-setup	proposal
+R120	proposal	P14	Own-post video, exact social controls, unpublished/unavailable recap behavior, and detailed upload recovery await approval.	after_recap,recap_unpublished,recap-unavailable,past-events,ended-unpublished,recap-comment,recap-comment-posted	proposal
+R121	proposal	P15	Staff identity checks, reentry escalation, and offline roster reconciliation require explicit operational design.	stafffindguest,duplicateadmission	proposal
+R122	proposal	P16	One-person bookings, no anonymous plus-ones/transfers, and walk-in limits are proposed participation rules.		specified_constraint
+R123	proposal	P17	Exact five-tab placement, past-event navigation, and request-state placement are proposed layout details.	events-list,events-discover	proposal
+R124	proposal	P18	Code sequencing, retry preservation, and code-change effects are proposed.	enter-code,codeinvalid	proposal
+R125	proposal	P19	Event publication fields, validation, draft-link visibility, and preview behavior are proposed.	console-event,console-preview	proposal
+R126	proposal	P20	Share/calendar recovery and approximate-home calendar content are proposed; omitting Save is not an approved scope cut.	rsvp-confirmed	proposal
+R127	open	M005,D10,D12	Default special-pin schedule and multiple-event precedence require review; seven-day windows are proposals only.	console-map-controls	open
+R128	open	T2	Own-video support in the personal check-in is unsettled; shared-gallery photos/videos are approved.	after_composer	open
+R129	approved	T1	Show an example of notification value before requesting notification permission; exact contextual trigger remains proposed.	notification-primer	shown
+R130	approved	T1	Keep the entry QR with Events; do not add a separate Tickets tab.	events-list,arrival-ticket	shown
+R131	approved	M005,T1	The event splash is the event detail itself, not an extra blocking branded screen or general onboarding tour.	event-detail	shown
+R132	approved	T2	Shared conversation supports back-and-forth replies and liking; exact control design is proposed.	recap-comment,recap-comment-posted	shown
+R133	superseded	T2,D3	Friend/second-degree-only event preview brainstorming was broadened to Astir-wide preview by D3.		superseded
+R134	superseded	M005	The spoken one-to-one/reversed places-and-events wording is corrected by the same discussion: each event has one place and a place can have many events.		superseded
+R135	derived	M005,ROADMAP	Use the first-event and 30-friend-beta objectives as context; the audit does not change roadmap dates or assume additional founder capacity.		specified_constraint
+R136	approved	M005,U-0914-INSTALLED-INVITE	An invite opened with Astir already installed opens the linked event inside the full app; resolve the signed-in account and existing reservation before offering the applicable action.	invite-installed,installed-event-detail,installed-event-signedout,app-event-auth,confirmed-detail	shown
+R137	approved	M005,U-0914-EVENTS-DISCOVERY	Discovering and tapping an upcoming event in the new Events tab opens the same in-app event detail as an invite. Tapping a confirmed card opens its confirmed event; Show ticket remains a separate QR shortcut.	events-discover,installed-event-detail,events-list,confirmed-detail	shown
+R138	approved	T3	All View event links identify the same event, including invite, confirmation/reminders and shares; forwarded links resolve the recipient independently.	invite,invite-installed,confirmation-text,pre-event-text,two-hour-text,important-change-text,after_text	shown
+R139	approved	T3	Show app, App Clip and web side by side across unknown identity, recognized no RSVP and recognized confirmed RSVP; Clip is single-event without app tabs.	event-state-matrix	shown
+R140	approved	T3	Unknown identity is distinct from no RSVP; restore the account and fetch its real reservation before a new submission. Persistence/handoff mechanism requires engineering validation.	event-state-matrix,clip-recover-auth,browser-recover-auth,clip-ready-rsvp,browser-ready-rsvp,event-lookup-loading,event-lookup-retry	specified_constraint
+R141	approved	U-0914-REVIEW,U-0914-DOWNLOAD-CLARIFICATION	After confirmation offer an optional dismissible download upsell with QR-at-door rationale; guest list and RSVP management still require recognized confirmed RSVP, not download.	rsvp-confirmed,noapp-confirmed-detail,manage-rsvp	shown
+R142	approved	T3	Use View or change RSVP on the event; retain before-start cancellation inside management.	confirmed-detail,noapp-confirmed-detail,manage-rsvp	shown
+R143	approved	T4	Installed but incomplete account must finish name and username before QR/admission; reuse existing data and keep profile photo optional.	account-entry-setup,missingidentity	shown
+R144	approved	T3	Handle deleted-app post-event return: event details remain accessible, while check-in/uploads require reinstall and same-account attendance/completion recovery.	postevent-reinstall,postevent-install,postevent-recover,noapp-ended-preview,noapp-recap-unpublished	shown
+R145	approved	T3	Console generates/editable event tag options that populate optional event check-in tags; ten is an example, not a fixed requirement.	console-tags,after_composer	shown
+R146	approved	T3	Recap is rich and event-focused using place-profile patterns: cover, familiar comment controls, a clear add-media plus, and upper-right event Share.	after_recap,recap-after-deletion,recap-after-photo-removal	shown
+R147	approved	T3,T4	Keep standard map/place interaction: special pin opens collapsed event/place label with smaller at; place events remain inline without giant footer CTA or invented Explore nearby.	map_special_event,map-event-collapsed,map_place_history	shown
+R148	approved	T4	During the configured promotion interval show in Featured to permitted viewers, You for attendees, Friends when relevant friends attended; console controls Featured promotion.	console-map-controls,map_special_event	specified_constraint
+R149	approved	T4	Explore square, rounded and glow/motion event-pin treatments; do not silently select one final preset.		specified_constraint
+R150	approved	T4	Console and simple staff QR scanner are authenticated internal web interfaces; keep event, first-party media, post-event and settings management out of the guest app.	console,staff-scan,staff-guest-search	shown
+R151	approved	T4	Generate optional invitation codes with optional capped or uncapped usage, include enabled codes in invitation text, and allow codes to remain off initially.	console-invite-codes,enter-code,invite-with-code	shown
+R152	approved	T4	Full guest list prioritizes people the viewer follows and shows truthful permitted mutual-connection counts.	full-guest-list	shown
+R153	approved	T3,T4	Create visually accurate Swift front-end mocks in an isolated sandbox and capture actual simulator screenshots; no backend integration or production app changes.		specified_constraint
+R154	approved	T4	Create the full starting-state and end-to-end exit acceptance suite for the engineering plan; distinguish planned tests from implemented/passed tests.		specified_constraint
+R155	open	T3	The icon color mismatch needs the exact icon identified; do not invent a target or claim the unidentified issue fixed.		open
+R156	open	T3,T4	External share payload, second-degree Friends eligibility, tag-generation mechanics and invitation-code redemption semantics need explicit follow-through; broad Featured visibility is selected.		open

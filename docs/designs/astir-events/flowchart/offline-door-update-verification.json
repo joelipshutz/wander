@@ -1,0 +1,215 @@
+{
+  "decision": "Engineering D9B offline door; local design artifact only",
+  "verified_at": "2026-09-15T18:33:25.601Z",
+  "screens": 172,
+  "sections": 13,
+  "new_screens": [
+    {
+      "id": "offline-roster-prepare",
+      "reviewNumber": "166",
+      "title": "Prepare the door guest list",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-roster-match",
+      "reviewNumber": "167",
+      "title": "Verify a guest from the downloaded list",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-entry-pending",
+      "reviewNumber": "168",
+      "title": "Entry is saved on this device",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-syncing",
+      "reviewNumber": "169",
+      "title": "Reconcile after reconnecting",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-sync-results",
+      "reviewNumber": "170",
+      "title": "See each reconciliation outcome",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-booking-conflict",
+      "reviewNumber": "171",
+      "title": "Resolve a changed or canceled booking",
+      "channel": "staff"
+    },
+    {
+      "id": "offline-roster-unavailable",
+      "reviewNumber": "172",
+      "title": "No usable roster during the outage",
+      "channel": "staff"
+    }
+  ],
+  "changed_existing_screens": {
+    "stafffindguest": {
+      "note": {
+        "before": "The action remains unavailable until checks are complete. Uncertain matches go to the staff lead.",
+        "after": "The action remains unavailable until checks are complete. Uncertain matches need Team admin resolution. All authorized console users have the same Team admin role."
+      }
+    },
+    "duplicateadmission": {
+      "body": {
+        "before": "This guest’s entry is already recorded. Don’t add another admission. Ask the staff lead before allowing reentry.",
+        "after": "This guest’s entry is already recorded. Don’t add another admission. Ask a Team admin to review the situation."
+      },
+      "note": {
+        "before": "The staff-lead reentry procedure is proposed. Repeated scans must not create duplicate attendance.",
+        "after": "Repeated scans must not create duplicate attendance. Reentry policy remains unapproved; Team admin review does not itself authorize reentry."
+      },
+      "primary": {
+        "before": "Ask staff lead",
+        "after": "Ask Team admin"
+      }
+    },
+    "staff-no-match": {
+      "secondary": {
+        "before": "Ask staff lead",
+        "after": "Ask Team admin"
+      }
+    }
+  },
+  "original165_ids_numbers_order_routes_preserved": true,
+  "offline_section_adjacent_to_door": true,
+  "new_preview_files": [
+    "offline-booking-conflict-full.jpg",
+    "offline-booking-conflict.jpg",
+    "offline-entry-pending-full.jpg",
+    "offline-entry-pending.jpg",
+    "offline-roster-match-full.jpg",
+    "offline-roster-match.jpg",
+    "offline-roster-prepare-full.jpg",
+    "offline-roster-prepare.jpg",
+    "offline-roster-unavailable-full.jpg",
+    "offline-roster-unavailable.jpg",
+    "offline-sync-results-full.jpg",
+    "offline-sync-results.jpg",
+    "offline-syncing-full.jpg",
+    "offline-syncing.jpg"
+  ],
+  "changed_original_preview_files": [
+    "staff-no-match.jpg",
+    "duplicateadmission.jpg",
+    "duplicateadmission-full.jpg",
+    "staff-no-match-full.jpg"
+  ],
+  "unchanged_original_preview_files": 326,
+  "complete_manifest_with_per_screen_source_provenance": true,
+  "native_screen_map_unchanged": true,
+  "new_full_previews_visually_inspected": true,
+  "changed_files": {
+    "build-flow-wireframes.py": {
+      "before": "11412cb06692703050e079ff46bcc8b7d2a670be5dd2a2d485c74b4af6736c91",
+      "after": "08f50a85788d75c2519f4c244778c85c205b2f6fe44f01d4ad0bf2d65be9b9d1"
+    },
+    "revision-20260915/apply-offline-door.py": {
+      "before": null,
+      "after": "1307a54889355a0fb9c227d40e92a165b81b986610d5174451d7a51131cb951d"
+    },
+    "flowchart/continuous-layout.py": {
+      "before": "1eb64e30fd17be53d0ace943e336182cad202ffc8201ee76c95954987a7554fd",
+      "after": "4baaf4906ef577c9fb830c0d541d7d78f6c609c35fdbc52c0bab14a3c30a46ee"
+    },
+    "flowchart/build-continuous-page.py": {
+      "before": "a9e07c79bc99d27880ccfce5088770a9230b8dc8bbfec78376d1e7ef796e0b93",
+      "after": "ed34a405cc18a0a0f313e79202a1a19af9e62179570d4765717c83c5d0baa25d"
+    },
+    "flowchart/build-flowchart.py": {
+      "before": "abf74f6a2285c54edfdfa54d47ffd32f2cc4d899cba33e5c991dd34c183b763b",
+      "after": "29ab54a77fee7825648263ce0bd4d569b4b369c85105643aaa3287c7c52a884c"
+    },
+    "flowchart/capture-screen-previews.cjs": {
+      "before": "6e4f7ffdfc2ef6c61275cd2c49bdc177b97c5ec76b6ae81b619448252735d391",
+      "after": "687ce5329cb7779c22f941c8e5d6f53e7f3b3c444a642a350e280ad2f5752d2c"
+    },
+    "flowchart/verify-inline-previews.cjs": {
+      "before": "16bf319ed36687fd5bbb54350514022142033e13824c6b9302ac23f85294d692",
+      "after": "8704790c86094bee03dabb40fb384f449006f4bbddb5ffaae68908b4e880bff2"
+    },
+    "flowchart/README.md": {
+      "before": "b61b267a423110722b17b5e6b9472f78318cf276d3503960077577d4d9272af5",
+      "after": "f3c66230a3143258d2c5d9d46216150fc374a17f7424e1c8e5b2f58d4f1663dc"
+    },
+    "astir-events-wireframes.html": {
+      "before": "ccc9b8f36dac82557e886d928b20b4adbf25e9034eaf7493d9cd58b78cef6d51",
+      "after": "36230ec7fe5141c99a9c098f4c2752352839b536e892ae0f150fc8b2cd74d07a"
+    },
+    "astir-events-flowchart.html": {
+      "before": "790d73b69e52e1df4f608d5b15692cc31945725a140203d00e3300ef90f3fa84",
+      "after": "fcc986c1362486dc7b6309499ff76a1d50e20135e5aeac08516325049d806113"
+    },
+    "flowchart/screen-model.json": {
+      "before": "9adc48aa8e926f1edc07323a267989593ed96235c825f0522f4451d9e51fbf53",
+      "after": "1dfafdad2e5894a7a7929990e201607a3417fbb60af3ec3edc16e691daa70063"
+    },
+    "flowchart/wireframe-preview-manifest.json": {
+      "before": "92146a713d1628bd6d0e5ae34b5136c36e1556594b4ac9a5ce10be40a03482be",
+      "after": "54852d7dd74928fceeaf531ac8f7ce8ecdac24a79e7171881e0c184d63e728b1"
+    },
+    "flowchart/continuous-layout.json": {
+      "before": "6f3b6d31ef52361129a8106b377e3a0615c250be844b4835965ecdff5656ce45",
+      "after": "ef50d7b318e370e8204abb28e12b0a5e9b7cf80a4ce74ed4c3ba85cf2a65a14c"
+    },
+    "flowchart/continuous-coverage.json": {
+      "before": "4f1d088409f1328f8922575bc8e5e83748d4d078fb648e6d17d2da085eda7331",
+      "after": "1d982de8a636597a127f764087d7d34b167d37fab8434d72d62a277d157124a8"
+    },
+    "flowchart/inline-preview-verification.json": {
+      "before": "3983c2cf7928051bf5d0f6f2574d24676294d57602c6bfe84f4206a334ddb38d",
+      "after": "045a6b1d5fb17b9d767555d3cc0bb1d2af363d9bc961b9402534a01f55bed295"
+    },
+    "generated-wireframes/flow-model.json": {
+      "before": "9adc48aa8e926f1edc07323a267989593ed96235c825f0522f4451d9e51fbf53",
+      "after": "1dfafdad2e5894a7a7929990e201607a3417fbb60af3ec3edc16e691daa70063"
+    },
+    "generated-wireframes/onboarding-review.html": {
+      "before": "ccc9b8f36dac82557e886d928b20b4adbf25e9034eaf7493d9cd58b78cef6d51",
+      "after": "36230ec7fe5141c99a9c098f4c2752352839b536e892ae0f150fc8b2cd74d07a"
+    },
+    "generated-wireframes/onboarding-choice-original.html": {
+      "before": null,
+      "after": "ccc9b8f36dac82557e886d928b20b4adbf25e9034eaf7493d9cd58b78cef6d51"
+    },
+    "generated-wireframes/onboarding-review-before-surface-correction.html": {
+      "before": null,
+      "after": "ccc9b8f36dac82557e886d928b20b4adbf25e9034eaf7493d9cd58b78cef6d51"
+    }
+  },
+  "browser_verification": {
+    "offline_branch": {
+      "new_screen_count": 7,
+      "checks_gate_offline_admit": true,
+      "pending_not_server_validated": true,
+      "sync_disabled_offline": true,
+      "conflict_error_treatment": true,
+      "staff_web_surface": true
+    },
+    "screens": 172,
+    "primary_native_mocks": 26,
+    "primary_wireframes": 146,
+    "visible_default_ui_images": 186,
+    "all_inline_images_decoded": true,
+    "desktop_in_place_expand": true,
+    "mobile_in_place_expand": true,
+    "external_requests": [],
+    "new_tabs_on_expand": 0,
+    "search_preserves_all_screens": true,
+    "all_previews_visible_in_print": true,
+    "motion_duration_seconds": 5.603333,
+    "errors": [],
+    "html_sha256": "fcc986c1362486dc7b6309499ff76a1d50e20135e5aeac08516325049d806113",
+    "verified_at": "2026-09-15T18:33:25.601Z"
+  },
+  "limitations": [
+    "Wireframes only: no offline storage, production admission or reconciliation implemented.",
+    "Reentry policy remains unapproved.",
+    "Existing diagram exports remain the earlier 165-screen snapshot, labeled in the page and README.",
+    "Repo/main and root-owned product, engineering, working-record and acceptance documents were not changed by this task."
+  ]
+}
