@@ -386,13 +386,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderUseStorefrontFixtures"
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
         ]
         app.launch()
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["map.filter.featured"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 8))
 
         let pin = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Canyon Lookout Trail,")
