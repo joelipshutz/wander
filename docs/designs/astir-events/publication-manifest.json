@@ -3,11 +3,11 @@
   "planning_only": true,
   "app_source_baseline": "f8d258e869503a28d70518a050dff36a344134c6",
   "packaging_main_baseline": "f8493c026503cf270f6c6c21295093fd7df5bef0",
-  "flowchart_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "flowchart_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581",
   "files": {
     "astir-events-flowchart.html": {
-      "source_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
-      "published_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993"
+      "source_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581",
+      "published_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581"
     },
     "astir-events-wireframes.html": {
       "source_sha256": "13a7c90871ef60361b7e48e3d5300eac58426084ac16c3f3c9c584a7fedb69bf",
@@ -79,7 +79,7 @@
     },
     "engineering-plan.md": {
       "source_sha256": "c2aca96f7e15ff3e2ec8d6e87a358f91b192e39b7a7687cc334c559852addffa",
-      "published_sha256": "c2aca96f7e15ff3e2ec8d6e87a358f91b192e39b7a7687cc334c559852addffa"
+      "published_sha256": "a5ceefe9198ebb559e00a65799b357a8e7f9c10248ad6095c9e113e1fc94733a"
     },
     "engineering-rollout.md": {
       "source_sha256": "11ca50953dafd8d31fb45cfc123ae6e2458312aeb73e6045b2207ab9353ff476",
@@ -256,7 +256,37 @@
     "working-product-record.md": {
       "source_sha256": "28c9b9323f5dc2948e53ea00577215fd6420870229392c2d9c8aa8e907fd7dd2",
       "published_sha256": "af01925829d17e12ffc64c10653f7a92c396e1f0fa07c3226c5bfa4900112f60"
+    },
+    "astir-events-linear.html": {
+      "source_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+      "published_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993"
+    },
+    "flowchart/canvas-camera.js": {
+      "source_sha256": "7e9296d0f65616afde6f8e992ce5c749915c85f8affc5227a6cf482297e5b37a",
+      "published_sha256": "7e9296d0f65616afde6f8e992ce5c749915c85f8affc5227a6cf482297e5b37a"
+    },
+    "flowchart/canvas-review.js": {
+      "source_sha256": "6156c8cabac293f4aa1700888c3f71a45df34534385ea11ba87c10f3438cb974",
+      "published_sha256": "6156c8cabac293f4aa1700888c3f71a45df34534385ea11ba87c10f3438cb974"
+    },
+    "flowchart/canvas.css": {
+      "source_sha256": "1a5a4b773aaf5225489838153bbc543d4b9f939b2d9e796b8f38532b1305a013",
+      "published_sha256": "1a5a4b773aaf5225489838153bbc543d4b9f939b2d9e796b8f38532b1305a013"
+    },
+    "flowchart/build-canvas.py": {
+      "source_sha256": "56b85da88fa9c99d18375208166ab6b19f9669c0ab5bdfb244467fc8b9a81163",
+      "published_sha256": "56b85da88fa9c99d18375208166ab6b19f9669c0ab5bdfb244467fc8b9a81163"
+    },
+    "flowchart/continuous-layout.json": {
+      "source_sha256": "ef50d7b318e370e8204abb28e12b0a5e9b7cf80a4ce74ed4c3ba85cf2a65a14c",
+      "published_sha256": "ef50d7b318e370e8204abb28e12b0a5e9b7cf80a4ce74ed4c3ba85cf2a65a14c"
+    },
+    "flowchart/canvas-verification.json": {
+      "source_sha256": "15353e8f30d703e8fa84b392944c19a0a3a8cfcc263a96aa6b122208771e9c95",
+      "published_sha256": "15353e8f30d703e8fa84b392944c19a0a3a8cfcc263a96aa6b122208771e9c95"
     }
   },
-  "portability": "Markdown links to app evidence use immutable GitHub source; native gallery link uses equivalent embedded flowchart comparisons. Local transcript/design-authoring links are explicitly labeled; raw attachments are not added. Historical audits retain their dated snapshot status. Published TSV files use LF line endings."
+  "portability": "Markdown links to app evidence use immutable GitHub source; native gallery link uses equivalent embedded flowchart comparisons. Local transcript/design-authoring links are explicitly labeled; raw attachments are not added. Historical audits retain their dated snapshot status. Published TSV files use LF line endings.",
+  "linear_review_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "review_shell": "Pannable canvas; earlier browser checks apply only to preserved astir-events-linear.html."
 }
