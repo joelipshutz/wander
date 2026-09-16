@@ -1266,7 +1266,9 @@ struct AddScreen: View {
             defaultVisibility: draft.form.selectedVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
         )
-        addSaveFlow = context
+        addSaveFlow = draft.form.selectedStatus == .wannaGo && draft.baselineUserPlaceLocalID == nil
+            ? context.freshWannaContext()
+            : context
         selectedDetent = MapPlaceSaveFlowSheet.compactDetent
     }
 
