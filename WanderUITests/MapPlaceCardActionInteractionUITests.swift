@@ -224,7 +224,12 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         for _ in 0..<5 { app.swipeUp() }
         XCTAssertTrue(checkIn.isHittable)
         XCTAssertTrue(app.buttons["MY CHECK-INS"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")).firstMatch.exists)
+        // The covered Feed may remain in the accessibility tree; only visible,
+        // interactive history controls belong to the presented profile.
+        let wannaButtons = app.buttons.matching(
+            NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")
+        ).allElementsBoundByIndex
+        XCTAssertFalse(wannaButtons.contains { $0.isHittable })
         capture("REC495 Feed full profile history")
         checkIn.tap()
         XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
