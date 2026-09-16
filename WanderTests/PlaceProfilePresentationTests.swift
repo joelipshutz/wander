@@ -1624,6 +1624,42 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
     }
 
+    func testAnonymousFeaturedCheckInCannotMakeFriendsWannaRingPartlySolid() throws {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let venue = place(id: "fixture_sushi", category: "restaurant")
+        let own = summary(owner: viewer, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        let social = summary(owner: friend, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        let aggregate = summary(owner: community, place: venue, status: .been, ratingScore: 4, tags: [])
+        let places = [own, social, aggregate].map(\.visiblePlace)
+        let groups = VisiblePlaceGrouping.groups(from: places, currentUserID: viewer.id)
+        let group = try XCTUnwrap(groups.first)
+        let catalog = MapPinRenderCatalog(groups: groups, currentUserPlaces: [own.visiblePlace], currentUserID: viewer.id)
+        let expected = [
+            MapPinOutline(ownership: .currentUser, status: .wannaGo),
+            MapPinOutline(ownership: .social, status: .wannaGo)
+        ]
+        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], expected)
+        XCTAssertEqual(MapPinOutlineBuilder.outlineCatalog(for: places, currentUserID: viewer.id)[own.id], expected)
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: own.visiblePlace).saveCandidate,
+            seeds: places, available: places, currentUserID: viewer.id, viewerFollows: { $0 == friend.id }
+        )
+        XCTAssertEqual(Set(history.map(\.id)), Set([own.id, social.id]))
+    }
+
+    func testAnonymousFeaturedOnlyPlaceHasNoPersonalOrSocialRing() throws {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let aggregate = summary(owner: community, place: place(id: "featured_only", category: "restaurant"),
+                                status: .been, ratingScore: 4, tags: [])
+        let groups = VisiblePlaceGrouping.groups(from: [aggregate.visiblePlace], currentUserID: "viewer")
+        XCTAssertEqual(groups.count, 1, "The Featured place remains on the map.")
+        let group = try XCTUnwrap(groups.first)
+        let catalog = MapPinRenderCatalog(groups: groups, currentUserPlaces: [], currentUserID: "viewer")
+        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], [])
+    }
+
     func testMyCheckInsExcludesCurrentAndHistoricalWannasForEveryOwner() {
         let viewer = profile(id: "viewer", handle: "viewer")
         let friend = profile(id: "friend", handle: "friend")

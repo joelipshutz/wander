@@ -1033,12 +1033,7 @@ struct MapPinRenderCatalog {
                }) {
                 places.append(currentUserSave)
             }
-            let states = places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            let states = MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
             outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
         }
 
@@ -3511,14 +3506,7 @@ struct MapScreen: View {
             places.append(currentUserSave)
         }
         return MapPinOutlineBuilder.outlines(
-            for: places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == store.currentUser.id
-                        ? .currentUser
-                        : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            for: MapPinSaveState.personalStates(for: places, currentUserID: store.currentUser.id)
         )
     }
 
@@ -8946,14 +8934,10 @@ private struct MapSearchSuggestion: Identifiable {
     static func searchCandidate(_ candidate: MapSearchCandidate) -> MapSearchSuggestion {
         switch candidate {
         case .saved(let savedCandidate):
-            let saveStates = savedCandidate.group.places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == savedCandidate.group.currentUserID
-                        ? .currentUser
-                        : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            let saveStates = MapPinSaveState.personalStates(
+                for: savedCandidate.group.places,
+                currentUserID: savedCandidate.group.currentUserID
+            )
             return saved(savedCandidate, saveStates: saveStates)
         case .mapKit(let candidate):
             return mapKit(candidate)
@@ -10148,6 +10132,18 @@ enum MapPinSaveOwnership: Equatable {
 struct MapPinSaveState: Equatable {
     let ownership: MapPinSaveOwnership
     let status: PlaceStatus
+
+    /// Featured aggregates describe a place, not a person the viewer follows.
+    /// Keep their recommendation pins, but never turn them into social rings.
+    static func personalStates(for places: [VisiblePlace], currentUserID: String) -> [Self] {
+        places.compactMap { place in
+            guard !place.isCommunityAggregate, place.userPlace.deletedAt == nil else { return nil }
+            return Self(
+                ownership: place.owner.id == currentUserID ? .currentUser : .social,
+                status: place.userPlace.status
+            )
+        }
+    }
 }
 
 enum MapPinVisualMetrics {
@@ -10613,12 +10609,7 @@ enum MapPinOutlineBuilder {
             currentUserID: currentUserID
         ) {
             let outlines = outlines(
-                for: group.places.map { visiblePlace in
-                    MapPinSaveState(
-                        ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                        status: visiblePlace.userPlace.status
-                    )
-                }
+                for: MapPinSaveState.personalStates(for: group.places, currentUserID: currentUserID)
             )
 
             for visiblePlace in group.places {
