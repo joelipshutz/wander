@@ -415,18 +415,21 @@ struct WanderRootView: View {
         _placeProfileFloatingActionVariant = State(
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
-        let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        let store = Self.makeStore(
-            fixtureMode: fixtureMode,
-            parser: parser,
-            analytics: analytics,
-            persistence: persistence,
-            initialSession: initialSession
-        )
-        if Self.resolvedInitialDarkMap(from: launchArguments) {
-            store.isDarkMapEnabled = true
-        }
-        _store = StateObject(wrappedValue: store)
+        // SwiftUI retains the StateObject. Defer construction so root value
+        // updates do not restore a throwaway store from disk.
+        _store = StateObject(wrappedValue: {
+            let store = Self.makeStore(
+                fixtureMode: fixtureMode,
+                parser: parser,
+                analytics: analytics,
+                persistence: fixtureMode == .empty ? .live : nil,
+                initialSession: initialSession
+            )
+            if Self.resolvedInitialDarkMap(from: launchArguments) {
+                store.isDarkMapEnabled = true
+            }
+            return store
+        }())
         let importPersistence: any PlaceImportPersisting = fixtureMode == .empty
             ? FilePlaceImportPersistence()
             : EphemeralPlaceImportPersistence()
@@ -653,10 +656,7 @@ struct WanderRootView: View {
             Label {
                 Text(tab.title)
             } icon: {
-                Image(uiImage: PlaceListSymbol.paperTabImage(
-                    isSelected: selectedTab == .lists,
-                    isDark: systemColorScheme == .dark
-                ))
+                Image(uiImage: PlaceListSymbol.paperTabImage)
             }
         } else {
             Label(tab.title, systemImage: tab.systemImage)
