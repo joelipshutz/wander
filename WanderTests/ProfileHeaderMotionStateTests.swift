@@ -92,4 +92,27 @@ final class ProfileHeaderMotionStateTests: XCTestCase {
         XCTAssertEqual(environment.resolvedProfileHeaderMotion, .compact)
     }
 
+    func testPhotoStaysPinnedAcrossBothScrollDirectionsIncludingBioRestoration() {
+        var state = ProfileHeaderMotionState()
+        let pinnedY = avatar.midY
+        for offset: CGFloat in [0, 12, 100, 300, 750, 300, 240, 150, 50, 12, 0] {
+            _ = state.update(offset: offset, originalAvatar: avatar, entryBoundary: 12, restoreBoundary: 240)
+            let center = ProfileHeaderPhotoLayout.center(
+                inlineFrame: avatar.offsetBy(dx: 0, dy: -offset), pinnedY: pinnedY
+            )
+            XCTAssertEqual(center, CGPoint(x: avatar.midX, y: pinnedY))
+            XCTAssertGreaterThanOrEqual(center.y - avatar.height / 2, 0)
+            if offset == 240 { XCTAssertFalse(state.expanded) }
+        }
+    }
+
+    func testPhotoRejoinsInlinePositionContinuouslyAndFollowsPullDownBounce() {
+        for offset: CGFloat in [1, 0, -1, -20, -80, -20, -1, 0, 1] {
+            let inlineFrame = avatar.offsetBy(dx: 0, dy: -offset)
+            let center = ProfileHeaderPhotoLayout.center(inlineFrame: inlineFrame, pinnedY: avatar.midY)
+            XCTAssertEqual(center.x, inlineFrame.midX)
+            XCTAssertEqual(center.y, avatar.midY - min(offset, 0))
+        }
+    }
+
 }

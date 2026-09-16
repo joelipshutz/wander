@@ -116,6 +116,10 @@ async function main() {
           readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"),
           "rollback",
         ));
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/checkin_history_engagement.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - check-in history engagement, historical repair, and owner deletion");
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
         await runListSnapshotCoverSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
@@ -1172,7 +1176,7 @@ function runLinkedSmokeChecks(
   const migrationPreviewSQL = migrationPreviewPaths
     .map(loadMigrationPreview)
     .join("\n\n");
-  const migrationPreviewTestSQL = migrationPreviewPaths.length > 0
+  const migrationPreviewTestSQL = migrationPreviewPaths.length > 0 || migrationTestPath
     ? transactionBody(
       loadStrictPgTapSQL(
         migrationTestPath
@@ -1246,6 +1250,11 @@ function runLinkedSmokeChecks(
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+  if (!migrationTestPath) {
+    // Each pgTAP suite gets its own rolled-back transaction and migration preview.
+    runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID,
+      migrationPreviewPaths, "supabase/tests/checkin_history_engagement.sql");
   }
 }
 

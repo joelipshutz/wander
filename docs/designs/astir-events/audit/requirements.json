@@ -1,0 +1,4004 @@
+{
+  "auditDate": "2026-09-14",
+  "status": "Source-fidelity audit complete; design review remains in progress",
+  "requirements": [
+    {
+      "id": "R001",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "An event is a time-specific happening associated with exactly one canonical place.",
+      "screens": [
+        "console-event",
+        "after_post",
+        "map_place_history"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "console-event",
+        "after_post",
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R002",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "A place may have no events or many events; preserve a lasting place-to-event relationship.",
+      "screens": [
+        "map_place_history"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R003",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "M022"
+      ],
+      "requirement": "A home is a special place type; linking an event does not automatically expose exact location or hide the entire place profile.",
+      "screens": [
+        "home-before",
+        "home-expired"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "home-before",
+        "home-expired"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R004",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "U-0914-TIMING",
+        "T3",
+        "T4"
+      ],
+      "requirement": "Introduce Astir progressively: no-install RSVP, optional download offer, texts, installed-app entry, content/check-in and event-linked map/place history.",
+      "screens": [
+        "discover-rsvp",
+        "texts-before-install",
+        "install-onboarding",
+        "after_event",
+        "map_place",
+        "ordinary-map"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "invite",
+        "event-detail",
+        "rsvp-auth",
+        "rsvp-phone",
+        "rsvp-code",
+        "rsvp-confirmed",
+        "confirmation-text",
+        "pre-event-text",
+        "noapp-confirmed-detail",
+        "entry-download",
+        "install",
+        "recover-booking",
+        "ticket-first",
+        "optional-photo",
+        "after_text",
+        "recap-notice",
+        "after_composer",
+        "after_recap",
+        "after_gallery",
+        "after_post",
+        "map_special_event",
+        "map-event-collapsed",
+        "map_place_history",
+        "ordinary-map"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R005",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "M007",
+        "M051"
+      ],
+      "requirement": "Resolve product behavior and exceptions before engineering specification and implementation; use gstack specification/design review.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R006",
+      "authority": "approved",
+      "sources": [
+        "M003"
+      ],
+      "requirement": "Keep the September roadmap and session objective in view.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R007",
+      "authority": "approved",
+      "sources": [
+        "M054",
+        "M055",
+        "U-0914-TIMING"
+      ],
+      "requirement": "Show the complete journey with options, alternate paths, and explicit browser/App Clip/app distinctions.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R008",
+      "authority": "approved",
+      "sources": [
+        "U-0914-AUDIT"
+      ],
+      "requirement": "Maintain a requirement-by-requirement internal audit; do not silently replace user intent with assumptions.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1–2"
+    },
+    {
+      "id": "R009",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "Provide a new Events tab in the full app.",
+      "screens": [
+        "events-list"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-list"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R010",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "Show confirmed events first when they exist.",
+      "screens": [
+        "events-list",
+        "events-discover"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-list",
+        "events-discover"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R011",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "Show a simple list of upcoming nearby events.",
+      "screens": [
+        "events-list",
+        "events-discover"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-list",
+        "events-discover"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R012",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "When no local events exist, keep the coming-soon state simple; do not treat the earlier city waitlist idea as settled.",
+      "screens": [
+        "events-empty"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-empty"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R013",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T1"
+      ],
+      "requirement": "Use an immersive event cover with overlaid title/description and the requested glass/floating-action direction.",
+      "screens": [
+        "event-detail",
+        "noapp-confirmed-detail",
+        "confirmed-detail",
+        "event-state-matrix"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail",
+        "noapp-confirmed-detail",
+        "confirmed-detail",
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R014",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T1"
+      ],
+      "requirement": "Event details include a strong title, short description, date/time, location under its rules, and social proof.",
+      "screens": [
+        "event-detail",
+        "full-guest-list",
+        "event-state-matrix"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail",
+        "full-guest-list",
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R015",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T1"
+      ],
+      "requirement": "RSVP is the primary action; Share remains prominent.",
+      "screens": [
+        "event-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R016",
+      "authority": "open",
+      "sources": [
+        "M005",
+        "T1"
+      ],
+      "requirement": "Whether a separate Save event/bookmark action belongs in scope is unselected.",
+      "screens": [],
+      "coverage": "open",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R017",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "A shared event link leads to the event detail; the installed app has equivalent applicable functionality.",
+      "screens": [
+        "event-detail",
+        "confirmed-detail",
+        "existing-member",
+        "member-confirmed",
+        "installed-entry",
+        "event-state-matrix"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail",
+        "confirmed-detail",
+        "existing-member",
+        "member-confirmed",
+        "invite-installed",
+        "events-discover",
+        "installed-event-detail",
+        "installed-event-signedout",
+        "app-event-auth",
+        "installed-pending",
+        "installed-waitlist",
+        "installed-offer",
+        "installed-offer-expired",
+        "installed-code",
+        "installed-code-invalid",
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R018",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "D14"
+      ],
+      "requirement": "Use the App Clip for the preferred no-full-install RSVP; support equivalent browser RSVP when it cannot open.",
+      "screens": [
+        "event-detail",
+        "browserfallback",
+        "event-state-matrix"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail",
+        "browserfallback",
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R019",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "U-0914-TIMING"
+      ],
+      "requirement": "Apple/Google sign-up occurs within the no-install RSVP before phone collection; it is not a download step.",
+      "screens": [
+        "rsvp-auth",
+        "rsvp-phone"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-auth",
+        "rsvp-phone"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R020",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "Provide clear Apple and Google sign-up buttons.",
+      "screens": [
+        "rsvp-auth"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-auth"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R021",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "Collect a name and phone number for RSVP without unnecessary repetition.",
+      "screens": [
+        "rsvp-phone",
+        "existing-member",
+        "rsvp-phone-app",
+        "app-event-auth"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-phone",
+        "existing-member",
+        "rsvp-phone-app",
+        "app-event-auth"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R022",
+      "authority": "approved",
+      "sources": [
+        "D17"
+      ],
+      "requirement": "Verify phone control by SMS before confirming RSVP; a stored number alone is insufficient.",
+      "screens": [
+        "rsvp-code",
+        "existing-member",
+        "rsvp-code-app",
+        "rsvp-phone-app"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-code",
+        "existing-member",
+        "rsvp-code-app",
+        "rsvp-phone-app"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R023",
+      "authority": "derived",
+      "sources": [
+        "D17"
+      ],
+      "requirement": "Pending, failed, or expired phone verification must not show a confirmed reservation.",
+      "screens": [
+        "rsvp-code",
+        "verification-error"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "rsvp-code",
+        "verification-error"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R024",
+      "authority": "approved",
+      "sources": [
+        "D19"
+      ],
+      "requirement": "Explain event-specific texts at RSVP.",
+      "screens": [
+        "rsvp-phone"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-phone"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R025",
+      "authority": "approved",
+      "sources": [
+        "D19"
+      ],
+      "requirement": "Future-event texts have a separate optional checkbox initially unchecked; declining it does not prevent RSVP/event updates.",
+      "screens": [
+        "rsvp-phone"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-phone"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R026",
+      "authority": "superseded",
+      "sources": [
+        "M005",
+        "D19"
+      ],
+      "requirement": "The original combined this-event-and-future-events checkbox was replaced by D19A.",
+      "screens": [],
+      "coverage": "superseded",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R027",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Support a required event access code when the event uses one.",
+      "screens": [
+        "enter-code",
+        "codeinvalid",
+        "installed-code",
+        "installed-code-invalid"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "enter-code",
+        "codeinvalid",
+        "installed-code",
+        "installed-code-invalid"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R028",
+      "authority": "approved",
+      "sources": [
+        "D20"
+      ],
+      "requirement": "First-release RSVP is free; do not introduce payment/checkout/refund flows.",
+      "screens": [
+        "event-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R029",
+      "authority": "approved",
+      "sources": [
+        "D22"
+      ],
+      "requirement": "Eligible RSVPs automatically confirm if space is available by default.",
+      "screens": [
+        "rsvp-confirmed",
+        "existing-member"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-confirmed",
+        "existing-member"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R030",
+      "authority": "approved",
+      "sources": [
+        "D22"
+      ],
+      "requirement": "Astir can enable manual RSVP approval internally.",
+      "screens": [
+        "manualpending",
+        "console-registration",
+        "console-review-request",
+        "console-request-approved",
+        "installed-pending"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "manualpending",
+        "console-registration",
+        "console-review-request",
+        "console-request-approved",
+        "installed-pending"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R031",
+      "authority": "approved",
+      "sources": [
+        "D21"
+      ],
+      "requirement": "At capacity, offer an event-specific waitlist; Astir chooses recipients of available spots.",
+      "screens": [
+        "waitlist",
+        "console-guests",
+        "console-offer",
+        "installed-waitlist"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "waitlist",
+        "console-guests",
+        "console-offer",
+        "installed-waitlist"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R032",
+      "authority": "approved",
+      "sources": [
+        "D23"
+      ],
+      "requirement": "Selection creates an offer that the guest must accept; it is not automatic confirmation.",
+      "screens": [
+        "offer",
+        "console-offer-sent",
+        "installed-offer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "offer",
+        "console-offer-sent",
+        "installed-offer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R033",
+      "authority": "approved",
+      "sources": [
+        "D23"
+      ],
+      "requirement": "Offers default to 24-hour expiry, adjustable in the console.",
+      "screens": [
+        "offer",
+        "console-registration",
+        "installed-offer-expired"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "offer",
+        "console-registration",
+        "installed-offer-expired"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R034",
+      "authority": "approved",
+      "sources": [
+        "D24"
+      ],
+      "requirement": "Guests may cancel their own confirmed RSVP before event start, releasing their spot.",
+      "screens": [
+        "noapp-confirmed-detail",
+        "confirmed-detail",
+        "cancel-confirm",
+        "rsvp-canceled",
+        "cancel-after-start",
+        "manage-rsvp"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "noapp-confirmed-detail",
+        "confirmed-detail",
+        "cancel-confirm",
+        "rsvp-canceled",
+        "cancel-after-start",
+        "manage-rsvp"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R035",
+      "authority": "approved",
+      "sources": [
+        "D31"
+      ],
+      "requirement": "While a waitlist exists, protect released spaces for Astir selection; new guests join the waitlist.",
+      "screens": [
+        "waitlist",
+        "console-guests"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "waitlist",
+        "console-guests"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R036",
+      "authority": "derived",
+      "sources": [
+        "D21",
+        "D22",
+        "D23",
+        "D31"
+      ],
+      "requirement": "Pending, waiting, offered, confirmed, canceled, and admitted are distinct states; no implicit promotion.",
+      "screens": [
+        "manualpending",
+        "waitlist",
+        "offer",
+        "offerexpired",
+        "rsvp-confirmed",
+        "rsvp-canceled",
+        "staff-admitted"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "manualpending",
+        "waitlist",
+        "offer",
+        "offerexpired",
+        "rsvp-confirmed",
+        "rsvp-canceled",
+        "staff-admitted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R037",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Show both RSVP confirmation and the event detail in its confirmed state.",
+      "screens": [
+        "rsvp-confirmed",
+        "noapp-confirmed-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-confirmed",
+        "noapp-confirmed-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R038",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Offer Add to calendar after confirmation.",
+      "screens": [
+        "rsvp-confirmed"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R039",
+      "authority": "approved",
+      "sources": [
+        "D30",
+        "M040"
+      ],
+      "requirement": "Use a face pile and count as an explicit RSVP conversion hook before confirmation.",
+      "screens": [
+        "event-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R040",
+      "authority": "approved",
+      "sources": [
+        "D30"
+      ],
+      "requirement": "Only confirmed guests unlock the full guest list; preview and attendee recap remain distinct gates.",
+      "screens": [
+        "full-guest-list"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "full-guest-list"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3–4"
+    },
+    {
+      "id": "R041",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "U-0914-TIMING"
+      ],
+      "requirement": "RSVP confirmation and event texts do not require a full-app download.",
+      "screens": [
+        "rsvp-confirmed",
+        "confirmation-text",
+        "pre-event-text"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-confirmed",
+        "confirmation-text",
+        "pre-event-text"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R042",
+      "authority": "approved",
+      "sources": [
+        "D29"
+      ],
+      "requirement": "Automatically text confirmation, 24-hour and 2-hour reminders, important changes, and recap invitation.",
+      "screens": [
+        "confirmation-text",
+        "pre-event-text",
+        "after_text",
+        "console-messages"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "confirmation-text",
+        "pre-event-text",
+        "after_text",
+        "console-messages"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R043",
+      "authority": "approved",
+      "sources": [
+        "D29"
+      ],
+      "requirement": "Message timing and templates are configurable from the console.",
+      "screens": [
+        "console-messages"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-messages"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R044",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "D14",
+        "D15",
+        "U-0914-TIMING"
+      ],
+      "requirement": "Full-app installation and the event QR are a hard admission requirement, later than RSVP.",
+      "screens": [
+        "entry-download",
+        "arrival-ticket",
+        "ticket-after-profile",
+        "staff-scan"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "entry-download",
+        "arrival-ticket",
+        "ticket-after-profile",
+        "staff-scan"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R045",
+      "authority": "approved",
+      "sources": [
+        "D15"
+      ],
+      "requirement": "Disclose compatible-phone/full-app entry requirements before RSVP; browser access does not waive admission rules.",
+      "screens": [
+        "event-detail",
+        "unsupportedphone"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail",
+        "unsupportedphone"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R046",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "The entry QR is accessible in the Events tab.",
+      "screens": [
+        "events-list",
+        "arrival-ticket"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-list",
+        "arrival-ticket"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R047",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Guests arriving from RSVP receive shortened onboarding that preserves their event/booking context.",
+      "screens": [
+        "recover-booking",
+        "app-recovery-auth"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recover-booking",
+        "app-recovery-auth"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R048",
+      "authority": "approved",
+      "sources": [
+        "D18"
+      ],
+      "requirement": "Strongly prompt for a profile photo during app setup, but keep it optional.",
+      "screens": [
+        "optional-photo",
+        "profile-before-ticket",
+        "ticket-first",
+        "ticket-after-profile"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "optional-photo",
+        "profile-before-ticket",
+        "ticket-first",
+        "ticket-after-profile"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R049",
+      "authority": "approved",
+      "sources": [
+        "D18"
+      ],
+      "requirement": "No missing/failed profile photo may block RSVP, QR access, or later check-in.",
+      "screens": [
+        "optional-photo",
+        "photouploadfailure"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "optional-photo",
+        "photouploadfailure"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R050",
+      "authority": "open",
+      "sources": [
+        "U-0914-TIMING",
+        "U-0914-REVIEW",
+        "T3"
+      ],
+      "requirement": "Initial optional download upsell is selected after confirmation; exact later reminder timing and near-arrival QR prominence remain unselected.",
+      "screens": [
+        "entry-download"
+      ],
+      "coverage": "open",
+      "screenIds": [
+        "entry-download"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R051",
+      "authority": "open",
+      "sources": [
+        "M051",
+        "M054",
+        "M055"
+      ],
+      "requirement": "Ticket-first versus optional profile-before-ticket remains an unselected A/B layout choice after installation.",
+      "screens": [
+        "ticket-option-a",
+        "profile-before-ticket"
+      ],
+      "coverage": "open",
+      "screenIds": [
+        "ticket-option-a",
+        "profile-before-ticket"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R052",
+      "authority": "approved",
+      "sources": [
+        "D16",
+        "M030"
+      ],
+      "requirement": "Assume App Store availability before live Events; keep TestFlight as a separate testing path, not a claim of current release.",
+      "screens": [
+        "install"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "install"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R053",
+      "authority": "approved",
+      "sources": [
+        "D25"
+      ],
+      "requirement": "For an installed-app guest whose QR fails, staff can verify the confirmed booking and manually admit.",
+      "screens": [
+        "qrfailure",
+        "door-help",
+        "stafffindguest",
+        "staff-guest-search",
+        "staff-no-match",
+        "scan-rejected"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "qrfailure",
+        "door-help",
+        "stafffindguest",
+        "staff-guest-search",
+        "staff-no-match",
+        "scan-rejected"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R054",
+      "authority": "approved",
+      "sources": [
+        "D5"
+      ],
+      "requirement": "Recorded admission establishes recap eligibility; staff can correct a missed scan.",
+      "screens": [
+        "recap_missing_admission",
+        "console-attendance",
+        "console-attendance-corrected"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_missing_admission",
+        "console-attendance",
+        "console-attendance-corrected"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R055",
+      "authority": "approved",
+      "sources": [
+        "D5"
+      ],
+      "requirement": "RSVP alone, a no-show, or self-report cannot unlock protected attendee content.",
+      "screens": [
+        "recap_missing_admission",
+        "recap_locked_preview"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_missing_admission",
+        "recap_locked_preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R056",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T2",
+        "D4",
+        "D5"
+      ],
+      "requirement": "Door admission is separate from the personal post-event check-in and does not itself create a place visit/public post.",
+      "screens": [
+        "staff-admitted",
+        "after_composer"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "staff-admitted",
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R057",
+      "authority": "approved",
+      "sources": [
+        "D26"
+      ],
+      "requirement": "Astir publishes the recap when ready in the console; invitations follow publication.",
+      "screens": [
+        "console-recap-preview",
+        "console-recap-live"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-recap-preview",
+        "console-recap-live"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R058",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "D26",
+        "D29"
+      ],
+      "requirement": "A content notice and text bring eligible attendees back after publication.",
+      "screens": [
+        "after_text",
+        "recap-notice"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_text",
+        "recap-notice"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R059",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T2",
+        "D2"
+      ],
+      "requirement": "Require explicit personal event check-in submission to unlock full content.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R060",
+      "authority": "approved",
+      "sources": [
+        "T2",
+        "M018"
+      ],
+      "requirement": "The check-in is a personal event post, distinct from a shared-event comment.",
+      "screens": [
+        "after_composer",
+        "after_post",
+        "after_recap"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer",
+        "after_post",
+        "after_recap"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R061",
+      "authority": "approved",
+      "sources": [
+        "T2",
+        "D2"
+      ],
+      "requirement": "Public note is optional.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R062",
+      "authority": "approved",
+      "sources": [
+        "T2",
+        "D2"
+      ],
+      "requirement": "Personal photos are optional.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R063",
+      "authority": "approved",
+      "sources": [
+        "D2",
+        "D34"
+      ],
+      "requirement": "Private feedback is optional; a completely empty submission is valid.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R064",
+      "authority": "approved",
+      "sources": [
+        "T2",
+        "D34"
+      ],
+      "requirement": "There is no public venue rating on an event check-in.",
+      "screens": [
+        "after_composer",
+        "after_post"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer",
+        "after_post"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R065",
+      "authority": "approved",
+      "sources": [
+        "D34"
+      ],
+      "requirement": "Private feedback offers optional 1–5 stars and an independently optional comment to Astir.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R066",
+      "authority": "approved",
+      "sources": [
+        "T2",
+        "D34"
+      ],
+      "requirement": "Private feedback must not appear in the public post or alter a public venue rating.",
+      "screens": [
+        "after_post"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "after_post"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R067",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "Successful personal check-in lands on the attendee recap, not immediately on the map.",
+      "screens": [
+        "after_composer",
+        "after_recap"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer",
+        "after_recap"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R068",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "The recap contains an event summary and Astir-provided photos/videos.",
+      "screens": [
+        "after_recap",
+        "event-video"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_recap",
+        "event-video"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R069",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "The recap also contains attendee-provided photos/videos.",
+      "screens": [
+        "after_recap",
+        "gallery-posted"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_recap",
+        "gallery-posted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R070",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "Comments and social conversation appear prominently near the top.",
+      "screens": [
+        "after_recap",
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_recap",
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R071",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "Personal event check-ins appear in the shared event experience.",
+      "screens": [
+        "after_recap"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_recap"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R072",
+      "authority": "approved",
+      "sources": [
+        "D3"
+      ],
+      "requirement": "Nonattending Astir members can see an event preview across Astir, not just social connections.",
+      "screens": [
+        "recap_locked_preview",
+        "map-event-preview"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_locked_preview",
+        "map-event-preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R073",
+      "authority": "approved",
+      "sources": [
+        "D3",
+        "D5"
+      ],
+      "requirement": "Full gallery and conversation require this event's admission and completed check-in.",
+      "screens": [
+        "recap_locked_preview",
+        "after_recap"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "recap_locked_preview",
+        "after_recap"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R074",
+      "authority": "approved",
+      "sources": [
+        "M017"
+      ],
+      "requirement": "The preview shows a gray/blurred locked comment section with unreadable text.",
+      "screens": [
+        "recap_locked_preview"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_locked_preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R075",
+      "authority": "open",
+      "sources": [
+        "M017"
+      ],
+      "requirement": "A profile photo in the locked-comment teaser was tentative, not approved.",
+      "screens": [
+        "recap_locked_preview"
+      ],
+      "coverage": "open",
+      "screenIds": [
+        "recap_locked_preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R076",
+      "authority": "derived",
+      "sources": [
+        "M017",
+        "D3",
+        "D5"
+      ],
+      "requirement": "Locked placeholders must not include protected text; copy must not promise future attendance unlocks an unattended past event.",
+      "screens": [
+        "recap_locked_preview"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "recap_locked_preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R077",
+      "authority": "approved",
+      "sources": [
+        "D6"
+      ],
+      "requirement": "Before check-in, guests may add their own photos; protected event photos are available only after unlock.",
+      "screens": [
+        "after_composer",
+        "after_gallery"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer",
+        "after_gallery"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R078",
+      "authority": "approved",
+      "sources": [
+        "D6",
+        "D28"
+      ],
+      "requirement": "After unlock, gallery photos may be added to the same personal check-in without a new visit.",
+      "screens": [
+        "after_gallery",
+        "after_post"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "after_gallery",
+        "after_post"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R079",
+      "authority": "approved",
+      "sources": [
+        "D27"
+      ],
+      "requirement": "Eligible attendee shared-gallery uploads are visible immediately to eligible viewers.",
+      "screens": [
+        "gallery-add",
+        "gallery-posted"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "gallery-add",
+        "gallery-posted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R080",
+      "authority": "approved",
+      "sources": [
+        "D27"
+      ],
+      "requirement": "Uploaders may remove their content and Astir may moderate shared uploads.",
+      "screens": [
+        "gallery-manage",
+        "console-moderation",
+        "console-photo-removed"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "gallery-manage",
+        "console-moderation",
+        "console-photo-removed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R081",
+      "authority": "approved",
+      "sources": [
+        "D28",
+        "M038"
+      ],
+      "requirement": "Shared-gallery photos may appear in public Astir event check-ins; omit every reuse explanation or extra approval prompt.",
+      "screens": [
+        "after_gallery",
+        "after_post",
+        "gallery-add"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "after_gallery",
+        "after_post",
+        "gallery-add"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R082",
+      "authority": "approved",
+      "sources": [
+        "D32"
+      ],
+      "requirement": "Removing a source gallery photo removes it from all referencing personal check-ins.",
+      "screens": [
+        "recap_photo_removed",
+        "recap-after-photo-removal",
+        "gallery-after-photo-removal"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "recap_photo_removed",
+        "recap-after-photo-removal",
+        "gallery-after-photo-removal"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R083",
+      "authority": "approved",
+      "sources": [
+        "D32"
+      ],
+      "requirement": "Source-photo removal preserves surrounding notes, other media, and place visits.",
+      "screens": [
+        "recap_photo_removed"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_photo_removed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R084",
+      "authority": "approved",
+      "sources": [
+        "D33"
+      ],
+      "requirement": "Deleting a personal check-in removes that post/event visit while retaining valid-attendee recap access.",
+      "screens": [
+        "recap_removal_results",
+        "manage-personal-post",
+        "recap-after-deletion",
+        "place-after-post-deletion"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap_removal_results",
+        "manage-personal-post",
+        "recap-after-deletion",
+        "place-after-post-deletion"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R085",
+      "authority": "derived",
+      "sources": [
+        "D4",
+        "D9",
+        "D33"
+      ],
+      "requirement": "Do not erase independent place history, ratings, saved intent, existing restrictions, or staff admission when managing event posts.",
+      "screens": [
+        "recap_removal_results"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "recap_removal_results"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R086",
+      "authority": "approved",
+      "sources": [
+        "M018",
+        "D4"
+      ],
+      "requirement": "Show event title/date as the identity of the special check-in while preserving its canonical place association.",
+      "screens": [
+        "after_post",
+        "recap_photo_removed"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_post",
+        "recap_photo_removed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R087",
+      "authority": "approved",
+      "sources": [
+        "D4"
+      ],
+      "requirement": "Event check-in marks the place Been as an event-labeled visit without a venue rating.",
+      "screens": [
+        "after_post",
+        "map_place_history"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_post",
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R088",
+      "authority": "derived",
+      "sources": [
+        "M018",
+        "D4",
+        "D6"
+      ],
+      "requirement": "One event check-in is one logical visit across event and place views; editing or retry does not duplicate it.",
+      "screens": [
+        "after_gallery",
+        "after_post"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "after_gallery",
+        "after_post"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R089",
+      "authority": "approved",
+      "sources": [
+        "D9",
+        "M022"
+      ],
+      "requirement": "Personal event posts default to Everyone in Astir and show a small eye audience icon.",
+      "screens": [
+        "after_composer",
+        "after_post",
+        "recap_photo_removed"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_composer",
+        "after_post",
+        "recap_photo_removed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R090",
+      "authority": "deferred",
+      "sources": [
+        "D9",
+        "M022"
+      ],
+      "requirement": "Later profile-level and per-check-in audience controls, including followers-only, apply consistently to places and events.",
+      "screens": [],
+      "coverage": "deferred",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R091",
+      "authority": "derived",
+      "sources": [
+        "D9"
+      ],
+      "requirement": "The Everyone default does not grant the full shared gallery, private feedback, exact home address, or anonymous-web access.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R092",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "The place profile offers a lasting route back to past events and the viewer's permitted recap/preview.",
+      "screens": [
+        "map_place_history",
+        "map_place_preview",
+        "past-events",
+        "ended-unpublished"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "map_place_history",
+        "map_place_preview",
+        "past-events",
+        "ended-unpublished"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R093",
+      "authority": "approved",
+      "sources": [
+        "D10"
+      ],
+      "requirement": "Special pins identify discoverable upcoming/recent events for permitted viewers, not only attendees or completed memories.",
+      "screens": [
+        "map_special_event",
+        "map-event-preview"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "map_special_event",
+        "map-event-preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R094",
+      "authority": "approved",
+      "sources": [
+        "D11"
+      ],
+      "requirement": "Console controls special map styling on/off, start/end, presets, and preview.",
+      "screens": [
+        "console-map-controls"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-map-controls"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R095",
+      "authority": "approved",
+      "sources": [
+        "D12",
+        "T3",
+        "T4"
+      ],
+      "requirement": "Tapping a special event pin opens a collapsed event card over the standard map; expanding opens the event, which links to its place.",
+      "screens": [
+        "map_special_event",
+        "map-event-collapsed",
+        "map-event-collapsed-preview",
+        "after_recap",
+        "map_place_history"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "map_special_event",
+        "map-event-collapsed",
+        "map-event-collapsed-preview",
+        "after_recap",
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R096",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "After temporary pin styling ends, place access and event history persist.",
+      "screens": [
+        "map_place_history"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R097",
+      "authority": "superseded",
+      "sources": [
+        "M005",
+        "T4"
+      ],
+      "requirement": "Remove the invented event-to-nearby-recommendations screen (old31) and Explore nearby from old30; ordinary Astir map/place discovery remains.",
+      "screens": [],
+      "coverage": "superseded",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R098",
+      "authority": "approved",
+      "sources": [
+        "D8",
+        "M022"
+      ],
+      "requirement": "A home event/place may remain visible at an approximate area or radius.",
+      "screens": [
+        "home-before",
+        "home-expired",
+        "home-event-preview",
+        "home-place-preview",
+        "home-place-before"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "home-before",
+        "home-expired",
+        "home-event-preview",
+        "home-place-preview",
+        "home-place-before"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R099",
+      "authority": "approved",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "The owner or renter of a home venue must consent to its use.",
+      "screens": [
+        "console-home"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-home"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R100",
+      "authority": "approved",
+      "sources": [
+        "D13"
+      ],
+      "requirement": "Default exact-home-address reveal is event start minus 24 hours for confirmed guests.",
+      "screens": [
+        "home-before",
+        "home-revealed",
+        "home-event-confirmed",
+        "home-place-confirmed",
+        "home-exact-details"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "home-before",
+        "home-revealed",
+        "home-event-confirmed",
+        "home-place-confirmed",
+        "home-exact-details"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R101",
+      "authority": "approved",
+      "sources": [
+        "D13"
+      ],
+      "requirement": "A guest confirmed within the active reveal window receives address access immediately.",
+      "screens": [
+        "home-revealed",
+        "home-exact-details"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "home-revealed",
+        "home-exact-details"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R102",
+      "authority": "approved",
+      "sources": [
+        "D13",
+        "M024"
+      ],
+      "requirement": "Astir can adjust home-address reveal timing in the console.",
+      "screens": [
+        "console-home"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-home"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R103",
+      "authority": "approved",
+      "sources": [
+        "D35"
+      ],
+      "requirement": "Exact-home-address access expires event end plus 24 hours for all guests by default.",
+      "screens": [
+        "home-expired"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "home-expired"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R104",
+      "authority": "approved",
+      "sources": [
+        "D35"
+      ],
+      "requirement": "Astir can change the address-expiry cutoff per event; approximate event/place history remains after expiry.",
+      "screens": [
+        "console-home",
+        "home-expired"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-home",
+        "home-expired"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R105",
+      "authority": "derived",
+      "sources": [
+        "D8",
+        "D13",
+        "D35"
+      ],
+      "requirement": "Apply home location access consistently across event, place, map, navigation and links; recap eligibility remains separate.",
+      "screens": [
+        "home-before",
+        "home-revealed",
+        "home-expired",
+        "home-place-before",
+        "home-event-preview",
+        "home-place-preview",
+        "home-exact-details",
+        "home-event-confirmed",
+        "home-place-confirmed"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "home-before",
+        "home-revealed",
+        "home-expired",
+        "home-place-before",
+        "home-event-preview",
+        "home-place-preview",
+        "home-exact-details",
+        "home-event-confirmed",
+        "home-place-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5"
+    },
+    {
+      "id": "R106",
+      "authority": "deferred",
+      "sources": [
+        "D7",
+        "M020"
+      ],
+      "requirement": "Capture reconnection, missed connections, people met, and solo/single/private ideas for the next joint discussion; do not spec them now.",
+      "screens": [],
+      "coverage": "deferred",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R107",
+      "authority": "proposal",
+      "sources": [
+        "P01"
+      ],
+      "requirement": "Preserve event context through retry; recover the same account and booking without silent merge or replacement.",
+      "screens": [
+        "app-recovery-auth",
+        "wrongaccount",
+        "auth-canceled",
+        "alreadyRSVPed",
+        "recoveringmatchingbooking",
+        "app-rsvp-auth",
+        "app-event-auth",
+        "installed-event-signedout",
+        "clip-recover-auth",
+        "browser-recover-auth",
+        "postevent-recover"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "app-recovery-auth",
+        "wrongaccount",
+        "auth-canceled",
+        "alreadyRSVPed",
+        "recoveringmatchingbooking",
+        "app-rsvp-auth",
+        "app-event-auth",
+        "installed-event-signedout",
+        "clip-recover-auth",
+        "browser-recover-auth",
+        "postevent-recover"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R108",
+      "authority": "proposal",
+      "sources": [
+        "P02"
+      ],
+      "requirement": "Use a 60-second SMS resend delay with editable number and explicit failure states; provider timing still needs validation.",
+      "screens": [
+        "verification-error"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "verification-error"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R109",
+      "authority": "proposal",
+      "sources": [
+        "P03"
+      ],
+      "requirement": "Cancel with one confirmation, invalidate QR and event-provided exact location, and rebook under current rules.",
+      "screens": [
+        "cancel-confirm",
+        "rsvp-canceled"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "cancel-confirm",
+        "rsvp-canceled"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R110",
+      "authority": "proposal",
+      "sources": [
+        "P04"
+      ],
+      "requirement": "Apply approval-mode/duration changes prospectively; notify guests when changing issued offers.",
+      "screens": [
+        "console-registration"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "console-registration"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R111",
+      "authority": "proposal",
+      "sources": [
+        "P05"
+      ],
+      "requirement": "For event cancellation/rescheduling, show changed state, preserve or invalidate booking as specified, adjust reminders/address windows.",
+      "screens": [
+        "event-rescheduled",
+        "event-canceled",
+        "rescheduled-cancel",
+        "rescheduled-canceled",
+        "rescheduled-unreserved"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "event-rescheduled",
+        "event-canceled",
+        "rescheduled-cancel",
+        "rescheduled-canceled",
+        "rescheduled-unreserved"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R112",
+      "authority": "proposal",
+      "sources": [
+        "P06"
+      ],
+      "requirement": "Retain failed check-in drafts, make retries idempotent, and offer explicit submission without a failed optional photo.",
+      "screens": [
+        "recap_upload_error"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "recap_upload_error"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R113",
+      "authority": "proposal",
+      "sources": [
+        "P07"
+      ],
+      "requirement": "Edit public post media/note and private feedback separately; use neutral removed-photo states.",
+      "screens": [
+        "recap_photo_removed"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "recap_photo_removed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R114",
+      "authority": "proposal",
+      "sources": [
+        "P08"
+      ],
+      "requirement": "Use a stable non-house-centered approximate area and require recorded consent before publication.",
+      "screens": [
+        "home-before",
+        "console-home"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "home-before",
+        "console-home"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R115",
+      "authority": "proposal",
+      "sources": [
+        "P09"
+      ],
+      "requirement": "Use event-local time zones and explicit draft/preview/publish operator semantics with failure states.",
+      "screens": [
+        "console-preview",
+        "console-live",
+        "console-publish",
+        "console-publish-failed",
+        "console-invite-failed"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "console-preview",
+        "console-live",
+        "console-publish",
+        "console-publish-failed",
+        "console-invite-failed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R116",
+      "authority": "proposal",
+      "sources": [
+        "P10"
+      ],
+      "requirement": "Skip elapsed reminders, keep retries distinct from successful sends, and stop SMS on opt-out without canceling RSVP.",
+      "screens": [
+        "console-messages"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "console-messages"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R117",
+      "authority": "proposal",
+      "sources": [
+        "P11"
+      ],
+      "requirement": "Active offers hold capacity; pending verification/approval do not. Expired/declined offers return to deliberate reselection.",
+      "screens": [
+        "offerexpired",
+        "console-registration"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "offerexpired",
+        "console-registration"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R118",
+      "authority": "proposal",
+      "sources": [
+        "P12"
+      ],
+      "requirement": "Use permitted confirmed-guest photos/count, then names/photos without phone numbers in the full list.",
+      "screens": [
+        "full-guest-list"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "full-guest-list"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R119",
+      "authority": "proposal",
+      "sources": [
+        "P13"
+      ],
+      "requirement": "Repair only truly missing required identity and defer general permissions/tour on the event return path.",
+      "screens": [
+        "missingidentity",
+        "location-primer",
+        "notification-primer",
+        "location-denied",
+        "account-entry-setup"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "missingidentity",
+        "location-primer",
+        "notification-primer",
+        "location-denied",
+        "account-entry-setup"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R120",
+      "authority": "proposal",
+      "sources": [
+        "P14"
+      ],
+      "requirement": "Own-post video, exact social controls, unpublished/unavailable recap behavior, and detailed upload recovery await approval.",
+      "screens": [
+        "after_recap",
+        "recap_unpublished",
+        "recap-unavailable",
+        "past-events",
+        "ended-unpublished",
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "after_recap",
+        "recap_unpublished",
+        "recap-unavailable",
+        "past-events",
+        "ended-unpublished",
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R121",
+      "authority": "proposal",
+      "sources": [
+        "P15"
+      ],
+      "requirement": "Staff identity checks, reentry escalation, and offline roster reconciliation require explicit operational design.",
+      "screens": [
+        "stafffindguest",
+        "duplicateadmission"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "stafffindguest",
+        "duplicateadmission"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R122",
+      "authority": "proposal",
+      "sources": [
+        "P16"
+      ],
+      "requirement": "One-person bookings, no anonymous plus-ones/transfers, and walk-in limits are proposed participation rules.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R123",
+      "authority": "proposal",
+      "sources": [
+        "P17"
+      ],
+      "requirement": "Exact five-tab placement, past-event navigation, and request-state placement are proposed layout details.",
+      "screens": [
+        "events-list",
+        "events-discover"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "events-list",
+        "events-discover"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R124",
+      "authority": "proposal",
+      "sources": [
+        "P18"
+      ],
+      "requirement": "Code sequencing, retry preservation, and code-change effects are proposed.",
+      "screens": [
+        "enter-code",
+        "codeinvalid"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "enter-code",
+        "codeinvalid"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R125",
+      "authority": "proposal",
+      "sources": [
+        "P19"
+      ],
+      "requirement": "Event publication fields, validation, draft-link visibility, and preview behavior are proposed.",
+      "screens": [
+        "console-event",
+        "console-preview"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "console-event",
+        "console-preview"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R126",
+      "authority": "proposal",
+      "sources": [
+        "P20"
+      ],
+      "requirement": "Share/calendar recovery and approximate-home calendar content are proposed; omitting Save is not an approved scope cut.",
+      "screens": [
+        "rsvp-confirmed"
+      ],
+      "coverage": "proposal",
+      "screenIds": [
+        "rsvp-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R127",
+      "authority": "open",
+      "sources": [
+        "M005",
+        "D10",
+        "D12"
+      ],
+      "requirement": "Default special-pin schedule and multiple-event precedence require review; seven-day windows are proposals only.",
+      "screens": [
+        "console-map-controls"
+      ],
+      "coverage": "open",
+      "screenIds": [
+        "console-map-controls"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R128",
+      "authority": "open",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "Own-video support in the personal check-in is unsettled; shared-gallery photos/videos are approved.",
+      "screens": [
+        "after_composer"
+      ],
+      "coverage": "open",
+      "screenIds": [
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R129",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Show an example of notification value before requesting notification permission; exact contextual trigger remains proposed.",
+      "screens": [
+        "notification-primer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "notification-primer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R130",
+      "authority": "approved",
+      "sources": [
+        "T1"
+      ],
+      "requirement": "Keep the entry QR with Events; do not add a separate Tickets tab.",
+      "screens": [
+        "events-list",
+        "arrival-ticket"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-list",
+        "arrival-ticket"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R131",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "T1"
+      ],
+      "requirement": "The event splash is the event detail itself, not an extra blocking branded screen or general onboarding tour.",
+      "screens": [
+        "event-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R132",
+      "authority": "approved",
+      "sources": [
+        "T2"
+      ],
+      "requirement": "Shared conversation supports back-and-forth replies and liking; exact control design is proposed.",
+      "screens": [
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "recap-comment",
+        "recap-comment-posted"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R133",
+      "authority": "superseded",
+      "sources": [
+        "T2",
+        "D3"
+      ],
+      "requirement": "Friend/second-degree-only event preview brainstorming was broadened to Astir-wide preview by D3.",
+      "screens": [],
+      "coverage": "superseded",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R134",
+      "authority": "superseded",
+      "sources": [
+        "M005"
+      ],
+      "requirement": "The spoken one-to-one/reversed places-and-events wording is corrected by the same discussion: each event has one place and a place can have many events.",
+      "screens": [],
+      "coverage": "superseded",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R135",
+      "authority": "derived",
+      "sources": [
+        "M005",
+        "ROADMAP"
+      ],
+      "requirement": "Use the first-event and 30-friend-beta objectives as context; the audit does not change roadmap dates or assume additional founder capacity.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "1, 8–9"
+    },
+    {
+      "id": "R136",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "U-0914-INSTALLED-INVITE"
+      ],
+      "requirement": "An invite opened with Astir already installed opens the linked event inside the full app; resolve the signed-in account and existing reservation before offering the applicable action.",
+      "screens": [
+        "invite-installed",
+        "installed-event-detail",
+        "installed-event-signedout",
+        "app-event-auth",
+        "confirmed-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "invite-installed",
+        "installed-event-detail",
+        "installed-event-signedout",
+        "app-event-auth",
+        "confirmed-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3"
+    },
+    {
+      "id": "R137",
+      "authority": "approved",
+      "sources": [
+        "M005",
+        "U-0914-EVENTS-DISCOVERY"
+      ],
+      "requirement": "Discovering and tapping an upcoming event in the new Events tab opens the same in-app event detail as an invite. Tapping a confirmed card opens its confirmed event; Show ticket remains a separate QR shortcut.",
+      "screens": [
+        "events-discover",
+        "installed-event-detail",
+        "events-list",
+        "confirmed-detail"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "events-discover",
+        "installed-event-detail",
+        "events-list",
+        "confirmed-detail"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3"
+    },
+    {
+      "id": "R138",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "All View event links identify the same event, including invite, confirmation/reminders and shares; forwarded links resolve the recipient independently.",
+      "screens": [
+        "invite",
+        "invite-installed",
+        "confirmation-text",
+        "pre-event-text",
+        "two-hour-text",
+        "important-change-text",
+        "after_text"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "invite",
+        "invite-installed",
+        "confirmation-text",
+        "pre-event-text",
+        "two-hour-text",
+        "important-change-text",
+        "after_text"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3, 5"
+    },
+    {
+      "id": "R139",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Show app, App Clip and web side by side across unknown identity, recognized no RSVP and recognized confirmed RSVP; Clip is single-event without app tabs.",
+      "screens": [
+        "event-state-matrix"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3"
+    },
+    {
+      "id": "R140",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Unknown identity is distinct from no RSVP; restore the account and fetch its real reservation before a new submission. Persistence/handoff mechanism requires engineering validation.",
+      "screens": [
+        "event-state-matrix",
+        "clip-recover-auth",
+        "browser-recover-auth",
+        "clip-ready-rsvp",
+        "browser-ready-rsvp",
+        "event-lookup-loading",
+        "event-lookup-retry"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "event-app-unknown",
+        "event-clip-unknown",
+        "event-browser-unknown",
+        "event-app-unregistered",
+        "event-clip-unregistered",
+        "event-browser-unregistered",
+        "event-app-confirmed",
+        "event-clip-confirmed",
+        "event-browser-confirmed",
+        "clip-recover-auth",
+        "browser-recover-auth",
+        "clip-ready-rsvp",
+        "browser-ready-rsvp",
+        "event-lookup-loading",
+        "event-lookup-retry"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3"
+    },
+    {
+      "id": "R141",
+      "authority": "approved",
+      "sources": [
+        "U-0914-REVIEW",
+        "U-0914-DOWNLOAD-CLARIFICATION"
+      ],
+      "requirement": "After confirmation offer an optional dismissible download upsell with QR-at-door rationale; guest list and RSVP management still require recognized confirmed RSVP, not download.",
+      "screens": [
+        "rsvp-confirmed",
+        "noapp-confirmed-detail",
+        "manage-rsvp"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "rsvp-confirmed",
+        "noapp-confirmed-detail",
+        "manage-rsvp"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3, 5"
+    },
+    {
+      "id": "R142",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Use View or change RSVP on the event; retain before-start cancellation inside management.",
+      "screens": [
+        "confirmed-detail",
+        "noapp-confirmed-detail",
+        "manage-rsvp"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "confirmed-detail",
+        "noapp-confirmed-detail",
+        "manage-rsvp"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "4"
+    },
+    {
+      "id": "R143",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Installed but incomplete account must finish name and username before QR/admission; reuse existing data and keep profile photo optional.",
+      "screens": [
+        "account-entry-setup",
+        "missingidentity"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "account-entry-setup",
+        "missingidentity"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "5, 8"
+    },
+    {
+      "id": "R144",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Handle deleted-app post-event return: event details remain accessible, while check-in/uploads require reinstall and same-account attendance/completion recovery.",
+      "screens": [
+        "postevent-reinstall",
+        "postevent-install",
+        "postevent-recover",
+        "noapp-ended-preview",
+        "noapp-recap-unpublished"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "postevent-reinstall",
+        "postevent-install",
+        "postevent-recover",
+        "noapp-ended-preview",
+        "noapp-recap-unpublished"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6"
+    },
+    {
+      "id": "R145",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Console generates/editable event tag options that populate optional event check-in tags; ten is an example, not a fixed requirement.",
+      "screens": [
+        "console-tags",
+        "after_composer"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-tags",
+        "after_composer"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6, 7"
+    },
+    {
+      "id": "R146",
+      "authority": "approved",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "Recap is rich and event-focused using place-profile patterns: cover, familiar comment controls, a clear add-media plus, and upper-right event Share.",
+      "screens": [
+        "after_recap",
+        "recap-after-deletion",
+        "recap-after-photo-removal"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "after_recap",
+        "recap-after-deletion",
+        "recap-after-photo-removal"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "6, 7"
+    },
+    {
+      "id": "R147",
+      "authority": "approved",
+      "sources": [
+        "T3",
+        "T4"
+      ],
+      "requirement": "Keep standard map/place interaction: special pin opens collapsed event/place label with smaller at; place events remain inline without giant footer CTA or invented Explore nearby.",
+      "screens": [
+        "map_special_event",
+        "map-event-collapsed",
+        "map_place_history"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "map_special_event",
+        "map-event-collapsed",
+        "map_place_history"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R148",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "During the configured promotion interval show in Featured to permitted viewers, You for attendees, Friends when relevant friends attended; console controls Featured promotion.",
+      "screens": [
+        "console-map-controls",
+        "map_special_event"
+      ],
+      "coverage": "specified_constraint",
+      "screenIds": [
+        "console-map-controls",
+        "map_special_event"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R149",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Explore square, rounded and glow/motion event-pin treatments; do not silently select one final preset.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R150",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Console and simple staff QR scanner are authenticated internal web interfaces; keep event, first-party media, post-event and settings management out of the guest app.",
+      "screens": [
+        "console",
+        "staff-scan",
+        "staff-guest-search"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-event",
+        "console-guests",
+        "console-publish",
+        "console-preview",
+        "console-live",
+        "console-recap-preview",
+        "console-recap-live",
+        "console-registration",
+        "console-map-controls",
+        "console-home",
+        "console-messages",
+        "console-attendance",
+        "console-attendance-corrected",
+        "console-moderation",
+        "console-photo-removed",
+        "console-review-request",
+        "console-request-approved",
+        "console-offer",
+        "console-offer-sent",
+        "console-publish-failed",
+        "console-invite-failed",
+        "console-tags",
+        "console-invite-codes",
+        "console-notifications",
+        "staff-scan",
+        "staff-guest-search"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7"
+    },
+    {
+      "id": "R151",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Generate optional invitation codes with optional capped or uncapped usage, include enabled codes in invitation text, and allow codes to remain off initially.",
+      "screens": [
+        "console-invite-codes",
+        "enter-code",
+        "invite-with-code"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "console-invite-codes",
+        "enter-code",
+        "invite-with-code"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3, 7"
+    },
+    {
+      "id": "R152",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Full guest list prioritizes people the viewer follows and shows truthful permitted mutual-connection counts.",
+      "screens": [
+        "full-guest-list"
+      ],
+      "coverage": "shown",
+      "screenIds": [
+        "full-guest-list"
+      ],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "3"
+    },
+    {
+      "id": "R153",
+      "authority": "approved",
+      "sources": [
+        "T3",
+        "T4"
+      ],
+      "requirement": "Create visually accurate Swift front-end mocks in an isolated sandbox and capture actual simulator screenshots; no backend integration or production app changes.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "7, 9"
+    },
+    {
+      "id": "R154",
+      "authority": "approved",
+      "sources": [
+        "T4"
+      ],
+      "requirement": "Create the full starting-state and end-to-end exit acceptance suite for the engineering plan; distinguish planned tests from implemented/passed tests.",
+      "screens": [],
+      "coverage": "specified_constraint",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "9"
+    },
+    {
+      "id": "R155",
+      "authority": "open",
+      "sources": [
+        "T3"
+      ],
+      "requirement": "The icon color mismatch needs the exact icon identified; do not invent a target or claim the unidentified issue fixed.",
+      "screens": [],
+      "coverage": "open",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "Design review"
+    },
+    {
+      "id": "R156",
+      "authority": "open",
+      "sources": [
+        "T3",
+        "T4"
+      ],
+      "requirement": "External share payload, second-degree Friends eligibility, tag-generation mechanics and invitation-code redemption semantics need explicit follow-through; broad Featured visibility is selected.",
+      "screens": [],
+      "coverage": "open",
+      "screenIds": [],
+      "implementationStatus": "Not implemented or runtime-verified by this audit",
+      "specSection": "Design review"
+    }
+  ],
+  "sourceCatalog": {
+    "T3": {
+      "kind": "original_user_transcript",
+      "path": "/Users/joelipshutz/.codex/attachments/8bd0dd83-5b99-400d-bffd-dbe08f07e37d/pasted-text.txt"
+    },
+    "T4": {
+      "kind": "original_user_transcript",
+      "path": "/Users/joelipshutz/.codex/attachments/3efb9496-b31f-4d2e-abe0-222e40720bc4/pasted-text.txt"
+    },
+    "T1": {
+      "kind": "original_user_transcript",
+      "path": "/Users/joelipshutz/.codex/attachments/6ae904a6-a3b8-416d-b521-d116614a93cf/pasted-text.txt"
+    },
+    "T2": {
+      "kind": "original_user_transcript",
+      "path": "/Users/joelipshutz/.codex/attachments/089ef3f0-1347-4b1a-92ce-bac6e68c5104/pasted-text.txt"
+    },
+    "ROADMAP": {
+      "kind": "local_roadmap_context",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/september-roadmap-deck/september-roadmap.html"
+    },
+    "P01": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 1"
+    },
+    "P02": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 2"
+    },
+    "P03": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 3"
+    },
+    "P04": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 4"
+    },
+    "P05": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 5"
+    },
+    "P06": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 6"
+    },
+    "P07": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 7"
+    },
+    "P08": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 8"
+    },
+    "P09": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 9"
+    },
+    "P10": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 10"
+    },
+    "P11": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 11"
+    },
+    "P12": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 12"
+    },
+    "P13": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 13"
+    },
+    "P14": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 14"
+    },
+    "P15": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 15"
+    },
+    "P16": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 16"
+    },
+    "P17": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 17"
+    },
+    "P18": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 18"
+    },
+    "P19": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 19"
+    },
+    "P20": {
+      "kind": "unapproved_draft_default",
+      "path": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-events-spec/product-spec-draft.md",
+      "section": "8, proposed default 20"
+    },
+    "D1": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M008",
+        "M009"
+      ],
+      "answer": [
+        "T2",
+        "M010"
+      ],
+      "choice": "Detailed response: personal event check-in"
+    },
+    "D2": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017"
+      ],
+      "choice": "A"
+    },
+    "D3": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017"
+      ],
+      "choice": "A + locked comments amendment"
+    },
+    "D4": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017",
+        "M018"
+      ],
+      "choice": "A + M018 event-led clarification"
+    },
+    "D5": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "A"
+    },
+    "D6": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "A"
+    },
+    "D7": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "Deferred until together again"
+    },
+    "D8": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "D + approximate home amendment"
+    },
+    "D9": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "C + eye + future privacy"
+    },
+    "D10": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "A + console"
+    },
+    "D11": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "A"
+    },
+    "D12": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "A"
+    },
+    "D13": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "B + console adjustable"
+    },
+    "D14": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026"
+      ],
+      "choice": "A"
+    },
+    "D15": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026"
+      ],
+      "choice": "A"
+    },
+    "D16": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026",
+        "M030"
+      ],
+      "choice": "C + M030 public launch before Events"
+    },
+    "D17": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D18": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D19": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D20": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "A"
+    },
+    "D21": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "C"
+    },
+    "D22": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "A with internal B option"
+    },
+    "D23": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D24": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D25": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D26": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A"
+    },
+    "D27": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A"
+    },
+    "D28": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A; omit reuse explanation"
+    },
+    "D29": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "A"
+    },
+    "D30": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "B; it should be a hook"
+    },
+    "D31": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "A"
+    },
+    "D32": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D33": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D34": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D35": {
+      "kind": "original_question_answer_pair",
+      "question": [
+        "question-35.md"
+      ],
+      "answer": [
+        "M047"
+      ],
+      "choice": "A"
+    }
+  },
+  "decisionCrosswalk": {
+    "D1": {
+      "question": [
+        "M008",
+        "M009"
+      ],
+      "answer": [
+        "T2",
+        "M010"
+      ],
+      "choice": "Detailed response: personal event check-in"
+    },
+    "D2": {
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017"
+      ],
+      "choice": "A"
+    },
+    "D3": {
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017"
+      ],
+      "choice": "A + locked comments amendment"
+    },
+    "D4": {
+      "question": [
+        "M016"
+      ],
+      "answer": [
+        "M017",
+        "M018"
+      ],
+      "choice": "A + M018 event-led clarification"
+    },
+    "D5": {
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "A"
+    },
+    "D6": {
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "A"
+    },
+    "D7": {
+      "question": [
+        "M019"
+      ],
+      "answer": [
+        "M020"
+      ],
+      "choice": "Deferred until together again"
+    },
+    "D8": {
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "D + approximate home amendment"
+    },
+    "D9": {
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "C + eye + future privacy"
+    },
+    "D10": {
+      "question": [
+        "M021"
+      ],
+      "answer": [
+        "M022"
+      ],
+      "choice": "A + console"
+    },
+    "D11": {
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "A"
+    },
+    "D12": {
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "A"
+    },
+    "D13": {
+      "question": [
+        "M023"
+      ],
+      "answer": [
+        "M024"
+      ],
+      "choice": "B + console adjustable"
+    },
+    "D14": {
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026"
+      ],
+      "choice": "A"
+    },
+    "D15": {
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026"
+      ],
+      "choice": "A"
+    },
+    "D16": {
+      "question": [
+        "M025"
+      ],
+      "answer": [
+        "M026",
+        "M030"
+      ],
+      "choice": "C + M030 public launch before Events"
+    },
+    "D17": {
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D18": {
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D19": {
+      "question": [
+        "M031"
+      ],
+      "answer": [
+        "M032"
+      ],
+      "choice": "A"
+    },
+    "D20": {
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "A"
+    },
+    "D21": {
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "C"
+    },
+    "D22": {
+      "question": [
+        "M033"
+      ],
+      "answer": [
+        "M034"
+      ],
+      "choice": "A with internal B option"
+    },
+    "D23": {
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D24": {
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D25": {
+      "question": [
+        "M035"
+      ],
+      "answer": [
+        "M036"
+      ],
+      "choice": "A"
+    },
+    "D26": {
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A"
+    },
+    "D27": {
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A"
+    },
+    "D28": {
+      "question": [
+        "M037"
+      ],
+      "answer": [
+        "M038"
+      ],
+      "choice": "A; omit reuse explanation"
+    },
+    "D29": {
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "A"
+    },
+    "D30": {
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "B; it should be a hook"
+    },
+    "D31": {
+      "question": [
+        "M039"
+      ],
+      "answer": [
+        "M040"
+      ],
+      "choice": "A"
+    },
+    "D32": {
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D33": {
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D34": {
+      "question": [
+        "M041"
+      ],
+      "answer": [
+        "M045"
+      ],
+      "choice": "A"
+    },
+    "D35": {
+      "question": [
+        "question-35.md"
+      ],
+      "answer": [
+        "M047"
+      ],
+      "choice": "A"
+    }
+  },
+  "counts": {
+    "requirements": 156,
+    "authority": {
+      "approved": 114,
+      "open": 8,
+      "derived": 8,
+      "superseded": 4,
+      "deferred": 2,
+      "proposal": 20
+    },
+    "coverage": {
+      "specified_constraint": 28,
+      "shown": 95,
+      "open": 8,
+      "superseded": 4,
+      "deferred": 2,
+      "proposal": 19
+    },
+    "screens": 165,
+    "chapters": 18,
+    "messages": 62
+  },
+  "files": {
+    "model": "/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/events-onboarding-20260910/flow-model.json",
+    "modelSha256": "84fa52a48fc7036c7a78576ac3be498988814f8d001a7cb8af699e84d3a26604",
+    "htmlSha256": "0fead8dc38dc4ca8228ce36865a8a2c587e0729e0ec635bd9bc4bb815e0dd492",
+    "discussionSha256": "4489c567843f5a982debbf0c030b71cb6df51e1a9c76c44cda132d0f3084ace8"
+  }
+}

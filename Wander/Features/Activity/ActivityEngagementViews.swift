@@ -27,11 +27,14 @@ struct ActivityEngagementActionRow: View {
     let visiblePlace: VisiblePlace?
     var showsCommentButton = true
     var isEngagementEnabled = true
+    var resolveContext: (@MainActor () async -> ActivityEngagementContext?)?
     var reportSubjectOverride: CommunityReportSubject?
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     @State private var wannaSaveContext: MapPlaceSaveContext?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
     @State private var reportSubject: CommunityReportSubject?
+    @State private var isResolvingAction = false
+    @State private var actionError: String?
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
@@ -52,6 +55,13 @@ struct ActivityEngagementActionRow: View {
             bookmarkButton
         }
         .frame(minHeight: 44)
+        .alert("Couldn't load this check-in", isPresented: Binding(
+            get: { actionError != nil }, set: { if !$0 { actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { actionError = nil }
+        } message: {
+            Text(actionError ?? "Try again in a moment.")
+        }
         .sheet(item: $wannaSaveContext, onDismiss: {
             store.saveFlowDidDismiss(.saveSheet)
         }) { saveContext in
@@ -90,9 +100,9 @@ struct ActivityEngagementActionRow: View {
     private var likeButton: some View {
         Button {
             auth.requireSignIn(for: .socialActivity) {
-                Task {
+                performResolvedAction { resolved in
                     _ = await store.toggleActivityLike(
-                        activityID: context.activityID,
+                        activityID: resolved.activityID,
                         backend: auth.isSignedIn ? backend : nil
                     )
                 }
@@ -116,8 +126,8 @@ struct ActivityEngagementActionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!isEngagementEnabled || store.isActivityLikePending(context.activityID))
-        .opacity(isEngagementEnabled ? 1 : 0.45)
+        .disabled(!canAttemptEngagement || isResolvingAction || store.isActivityLikePending(context.activityID))
+        .opacity(canAttemptEngagement ? 1 : 0.45)
         .accessibilityLabel(engagement.viewerHasLiked ? "Unlike activity" : "Like activity")
         .accessibilityValue("\(engagement.likeCount) likes")
     }
@@ -125,10 +135,9 @@ struct ActivityEngagementActionRow: View {
     private var commentButton: some View {
         Button {
             auth.requireSignIn(for: .socialActivity) {
-                activityNavigation.openComments(
-                    context: context,
-                    visiblePlace: visiblePlace
-                )
+                performResolvedAction { resolved in
+                    activityNavigation.openComments(context: resolved, visiblePlace: visiblePlace)
+                }
             }
         } label: {
             HStack(spacing: 5) {
@@ -145,8 +154,8 @@ struct ActivityEngagementActionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!isEngagementEnabled)
-        .opacity(isEngagementEnabled ? 1 : 0.45)
+        .disabled(!canAttemptEngagement || isResolvingAction)
+        .opacity(canAttemptEngagement ? 1 : 0.45)
         .accessibilityLabel("Open comments")
         .accessibilityValue("\(engagement.commentCount) comments")
     }
@@ -187,21 +196,24 @@ struct ActivityEngagementActionRow: View {
 
     @ViewBuilder
     private var shareButton: some View {
-        if isEngagementEnabled, activityShareContent != nil {
+        if resolveContext != nil || (isEngagementEnabled && activityShareContent != nil) {
             Button {
-                guard let presentation = ActivitySharePreviewPresentation(context: context) else {
-                    return
-                }
-
-                if let onSharePreviewPresentation {
-                    onSharePreviewPresentation(presentation)
-                } else {
-                    sharePreviewPresentation = presentation
+                performResolvedAction { resolved in
+                    guard let presentation = ActivitySharePreviewPresentation(context: resolved) else {
+                        actionError = "This check-in is still syncing. Try sharing again in a moment."
+                        return
+                    }
+                    if let onSharePreviewPresentation {
+                        onSharePreviewPresentation(presentation)
+                    } else {
+                        sharePreviewPresentation = presentation
+                    }
                 }
             } label: {
                 shareLabel
             }
             .buttonStyle(.plain)
+            .disabled(isResolvingAction)
         } else {
             Button(action: {}) {
                 shareLabel
@@ -210,6 +222,31 @@ struct ActivityEngagementActionRow: View {
             .disabled(true)
             .opacity(0.45)
             .accessibilityHint("Available when this activity finishes loading.")
+        }
+    }
+
+    private var canAttemptEngagement: Bool {
+        isEngagementEnabled || resolveContext != nil
+    }
+
+    private func performResolvedAction(_ action: @escaping @MainActor (ActivityEngagementContext) async -> Void) {
+        guard !isResolvingAction else { return }
+        isResolvingAction = true
+        let requestUserID = store.currentUser.id
+        Task { @MainActor in
+            defer { isResolvingAction = false }
+            let resolved: ActivityEngagementContext?
+            if let resolveContext {
+                resolved = await resolveContext()
+            } else {
+                resolved = isEngagementEnabled ? context : nil
+            }
+            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+            guard let resolved else {
+                actionError = "Check your connection and tap the action to try again. If the owner removed this check-in, it will disappear when history refreshes."
+                return
+            }
+            await action(resolved)
         }
     }
 
@@ -315,6 +352,8 @@ struct ActivityPostcardView: View {
     var showsCommentButton = true
     var showsEngagementActions = true
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
+    var activityGroup: FeedActivityGroup? = nil
+    var openActivityList: ((LocalPlaceList) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -349,6 +388,10 @@ struct ActivityPostcardView: View {
                         )
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Note: \(note)")
+                }
+
+                if let activityGroup {
+                    FeedActivityDisclosure(group: activityGroup, openList: openActivityList)
                 }
 
                 if showsEngagementActions {

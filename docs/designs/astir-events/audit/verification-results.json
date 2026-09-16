@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-09-14T20:39:02.599Z",
+  "htmlSha256": "0fead8dc38dc4ca8228ce36865a8a2c587e0729e0ec635bd9bc4bb815e0dd492",
+  "screens": 165,
+  "chapters": 18,
+  "mainScreens": 28,
+  "scriptErrors": [],
+  "duplicateIds": [],
+  "largeNarrowOverflow": [],
+  "screenshots": [
+    "/private/tmp/astir-flows-overview.png",
+    "/private/tmp/astir-flow-contact-sheet.png",
+    "/private/tmp/astir-flow-large-dark.png"
+  ]
+}

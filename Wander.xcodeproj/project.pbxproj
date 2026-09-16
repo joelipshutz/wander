@@ -67,6 +67,7 @@
 		268207FAA4721BCE51516935 /* rec-228-bulk-status-coupling-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */; };
 		2B104C64FDB4DC5F3C4E95F2 /* YourMapPrototypeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7063D79739F20DE41DD84697 /* YourMapPrototypeScreen.swift */; };
 		2CF99969C90415247403D552 /* ListMapPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D6E3741B00C6D1C66CD1C7 /* ListMapPresentation.swift */; };
+		2D107CD426A30F739DC2FB0E /* FeedActivityDisclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */; };
 		2E4B3E45711537662297A152 /* ListsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA94EC62E68038D903E3501 /* ListsScreen.swift */; };
 		2EAB478075A4392BD131BCAF /* simulator-test-session-relaunch-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 4017467979764DBA4C407626 /* simulator-test-session-relaunch-pre.json */; };
 		2EB296C93578FE337D715ED9 /* LocalListModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */; };
@@ -250,6 +251,7 @@
 		CE09B8314A8C8030E6644CBC /* FirstVisitWalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6F6858FAB55D4C03CB7BC2 /* FirstVisitWalkthroughTests.swift */; };
 		CE0E108A9243224B04BDAD02 /* rec-270-liquid-glass-pin-transition-post.png in Resources */ = {isa = PBXBuildFile; fileRef = D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */; };
 		CE501803271AD8BE8E83680A /* rec-289-selection-lifetime-layering-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = AAD27492E189F57CEEE5FB6F /* rec-289-selection-lifetime-layering-pre.json */; };
+		D0233FBA3CB9F76B5D6E74CD /* FeedActivityGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */; };
 		D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */; };
 		D19890A5F55C39BB31669E89 /* ProfilePhotoCropStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46C27751B250A584CB654D8 /* ProfilePhotoCropStateTests.swift */; };
 		D28930971035EC9FAB4E2A9F /* MapFilterInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62C6A6EE96BB03651C6503D /* MapFilterInteractionUITests.swift */; };
@@ -395,6 +397,7 @@
 		16C5F62A98A3826F6DD6332C /* InviteFramework.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFramework.swift; sourceTree = "<group>"; };
 		17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionProviding.swift; sourceTree = "<group>"; };
 		18244466AAA64D03A3B75227 /* OnboardingCommentsCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCommentsCaptureView.swift; sourceTree = "<group>"; };
+		1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedActivityDisclosure.swift; sourceTree = "<group>"; };
 		18B541F93C896A5613DCA47F /* MapSnapshotListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotListTests.swift; sourceTree = "<group>"; };
 		19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-liquid-glass-pin-transition-pre.json"; sourceTree = "<group>"; };
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
@@ -455,6 +458,7 @@
 		484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockup.swift; sourceTree = "<group>"; };
 		4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceCardActionInteractionUITests.swift; sourceTree = "<group>"; };
 		4EA9C4F456C7AF33B5D9EA15 /* ProfileHeaderMotionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotionStateTests.swift; sourceTree = "<group>"; };
+		4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedActivityGroupingUITests.swift; sourceTree = "<group>"; };
 		4F8BE1B23A944FEF54533C0A /* PlaceBusinessMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBusinessMetadata.swift; sourceTree = "<group>"; };
 		50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateSheet.swift; sourceTree = "<group>"; };
 		5158D1D9D07312701C4E026B /* rec-270-map-search-shadow-followup-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-map-search-shadow-followup-pre.json"; sourceTree = "<group>"; };
@@ -1062,6 +1066,7 @@
 		9AE6A3AE5173E9D59B6DEBAD /* Feed */ = {
 			isa = PBXGroup;
 			children = (
+				1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */,
 				C904029812CF4369275B29FA /* FeedScreen.swift */,
 			);
 			path = Feed;
@@ -1176,6 +1181,7 @@
 			children = (
 				EA454CD7CBC8A79CCEE08BBD /* AppStoreScreenshotsUITests.swift */,
 				711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */,
+				4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */,
 				7327B8B87EDE207236010857 /* FullPageBackSwipeUITests.swift */,
 				F62C6A6EE96BB03651C6503D /* MapFilterInteractionUITests.swift */,
 				4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */,
@@ -1560,6 +1566,7 @@
 				1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */,
 				812F84570207D139A528319C /* DiscoverScreen.swift in Sources */,
 				AAB7435F80274F652331795F /* FeatureFlags.swift in Sources */,
+				2D107CD426A30F739DC2FB0E /* FeedActivityDisclosure.swift in Sources */,
 				B2D3D8AE71BC35FB52F0AE0C /* FeedModels.swift in Sources */,
 				91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */,
 				97DA8BB449DC58D55A4DD2ED /* FirstVisitWalkthrough.swift in Sources */,
@@ -1785,6 +1792,7 @@
 			files = (
 				63B4F0219103EE4D48C147C9 /* AppStoreScreenshotsUITests.swift in Sources */,
 				EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */,
+				D0233FBA3CB9F76B5D6E74CD /* FeedActivityGroupingUITests.swift in Sources */,
 				983E4529E27D443CF4EB85D3 /* FullPageBackSwipeUITests.swift in Sources */,
 				D28930971035EC9FAB4E2A9F /* MapFilterInteractionUITests.swift in Sources */,
 				31E27F44912FDDF3AF00306E /* MapPlaceCardActionInteractionUITests.swift in Sources */,

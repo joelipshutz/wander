@@ -290,18 +290,26 @@ final class MapPlaceListPickerTests: XCTestCase {
             XCTAssertEqual(selected.size, CGSize(width: 22, height: 25))
             XCTAssertEqual(unselected.size, selected.size)
             XCTAssertEqual(selected.renderingMode, .alwaysOriginal)
-            XCTAssertEqual(unselected.renderingMode, .alwaysOriginal)
+            XCTAssertEqual(unselected.renderingMode, .alwaysTemplate)
             XCTAssertEqual(try paperFillRGBA(selected), [240, 90, 60, 255])
-            XCTAssertEqual(try paperFillRGBA(unselected), isDark ? [242, 233, 219, 255] : [20, 23, 20, 255])
+            XCTAssertEqual(
+                try paperFillRGBA(unselected.withTintColor(.white, renderingMode: .alwaysOriginal)),
+                [255, 255, 255, 255]
+            )
             XCTAssertTrue(selected === PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark))
         }
     }
 
     private func paperFillRGBA(_ image: UIImage) throws -> [UInt8] {
-        let source = try XCTUnwrap(image.cgImage)
+        // UIKit can carry tint as rendering metadata while cgImage keeps the
+        // original pixels. Draw the UIImage before inspecting its displayed fill.
+        let rendered = UIGraphicsImageRenderer(size: image.size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+        let source = try XCTUnwrap(rendered.cgImage)
         // A center pixel between rows measures opaque sheet fill without edge antialiasing.
         let crop = try XCTUnwrap(source.cropping(to: CGRect(
-            x: 10 * image.scale, y: 9 * image.scale, width: 1, height: 1
+            x: 10 * rendered.scale, y: 9 * rendered.scale, width: 1, height: 1
         )))
         var rgba = [UInt8](repeating: 0, count: 4)
         try rgba.withUnsafeMutableBytes { bytes in

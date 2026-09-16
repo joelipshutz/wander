@@ -1,0 +1,121 @@
+{
+  "scope": "Engineering D4\u2013D6/D13/D14 approved annotation wording; local design artifacts only",
+  "verified_at": "2026-09-15T20:00:58.343Z",
+  "screens": 172,
+  "sections": 13,
+  "changed_screens": {
+    "event-rescheduled": {
+      "note": {
+        "before": "Proposed handling: preserve RSVP, explain the change, offer cancellation, and recalculate address windows/reminders. This is a separate alternate scenario, not a change to the main sample event. Return to the same surface and event this guest came from.",
+        "after": "D13A approved: an upcoming event moved to a new future date keeps confirmed RSVPs, notifies guests and permits cancellation without reconfirmation. Recalculate applicable reminder and address timing. This Oct 17 alternate keeps the same event; layout remains proposed. Return to the same surface and event this guest came from."
+      }
+    },
+    "rescheduled-cancel": {
+      "note": {
+        "before": "Separate reschedule example. Keep or cancel the Oct 17 reservation; do not return to the old Oct 10 date. Rescheduling mechanics remain proposed.",
+        "after": "Separate reschedule example. Keep or cancel the Oct 17 reservation; do not return to the old Oct 10 date. D13A approves retaining confirmation without reconfirmation and offering cancellation. The cancellation-screen layout remains proposed."
+      }
+    },
+    "console-registration": {
+      "note": {
+        "before": "Automatic/manual approval and configurable offer duration are approved. Seat-hold accounting, prospective changes, and cutoff mechanics are proposed.",
+        "after": "Approved: automatic/manual approval and configurable offer duration. D4\u2013D6: active offers hold seats; pending approval and unfinished verification do not. D14A: new RSVPs remain open until event end by default, with an earlier console cutoff allowed. Changes to issued deadlines and other unselected operating edits remain open; layout is proposed."
+      }
+    },
+    "console-offer": {
+      "note": {
+        "before": "Astir selects the recipient. The offer requires acceptance and defaults to 24 hours. Holding a seat and changing issued deadlines are proposed operating rules.",
+        "after": "Astir selects the recipient. D4A: an issued offer reserves one available seat until its stated deadline and requires acceptance. Default duration is 24 hours, adjustable in the console. Editing an already-issued deadline remains open; layout is proposed."
+      }
+    }
+  },
+  "all_ids_numbers_order_routes_surfaces_layout_fields_preserved": true,
+  "all_preview_images_unchanged": 344,
+  "selectively_recaptured_ids": [
+    "console-offer",
+    "console-registration",
+    "event-rescheduled",
+    "rescheduled-cancel"
+  ],
+  "complete_manifest_with_per_screen_provenance": true,
+  "unaffected_manifest_entries_preserved": true,
+  "native_screen_map_unchanged": true,
+  "affected_full_previews_visually_inspected": true,
+  "registration_cutoff_check": "Screen 123 has no registration-close date/time control. The displayed 24 is New offer expiry \u00b7 Hours, not a registration cutoff. D14 default appears in its corrected review note.",
+  "changed_files": {
+    "build-flow-wireframes.py": {
+      "before": "08f50a85788d75c2519f4c244778c85c205b2f6fe44f01d4ad0bf2d65be9b9d1",
+      "after": "ccf0498638ba23651b3fb6eb97fa00cdf67c9bae4b750330a254e03ac11caba3"
+    },
+    "audit/flow-corrections.py": {
+      "before": "5ef3b84bbfadb0cab631580588b8e3d618181dace9c87eff1dafa6af02b1fb11",
+      "after": "957fa9af48e6b76f6a65a862d2cec425fbb63116fced8518a201cbceedc21505"
+    },
+    "astir-events-wireframes.html": {
+      "before": "36230ec7fe5141c99a9c098f4c2752352839b536e892ae0f150fc8b2cd74d07a",
+      "after": "13a7c90871ef60361b7e48e3d5300eac58426084ac16c3f3c9c584a7fedb69bf"
+    },
+    "astir-events-flowchart.html": {
+      "before": "fcc986c1362486dc7b6309499ff76a1d50e20135e5aeac08516325049d806113",
+      "after": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993"
+    },
+    "flowchart/screen-model.json": {
+      "before": "1dfafdad2e5894a7a7929990e201607a3417fbb60af3ec3edc16e691daa70063",
+      "after": "a67bfbe10f93f0551f2ccfc5f0ed367cf33d5e9142820796a88f325044c7bee7"
+    },
+    "flowchart/wireframe-preview-manifest.json": {
+      "before": "54852d7dd74928fceeaf531ac8f7ce8ecdac24a79e7171881e0c184d63e728b1",
+      "after": "c26a6cf117583027249db60e9dfca4676210481b0de4a83aec71329e3ac3b1f9"
+    },
+    "flowchart/continuous-coverage.json": {
+      "before": "1d982de8a636597a127f764087d7d34b167d37fab8434d72d62a277d157124a8",
+      "after": "16195282e5cb988a02e83e72491d9a9c76509815f0cc2426869a07ccd7f5848e"
+    },
+    "flowchart/inline-preview-verification.json": {
+      "before": "045a6b1d5fb17b9d767555d3cc0bb1d2af363d9bc961b9402534a01f55bed295",
+      "after": "dce98d0e3527c6a8ae96e4bb6860e14d58e984b9b66efbba2e01ce433702ca8b"
+    },
+    "generated-wireframes/flow-model.json": {
+      "before": "1dfafdad2e5894a7a7929990e201607a3417fbb60af3ec3edc16e691daa70063",
+      "after": "a67bfbe10f93f0551f2ccfc5f0ed367cf33d5e9142820796a88f325044c7bee7"
+    },
+    "generated-wireframes/onboarding-review.html": {
+      "before": "36230ec7fe5141c99a9c098f4c2752352839b536e892ae0f150fc8b2cd74d07a",
+      "after": "13a7c90871ef60361b7e48e3d5300eac58426084ac16c3f3c9c584a7fedb69bf"
+    }
+  },
+  "verification_screenshots_rewritten": [
+    "flowchart/inline-previews-overview.png",
+    "flowchart/inline-native-surface-branches.png",
+    "flowchart/inline-native-expanded.png",
+    "flowchart/inline-wireframe-expanded.png",
+    "flowchart/inline-mobile-expanded.png"
+  ],
+  "root_owned_documents_edited": false,
+  "repository_or_remote_changes": false,
+  "browser_verification": {
+    "offline_branch": {
+      "new_screen_count": 7,
+      "checks_gate_offline_admit": true,
+      "pending_not_server_validated": true,
+      "sync_disabled_offline": true,
+      "conflict_error_treatment": true,
+      "staff_web_surface": true
+    },
+    "screens": 172,
+    "primary_native_mocks": 26,
+    "primary_wireframes": 146,
+    "visible_default_ui_images": 186,
+    "all_inline_images_decoded": true,
+    "desktop_in_place_expand": true,
+    "mobile_in_place_expand": true,
+    "external_requests": [],
+    "new_tabs_on_expand": 0,
+    "search_preserves_all_screens": true,
+    "all_previews_visible_in_print": true,
+    "motion_duration_seconds": 5.603333,
+    "errors": [],
+    "html_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+    "verified_at": "2026-09-15T20:00:58.343Z"
+  }
+}
