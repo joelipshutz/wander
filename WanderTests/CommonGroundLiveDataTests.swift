@@ -47,6 +47,68 @@ final class CommonGroundLiveDataTests: XCTestCase {
         XCTAssertEqual(place.kind, .mutualWanna)
     }
 
+    func testLiveStoreProjectionIncludesRepeatWannasOnBeenParent() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let partnerPlace = try XCTUnwrap(store.placesInCommon(with: "user_maya").first)
+        let ownPlace = try XCTUnwrap(store.currentUserVisiblePlaces.first {
+            VisiblePlaceGrouping.matches($0, partnerPlace)
+        })
+        let candidate = PlaceCandidate(
+            id: ownPlace.place.id,
+            name: ownPlace.place.canonicalName,
+            category: ownPlace.place.category,
+            address: ownPlace.place.address,
+            locality: ownPlace.place.locality,
+            region: ownPlace.place.region,
+            country: ownPlace.place.country,
+            latitude: ownPlace.place.latitude,
+            longitude: ownPlace.place.longitude,
+            sourceProvider: ownPlace.place.sourceProvider,
+            sourceProviderPlaceID: ownPlace.place.sourceProviderPlaceID,
+            confidence: 1
+        )
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "Still a Been place",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+        let firstID = "11111111-1111-4111-8111-111111111111"
+        let secondID = "22222222-2222-4222-8222-222222222222"
+        _ = await store.saveNewWanna(
+            candidate,
+            operationID: firstID,
+            visibility: .followers,
+            note: "Go again",
+            plannedDate: nil,
+            attributes: [],
+            backend: nil
+        )
+        _ = await store.saveNewWanna(
+            candidate,
+            operationID: secondID,
+            visibility: .followers,
+            note: "Another time",
+            plannedDate: nil,
+            attributes: [],
+            backend: nil
+        )
+
+        let projected = try XCTUnwrap(
+            CommonGroundLiveData.places(store: store, profileID: "user_maya")
+                .first { $0.sourcePlaceID == ownPlace.id }
+        )
+        XCTAssertEqual(projected.youEvidence.wannaRecordIDs, [firstID, secondID])
+        XCTAssertGreaterThan(projected.youVisits, 0)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first { VisiblePlaceGrouping.matches($0, ownPlace) }?.userPlace.status,
+            .been,
+            "Repeat Wanna events must not replace the checked-in place summary."
+        )
+    }
+
     func testVisitAliasesDeduplicateAndRatingsRemainPersonSpecific() throws {
         let viewer = profile("viewer"), partner = profile("partner")
         let mine = row("viewer-been", owner: viewer, status: .been, rating: 5)

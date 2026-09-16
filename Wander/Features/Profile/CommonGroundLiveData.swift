@@ -28,13 +28,15 @@ enum CommonGroundLiveData {
             partnerProfile: partner,
             authorizedPlaces: store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID),
             visitsForUserPlace: { store.visits(for: $0) },
-            shouldShowLegacyCheckInSummary: { store.shouldShowLegacyCheckInSummary(for: $0) }
+            shouldShowLegacyCheckInSummary: { store.shouldShowLegacyCheckInSummary(for: $0) },
+            eligibleWannaEventIDs: { store.wannaSaves(for: $0).map(\.id) }
         )
     }
 
-    /// The event seam intentionally receives already-authorized event IDs.
-    /// After REC-497 lands, the store wrapper can supply wannaSaves(for:) for
-    /// every parent row; a Been status must never suppress those events.
+    /// The event seam receives already-authorized event IDs. The live store
+    /// supplies repeat Wannas for every canonical parent row, including Been
+    /// summaries; the projection then deduplicates event IDs independently of
+    /// check-ins and the legacy Wanna summary.
     static func snapshot(
         viewerProfile: LocalProfile,
         partnerProfile: LocalProfile,
