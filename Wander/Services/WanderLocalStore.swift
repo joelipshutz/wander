@@ -4667,17 +4667,30 @@ final class WanderStore: ObservableObject {
             .sorted { $0.questionKey < $1.questionKey }
     }
 
-    /// Server reads remain authoritative, with local tombstones/blocks applied
-    /// while their writes are still pending so refresh cannot resurrect them.
+    /// Pending deletion intent wins over remote snapshots. A completed deletion
+    /// only hides older snapshots: saving again can restore the same server ID.
     func placeProfileVisibleSaves(from saves: [VisiblePlace]) -> [VisiblePlace] {
-        let deletedOwnIDs = Set(userPlaces.filter {
-            $0.userID == currentUser.id && $0.deletedAt != nil
-        }.flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0?.lowercased() } })
+        var deletedThroughByID: [String: Date] = [:]
+        for row in userPlaces where row.userID == currentUser.id {
+            guard let deletedAt = row.deletedAt else { continue }
+            let deletionIsComplete = row.syncState == .tombstoned || row.syncState == .synced
+            let cutoff = deletionIsComplete ? deletedAt : Date.distantFuture
+            for id in Self.referenceIDs(for: row).map({ $0.lowercased() }) {
+                deletedThroughByID[id] = max(deletedThroughByID[id] ?? .distantPast, cutoff)
+            }
+        }
         return saves.filter { visible in
             guard !isBlockedBetweenCurrentUser(and: visible.owner.id),
                   visible.userPlace.deletedAt == nil else { return false }
-            return visible.owner.id != currentUser.id
-                || deletedOwnIDs.isDisjoint(with: [visible.userPlace.id, visible.userPlace.localID, visible.userPlace.serverID].compactMap { $0?.lowercased() })
+            guard visible.owner.id == currentUser.id else { return true }
+            let row = visible.userPlace
+            let updatedAt = row.syncState == .synced
+                ? (row.serverUpdatedAt ?? row.updatedAt)
+                : row.localUpdatedAt
+            return Self.referenceIDs(for: row).allSatisfy { id in
+                guard let deletedThrough = deletedThroughByID[id.lowercased()] else { return true }
+                return updatedAt > deletedThrough
+            }
         }
     }
 
