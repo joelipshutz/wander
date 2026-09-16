@@ -44,15 +44,74 @@ enum PlaceCheckInQuestionCatalog {
     static let allQuestions = coreQuestions + everydayQuestions
     static let profiles = coreProfiles + everydayProfiles
 
+    /// Historical answers keep their original definitions and option values.
+    /// Retired trivia is excluded from new selections, never rewritten into a
+    /// different fact (for example apparatus used is not a reformer-class answer).
+    static let retiredQuestionIDs: Set<String> = [
+        "place_detail_bread",
+        "place_detail_rice",
+        "place_detail_small_plates",
+        "place_detail_dessert",
+        "place_detail_menu_guidance",
+        "place_detail_fresh_herbs",
+        "place_detail_broth",
+        "place_detail_noodles",
+        "place_detail_dumplings",
+        "place_detail_bao",
+        "place_detail_dim_sum",
+        "place_detail_hotpot",
+        "place_detail_roast_meats",
+        "place_detail_skewers",
+        "place_detail_sushi_menu",
+        "place_detail_curry",
+        "place_detail_crispy_takeaway",
+        "place_detail_flatbread",
+        "place_detail_dips",
+        "place_detail_coffee_after",
+        "place_detail_stew",
+        "place_detail_shared_platter",
+        "place_detail_grilled",
+        "place_detail_pastry",
+        "place_detail_seafood",
+        "place_detail_pasta",
+        "place_detail_tapas",
+        "place_detail_fondue",
+        "place_detail_tacos",
+        "place_detail_salsa",
+        "place_detail_sandwich",
+        "place_detail_burger",
+        "place_detail_barbecue",
+        "place_detail_wings",
+        "place_detail_steak",
+        "place_detail_bowl",
+        "place_detail_soup",
+        "place_detail_oysters",
+        "place_detail_tea",
+        "place_detail_tea_shop",
+        "place_detail_smoothie",
+        "place_detail_toppings",
+        "place_detail_cake",
+        "place_detail_karaoke_charge",
+        "place_detail_garden_labels",
+        "place_detail_fishing_pier_setup",
+        "place_detail_class_size",
+        "place_detail_pilates_format",
+        "place_detail_pilates_intro",
+        "place_detail_everyday_browsing",
+        "place_detail_everyday_barrier",
+    ]
+    static let availableQuestions = allQuestions.filter { !retiredQuestionIDs.contains($0.id) }
+
+
     /// Category fallbacks are used only for a user-written/unknown subtype.
     /// Known selectable subtypes must have an explicit profile above.
     static let defaultQuestionIDs: [String: [String]] = [
-        "restaurants_food": ["booking", "noise", "vegetarian"],
+        "restaurants_food": ["dog_access", "outdoor_seating", "booking_policy"],
         "coffee_tea_sweets": ["laptop", "outlets", "dog_access"],
         "bars_nightlife": ["noise", "alcohol_free", "outdoor_seating"],
-        "outdoors_nature": ["shade", "restroom", "path_surface"],
+        "outdoors_nature": ["leash", "shade", "restroom"],
         "things_to_do": ["admission", "visit_time", "step_free"],
-        "shopping": ["everyday_browsing", "everyday_staff_help", "everyday_payment"],
+        "shopping": ["dog_access", "everyday_staff_help", "everyday_payment"],
         "wellness_fitness": ["step_free", "waiting", "restroom"],
         "stays": ["everyday_room_noise", "everyday_luggage", "everyday_room_cooling"],
         "services_errands": ["everyday_appointment", "waiting", "everyday_prices"],
@@ -71,6 +130,35 @@ enum PlaceCheckInQuestionCatalog {
     static func question(id: String) -> PlaceCheckInQuestion? {
         questionsByID[id]
     }
+
+    /// Food type can correct a culinary label (Ramen to Thai), while a venue
+    /// format such as a truck or food court still determines useful questions.
+    /// This affects question/preference context only, never saved categorization.
+    static func questionSubtype(categoryID: String, subcategory: String?, cuisine: String?) -> String? {
+        let category = WanderPlaceCategory.normalizedPrimaryCategory(categoryID)
+        let subtype = WanderPlaceCategory.canonicalSubcategory(subcategory, primaryCategory: category)
+        guard category == WanderPlaceCategory.restaurantsFood else { return subtype }
+
+        let selectedFoodType = WanderPlaceCategory.canonicalSubcategory(cuisine, primaryCategory: category)
+        // An explicit format selected in Food type can replace a provider format.
+        if let selectedFormat = diningVenueFormats[WanderPlaceCategory.normalizedCategoryText(selectedFoodType)] {
+            return selectedFormat
+        }
+        if let venueFormat = diningVenueFormats[WanderPlaceCategory.normalizedCategoryText(subtype)] {
+            return venueFormat
+        }
+        return selectedFoodType ?? subtype
+    }
+
+    /// Exact formats only: culinary labels such as Ramen, Sushi and Thai are
+    /// deliberately absent. Legacy/custom formats keep their own scope and use
+    /// the normal category fallback when no curated profile exists.
+    private static let diningVenueFormats: [String: String] = Dictionary(uniqueKeysWithValues: [
+        "Taco stand", "Taco truck", "Food court", "Diner", "Deli", "Bistro",
+        "Steakhouse", "Bar & grill", "Oyster bar", "Snack bar", "Gastropub",
+        "Food truck", "Food stand", "Buffet", "Cafeteria", "Fast food", "Takeout",
+        "Fine dining", "Casual/family"
+    ].map { (WanderPlaceCategory.normalizedCategoryText($0), $0) })
 
     static func questions(categoryID: String, subcategory: String?) -> [PlaceCheckInQuestion] {
         if let curated = curatedQuestions(categoryID: categoryID, subcategory: subcategory) {

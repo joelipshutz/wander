@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-15T23:17:09.400169+00:00",
+  "title": "Astir Events planned acceptance-to-test map",
+  "status": "planning_only_not_implemented_not_run",
+  "source": "events-exit-criteria.md",
+  "source_sha256": "4c643549a1b67fe63f1e2558bf145a9e90cdb31580b134af3634e0ec16e0013f",
+  "source_case_count": 121,
+  "mapped_case_count": 121,
+  "additional_risk_count": 24,
+  "mapping_completeness": "121/121 named scenarios mapped; not runtime/code coverage",
+  "implemented_events_cases": 0,
+  "executed_events_cases": 0,
+  "cases_with_explicit_proposed_clauses": 26,
+  "fragments": [
+    {
+      "file": "native-entry.json",
+      "sha256": "b98f5ea1dc90ea901ab66549aa463d55cc2e11a6ea5e9898d965036f9557c02f",
+      "baseline": {
+        "checkout": "wander-events-flowchart-review",
+        "commit": "f8d258e869503a28d70518a050dff36a344134c6",
+        "app_code_baseline": "a0117cff (per engineering-plan inspection baseline; newer main must be reconciled before implementation)",
+        "authority": "events-exit-criteria.md L01\u2013L17 and I01\u2013I12; engineering D3A/D16A plus parent-reported D17A test-review approval",
+        "criteria_sha256": "9029c96df070540dc66f87650d7bf158a9bde60fd7c8caede72c4292a6007ea3",
+        "status": "PLANNED / NOT IMPLEMENTED / NOT EXECUTED",
+        "scope": "Exactly 29 entry/link/identity case IDs plus TN01\u2013TN05 technical risks; no app, service, test or repository edits."
+      }
+    },
+    {
+      "file": "booking-door.json",
+      "sha256": "a587744d5335b6f7ab2643000470a54f56315e0dc3a2f23cde1b92400b46d429",
+      "baseline": {
+        "source": "astir-events-spec/events-exit-criteria.md: B01\u2013B16, M01\u2013M14, A01\u2013A11, C01\u2013C07",
+        "source_decisions": "engineering-plan.md approved D3A\u2013D14A and D16A; D17A authorizes this test review only",
+        "repo": "wander-events-flowchart-review",
+        "head": "f8d258e869503a28d70518a050dff36a344134c6",
+        "reviewed_code_base": "a0117cff6ed55a967f4212b45bb28d8c39ca1488",
+        "observed_origin_main": "0d29d776f42132a28548355ae4e18302cdc3857a",
+        "drift": "Read-only git diff a0117cff..origin/main shows only docs/designs/astir-events artifacts; inspected scripts, Supabase, project.yml and framework code unchanged.",
+        "status": "PLANNED ONLY: no Events test implementation, application test execution, hosted requests, real messages, or admin configuration changes performed.",
+        "mapping_count": 48,
+        "additional_risk_count": 10,
+        "browser_framework": "Playwright test locations are proposed; no existing web package, browser-test framework or Playwright installation was found in inspected tracked files. Selection/setup remains implementation work."
+      }
+    },
+    {
+      "file": "recap-history.json",
+      "sha256": "44445370341e6f08e4c06a73800907092dedaeb5ab4e8150e395b5ad7e8f0eaf",
+      "baseline": {
+        "repository": "wander-events-flowchart-review",
+        "commit": "f8d258e869503a28d70518a050dff36a344134c6",
+        "app_code_ancestor": "a0117cff6ed55a967f4212b45bb28d8c39ca1488",
+        "criteria": "astir-events-spec/events-exit-criteria.md",
+        "decisions": "Engineering D2, D9B, D13A, D16A and approved product clauses; D17A test review",
+        "execution_status": "PLANNED ONLY \u2014 no Events tests implemented or executed by this audit"
+      }
+    },
+    {
+      "file": "cross-cutting.json",
+      "sha256": "dd1a575e2093f4b5fb22cbde899e6b9d9657e0f0d069f105281bc4e0d26ad6eb",
+      "baseline": "f8d258e869503a28d70518a050dff36a344134c6"
+    }
+  ],
+  "case_family_counts": {
+    "L": 17,
+    "I": 12,
+    "B": 16,
+    "M": 14,
+    "A": 11,
+    "C": 7,
+    "P": 17,
+    "V": 8,
+    "H": 7,
+    "E": 12
+  },
+  "existing_source_locations_checked": 78,
+  "all_ids_unique": true,
+  "every_case_has_files_layers_assertions_owner": true,
+  "proposed_authority_preserved": true,
+  "application_tests_run": false
+}

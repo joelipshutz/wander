@@ -1,8 +1,41 @@
 # Decisions
 
-Last updated: 2026-09-06
+Last updated: 2026-09-15
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Astir Events engineering direction (REC-467)
+
+The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
+plans the complete Events journey with two changing work lanes: parallel backend/history
+and native/Clip/web foundations, then before-event/admission and after-event/history.
+Keep the existing Supabase identity, canonical place and visit history. App Clip/browser
+RSVP and management precede the required app QR at the door. Admission, explicit
+check-in and historical completion remain distinct. Issued waitlist offers hold seats;
+manual pending review and phone verification do not. Use one full-access Team admin
+console role and a prepared offline roster with durable reconciliation.
+
+The [engineering plan](designs/astir-events/engineering-plan.md) records exact D1–D19
+approvals, including code allowance, rescheduling and registration deadlines. This
+entry approves no additional operating default and claims no implemented Events code.
+[Open decisions](designs/astir-events/engineering-open-decisions.md) remain explicit.
+
+## Feed activity grouping (REC-494)
+
+The Feed combines already-visible check-in, Wanna, and list-addition events from
+the same actor and canonical place within 30 minutes of the first event. The
+window does not slide. A second check-in starts a new group; list creation,
+missing-place events, and ambiguous legacy social saves remain separate.
+Check-in leads over Wanna, then list addition. Group identity and Feed ordering
+stay anchored to the first event, so later organization does not bump the card.
+
+One card shows the place artwork and headline, with visible list context and an
+inline **View activity / Hide activity** disclosure. Expanded rows show the
+chronological action and timestamp and open the original post or visible list.
+Original event IDs, likes, comments, shares, and authorization remain intact;
+the main action row belongs to the headline event. No conversations or stored
+events are merged. Grouping covers the events loaded in the current Feed page,
+and a refresh recomputes it solely from currently visible events.
 
 ## Product Decisions
 
@@ -83,13 +116,16 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Full onboarding | Locked for REC-132 Phase A; revised for REC-396 and REC-425 on 2026-09-03 | Logged-out users see a three-slide real-map carousel, then Clerk auth, required display name/username, optional photo, and location, Contacts, trusted-friend, and notification steps. A permission primer that immediately precedes a system alert has one neutral Continue action and no skip path; denied state recovery may open Settings or continue without the optional capability. Apple Calendar setup stays in Profile → Settings → Privacy and trust until the NUX reaches the relevant social experience. Existing users remain complete. Contextual notification enrollment reuses the central campaign after new saves/follows. |
 | M3 backend schema/RLS/profile foundation | Project created, migrations applied, webhook verified | New Supabase project `rugmtlgufrhlxwfkumhw` and new Clerk app `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9` are created. Migrations `20260602131500`, `20260602140304`, `20260602143000`, `20260602210000`, and `20260604185000` are applied remotely. Hosted pgTAP tests passed with 29 assertions. Clerk profile mirroring is deployed through Svix -> Supabase Edge Function -> PostgREST RPC, and real create/delete webhook flow was verified. Schema includes custom `question_definitions` plus JSON-backed `place_attributes` so future user-created questions/inputs can be added without answer-column churn. |
 
-## Check-in details (REC-485, 2026-09-14)
+## Check-in details (REC-485, revised 2026-09-16)
 
 - Each selectable place subcategory has three deliberately curated, optional default questions. Shared questions are reused when the practical need is the same; functional subtypes receive their own selection. The complete inventory is in [the question catalog](product/check-in-question-catalog.md).
 - A fresh Check-in starts with no answers. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
-- Wanna leads with one introduction/context note. Check-in leads with rating and useful details, followed by a visit note. Tags and optional date planning remain secondary. Adding a visit retains the original Wanna note.
-- Customize belongs beside the Check-in questions. A person can reorder, hide, restore, add catalog questions, or add recurring personal yes/no questions for that subtype. Custom configuration and custom answers are account-scoped on the current device; the UI states this explicitly. Hiding a question retains its previous answers.
-- Built-in observations use the existing `single_choice` value type. Search uses explicit answer semantics: a negative answer does not become a positive amenity match. Existing labels and attributes remain intact when edited. Custom questions and answers never enter the shared attribute payload.
+- Wanna leads with one introduction/context note, with its optional date above categories. Check-in orders rating, note, date, categories, Useful details, then friends/photos. Optional tags stay at the bottom. Adding a visit retains the original Wanna note.
+- Customize belongs beside Useful details and in Settings → Check-in questions. A person can search subtypes, reorder, remove, restore, add catalog questions, or create recurring yes/no questions. Configuration is account-scoped on the current device. Removing a question retains its previous answers.
+- Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
+- Built-in observations use the existing `single_choice` value type. Explicitly shared custom answers use a versioned prompt/yes-no JSON envelope with the existing `text` value type and a distinct `place_detail_custom_` key. Legacy private custom keys never imply publication consent. Search uses explicit answer semantics: a negative answer does not become a positive amenity match. Existing labels and unknown attributes remain intact when edited.
+- Shared Visit invitations preserve their established note, rating, tags, and photos, but omit the source owner's question answers. Recipients answer firsthand details themselves. New snapshot construction and reads of older pending snapshots use the same filter; stored history is not rewritten.
+- Tag suggestions describe uses and occasions rather than repeating question facts. Each category offers a small curated set; exact duplicates and an explicit list of near-synonyms render as one chip. Existing personal labels remain stored unchanged unless the person explicitly removes their chip.
 - Synced owner visits hydrate complete answer JSON through `own_place_visit_details`, an authenticated owner-only read. Raw table-column grants remain restricted. Unknown remote answers cannot be edited or synchronized as an empty answer set. This endpoint exposes no other person's answer history.
 - Voice capture and semantic personal recall remain separate follow-up work (REC-490, REC-491, REC-492). This change preserves useful narrative context without introducing those features.
 

@@ -1,0 +1,1015 @@
+[
+  {
+    "id": "entry",
+    "title": "Someone finds the event",
+    "sub": "These are different entrances to the same event. A link never carries someone else’s identity or RSVP.",
+    "gate": "What opens for this person?",
+    "next": "Open the event in the surface that actually works.",
+    "lanes": [
+      {
+        "title": "From an invitation",
+        "ids": [
+          "invite",
+          "invite-installed",
+          "invite-with-code"
+        ],
+        "kind": "cases",
+        "note": "A normal invitation, an installed-app example, or an invitation with an optional event code.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "From inside Astir",
+        "ids": [
+          "events-discover",
+          "alreadyRSVPed"
+        ],
+        "kind": "cases",
+        "note": "Tap an event in the new Events tab, or reopen Astir after an earlier RSVP.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "surfaces",
+    "title": "Open the event. Keep the right state.",
+    "sub": "Full app, App Clip, and browser are clearly separate. The same event and permission rules apply in each.",
+    "gate": "Which surface opened? Then: is the account recognized, and is the RSVP confirmed?",
+    "next": "Unknown identity → recover the account. Known with no RSVP → sign up. Already confirmed → skip ahead to the texts and guest controls.",
+    "lanes": [
+      {
+        "title": "FULL APP · installed and opens",
+        "ids": [
+          "event-app-unknown",
+          "event-app-unregistered",
+          "event-app-confirmed"
+        ],
+        "kind": "cases",
+        "note": "Three alternative states: identity unknown / known with no RSVP / known and confirmed.",
+        "arrows": [],
+        "end": "Existing confirmed guests skip registration. The Events tab also opens this event.",
+        "main": false
+      },
+      {
+        "title": "APP CLIP · no full app, Clip works",
+        "ids": [
+          "event-clip-unknown",
+          "event-clip-unregistered",
+          "event-clip-confirmed"
+        ],
+        "kind": "cases",
+        "note": "The event opens in App Clip. No full-app tabs.",
+        "arrows": [],
+        "end": "Confirmed guests can see the guest list and manage their RSVP here.",
+        "main": false
+      },
+      {
+        "title": "BROWSER · Clip unavailable or link stays on web",
+        "ids": [
+          "event-browser-unknown",
+          "event-browser-unregistered",
+          "event-browser-confirmed"
+        ],
+        "kind": "cases",
+        "note": "Equivalent web event. A browser opening does not prove the app is absent.",
+        "arrows": [],
+        "end": "Confirmed guests can see the guest list and manage their RSVP here.",
+        "main": false
+      },
+      {
+        "title": "Earlier review screens of these same entrances",
+        "ids": [
+          "event-detail",
+          "browserfallback",
+          "installed-event-detail",
+          "installed-event-signedout"
+        ],
+        "kind": "cases",
+        "note": "These numbered screens remain in the review. They illustrate the event cover, browser fallback, in-app detail, and signed-out app state.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "account",
+    "title": "Sign in and complete only what is missing",
+    "sub": "Unknown does not mean “no RSVP.” Establish the account and look up its booking before creating anything new.",
+    "gate": "Existing reservation found? Restore its actual state. Otherwise complete identity and phone verification.",
+    "next": "Only a successful registration result can confirm a place.",
+    "lanes": [
+      {
+        "title": "New guest · App Clip or browser",
+        "ids": [
+          "rsvp-auth",
+          "rsvp-phone",
+          "rsvp-code"
+        ],
+        "kind": "chain",
+        "note": "Apple or Google stays. Collect missing name and phone. Future-event texts are a separate, optional checkbox.",
+        "arrows": [
+          "Account established; no existing RSVP",
+          "Send and verify SMS code"
+        ],
+        "end": "Verified identity → check code, capacity, and approval mode below.",
+        "main": true
+      },
+      {
+        "title": "In the installed app",
+        "ids": [
+          "app-event-auth",
+          "rsvp-phone-app",
+          "rsvp-code-app",
+          "existing-member"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Account found with no RSVP; only if phone verification is missing",
+          "Enter SMS verification code",
+          "Now the account and current phone are verified"
+        ],
+        "end": "Existing booking found → restore it. Already verified with no RSVP → skip both phone screens and go directly to Ready to RSVP.",
+        "main": false
+      },
+      {
+        "title": "Switch account or recover an existing RSVP",
+        "ids": [
+          "app-rsvp-auth",
+          "clip-recover-auth",
+          "browser-recover-auth"
+        ],
+        "kind": "cases",
+        "note": "Each returns to the actual account/booking result in its original surface. Recovering does not automatically confirm anything.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Recognized and ready to RSVP",
+        "ids": [
+          "clip-ready-rsvp",
+          "browser-ready-rsvp"
+        ],
+        "kind": "cases",
+        "note": "The phone is verified and no active RSVP exists. Submit the request, then apply the real registration result.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The lookup is still unresolved",
+        "ids": [
+          "event-lookup-loading",
+          "event-lookup-retry"
+        ],
+        "kind": "cases",
+        "note": "Loading and failed are distinct states. Retry without inventing a missing or confirmed RSVP.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Sign-in or SMS fails",
+        "ids": [
+          "auth-canceled",
+          "verification-error"
+        ],
+        "kind": "cases",
+        "note": "Cancel sign-in → return to sign-in. Wrong/expired SMS code → retry or change the number. Keep the event.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Only when optional invitation codes are enabled",
+        "ids": [
+          "enter-code",
+          "codeinvalid",
+          "installed-code",
+          "installed-code-invalid"
+        ],
+        "kind": "cases",
+        "note": "Valid code → continue the account/RSVP flow. Invalid code → correct it in the same surface. This is separate from SMS verification.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "reservation",
+    "title": "Did the RSVP actually confirm?",
+    "sub": "Free RSVP. Automatic confirmation is the default when eligible capacity is available; Astir can choose manual approval.",
+    "gate": "Confirmed / pending approval / waitlisted / offered are different states.",
+    "next": "Confirmed → continue below. Every other state waits for its own valid outcome.",
+    "lanes": [
+      {
+        "title": "YES · the place is confirmed",
+        "ids": [
+          "rsvp-confirmed",
+          "member-confirmed"
+        ],
+        "kind": "cases",
+        "note": "App Clip/web confirmation and the installed-app equivalent. Calendar is available; download is optional.",
+        "arrows": [],
+        "end": "Guest list + View or change RSVP are now unlocked.",
+        "main": true
+      },
+      {
+        "title": "Manual approval is enabled",
+        "ids": [
+          "manualpending",
+          "installed-pending"
+        ],
+        "kind": "cases",
+        "note": "App Clip/web and full-app versions. A request is pending, not confirmed.",
+        "arrows": [],
+        "end": "Astir approves → confirmed. Otherwise keep the real pending/declined state.",
+        "main": false
+      },
+      {
+        "title": "No available place yet",
+        "ids": [
+          "waitlist",
+          "installed-waitlist"
+        ],
+        "kind": "cases",
+        "note": "The guest is waiting. Released places are protected for Astir selections.",
+        "arrows": [],
+        "end": "Astir selects this guest → send an offer. Never promote automatically.",
+        "main": false
+      },
+      {
+        "title": "Astir offers this guest a place",
+        "ids": [
+          "offer",
+          "installed-offer"
+        ],
+        "kind": "cases",
+        "note": "The selected guest must accept their current valid offer.",
+        "arrows": [],
+        "end": "Accepted in time → confirmed. Default expiry is 24 hours; console can change it.",
+        "main": false
+      },
+      {
+        "title": "The offer expired before acceptance",
+        "ids": [
+          "offerexpired",
+          "installed-offer-expired"
+        ],
+        "kind": "cases",
+        "note": "Expired is not confirmed and does not produce a ticket.",
+        "arrows": [],
+        "end": "Return to the waiting/event state.",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "texts",
+    "title": "Stay connected by text. No download required yet.",
+    "sub": "The reservation is complete. Time passes here. Every “View event” link reopens this event using the guest’s current app and account state.",
+    "gate": "Optional now: download Astir. Required later: full app for the entry QR.",
+    "next": "When the guest chooses to prepare for entry, open or install Astir.",
+    "lanes": [
+      {
+        "title": "The text program",
+        "ids": [
+          "confirmation-text",
+          "pre-event-text",
+          "two-hour-text"
+        ],
+        "kind": "chain",
+        "note": "Texts continue without the app. Send applicable reminders only while the reservation and messaging eligibility remain valid. Skipping elapsed reminders for a late RSVP is a proposed operating detail.",
+        "arrows": [
+          "Time passes · 24-hour reminder",
+          "Time passes · 2-hour reminder"
+        ],
+        "end": "Each View event link returns to the correct event state, not automatically to installation.",
+        "main": true
+      },
+      {
+        "title": "Important updates and event details",
+        "ids": [
+          "important-change-text",
+          "noapp-confirmed-detail",
+          "confirmed-detail"
+        ],
+        "kind": "cases",
+        "note": "Important changes can trigger another text. A confirmed return opens App Clip/web detail or the installed-app detail.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Guest list and RSVP management",
+        "ids": [
+          "full-guest-list",
+          "manage-rsvp"
+        ],
+        "kind": "cases",
+        "note": "Both are unlocked by a recognized confirmed RSVP, including App Clip/web. They do not require download.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The guest chooses to cancel before start",
+        "ids": [
+          "cancel-confirm",
+          "rsvp-canceled"
+        ],
+        "kind": "chain",
+        "note": "Open cancellation from View or change RSVP.",
+        "arrows": [
+          "Confirm cancellation"
+        ],
+        "end": "Release the place; guest-list/booking benefits end. Apply waitlist rules to released capacity.",
+        "main": false
+      },
+      {
+        "title": "Cancellation is closed",
+        "ids": [
+          "cancel-after-start"
+        ],
+        "kind": "cases",
+        "note": "After the event starts, show the closed cancellation state. Preserve the actual reservation.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The event is rescheduled",
+        "ids": [
+          "event-rescheduled",
+          "rescheduled-cancel",
+          "rescheduled-canceled",
+          "rescheduled-unreserved"
+        ],
+        "kind": "chain",
+        "note": "If the guest keeps their place, the RSVP remains confirmed and timing follows the new schedule.",
+        "arrows": [
+          "Guest chooses to cancel",
+          "Confirm cancellation",
+          "View the updated event without this reservation"
+        ],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The event itself is canceled",
+        "ids": [
+          "event-canceled"
+        ],
+        "kind": "cases",
+        "note": "No active entry ticket. Inform guests and retire scheduled event reminders.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Find it again in Events",
+        "ids": [
+          "events-list",
+          "events-empty"
+        ],
+        "kind": "cases",
+        "note": "Confirmed events first when they exist. A separate empty state appears if there are no nearby events.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "install",
+    "title": "Later: open or install Astir for the QR",
+    "sub": "Keep the same event, account, and RSVP. Skip the general product tour on this route.",
+    "gate": "Full app + confirmed booking + valid name and username are required before any entry QR. Photo is optional.",
+    "next": "Once the required account details are valid, the entry QR is ready.",
+    "lanes": [
+      {
+        "title": "No full app yet · guest chooses to prepare",
+        "ids": [
+          "entry-download",
+          "install",
+          "recover-booking",
+          "recoveringmatchingbooking"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Explain why the app is needed → App Store",
+          "Open Astir with the event context",
+          "Recover the same account and booking"
+        ],
+        "end": "Valid booking found → check the required name and username.",
+        "main": true
+      },
+      {
+        "title": "Required account details are missing",
+        "ids": [
+          "missingidentity",
+          "account-entry-setup"
+        ],
+        "kind": "chain",
+        "note": "A photo is optional. No QR is shown until the required fields are valid.",
+        "arrows": [
+          "Complete the missing name / username"
+        ],
+        "end": "Save valid details → the entry QR.",
+        "main": false
+      },
+      {
+        "title": "No RSVP found for this account",
+        "ids": [
+          "wrongaccount",
+          "app-recovery-auth"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Sign in with the account used to RSVP"
+        ],
+        "end": "Look up the same event again. Do not create a second RSVP.",
+        "main": false
+      },
+      {
+        "title": "OPTION A · ticket first; photo below it",
+        "ids": [
+          "ticket-first",
+          "ticket-option-a",
+          "optional-photo"
+        ],
+        "kind": "cases",
+        "note": "The first two are the original and comparison versions of option A. From either ticket, Add a photo opens optional photo setup.",
+        "arrows": [],
+        "end": "Use photo or Skip → return to the ticket. This layout choice remains open.",
+        "main": false
+      },
+      {
+        "title": "OPTION B · optional photo before ticket",
+        "ids": [
+          "profile-before-ticket",
+          "ticket-after-profile"
+        ],
+        "kind": "chain",
+        "note": "Required name and username are already valid. This is the alternative layout, not an extra required step.",
+        "arrows": [
+          "Continue or Skip · photo stays optional"
+        ],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The optional photo fails",
+        "ids": [
+          "photouploadfailure"
+        ],
+        "kind": "cases",
+        "note": "Retry the photo or keep going to the valid ticket. Failure does not remove entry access.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "door",
+    "title": "At the door: show the QR and record admission",
+    "sub": "The guest uses Astir. Staff use the internal web console. Admission and the later personal event check-in are separate.",
+    "gate": "Is this event’s confirmed ticket valid, and is Astir installed?",
+    "next": "A successful admission record enables the attendee’s later post-event path. It does not create a personal post or place visit.",
+    "lanes": [
+      {
+        "title": "Normal arrival",
+        "ids": [
+          "arrival-ticket",
+          "staff-scan",
+          "staff-admitted"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Guest shows QR → staff scans in web console",
+          "Valid ticket → record admission"
+        ],
+        "end": "The event happens. Afterward, Astir publishes the recap when it is ready.",
+        "main": true
+      },
+      {
+        "title": "Installed guest cannot load their QR",
+        "ids": [
+          "qrfailure",
+          "door-help",
+          "staff-guest-search",
+          "stafffindguest"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Ask for help at the door",
+          "Staff takes over in the web console",
+          "Find and verify this event’s confirmed booking"
+        ],
+        "end": "Only a verified confirmed guest with Astir installed can receive manual admission.",
+        "main": false
+      },
+      {
+        "title": "Staff must not create another admission",
+        "ids": [
+          "duplicateadmission",
+          "scan-rejected",
+          "staff-no-match"
+        ],
+        "kind": "cases",
+        "note": "Already admitted / invalid ticket / no eligible booking. These are distinct results.",
+        "arrows": [],
+        "end": "Duplicate → do not add attendance. Invalid or no match → investigate; do not admit from this state.",
+        "main": false
+      },
+      {
+        "title": "The phone cannot run Astir",
+        "ids": [
+          "unsupportedphone"
+        ],
+        "kind": "cases",
+        "note": "The agreed entry rule has no unsupported-phone or no-app bypass.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "offline-door",
+    "title": "Offline door: prepare, admit, reconcile",
+    "sub": "Team admins prepare this event’s list while online. During an outage, local entry remains pending server validation.",
+    "gate": "Is a usable roster saved for this admin and event, and can the guest’s confirmed booking and installed account be established?",
+    "next": "Only validated server admission contributes eligibility for the post-event check-in and protected recap. Offline publishing is not available.",
+    "support": true,
+    "lanes": [
+      {
+        "title": "Prepare, then use the downloaded guest list",
+        "ids": [
+          "offline-roster-prepare",
+          "offline-roster-match",
+          "offline-entry-pending"
+        ],
+        "kind": "chain",
+        "note": "A saved roster can miss recent changes. Local save failure must show Not recorded, never success.",
+        "arrows": [
+          "Download succeeds; later the connection is lost",
+          "Checks pass and the local entry saves durably"
+        ],
+        "end": "Find the next guest while offline. Reopening retains the queue; recap access waits.",
+        "main": true
+      },
+      {
+        "title": "Connection returns: reconcile every entry",
+        "ids": [
+          "offline-syncing",
+          "offline-sync-results",
+          "offline-booking-conflict"
+        ],
+        "kind": "chain",
+        "note": "Resolved, duplicate, conflicting and retryable entries remain distinct. Team admins review conflicts without silently restoring canceled bookings.",
+        "arrows": [
+          "Server returns a result for each entry",
+          "Open the changed-booking conflict"
+        ],
+        "end": "Retry waiting entries; preserve unresolved work. One canonical admission per guest/event.",
+        "main": false
+      },
+      {
+        "title": "A usable roster or local storage is unavailable",
+        "ids": [
+          "offline-roster-unavailable"
+        ],
+        "kind": "cases",
+        "note": "Missing list, wrong account/event, uncertain identity or unavailable storage provides no basis for an invented entry.",
+        "arrows": [],
+        "end": "Reconnect or obtain an authorized prepared device. No bypass of guest app/account requirements.",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "return",
+    "title": "After the event: bring them back when the recap is ready",
+    "sub": "Publish the recap first. Then an in-app notice, text, and permitted push invite the guest back to the same event.",
+    "gate": "Is the recap published? Is there valid admission for this event? Has this attendee completed the event check-in before?",
+    "next": "Admitted + first completion → event check-in below. Admitted + previously completed → directly to the shared recap.",
+    "lanes": [
+      {
+        "title": "The recap is ready",
+        "ids": [
+          "after_text",
+          "recap-notice",
+          "past-events"
+        ],
+        "kind": "cases",
+        "note": "SMS, the in-app notice, and Past events are different entrances. Each checks the current event/admission/completion state.",
+        "arrows": [],
+        "end": "The user’s own state determines which branch opens.",
+        "main": true
+      },
+      {
+        "title": "Not published yet",
+        "ids": [
+          "recap_unpublished",
+          "ended-unpublished",
+          "noapp-recap-unpublished"
+        ],
+        "kind": "cases",
+        "note": "Full-app pending content, the ended event detail, and the no-app version. Stay on this event and return when ready.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "No recorded admission",
+        "ids": [
+          "recap_locked_preview",
+          "noapp-ended-preview",
+          "recap_missing_admission"
+        ],
+        "kind": "cases",
+        "note": "Show the allowed event preview. Comments are unreadable; the shared gallery stays locked. If an attendee’s scan was missed, ask staff to verify and correct it.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "The guest deleted the app",
+        "ids": [
+          "postevent-reinstall",
+          "postevent-install",
+          "postevent-recover"
+        ],
+        "kind": "chain",
+        "note": "Event viewing remains available. Restored admission and historical completion decide the next screen.",
+        "arrows": [
+          "Choose the app-only check-in or upload action",
+          "Reinstall and recover the same attendee account"
+        ],
+        "end": "Unresolved identity/admission/completion → loading or retry. No valid admission → preview or staff help. Valid admission: never completed → event check-in; already completed → shared recap.",
+        "main": false
+      },
+      {
+        "title": "An unlocked recap temporarily fails to load",
+        "ids": [
+          "recap-unavailable"
+        ],
+        "kind": "cases",
+        "note": "Retry loading. Do not erase the recorded completion or force a second check-in.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "recap",
+    "title": "Make the event check-in. Unlock the shared recap.",
+    "sub": "One explicit event check-in creates an event-led personal post and one canonical Been visit at the place. Every composer field is optional.",
+    "gate": "First completion creates one visit. Historical completion prevents a second forced check-in.",
+    "next": "The event memory leads naturally into the ordinary map and place profile.",
+    "lanes": [
+      {
+        "title": "First admitted return",
+        "ids": [
+          "after_composer",
+          "after_recap",
+          "after_gallery",
+          "after_post"
+        ],
+        "kind": "chain",
+        "note": "Optional note, own photos, event tags, and private feedback. No public venue rating is collected or created.",
+        "arrows": [
+          "Submit the event check-in; even with optional fields empty",
+          "Optionally choose photos from the shared gallery",
+          "Add selected photos to this same personal post"
+        ],
+        "end": "The recap remains available after completion; adding gallery photos is optional.",
+        "main": true
+      },
+      {
+        "title": "Join the conversation",
+        "ids": [
+          "recap-comment",
+          "recap-comment-posted"
+        ],
+        "kind": "chain",
+        "note": "From the shared recap. Ordinary replies and likes.",
+        "arrows": [
+          "Post the comment / reply"
+        ],
+        "end": "Return to the shared recap.",
+        "main": false
+      },
+      {
+        "title": "Contribute photos or videos",
+        "ids": [
+          "gallery-add",
+          "gallery-posted",
+          "gallery-manage"
+        ],
+        "kind": "chain",
+        "note": "Full-app action. The uploader or Astir can remove the source media.",
+        "arrows": [
+          "Upload succeeds → visible to eligible viewers",
+          "Open management for your own upload"
+        ],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Upload fails or someone opens a video",
+        "ids": [
+          "recap_upload_error",
+          "event-video"
+        ],
+        "kind": "cases",
+        "note": "Upload failure → preserve the draft and retry or omit. Video opens from the protected recap gallery.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Delete the personal event post",
+        "ids": [
+          "manage-personal-post",
+          "recap_removal_results",
+          "recap-after-deletion",
+          "place-after-post-deletion"
+        ],
+        "kind": "cases",
+        "note": "Manage → confirm deletion → post and its event visit are removed. The resulting recap and place screens show the independent effects.",
+        "arrows": [],
+        "end": "Historical completion, valid recap entitlement, and unrelated place visits remain.",
+        "main": false
+      },
+      {
+        "title": "A source gallery photo is removed",
+        "ids": [
+          "recap_photo_removed",
+          "recap-after-photo-removal",
+          "gallery-after-photo-removal"
+        ],
+        "kind": "cases",
+        "note": "These are the affected personal post, recap, and remaining gallery. Remove references to that source photo; retain other content and the place visit.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "map",
+    "title": "Continue into Astir’s map and the place",
+    "sub": "Every event has one canonical place. A place can have many events. The event check-in still counts as a check-in at that place.",
+    "gate": "Apply event visibility and the viewer’s recap rights independently.",
+    "next": "This completes the guest journey. Home-location controls and operator flows below support it in parallel.",
+    "lanes": [
+      {
+        "title": "Attendee explores the event on the map",
+        "ids": [
+          "map_special_event",
+          "map-event-collapsed",
+          "map_place_history"
+        ],
+        "kind": "chain",
+        "note": "The expanded event is the same event/recap already shown above. The place has inline Events here.",
+        "arrows": [
+          "Tap the special pin → collapsed card over the map",
+          "Expand event → use its place link → standard place profile"
+        ],
+        "end": "No separate recommendations detour.",
+        "main": true
+      },
+      {
+        "title": "A nonattendee sees the same permitted event",
+        "ids": [
+          "map-event-preview",
+          "map-event-collapsed-preview",
+          "map_place_preview"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Tap the pin → collapsed card",
+          "Expand the allowed event preview → open the linked place"
+        ],
+        "end": "The recap stays locked without valid admission and completion.",
+        "main": false
+      },
+      {
+        "title": "Ordinary discovery and optional permissions",
+        "ids": [
+          "ordinary-map",
+          "location-primer",
+          "location-denied",
+          "notification-primer"
+        ],
+        "kind": "cases",
+        "note": "Ordinary map/search stays usable. Location is requested when choosing nearby; notification permission when choosing event alerts. These do not interrupt the entry or recap path.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "home",
+    "title": "Parallel rule: when the event is at a home",
+    "sub": "These location states apply wherever that event or place appears. They are not extra steps after the map.",
+    "gate": "Resident consent + confirmed guest + current reveal window?",
+    "next": "Approximate location remains outside the permitted exact-address window. Recap access is a separate permission.",
+    "support": true,
+    "lanes": [
+      {
+        "title": "Visitor or no address entitlement",
+        "ids": [
+          "home-event-preview",
+          "home-place-preview"
+        ],
+        "kind": "cases",
+        "note": "Show the allowed event and place with an approximate area, not an exact pin.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Confirmed, before reveal",
+        "ids": [
+          "home-before",
+          "home-place-before"
+        ],
+        "kind": "cases",
+        "note": "Show the reveal time and approximate area. Default reveal: 24 hours before event start.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Confirmed, within the reveal window",
+        "ids": [
+          "home-revealed",
+          "home-exact-details",
+          "home-event-confirmed",
+          "home-place-confirmed"
+        ],
+        "kind": "cases",
+        "note": "Exact details become available. A late confirmation within the window gets access immediately.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "After address access expires",
+        "ids": [
+          "home-expired"
+        ],
+        "kind": "cases",
+        "note": "Return to approximate location. Default expiry: 24 hours after event end; console can change it. Independent location rights remain separate.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      }
+    ]
+  },
+  {
+    "id": "console",
+    "title": "Parallel actor: Astir’s internal web console",
+    "sub": "These are staff/operator paths that support the journey above. Guests never walk through them.",
+    "gate": "Only an authorized operator can publish, approve, correct admission, or change these controls.",
+    "next": "End of the full screen map.",
+    "support": true,
+    "lanes": [
+      {
+        "title": "Create the event",
+        "ids": [
+          "console-event",
+          "console-preview",
+          "console-live"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Preview the draft",
+          "Publish succeeds"
+        ],
+        "end": "The invitation is ready to share.",
+        "main": false
+      },
+      {
+        "title": "Choose the event’s operating rules",
+        "ids": [
+          "console-publish",
+          "console-registration",
+          "console-map-controls",
+          "console-home",
+          "console-messages",
+          "console-tags",
+          "console-invite-codes",
+          "console-notifications"
+        ],
+        "kind": "cases",
+        "note": "Independent settings: approval, offers, map promotion, home privacy, messages, check-in tags, invitation codes, notifications.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Approve a pending request",
+        "ids": [
+          "console-guests",
+          "console-review-request",
+          "console-request-approved"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Open a pending request",
+          "Approve successfully"
+        ],
+        "end": "Guest becomes confirmed and receives the appropriate confirmation.",
+        "main": false
+      },
+      {
+        "title": "Offer a waiting guest a place",
+        "ids": [
+          "console-offer",
+          "console-offer-sent"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Astir selects the guest and sends the offer"
+        ],
+        "end": "Guest must accept before expiry. Sending is not confirmation.",
+        "main": false
+      },
+      {
+        "title": "Publish the recap before inviting",
+        "ids": [
+          "console-recap-preview",
+          "console-recap-live"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Publish succeeds → queue invitations"
+        ],
+        "end": "Notice and texts lead into the post-event return decision.",
+        "main": false
+      },
+      {
+        "title": "Publication or invitation fails",
+        "ids": [
+          "console-publish-failed",
+          "console-invite-failed"
+        ],
+        "kind": "cases",
+        "note": "Failed publication → no recap invitation. Published with failed invitations → retry failures without double-sending successful deliveries.",
+        "arrows": [],
+        "end": "",
+        "main": false
+      },
+      {
+        "title": "Correct a missed admission",
+        "ids": [
+          "console-attendance",
+          "console-attendance-corrected"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Staff verifies attendance and saves the correction"
+        ],
+        "end": "Admission is restored. A first event check-in is still required.",
+        "main": false
+      },
+      {
+        "title": "Remove a shared source upload",
+        "ids": [
+          "console-moderation",
+          "console-photo-removed"
+        ],
+        "kind": "chain",
+        "note": "",
+        "arrows": [
+          "Astir removes the source photo"
+        ],
+        "end": "Remove its references; keep the rest of the event and personal-post content.",
+        "main": false
+      }
+    ]
+  }
+]

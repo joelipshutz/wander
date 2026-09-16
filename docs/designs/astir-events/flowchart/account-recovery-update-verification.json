@@ -1,0 +1,126 @@
+{
+  "decision": "Engineering D3A account recovery; local artifact amendment only",
+  "verified_at": "2026-09-15T16:43:32.519Z",
+  "scope": "No repository/main changes, no product/spec/working-record/engineering-plan changes, no app/backend changes",
+  "model_changes": {
+    "wrongaccount": {
+      "body": {
+        "before": "This RSVP isn’t linked to the account you’re using. Sign in with the account you used to book.",
+        "after": "Already RSVPed? Sign in with the account you used to RSVP."
+      },
+      "heading": {
+        "before": "Try your RSVP account",
+        "after": "No RSVP found for this account"
+      },
+      "note": {
+        "before": "Back returns to event details. Do not reveal another guest’s information or create a replacement booking.",
+        "after": "Show only after a completed lookup for this account; loading, failure and pending/waitlisted/offered states are separate. Keep the event through account switching. Do not infer another booking owner or create a replacement reservation."
+      },
+      "primary": {
+        "before": "Switch account",
+        "after": "Find my RSVP"
+      },
+      "status": {
+        "before": "Booking not matched",
+        "after": "No matching RSVP"
+      },
+      "title": {
+        "before": "Signed in with another account",
+        "after": "No RSVP found for this account"
+      }
+    },
+    "app-recovery-auth": {
+      "body": {
+        "before": "Use the Apple or Google account you used to RSVP.",
+        "after": "Sign in with the account you used to RSVP."
+      }
+    }
+  },
+  "screens": 165,
+  "same_screen_inventory_order_review_numbers_and_routes": true,
+  "layout_approval_label_preserved": true,
+  "changed_previews": [
+    "app-recovery-auth-full.jpg",
+    "app-recovery-auth.jpg",
+    "wrongaccount-full.jpg",
+    "wrongaccount.jpg"
+  ],
+  "unchanged_preview_files": 326,
+  "complete_manifest_with_per_screen_source_provenance": true,
+  "affected_actual_previews_visually_inspected": [
+    "wrongaccount-full.jpg",
+    "app-recovery-auth-full.jpg"
+  ],
+  "changed_files": {
+    "build-flow-wireframes.py": {
+      "before": "a7762bb433596be1e8f9ab984c2aecd115da6be13befb27533baa9a6e02457c9",
+      "after": "11412cb06692703050e079ff46bcc8b7d2a670be5dd2a2d485c74b4af6736c91"
+    },
+    "wireframe-recovery-content.json": {
+      "before": "d6337d60b496729e1fc92012feaf3ceb47c376c0c72aba03c62484c0835fe081",
+      "after": "72e07d4e98b027ab93a73ac1dfe514cae2b538a8664b6b5698040347afecb963"
+    },
+    "audit/flow-corrections.py": {
+      "before": "91f859ac0630317f1ca06815aa8c119badd2917c8762fe840b4ed289545b07fb",
+      "after": "5ef3b84bbfadb0cab631580588b8e3d618181dace9c87eff1dafa6af02b1fb11"
+    },
+    "flowchart/capture-screen-previews.cjs": {
+      "before": "307a9f670a00510d15a0f4090aa7d919614ce9413f4569b1332dd4b946582c04",
+      "after": "6e4f7ffdfc2ef6c61275cd2c49bdc177b97c5ec76b6ae81b619448252735d391"
+    },
+    "flowchart/continuous-layout.py": {
+      "before": "63247beb8bbf8cd5a2b03de85915767ad8a7a96a0b18c035724e05654bad423d",
+      "after": "1eb64e30fd17be53d0ace943e336182cad202ffc8201ee76c95954987a7554fd"
+    },
+    "astir-events-wireframes.html": {
+      "before": "0fead8dc38dc4ca8228ce36865a8a2c587e0729e0ec635bd9bc4bb815e0dd492",
+      "after": "ccc9b8f36dac82557e886d928b20b4adbf25e9034eaf7493d9cd58b78cef6d51"
+    },
+    "astir-events-flowchart.html": {
+      "before": "35105194f9edef38cd3a80d6467dab4453c76f5338323d6b496dda86cb7b50f7",
+      "after": "790d73b69e52e1df4f608d5b15692cc31945725a140203d00e3300ef90f3fa84"
+    },
+    "flowchart/screen-model.json": {
+      "before": "84fa52a48fc7036c7a78576ac3be498988814f8d001a7cb8af699e84d3a26604",
+      "after": "9adc48aa8e926f1edc07323a267989593ed96235c825f0522f4451d9e51fbf53"
+    },
+    "flowchart/wireframe-preview-manifest.json": {
+      "before": "39e4f087e6f5991d34f4c5d3b6adcf3f118e32fa700379e3ef6b64c4579bed5b",
+      "after": "92146a713d1628bd6d0e5ae34b5136c36e1556594b4ac9a5ce10be40a03482be"
+    },
+    "flowchart/continuous-layout.json": {
+      "before": "166b0844241aa58a833b7162084cb73e1a509fab6dd0e07e9aacf747211022a4",
+      "after": "6f3b6d31ef52361129a8106b377e3a0615c250be844b4835965ecdff5656ce45"
+    },
+    "flowchart/continuous-coverage.json": {
+      "before": "7c33ff056564859735066ce739052ad518d753adddb80a9a4161f982f2f369b5",
+      "after": "4f1d088409f1328f8922575bc8e5e83748d4d078fb648e6d17d2da085eda7331"
+    },
+    "flowchart/inline-preview-verification.json": {
+      "before": "e53fee594c4986bfb094623937926cd43ad702653810ea3fbbdf330282a426c3",
+      "after": "3983c2cf7928051bf5d0f6f2574d24676294d57602c6bfe84f4206a334ddb38d"
+    }
+  },
+  "new_generated_files": [
+    "generated-wireframes/flow-model.json",
+    "generated-wireframes/onboarding-review.html"
+  ],
+  "browser_verification": {
+    "screens": 165,
+    "primary_native_mocks": 26,
+    "primary_wireframes": 139,
+    "visible_default_ui_images": 179,
+    "all_inline_images_decoded": true,
+    "desktop_in_place_expand": true,
+    "mobile_in_place_expand": true,
+    "external_requests": [],
+    "new_tabs_on_expand": 0,
+    "search_preserves_all_screens": true,
+    "all_previews_visible_in_print": true,
+    "motion_duration_seconds": 5.603333,
+    "errors": [],
+    "html_sha256": "790d73b69e52e1df4f608d5b15692cc31945725a140203d00e3300ef90f3fa84",
+    "verified_at": "2026-09-15T16:43:32.519Z"
+  },
+  "supplemental_connection_diagrams": "Unchanged; this amendment rebuilds the continuous review and numbered source wireframes only."
+}

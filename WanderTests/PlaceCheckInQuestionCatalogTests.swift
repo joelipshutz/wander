@@ -30,7 +30,7 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
         }
         // Report the actual picker, not a hand-maintained expected count. Adding
         // a taxonomy subtype must fail curation above until it has its own row.
-        print("Check-in catalog audit: \(subtypeCount) selectable subtypes; \(PlaceCheckInQuestionCatalog.allQuestions.count) questions")
+        print("Check-in catalog audit: \(subtypeCount) selectable subtypes; \(PlaceCheckInQuestionCatalog.availableQuestions.count) available questions; \(PlaceCheckInQuestionCatalog.retiredQuestionIDs.count) historical definitions")
         for (bundle, subtypes) in sharedSets.sorted(by: { $0.key < $1.key }) where subtypes.count > 1 {
             print("Shared practical needs: \(subtypes.sorted().joined(separator: ", ")) [\(bundle)]")
         }
@@ -44,6 +44,7 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
             XCTAssertEqual(Set(profile.questionIDs).count, 3)
             for id in profile.questionIDs {
                 XCTAssertNotNil(PlaceCheckInQuestionCatalog.question(id: "place_detail_" + id), id)
+                XCTAssertFalse(PlaceCheckInQuestionCatalog.retiredQuestionIDs.contains("place_detail_" + id), id)
             }
             for subtype in profile.subcategories {
                 let scope = PlaceCheckInQuestionCatalog.preferenceKey(categoryID: profile.categoryID, subcategory: subtype)
@@ -54,6 +55,7 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
             XCTAssertEqual(ids.count, 3, category)
             for id in ids {
                 XCTAssertNotNil(PlaceCheckInQuestionCatalog.question(id: "place_detail_" + id), "\(category): \(id)")
+                XCTAssertFalse(PlaceCheckInQuestionCatalog.retiredQuestionIDs.contains("place_detail_" + id), id)
             }
         }
     }
@@ -86,23 +88,23 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
 
     func testOutdoorQuestionsDescribeTheActualActivity() {
         let park = ids("outdoors_nature", "Park")
-        XCTAssertEqual(park, ["shade", "restroom", "path_surface"])
+        XCTAssertEqual(park, ["leash", "shade", "restroom"])
         for type in ["Park", "City park", "State park", "National park", "Dog park", "Playground"] {
             XCTAssertFalse(ids("outdoors_nature", type).contains("beach_rinse"), type)
         }
-        XCTAssertEqual(ids("outdoors_nature", "Beach"), ["beach_rinse", "shade", "beach_access"])
-        XCTAssertEqual(ids("outdoors_nature", "Trail"), ["trail_marking", "incline", "path_surface"])
+        XCTAssertEqual(ids("outdoors_nature", "Beach"), ["leash", "shade", "beach_rinse"])
+        XCTAssertEqual(ids("outdoors_nature", "Trail"), ["leash", "incline", "trail_marking"])
         XCTAssertEqual(ids("outdoors_nature", "Trail"), ids("outdoors_nature", "Hike"))
         XCTAssertEqual(ids("outdoors_nature", "Dog park"), ["fenced", "leash", "water_refill"])
         XCTAssertEqual(ids("outdoors_nature", "Playground"), ["playground_age", "fenced", "shade"])
-        XCTAssertEqual(ids("outdoors_nature", "RV park"), ["camp_power", "camp_toilet", "camp_booking"])
-        XCTAssertEqual(ids("outdoors_nature", "Fishing charter"), ["fishing_gear", "booking", "restroom"])
+        XCTAssertEqual(ids("outdoors_nature", "RV park"), ["leash", "camp_power", "camp_toilet"])
+        XCTAssertEqual(ids("outdoors_nature", "Fishing charter"), ["fishing_gear", "restroom", "booking_ease"])
     }
 
     func testFitnessSubtypesAreNotCollapsedToGymQuestions() {
-        XCTAssertEqual(ids("wellness_fitness", "Pilates studio"), ["pilates_format", "pilates_intro", "class_size"])
+        XCTAssertEqual(ids("wellness_fitness", "Pilates studio"), ["pilates_reformer", "class_busyness", "booking_ease"])
         XCTAssertEqual(ids("wellness_fitness", "CrossFit gym"), ["crossfit_scaling", "crossfit_format", "fitness_dropin"])
-        XCTAssertEqual(ids("wellness_fitness", "Functional fitness studio"), ["functional_format", "coaching", "class_size"])
+        XCTAssertEqual(ids("wellness_fitness", "Functional fitness studio"), ["functional_format", "coaching", "venue_busyness"])
         XCTAssertEqual(ids("wellness_fitness", "Volleyball court"), ["volleyball_surface", "volleyball_net", "court_booking"])
         XCTAssertEqual(ids("wellness_fitness", "Gym"), ids("wellness_fitness", "Fitness center"))
         let types = ["Gym", "Yoga studio", "Pilates studio", "CrossFit gym", "Functional fitness studio", "Volleyball court", "Swimming pool", "Tennis court", "Basketball court", "Pickleball court"]
@@ -113,14 +115,14 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
     }
 
     func testSpecializedFoodFormatsHaveRelevantQuestions() {
-        XCTAssertEqual(ids("restaurants_food", "Ramen"), ["broth", "noodles", "waiting"])
-        XCTAssertEqual(ids("restaurants_food", "Sushi"), ["sushi_menu", "counter_seating", "booking"])
-        XCTAssertEqual(ids("restaurants_food", "Taco truck"), ["tacos", "waiting", "seating"])
-        XCTAssertEqual(ids("restaurants_food", "Fondue"), ["fondue", "dietary_menu", "booking"])
-        XCTAssertEqual(ids("coffee_tea_sweets", "Coffee stand"), ["waiting", "milk", "seating"])
+        XCTAssertEqual(ids("restaurants_food", "Ramen"), ["dog_access", "vegetarian", "waiting"])
+        XCTAssertEqual(ids("restaurants_food", "Sushi"), ["dog_access", "counter_seating", "booking_policy"])
+        XCTAssertEqual(ids("restaurants_food", "Taco truck"), ["dog_access", "waiting", "seating"])
+        XCTAssertEqual(ids("restaurants_food", "Fondue"), ["dog_access", "sharing", "booking_policy"])
+        XCTAssertEqual(ids("coffee_tea_sweets", "Coffee stand"), ["waiting", "milk", "dog_access"])
         XCTAssertEqual(ids("coffee_tea_sweets", "Coffee shop"), ["laptop", "outlets", "dog_access"])
         XCTAssertEqual(ids("coffee_tea_sweets", "Cafe"), ["laptop", "outdoor_seating", "dog_access"])
-        XCTAssertEqual(ids("coffee_tea_sweets", "Roastery"), ["beans", "tasting", "seating"])
+        XCTAssertEqual(ids("coffee_tea_sweets", "Roastery"), ["beans", "tasting", "dog_access"])
         XCTAssertFalse(ids("coffee_tea_sweets", "Coffee stand").contains("laptop"))
         XCTAssertFalse(ids("coffee_tea_sweets", "Donut shop").contains("outlets"))
     }
@@ -129,7 +131,7 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
         let custom = "My quiet garden corner"
         let other = "My river stop"
         XCTAssertNil(PlaceCheckInQuestionCatalog.curatedQuestions(categoryID: "outdoors_nature", subcategory: custom))
-        XCTAssertEqual(ids("outdoors_nature", custom), ["shade", "restroom", "path_surface"])
+        XCTAssertEqual(ids("outdoors_nature", custom), ["leash", "shade", "restroom"])
         XCTAssertNotEqual(
             PlaceCheckInQuestionCatalog.preferenceKey(categoryID: "outdoors_nature", subcategory: custom),
             PlaceCheckInQuestionCatalog.preferenceKey(categoryID: "outdoors_nature", subcategory: other)
@@ -140,6 +142,42 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
         )
         XCTAssertEqual(PlaceCheckInQuestionCatalog.questions(categoryID: "unrecognized category", subcategory: "My place").count, 3)
         XCTAssertEqual(PlaceCheckInQuestionCatalog.questions(categoryID: "place", subcategory: nil).count, 3)
+    }
+
+    func testFoodQuestionContextPreservesVenueFormatsAndRespectsCulinaryCorrections() {
+        let category = WanderPlaceCategory.restaurantsFood
+        let cases: [(subtype: String?, cuisine: String?, expected: String?)] = [
+            ("Restaurant", "Thai", "Thai"),
+            ("Ramen", "Thai", "Thai"),
+            ("Sushi", "Vietnamese", "Vietnamese"),
+            ("Taco truck", "Mexican", "Taco truck"),
+            ("Taco stand", "Thai", "Taco stand"),
+            ("Food court", "Japanese", "Food court"),
+            ("Buffet", "Indian", "Buffet"),
+            ("food_truck", "Korean", "Food truck"),
+            ("Cafeteria", "Vegetarian", "Cafeteria"),
+            ("Taco truck", "Food court", "Food court"),
+            ("Ramen", nil, "Ramen"),
+            ("Ramen", "  ", "Ramen"),
+            (nil, "Thai", "Thai"),
+            (nil, nil, nil)
+        ]
+        for value in cases {
+            XCTAssertEqual(PlaceCheckInQuestionCatalog.questionSubtype(
+                categoryID: category, subcategory: value.subtype, cuisine: value.cuisine
+            ), value.expected, "\(value.subtype ?? "nil") + \(value.cuisine ?? "nil")")
+        }
+        let truck = PlaceCheckInQuestionCatalog.questionSubtype(
+            categoryID: category, subcategory: "Taco truck", cuisine: "Mexican"
+        )
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.questions(categoryID: category, subcategory: truck).map(\.id),
+                       ["place_detail_dog_access", "place_detail_waiting", "place_detail_seating"])
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.preferenceKey(categoryID: category, subcategory: truck),
+                       "restaurants_food:taco truck")
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.questionSubtype(
+            categoryID: "outdoors_nature", subcategory: "Beach", cuisine: "Thai"
+        ), "Beach")
+        XCTAssertEqual(ids("things_to_do", "Billiards"), ["games", "game_payment", "equipment"])
     }
 
     func testSearchEvidenceDoesNotPromoteNegativeOrQualifiedAnswers() throws {
@@ -202,10 +240,74 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
         XCTAssertTrue(payment.options.contains("No charge"))
         XCTAssertFalse(ids("services_errands", "Electrician").contains("everyday_turnaround"))
         XCTAssertFalse(ids("services_errands", "Plumber").contains("everyday_turnaround"))
-        XCTAssertEqual(ids("coffee_tea_sweets", "Tea store"), ["tea_shop", "tasting", "gift_packaging"])
-        XCTAssertEqual(ids("bars_nightlife", "Karaoke"), ["karaoke", "booking", "karaoke_charge"])
+        XCTAssertEqual(ids("coffee_tea_sweets", "Tea store"), ["tasting", "gift_packaging", "dog_access"])
+        XCTAssertEqual(ids("bars_nightlife", "Karaoke"), ["karaoke", "booking_ease", "noise"])
         XCTAssertEqual(ids("outdoors_nature", "Cabin"), ids("stays", "Cabin"))
         XCTAssertEqual(ids("outdoors_nature", "Campground"), ids("stays", "Campground"))
+    }
+
+    func testNewLibraryRetiresTriviaWithoutReinterpretingSavedAnswers() throws {
+        let availableIDs = Set(PlaceCheckInQuestionCatalog.availableQuestions.map(\.id))
+        XCTAssertTrue(availableIDs.isDisjoint(with: PlaceCheckInQuestionCatalog.retiredQuestionIDs))
+        XCTAssertEqual(availableIDs.count + PlaceCheckInQuestionCatalog.retiredQuestionIDs.count,
+                       PlaceCheckInQuestionCatalog.allQuestions.count)
+        for id in PlaceCheckInQuestionCatalog.retiredQuestionIDs {
+            XCTAssertNotNil(PlaceCheckInQuestionCatalog.question(id: id), "Missing saved-answer definition: \(id)")
+        }
+        let historicalOptions: [String: [String]] = [
+            "everyday_browsing": ["Spacious", "Comfortable", "Tight"],
+            "pilates_format": ["Reformer", "Mat", "Mixed apparatus"],
+            "pilates_intro": ["Separate introduction", "Help during class", "No introduction offered"],
+            "class_size": ["On my own", "One-to-one", "Small group", "Larger group"],
+            "noodles": ["Several types", "One house style", "Custom preparation"],
+            "sushi_menu": ["Individual pieces or rolls", "Chef's selection", "Both"]
+        ]
+        for (id, options) in historicalOptions {
+            let question = try XCTUnwrap(PlaceCheckInQuestionCatalog.question(id: "place_detail_" + id))
+            XCTAssertEqual(question.options, options, id)
+            XCTAssertFalse(availableIDs.contains(question.id), id)
+        }
+        let reformer = try XCTUnwrap(PlaceCheckInQuestionCatalog.question(id: "place_detail_pilates_reformer"))
+        XCTAssertEqual(reformer.prompt, "Was it a reformer class?")
+        XCTAssertEqual(reformer.options, ["Yes", "No"])
+        XCTAssertEqual(reformer.searchTerms(for: "No"), [])
+        XCTAssertEqual(reformer.searchTerms(for: "Reformer"), [], "Historical apparatus answers cannot become class answers")
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.question(id: "place_detail_class_busyness")?.options,
+                       ["Plenty of space", "Busy", "Packed"])
+        for question in PlaceCheckInQuestionCatalog.availableQuestions {
+            XCTAssertLessThanOrEqual(question.prompt.count, 65, question.id)
+        }
+    }
+
+    func testDogsAreUsefulDefaultsAcrossDiningAndOutdoorVisits() {
+        for subtype in ["Restaurant", "Thai", "Italian", "Pizza", "Ramen", "Seafood"] {
+            XCTAssertTrue(ids("restaurants_food", subtype).contains("dog_access"), subtype)
+        }
+        for subtype in ["Coffee shop", "Cafe", "Coffee stand", "Roastery", "Bakery", "Tea house"] {
+            XCTAssertTrue(ids("coffee_tea_sweets", subtype).contains("dog_access"), subtype)
+        }
+        for subtype in ["Park", "Trail", "Beach", "Garden", "Lake", "River", "Campground", "Surf break"] {
+            XCTAssertTrue(ids("outdoors_nature", subtype).contains("leash"), subtype)
+            XCTAssertFalse(ids("outdoors_nature", subtype).contains("dog_access"), "Outdoor-only places need posted rules, not indoor access: \(subtype)")
+        }
+        XCTAssertFalse(ids("coffee_tea_sweets", "Cat cafe").contains("dog_access"))
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.question(id: "place_detail_leash")?.searchTerms(for: "No sign found"), [])
+    }
+
+    func testSportsAndCoastalSubtypesHavePurposefulQuestionSets() {
+        XCTAssertEqual(ids("wellness_fitness", "Beach tennis"), ["court_booking", "equipment", "court_lights"])
+        XCTAssertEqual(ids("wellness_fitness", "Beach volleyball"), ["volleyball_net", "court_booking", "shade"])
+        XCTAssertEqual(ids("wellness_fitness", "Padel court"), ["court_booking", "court_setting", "equipment"])
+        XCTAssertEqual(ids("wellness_fitness", "Climbing gym"), ["climbing_type", "equipment", "venue_busyness"])
+        XCTAssertEqual(ids("wellness_fitness", "Surf school"), ["equipment", "class_busyness", "booking_ease"])
+        XCTAssertEqual(ids("things_to_do", "Stadium"), ["seat_cover", "show_seating", "everyday_bag_check"])
+        XCTAssertEqual(ids("things_to_do", "Arena"), ["acoustics", "show_seating", "everyday_bag_check"])
+        XCTAssertEqual(ids("outdoors_nature", "Surf"), ["surf_rental", "venue_busyness", "leash"])
+        XCTAssertEqual(ids("outdoors_nature", "Surf break"), ["surf_crowding", "beach_rinse", "leash"])
+        XCTAssertEqual(ids("outdoors_nature", "Kayak/canoe rental"), ["equipment", "booking_ease", "dogs_on_boats"])
+        XCTAssertEqual(ids("shopping", "Surf shop"), ["surf_rental", "everyday_repair", "dog_access"])
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.question(id: "place_detail_surf_rental")?.searchTerms(for: "Nearby only"), ["nearby surfboard rental"])
+        XCTAssertEqual(PlaceCheckInQuestionCatalog.question(id: "place_detail_dogs_on_boats")?.searchTerms(for: "No"), [])
     }
 
     private func ids(_ category: String, _ subtype: String) -> [String] {

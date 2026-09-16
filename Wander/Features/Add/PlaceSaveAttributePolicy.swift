@@ -8,7 +8,9 @@ enum PlaceSaveAttributePolicy {
         answers: [String: Set<String>],
         tags: Set<String>,
         tagKey: String,
-        status: PlaceStatus
+        status: PlaceStatus,
+        customQuestions: [CheckInCustomQuestion] = [],
+        privateQuestionIDs: Set<String> = []
     ) -> [PlaceAttributeDraft] {
         let normalizedTags = Set(tags.map { $0.lowercased() })
         var assignedTags = Set<String>()
@@ -32,7 +34,8 @@ enum PlaceSaveAttributePolicy {
                         stringValues: retained
                     ))
                 }
-            } else if !PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey) {
+            } else if !PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey)
+                        && !CheckInCustomQuestion.isCustomID(attribute.questionKey) {
                 result.append(attribute)
             }
         }
@@ -64,8 +67,19 @@ enum PlaceSaveAttributePolicy {
             result += original.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.questionKey) }
         } else {
             let originalByKey = Dictionary(original.map { ($0.questionKey, $0) }, uniquingKeysWith: { _, last in last })
-            for key in answers.keys.sorted() where PlaceCheckInQuestionCatalog.isDetailQuestion(key) {
-                guard let values = answers[key], !values.isEmpty else { continue }
+            let recovered = original.compactMap { SharedCheckInQuestion.decode($0)?.question }
+            let definitions = Dictionary((recovered + customQuestions).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for key in answers.keys.sorted() where CheckInCustomQuestion.isCustomID(key) {
+                guard !privateQuestionIDs.contains(key), let values = answers[key],
+                      let answer = ["yes", "no"].first(where: { values.contains($0) }),
+                      let question = definitions[key],
+                      let shared = SharedCheckInQuestion.encode(question: question, answer: answer)
+                else { continue }
+                result.append(shared)
+            }
+            for key in answers.keys.sorted()
+            where PlaceCheckInQuestionCatalog.isDetailQuestion(key) && !SharedCheckInQuestion.isSharedQuestion(key) {
+                guard !privateQuestionIDs.contains(key), let values = answers[key], !values.isEmpty else { continue }
                 if let question = PlaceCheckInQuestionCatalog.question(id: key),
                    let answer = question.options.first(where: { values.contains($0) }) {
                     result.append(PlaceAttributeDraft(questionKey: key, valueType: question.valueType, stringValue: answer))
@@ -75,7 +89,9 @@ enum PlaceSaveAttributePolicy {
             }
             // Unknown future fields may not decode into the UI's string map.
             result += original.filter {
-                PlaceCheckInQuestionCatalog.isDetailQuestion($0.questionKey) && answers[$0.questionKey] == nil
+                guard PlaceCheckInQuestionCatalog.isDetailQuestion($0.questionKey) else { return false }
+                let answerKey = SharedCheckInQuestion.customQuestionID(for: $0.questionKey) ?? $0.questionKey
+                return !privateQuestionIDs.contains(answerKey) && answers[answerKey] == nil
             }
         }
         return result

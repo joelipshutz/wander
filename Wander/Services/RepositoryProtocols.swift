@@ -1735,7 +1735,12 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable, Sendable {
     }
 
     var attributeDrafts: [PlaceAttributeDraft] {
-        attributeAnswers.map { answer in
+        attributeAnswers.filter { answer in
+            // A cached invitation is someone else's observation. The recipient
+            // can supply their own answers after accepting the place context.
+            !PlaceCheckInQuestionCatalog.isDetailQuestion(answer.questionKey)
+                && !answer.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix)
+        }.map { answer in
             let data = (try? JSONEncoder().encode(answer.value)) ?? Data("null".utf8)
             return PlaceAttributeDraft(
                 questionKey: answer.questionKey,

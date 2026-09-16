@@ -21,23 +21,44 @@ struct CheckInCustomQuestion: Codable, Equatable, Identifiable {
 
 struct CheckInQuestionConfiguration: Codable, Equatable {
     var orderedQuestionIDs: [String]
-    /// Definitions survive removal from the recurring prompt list so old answers
-    /// retain their meaning. Custom questions never become shared attributes.
+    /// Definitions survive removal so historical answers retain their meaning.
     private(set) var customQuestions: [CheckInCustomQuestion]
+    private(set) var stealthByQuestionID: [String: Bool]
 
-    init(orderedQuestionIDs: [String], customQuestions: [CheckInCustomQuestion] = []) {
+    init(orderedQuestionIDs: [String], customQuestions: [CheckInCustomQuestion] = [], stealthByQuestionID: [String: Bool] = [:]) {
         var seen = Set<String>()
         self.orderedQuestionIDs = orderedQuestionIDs.filter { seen.insert($0).inserted }
         self.customQuestions = customQuestions
+        self.stealthByQuestionID = stealthByQuestionID
     }
 
-    mutating func addCatalogQuestion(id: String) {
+    private enum CodingKeys: String, CodingKey {
+        case orderedQuestionIDs, customQuestions, stealthByQuestionID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        orderedQuestionIDs = try container.decode([String].self, forKey: .orderedQuestionIDs)
+        customQuestions = try container.decodeIfPresent([CheckInCustomQuestion].self, forKey: .customQuestions) ?? []
+        stealthByQuestionID = try container.decodeIfPresent([String: Bool].self, forKey: .stealthByQuestionID) ?? [:]
+    }
+
+    func isStealth(questionID: String) -> Bool {
+        stealthByQuestionID[questionID] ?? CheckInCustomQuestion.isCustomID(questionID)
+    }
+
+    mutating func setStealth(_ isStealth: Bool, questionID: String) {
+        stealthByQuestionID[questionID] = isStealth
+    }
+
+    mutating func addCatalogQuestion(id: String, stealth: Bool = false) {
         guard !orderedQuestionIDs.contains(id) else { return }
         orderedQuestionIDs.append(id)
+        setStealth(stealth, questionID: id)
     }
 
     @discardableResult
-    mutating func addCustomQuestion(prompt: String) throws -> CheckInCustomQuestion {
+    mutating func addCustomQuestion(prompt: String, stealth: Bool = true) throws -> CheckInCustomQuestion {
         let normalized = CheckInCustomQuestion.normalizedPrompt(prompt)
         guard !normalized.isEmpty,
               normalized.count <= CheckInCustomQuestion.maximumPromptLength
@@ -52,8 +73,14 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
         if !customQuestions.contains(where: { $0.id == question.id }) {
             customQuestions.append(question)
         }
-        addCatalogQuestion(id: question.id)
+        addCatalogQuestion(id: question.id, stealth: stealth)
         return question
+    }
+
+    mutating func retainDefinition(_ question: CheckInCustomQuestion) {
+        if !customQuestions.contains(where: { $0.id == question.id }) {
+            customQuestions.append(question)
+        }
     }
 
     mutating func removeQuestions(at offsets: IndexSet) {
@@ -112,8 +139,8 @@ enum CheckInQuestionPersistenceError: Error, LocalizedError {
     }
 }
 
-/// Local account-scoped storage, deliberately separate from place_attributes,
-/// social projections and cloud synchronization. The UI states this limitation.
+/// Local account-scoped preferences and private answers. Shared custom answers
+/// use an explicit, separate serialization path with the Check-in's audience.
 @MainActor
 struct CheckInQuestionPreferenceStore {
     static let didChangeNotification = Notification.Name("astir.checkInQuestions.changed")
@@ -162,7 +189,8 @@ struct CheckInQuestionPreferenceStore {
         }
         account.configurations[subtypeKey] = CheckInQuestionConfiguration(
             orderedQuestionIDs: configuration.orderedQuestionIDs,
-            customQuestions: definitions
+            customQuestions: definitions,
+            stealthByQuestionID: configuration.stealthByQuestionID
         )
         try writeAccount(account)
     }
@@ -172,6 +200,35 @@ struct CheckInQuestionPreferenceStore {
         return account.configurations.keys.sorted().flatMap {
             account.configurations[$0]?.customQuestions ?? []
         }
+    }
+
+    func configuredSubtypeKeys(ownerUserID: String) -> [String] {
+        guard let account = try? readAccount(ownerUserID: ownerUserID) else { return [] }
+        return account.configurations.keys.sorted()
+    }
+
+    /// Recover definitions from this owner's explicit shared answers when an
+    /// editor opens on another device. This never adds a recurring prompt or
+    /// changes the privacy of an existing answer.
+    func retainRecoveredDefinitions(
+        _ questions: [CheckInCustomQuestion],
+        ownerUserID: String,
+        subtypeKey: String,
+        defaultQuestionIDs: [String]
+    ) throws {
+        guard !questions.isEmpty else { return }
+        var value = configuration(ownerUserID: ownerUserID, subtypeKey: subtypeKey, defaultQuestionIDs: defaultQuestionIDs)
+        let owned = allCustomQuestions(ownerUserID: ownerUserID)
+        var changed = false
+        for question in questions {
+            if let existing = owned.first(where: { $0.id == question.id }) {
+                guard existing == question else { throw CheckInQuestionPersistenceError.invalidConfiguration }
+            } else {
+                value.retainDefinition(question)
+                changed = true
+            }
+        }
+        if changed { try saveConfiguration(value, ownerUserID: ownerUserID, subtypeKey: subtypeKey) }
     }
 
     func privateAnswers(
@@ -292,7 +349,10 @@ struct CheckInQuestionPreferenceStore {
     private func validatePrivateAnswers(_ answers: [String: String], account: Account) throws {
         let ownedIDs = Set(account.configurations.values.flatMap(\.customQuestions).map(\.id))
         guard answers.allSatisfy({ id, value in
-            ownedIDs.contains(id) && CheckInCustomQuestion.isCustomID(id) && (value == "yes" || value == "no")
+            if let question = PlaceCheckInQuestionCatalog.question(id: id) {
+                return question.options.contains(value)
+            }
+            return ownedIDs.contains(id) && CheckInCustomQuestion.isCustomID(id) && (value == "yes" || value == "no")
         }) else { throw CheckInQuestionPersistenceError.invalidPrivateAnswer }
     }
 
@@ -337,6 +397,9 @@ struct CheckInQuestionPreferenceStore {
                       && question.prompt.count <= CheckInCustomQuestion.maximumPromptLength
               }),
               configuration.orderedQuestionIDs.allSatisfy({ id in
+                  id.hasPrefix("place_detail_") || customIDs.contains(id)
+              }),
+              configuration.stealthByQuestionID.keys.allSatisfy({ id in
                   id.hasPrefix("place_detail_") || customIDs.contains(id)
               })
         else { throw CheckInQuestionPersistenceError.invalidConfiguration }

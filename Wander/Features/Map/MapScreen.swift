@@ -1370,6 +1370,7 @@ struct MapScreen: View {
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
+    @State private var retainedSelectionCache = MapRetainedSelectionCache()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedNativeMapFeatureID: String?
@@ -1389,7 +1390,6 @@ struct MapScreen: View {
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var isPlaceProfileMounted: Bool
-    @State private var placeProfilePreloadTask: Task<Void, Never>?
     @State private var placeProfilePresentationID: UUID?
     @State private var placeProfileDismissalID: UUID?
     @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
@@ -1630,31 +1630,30 @@ struct MapScreen: View {
         )
     }
 
+    private var authorizedRetainedSelection: MapRetainedSelectionCache.Selection {
+        retainedSelectionCache.value(
+            sourceIdentity: ObjectIdentifier(store),
+            revision: store.presentationRevision,
+            featuredRevision: featuredPlacesRevision,
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id,
+            retainedPlace: routedVisiblePlace,
+            retainedGroup: routedVisiblePlaceGroup,
+            submittedGroups: submittedSavedSearchGroups,
+            authorizedPlaces: { authorizedSelectionPlaces }
+        )
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedPlaces = MapActivePinRetention.places(
             from: renderProjection.visiblePlaces,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup
+            retaining: authorized.place,
+            retainingGroup: authorized.group
         )
         return MapActivePinRetention.places(
             from: activeRetainedPlaces,
-            retainingGroups: authorizedSubmittedGroups
+            retainingGroups: authorized.submittedGroups
         )
     }
 
@@ -1682,31 +1681,16 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedGroups = MapActivePinRetention.groups(
             from: renderProjection.visiblePlaceGroups,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup,
+            retaining: authorized.place,
+            retainingGroup: authorized.group,
             currentUserID: store.currentUser.id
         )
         return MapActivePinRetention.groups(
             from: activeRetainedGroups,
-            retainingGroups: authorizedSubmittedGroups,
+            retainingGroups: authorized.submittedGroups,
             currentUserID: store.currentUser.id
         )
     }
@@ -2384,7 +2368,6 @@ struct MapScreen: View {
                 initialMapSourceLoadID = nil
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
-                placeProfilePreloadTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -2442,8 +2425,6 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
-            placeProfilePreloadTask?.cancel()
-            placeProfilePreloadTask = nil
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
@@ -3629,28 +3610,6 @@ struct MapScreen: View {
             compactCardReadyIdentity = identity
             presentCompactCard()
         }
-        preloadSelectedPlaceProfile(for: identity)
-    }
-
-    private func preloadSelectedPlaceProfile(for identity: String) {
-        guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled,
-                  identity == compactSelectionIdentity,
-                  hasSelectedProfile,
-                  !isPlaceProfileMounted,
-                  !isPlaceProfilePresented
-            else { return }
-
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isPlaceProfileMounted = true
-            }
-            placeProfilePreloadTask = nil
-        }
     }
 
     private func presentCompactCard() {
@@ -4049,6 +4008,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4089,6 +4049,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4122,6 +4083,7 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: .none,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4132,8 +4094,6 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = nil
         placeProfilePresentationID = nil
         placeProfileDismissalID = nil
         placeProfileDismissalCompletion = nil
@@ -10308,6 +10268,69 @@ enum MapPinSelectionMotionStyle {
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
+/// One authorized selection snapshot per store revision. No cross-account or
+/// historical entries are retained; changed access is checked before reuse.
+@MainActor
+final class MapRetainedSelectionCache {
+    struct Selection {
+        let place: VisiblePlace?
+        let group: VisiblePlaceGroup?
+        let submittedGroups: [VisiblePlaceGroup]
+    }
+
+    private struct Key: Equatable {
+        let sourceIdentity: ObjectIdentifier
+        let revision: UInt64
+        let featuredRevision: UInt64
+        let featuredAccountID: String?
+        let currentUserID: String
+        let retainedPlaceID: String?
+        let retainedGroupIDs: [String]?
+        let submittedGroupIDs: [[String]]
+    }
+
+    private var key: Key?
+    private var selection: Selection?
+
+    func value(
+        sourceIdentity: ObjectIdentifier,
+        revision: UInt64,
+        featuredRevision: UInt64 = 0,
+        featuredAccountID: String? = nil,
+        currentUserID: String,
+        retainedPlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup],
+        authorizedPlaces: () -> [VisiblePlace]
+    ) -> Selection {
+        let nextKey = Key(
+            sourceIdentity: sourceIdentity,
+            revision: revision,
+            featuredRevision: featuredRevision,
+            featuredAccountID: featuredAccountID,
+            currentUserID: currentUserID,
+            retainedPlaceID: retainedPlace?.userPlace.id,
+            retainedGroupIDs: retainedGroup?.places.map(\.userPlace.id),
+            submittedGroupIDs: submittedGroups.map { $0.places.map(\.userPlace.id) }
+        )
+        if key == nextKey, let selection { return selection }
+        let places = authorizedPlaces()
+        let place = MapActivePinRetention.authorizedPlace(retainedPlace, within: places)
+        let result = Selection(
+            place: place,
+            group: MapActivePinRetention.authorizedGroup(
+                retainedGroup, requiring: place, within: places, currentUserID: currentUserID
+            ),
+            submittedGroups: MapActivePinRetention.authorizedGroups(
+                submittedGroups, within: places, currentUserID: currentUserID
+            )
+        )
+        key = nextKey
+        selection = result
+        return result
+    }
+}
+
 enum MapActivePinRetention {
     /// Featured's anonymous place aggregates are server-authorized separately
     /// from personal/social saves. Use the unranked response so recentering or
@@ -10995,6 +11018,12 @@ struct MapPlaceSaveContext: Identifiable {
         }
     }
 
+    /// Existing save content belongs to this account even if the active account
+    /// changes before the presenting root has finished replacing its editor.
+    var saveOwnerUserID: String? {
+        sourceVisiblePlace?.userPlace.userID ?? existingCurrentUserSave?.userPlace.userID
+    }
+
     var editedVisit: LocalPlaceVisit? {
         if case .editVisit(_, let visit) = mode {
             return visit
@@ -11460,6 +11489,12 @@ struct MapPlaceSaveContext: Identifiable {
         let decoder = JSONDecoder()
 
         for attribute in attributes {
+            // Legacy custom keys are private history, never publication input.
+            guard !attribute.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix) else { continue }
+            if let shared = SharedCheckInQuestion.decode(attribute) {
+                answers[shared.question.id] = [shared.answer]
+                continue
+            }
             guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels,
                   attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine
             else { continue }
@@ -11479,6 +11514,12 @@ struct MapPlaceSaveContext: Identifiable {
         let decoder = JSONDecoder()
 
         for attribute in attributes {
+            // Legacy custom keys are private history, never publication input.
+            guard !attribute.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix) else { continue }
+            if let shared = SharedCheckInQuestion.decode(attribute) {
+                answers[shared.question.id] = [shared.answer]
+                continue
+            }
             guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels,
                   attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine
             else { continue }
@@ -11593,6 +11634,10 @@ struct MapPlaceSaveSubmission {
     var plannedDate: Date? = nil
     var customQuestionAnswers: [String: String]? = nil
     var customQuestionOwnerID: String? = nil
+    /// Non-editor callers without a private-answer channel retain their existing
+    /// behavior. Editors explicitly pass their load state, including failures.
+    var customQuestionAnswersLoaded: Bool = true
+    var ownerUserID: String? = nil
 
     func replacingImportCandidate(
         _ candidate: PlaceCandidate,
@@ -11623,7 +11668,9 @@ struct MapPlaceSaveSubmission {
             visitedAt: visitedAt,
             plannedDate: status == .wannaGo ? plannedDate : nil,
             customQuestionAnswers: status == .been ? customQuestionAnswers : nil,
-            customQuestionOwnerID: customQuestionOwnerID
+            customQuestionOwnerID: customQuestionOwnerID,
+            customQuestionAnswersLoaded: status != .been || customQuestionAnswersLoaded,
+            ownerUserID: ownerUserID
         )
     }
 }
@@ -12006,11 +12053,21 @@ func persistScopedVisitOrWantSubmission(
 
 @MainActor
 func validatesPrivateCheckInDraft(_ submission: MapPlaceSaveSubmission, store: WanderStore) -> Bool {
+    guard submission.ownerUserID.map({ $0 == store.currentUser.id }) ?? true,
+          submission.context.saveOwnerUserID.map({ $0 == store.currentUser.id }) ?? true
+    else { return false }
     if case .editVisit(_, let visit) = submission.context.mode,
        !store.canEditVisitAnswers(visitID: visit.id) {
         return false
     }
-    guard submission.status == .been, let answers = submission.customQuestionAnswers else { return true }
+    guard submission.status == .been else { return true }
+    guard submission.customQuestionAnswersLoaded else { return false }
+    if submission.context.editedVisit != nil,
+       submission.context.originalAttributes.contains(where: { $0.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix) }),
+       submission.customQuestionAnswers == nil {
+        return false
+    }
+    guard let answers = submission.customQuestionAnswers else { return true }
     guard submission.customQuestionOwnerID == store.currentUser.id else { return false }
     do {
         try CheckInQuestionPreferenceStore().validatePrivateAnswers(answers, ownerUserID: store.currentUser.id)
@@ -12018,6 +12075,40 @@ func validatesPrivateCheckInDraft(_ submission: MapPlaceSaveSubmission, store: W
     } catch {
         return false
     }
+}
+
+/// Recover only legacy answers whose question and value are understood. Write
+/// the private copy before an editor can remove the legacy remote payload. A
+/// failure leaves the source unchanged and blocks the containing Check-in edit.
+@MainActor
+func loadAndMigratePrivateCheckInAnswers(
+    originalAttributes: [PlaceAttributeDraft],
+    ownerUserID: String,
+    userPlaceID: String,
+    visitID: String,
+    preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+) throws -> [String: String] {
+    let stored = try preferences.loadPrivateAnswers(
+        ownerUserID: ownerUserID, userPlaceID: userPlaceID, visitID: visitID
+    )
+    let knownIDs = Set(preferences.allCustomQuestions(ownerUserID: ownerUserID).map(\.id))
+    var recovered = stored
+    for attribute in originalAttributes where attribute.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix) {
+        guard CheckInCustomQuestion.isCustomID(attribute.questionKey),
+              knownIDs.contains(attribute.questionKey),
+              let value = try? JSONDecoder().decode(String.self, from: Data(attribute.valueJSON.utf8)),
+              ["yes", "no"].contains(value.lowercased())
+        else { throw CheckInQuestionPersistenceError.invalidPrivateAnswer }
+        if recovered[attribute.questionKey] == nil {
+            recovered[attribute.questionKey] = value.lowercased()
+        }
+    }
+    if recovered != stored {
+        try preferences.savePrivateAnswers(
+            recovered, ownerUserID: ownerUserID, userPlaceID: userPlaceID, visitID: visitID
+        )
+    }
+    return recovered
 }
 
 @MainActor
@@ -12196,13 +12287,20 @@ extension MapPlaceSaveModeDraft: Equatable where Photo: Equatable {}
 struct MapPlaceSaveModeDraftCache<Draft> {
     private var checkIn: Draft?
     private var wannaGo: Draft?
+    private(set) var ownerUserID: String?
 
-    init(checkIn: Draft? = nil, wannaGo: Draft? = nil) {
+    init(checkIn: Draft? = nil, wannaGo: Draft? = nil, ownerUserID: String? = nil) {
         self.checkIn = checkIn
         self.wannaGo = wannaGo
+        self.ownerUserID = ownerUserID
     }
 
-    mutating func store(_ draft: Draft, for status: PlaceStatus) {
+    mutating func store(_ draft: Draft, for status: PlaceStatus, ownerUserID: String? = nil) {
+        if self.ownerUserID != ownerUserID {
+            checkIn = nil
+            wannaGo = nil
+            self.ownerUserID = ownerUserID
+        }
         switch status {
         case .been:
             checkIn = draft
@@ -12211,8 +12309,9 @@ struct MapPlaceSaveModeDraftCache<Draft> {
         }
     }
 
-    func draft(for status: PlaceStatus) -> Draft? {
-        switch status {
+    func draft(for status: PlaceStatus, ownerUserID: String? = nil) -> Draft? {
+        guard self.ownerUserID == ownerUserID else { return nil }
+        return switch status {
         case .been:
             checkIn
         case .wannaGo:
@@ -12610,6 +12709,8 @@ struct MapPlaceSaveEditor: View {
     @State private var selectedRatingScore: Double
     @State private var customQuestionAnswers: [String: String]
     @State private var privateAnswersOwnerID: String?
+    @State private var editorOwnerID: String?
+    @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
     @State private var selectedAnswers: [String: Set<String>]
@@ -12730,6 +12831,7 @@ struct MapPlaceSaveEditor: View {
         _customQuestionAnswers = State(initialValue: restoredForm?.customQuestionAnswers ?? [:])
         _didLoadPrivateAnswers = State(initialValue: restoredForm?.customQuestionAnswers != nil)
         _privateAnswersOwnerID = State(initialValue: draft?.ownerUserID)
+        _editorOwnerID = State(initialValue: draft?.ownerUserID ?? context.saveOwnerUserID)
         _note = State(initialValue: restoredForm?.note ?? initialContext.initialNote)
         _visitedAt = State(
             initialValue: restoredForm?.visitedAt
@@ -12768,7 +12870,8 @@ struct MapPlaceSaveEditor: View {
                     customQuestionAnswers: restoredForm?.customQuestionAnswers ?? [:],
                     customQuestionAnswersLoaded: restoredForm?.customQuestionAnswers != nil
                 ),
-                for: initialStatus
+                for: initialStatus,
+                ownerUserID: draft?.ownerUserID
             )
         }
         _modeDrafts = State(initialValue: initialModeDrafts)
@@ -12890,7 +12993,10 @@ struct MapPlaceSaveEditor: View {
                 status: selectedStatus
             ),
             customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil,
-            customQuestionOwnerID: privateAnswersOwnerID
+            customQuestionOwnerID: privateAnswersOwnerID,
+            customQuestionAnswersLoaded: selectedStatus != .been
+                || (didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id),
+            ownerUserID: editorOwnerID
         )
     }
 
@@ -12903,13 +13009,19 @@ struct MapPlaceSaveEditor: View {
         )
     }
 
-    @ViewBuilder
     var body: some View {
-        switch presentation {
-        case .sheet:
-            sheetEditor
-        case .inlineStaging, .inlineSaving:
-            inlineEditor
+        Group {
+            switch presentation {
+            case .sheet:
+                sheetEditor
+            case .inlineStaging, .inlineSaving:
+                inlineEditor
+            }
+        }
+        .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
+        .onChange(of: store.currentUser.id, initial: true) { _, _ in
+            guard bindEditorOwnerIfNeeded() else { return }
+            if selectedStatus == .been { loadPrivateQuestionAnswersIfNeeded() }
         }
     }
 
@@ -13034,7 +13146,38 @@ struct MapPlaceSaveEditor: View {
         }
     }
 
+    /// Bind once. A surviving presentation must never adopt a second account,
+    /// including while the app entry coordinator awaits its profile lookup.
+    private func bindEditorOwnerIfNeeded() -> Bool {
+        if editorOwnerID == nil { editorOwnerID = store.currentUser.id }
+        guard editorOwnerID == store.currentUser.id,
+              sourceContext.saveOwnerUserID.map({ $0 == store.currentUser.id }) ?? true,
+              !didInvalidateForAccountChange
+        else {
+            if !didInvalidateForAccountChange {
+                didInvalidateForAccountChange = true
+                modeDrafts = MapPlaceSaveModeDraftCache()
+                selectedAnswers = [:]
+                customQuestionAnswers = [:]
+                privateAnswersOwnerID = nil
+                didLoadPrivateAnswers = false
+                unifiedTags = []
+                note = ""
+                droppedPinName = ""
+                selectedCuisine = nil
+                visitPhotoAttachments = []
+                selectedInviteeUserIDs = []
+                completedSaveWithWarning = nil
+                pendingWalkthroughSaveResult = nil
+                onClose()
+            }
+            return false
+        }
+        return true
+    }
+
     private func prepareEditor(isSheet: Bool) {
+        guard bindEditorOwnerIfNeeded() else { return }
         if isSheet {
             store.saveFlowDidPresent(.saveSheet)
             restoreWalkthroughSavePresentationIfNeeded()
@@ -13062,6 +13205,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func handleDraftUpdate(_ oldValue: PlaceSaveDraftUpdate, _ update: PlaceSaveDraftUpdate) {
+        guard bindEditorOwnerIfNeeded() else { return }
         if presentation == .sheet {
             walkthroughs.recordUserActivity()
         }
@@ -13182,12 +13326,6 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(.saveRating)
             }
 
-            if selectedStatus == .been {
-                checkInQuestionsSection
-                    .id(WalkthroughTargetID.saveQuestions)
-                    .walkthroughTarget(.saveQuestions)
-            }
-
             noteSection
                 .id(WalkthroughTargetID.saveNote)
                 .walkthroughTarget(.saveNote)
@@ -13200,6 +13338,10 @@ struct MapPlaceSaveEditor: View {
                 )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
+            } else {
+                plannedDateSection
+                    .id(WalkthroughTargetID.saveDate)
+                    .walkthroughTarget(.saveDate)
             }
 
             placeTypeSection
@@ -13207,6 +13349,10 @@ struct MapPlaceSaveEditor: View {
                 .walkthroughTarget(.saveDetails)
 
             if selectedStatus == .been {
+                checkInQuestionsSection
+                    .id(WalkthroughTargetID.saveQuestions)
+                    .walkthroughTarget(.saveQuestions)
+
                 visitParticipationSections
                     .id(WalkthroughTargetID.saveFriends)
                     .walkthroughTarget(.saveFriends)
@@ -13289,10 +13435,11 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var checkInQuestionSubtype: String? {
-        // The current Food type choice is the user's question context, even if
-        // a provider supplied a more specific subtype such as Ramen. Keep this
-        // preference scope separate from canonical category/save serialization.
-        isRestaurantsFoodSelected ? selectedCuisine ?? selectedAssignment.subcategory : selectedAssignment.subcategory
+        PlaceCheckInQuestionCatalog.questionSubtype(
+            categoryID: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine
+        )
     }
 
     private var checkInQuestionsSection: some View {
@@ -13307,16 +13454,12 @@ struct MapPlaceSaveEditor: View {
             defaultQuestions: PlaceCheckInQuestionCatalog.questions(
                 categoryID: selectedAssignment.primaryCategory, subcategory: checkInQuestionSubtype
             ),
+            savedCustomQuestions: savedCustomQuestions,
             answers: $selectedAnswers,
             customAnswers: $customQuestionAnswers
         )
+        .disabled(!didLoadPrivateAnswers || privateAnswersOwnerID != store.currentUser.id)
         .onChange(of: context.id, initial: true) { _, _ in loadPrivateQuestionAnswersIfNeeded() }
-        .onChange(of: store.currentUser.id) { _, _ in
-            customQuestionAnswers = [:]
-            didLoadPrivateAnswers = false
-            privateAnswersOwnerID = nil
-            loadPrivateQuestionAnswersIfNeeded()
-        }
         .alert("Check-in saved", isPresented: Binding(
             get: { completedSaveWithWarning != nil },
             set: { if !$0, let result = completedSaveWithWarning {
@@ -13336,32 +13479,55 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func loadPrivateQuestionAnswersIfNeeded() {
+        guard bindEditorOwnerIfNeeded() else { return }
         guard !didLoadPrivateAnswers || privateAnswersOwnerID != store.currentUser.id else { return }
         privateAnswersOwnerID = store.currentUser.id
-        guard let visit = context.editedVisit else {
-            didLoadPrivateAnswers = true
-            return
-        }
-        let userPlaceID = context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID
         do {
-            customQuestionAnswers = try CheckInQuestionPreferenceStore().loadPrivateAnswers(
-                ownerUserID: store.currentUser.id, userPlaceID: userPlaceID, visitID: visit.serverID ?? visit.localID
+            let preferences = CheckInQuestionPreferenceStore()
+            try preferences.retainRecoveredDefinitions(
+                savedCustomQuestions,
+                ownerUserID: store.currentUser.id,
+                subtypeKey: PlaceCheckInQuestionCatalog.preferenceKey(
+                    categoryID: selectedAssignment.primaryCategory, subcategory: checkInQuestionSubtype
+                ),
+                defaultQuestionIDs: PlaceCheckInQuestionCatalog.questions(
+                    categoryID: selectedAssignment.primaryCategory, subcategory: checkInQuestionSubtype
+                ).map(\.id)
             )
+            guard let visit = context.editedVisit else {
+                didLoadPrivateAnswers = true
+                return
+            }
+            let userPlaceID = context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID
+            customQuestionAnswers = try loadAndMigratePrivateCheckInAnswers(
+                originalAttributes: context.originalAttributes,
+                ownerUserID: store.currentUser.id, userPlaceID: userPlaceID,
+                visitID: visit.serverID ?? visit.localID, preferences: preferences
+            )
+            // Private persisted answers win over any stale public draft state.
+            for id in customQuestionAnswers.keys { selectedAnswers[id] = [] }
             didLoadPrivateAnswers = true
         } catch {
-            errorMessage = "Your private answers couldn't be loaded. They will stay unchanged."
+            errorMessage = "Your private answers couldn't be loaded. They are unchanged. Try saving again to retry."
         }
+    }
+
+    private var savedCustomQuestions: [CheckInCustomQuestion] {
+        context.originalAttributes.compactMap { SharedCheckInQuestion.decode($0)?.question }
     }
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(selectedStatus == .wannaGo ? "What made you save this?" : "What do you want to remember?")
-                .font(AstirTypography.label)
-                .foregroundStyle(astirBrandMode.secondaryText)
+            if selectedStatus == .wannaGo {
+                Text("What made you save this?")
+                    .font(AstirTypography.label)
+                    .foregroundStyle(astirBrandMode.secondaryText)
+            }
             TextField(selectedStatus == .wannaGo ? "Who told you, what caught your eye, when you might go…" : "The good bits, what you ordered, who you were with…", text: $note, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(AstirTypography.body)
                 .accessibilityIdentifier("save.note")
+                .accessibilityLabel(selectedStatus == .wannaGo ? "What made you save this?" : "Check-in note")
                 .foregroundStyle(astirBrandMode.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .lineLimit(3, reservesSpace: true)
@@ -13630,17 +13796,12 @@ struct MapPlaceSaveEditor: View {
             if isShowingOptionalDetails {
                 questionAndLabelSections
                     .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
-                if selectedStatus == .wannaGo {
-                    plannedDateSection
-                        .id(WalkthroughTargetID.saveDate)
-                        .walkthroughTarget(.saveDate)
-                }
             }
         }
     }
 
     private var optionalDetailsSummary: String {
-        selectedStatus == .wannaGo ? "tags & a date" : "tags"
+        "tags"
     }
 
     private var removeSaveSection: some View {
@@ -13821,12 +13982,13 @@ struct MapPlaceSaveEditor: View {
     private func restoreModeDraft(
         _ draft: MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>
     ) {
+        guard bindEditorOwnerIfNeeded(), modeDrafts.ownerUserID == editorOwnerID else { return }
         selectedVisibility = store.isPrivateProfile ? .selfOnly : draft.visibility
         selectedRatingScore = draft.ratingScore
         selectedAnswers = draft.selectedAnswers
         customQuestionAnswers = draft.customQuestionAnswers
         didLoadPrivateAnswers = draft.customQuestionAnswersLoaded
-        privateAnswersOwnerID = store.currentUser.id
+        privateAnswersOwnerID = modeDrafts.ownerUserID
         unifiedTags = draft.unifiedTags
         note = draft.note
         visitedAt = draft.visitedAt
@@ -13974,11 +14136,7 @@ struct MapPlaceSaveEditor: View {
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
         if Self.isUnifiedTagKey(block.key) {
-            if let existing = unifiedTags.first(where: { $0.caseInsensitiveCompare(option) == .orderedSame }) {
-                unifiedTags.remove(existing)
-            } else {
-                unifiedTags.insert(option)
-            }
+            unifiedTags = PlaceMemoryTagPresentation.toggling(option, selected: unifiedTags)
             return
         }
 
@@ -14016,7 +14174,9 @@ struct MapPlaceSaveEditor: View {
             answers: selectedAnswers,
             tags: unifiedTags,
             tagKey: unifiedTagBlock?.key ?? "place_tags",
-            status: selectedStatus
+            status: selectedStatus,
+            customQuestions: CheckInQuestionPreferenceStore().allCustomQuestions(ownerUserID: store.currentUser.id),
+            privateQuestionIDs: Set(customQuestionAnswers.keys)
         )
         drafts.removeAll {
             $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
@@ -14461,8 +14621,16 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func save() {
+        guard bindEditorOwnerIfNeeded() else { return }
         guard !isSaving else { return }
         guard saveAttemptedAt == nil else { return }
+        if selectedStatus == .been {
+            loadPrivateQuestionAnswersIfNeeded()
+            guard didLoadPrivateAnswers, privateAnswersOwnerID == store.currentUser.id else {
+                errorMessage = "Your private answers couldn't be loaded. They are unchanged. Try saving again to retry."
+                return
+            }
+        }
         if case .editVisit(_, let visit) = context.mode,
            !store.canEditVisitAnswers(visitID: visit.id) {
             errorMessage = "Your saved details haven't loaded. Close this editor and try Edit again when connected."
@@ -14513,8 +14681,10 @@ struct MapPlaceSaveEditor: View {
         let submission = currentSubmission
 
         Task {
+            guard editorOwnerID == store.currentUser.id else { return }
             let result = await onSave(submission)
             await MainActor.run {
+                guard editorOwnerID == store.currentUser.id else { return }
                 isSaving = false
                 if let result {
                     if result.localDetailsWarning != nil {
@@ -14621,18 +14791,19 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func selectStatus(_ status: PlaceStatus) {
+        guard bindEditorOwnerIfNeeded() else { return }
         if presentedHasSelectedStatus, status == selectedStatus {
             return
         }
 
         if presentedHasSelectedStatus {
-            modeDrafts.store(currentModeDraft, for: selectedStatus)
+            modeDrafts.store(currentModeDraft, for: selectedStatus, ownerUserID: editorOwnerID)
         }
 
         let nextContext = sourceContext.preselectingStatus(status)
         context = nextContext
         selectedStatus = status
-        if let cachedDraft = modeDrafts.draft(for: status) {
+        if let cachedDraft = modeDrafts.draft(for: status, ownerUserID: editorOwnerID) {
             restoreModeDraft(cachedDraft)
         } else {
             applyDefaults(from: nextContext, preservingSharedPlaceDetails: true)
@@ -14704,6 +14875,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func removeSave() {
+        guard bindEditorOwnerIfNeeded() else { return }
         guard context.showsRemoveControl, !isSaving, !isRemoving else { return }
 
         isRemoving = true
@@ -16465,11 +16637,9 @@ private struct MapSaveUnifiedTagsSection: View {
     var body: some View {
         MapSaveQuestionBlock(title: block.title, tag: "optional") {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                selectionHeader
-
                 ScrollView(.vertical, showsIndicators: allOptions.count > maximumVisibleTagCount) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        ForEach(allOptions, id: \.self) { option in
+                        ForEach(allOptions) { option in
                             tagButton(option)
                         }
                     }
@@ -16481,37 +16651,6 @@ private struct MapSaveUnifiedTagsSection: View {
                 customTagControl
             }
         }
-    }
-
-    private var selectionHeader: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Text("your tags")
-                    .font(AstirTypography.label)
-                    .foregroundStyle(WanderTheme.textInk.color)
-
-                if !selectedValues.isEmpty {
-                    Text("\(selectedValues.count)")
-                        .font(.system(size: 10, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                        .frame(minWidth: 22, minHeight: 22)
-                        .background(WanderTheme.terracottaTint.color)
-                        .clipShape(Circle())
-                }
-            }
-
-            Text("Tap any that fit. Selected tags stay in place so you can review or change them.")
-                .font(AstirTypography.caption)
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.terracotta.color.opacity(0.28), lineWidth: 1)
-        )
     }
 
     private var gridColumns: [GridItem] {
@@ -16534,30 +16673,22 @@ private struct MapSaveUnifiedTagsSection: View {
         return CGFloat(rows) * 52 + CGFloat(rows - 1) * WanderTheme.spacing2
     }
 
-    private var allOptions: [String] {
-        let customSelections = selectedValues
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-
-        return block.options + customSelections
+    private var allOptions: [PlaceMemoryTagOption] {
+        PlaceMemoryTagPresentation.options(suggestions: block.options, selected: selectedValues)
     }
 
-    private func tagButton(_ option: String) -> some View {
-        let isSelected = selectedValues.contains {
-            $0.caseInsensitiveCompare(option) == .orderedSame
-        }
+    private func tagButton(_ option: PlaceMemoryTagOption) -> some View {
+        let isSelected = option.isSelected
 
         return Button {
-            onSelect(option)
+            onSelect(option.title)
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(option)
+                Text(option.title)
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.leading)
@@ -16579,7 +16710,7 @@ private struct MapSaveUnifiedTagsSection: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option) tag")
+        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option.title) tag")
         .accessibilityIdentifier(isSelected ? "save.tags.selected" : "save.tags.suggestion")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -16663,13 +16794,10 @@ private struct MapSaveUnifiedTagsSection: View {
             return
         }
 
-        if let existing = (block.options + Array(selectedValues))
-            .first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
-            if !selectedValues.contains(where: { $0.caseInsensitiveCompare(existing) == .orderedSame }) {
-                onSelect(existing)
-            }
-        } else {
-            onSelect(tag)
+        let key = PlaceMemoryTagPresentation.equivalenceKey(tag)
+        if !selectedValues.contains(where: { PlaceMemoryTagPresentation.equivalenceKey($0) == key }) {
+            let suggestion = block.options.first { PlaceMemoryTagPresentation.equivalenceKey($0) == key }
+            onSelect(suggestion ?? tag)
         }
 
         customTagText = ""

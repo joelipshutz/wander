@@ -1375,7 +1375,8 @@ final class WanderStoreTests: XCTestCase {
             note: "Stale remote note",
             ratingScore: 3,
             tags: [],
-            backfilledFromUserPlace: false
+            backfilledFromUserPlace: false,
+            attributeAnswersJSON: "[]"
         )
         let remoteWoodcat = await hydrateSyntheticCalendarVisits(
             in: store,
@@ -1456,7 +1457,8 @@ final class WanderStoreTests: XCTestCase {
                     note: "Remote note to edit",
                     ratingScore: 4,
                     tags: [],
-                    backfilledFromUserPlace: false
+                    backfilledFromUserPlace: false,
+                    attributeAnswersJSON: "[]"
                 ),
                 PlaceVisitResult(
                     visitID: cleanVisitID,
@@ -1465,7 +1467,8 @@ final class WanderStoreTests: XCTestCase {
                     note: "Clean remote note",
                     ratingScore: 3,
                     tags: [],
-                    backfilledFromUserPlace: false
+                    backfilledFromUserPlace: false,
+                    attributeAnswersJSON: "[]"
                 )
             ]
         )
@@ -6462,7 +6465,7 @@ final class WanderStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testPlusRepeatCheckInDraftKeepsLatestVisitDefaults() throws {
+    func testPlusRepeatCheckInDraftKeepsRatingButStartsWithUnansweredDetails() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
         let candidate = PlaceCandidate(
@@ -6502,7 +6505,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(draft.form.selectedRatingScore, 4)
-        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
+        XCTAssertTrue(draft.form.selectedAnswers.isEmpty, "A new visit asks for firsthand answers instead of copying the previous visit")
         XCTAssertTrue(draft.form.unifiedTags.isEmpty)
         XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
         XCTAssertEqual(draft.baselineVisitLocalID, latestVisit.localID)

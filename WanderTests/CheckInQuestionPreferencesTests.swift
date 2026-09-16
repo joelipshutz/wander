@@ -307,6 +307,53 @@ final class CheckInQuestionPreferencesTests: XCTestCase {
         XCTAssertEqual(try store.loadPrivateAnswers(ownerUserID: "a", userPlaceID: "parent", visitID: "local-visit"), [question.id: "yes"])
     }
 
+    func testLegacyConfigurationKeepsCustomQuestionsPrivate() throws {
+        let customID = "custom_question_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        let json = """
+        {"orderedQuestionIDs":["place_detail_outlets","\(customID)"],"customQuestions":[{"id":"\(customID)","prompt":"Plants?"}]}
+        """
+        var value = try JSONDecoder().decode(CheckInQuestionConfiguration.self, from: Data(json.utf8))
+        XCTAssertTrue(value.isStealth(questionID: customID))
+        XCTAssertFalse(value.isStealth(questionID: "place_detail_outlets"))
+        value.setStealth(false, questionID: customID)
+        value.setStealth(true, questionID: "place_detail_outlets")
+        let roundTrip = try JSONDecoder().decode(CheckInQuestionConfiguration.self, from: JSONEncoder().encode(value))
+        XCTAssertFalse(roundTrip.isStealth(questionID: customID))
+        XCTAssertTrue(roundTrip.isStealth(questionID: "place_detail_outlets"))
+    }
+
+    func testChangingStealthDefaultsDoesNotPublishOrRemoveHistoricalPrivateAnswers() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = CheckInQuestionPreferenceStore(defaults: defaults)
+        var value = configuration(store)
+        let custom = try value.addCustomQuestion(prompt: "Plants?", stealth: true)
+        try store.saveConfiguration(value, ownerUserID: "a", subtypeKey: "cafe")
+        try store.savePrivateAnswers([custom.id: "yes", "place_detail_outlets": "Plenty"], ownerUserID: "a", userPlaceID: "place", visitID: "visit")
+        value.setStealth(false, questionID: custom.id)
+        value.setStealth(false, questionID: "place_detail_outlets")
+        value.restoreSuggestedQuestions(defaultsIDs)
+        try store.saveConfiguration(value, ownerUserID: "a", subtypeKey: "cafe")
+        XCTAssertEqual(try store.loadPrivateAnswers(ownerUserID: "a", userPlaceID: "place", visitID: "visit"), [custom.id: "yes", "place_detail_outlets": "Plenty"])
+        XCTAssertThrowsError(try store.savePrivateAnswers(["place_detail_outlets": "Invented answer"], ownerUserID: "a", userPlaceID: "place", visitID: "visit"))
+        XCTAssertThrowsError(try store.savePrivateAnswers([custom.id: "yes"], ownerUserID: "b", userPlaceID: "place", visitID: "visit"))
+    }
+
+    func testRecoveringOwnedSharedDefinitionPreservesRecurringListAndAllowsPrivateEdit() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = CheckInQuestionPreferenceStore(defaults: defaults)
+        let question = CheckInCustomQuestion(id: "custom_question_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", prompt: "Plants?")
+        try store.retainRecoveredDefinitions([question], ownerUserID: "a", subtypeKey: "cafe", defaultQuestionIDs: defaultsIDs)
+        XCTAssertEqual(configuration(store).orderedQuestionIDs, defaultsIDs)
+        XCTAssertEqual(store.allCustomQuestions(ownerUserID: "a"), [question])
+        XCTAssertTrue(store.allCustomQuestions(ownerUserID: "b").isEmpty)
+        try store.savePrivateAnswers([question.id: "no"], ownerUserID: "a", userPlaceID: "place", visitID: "visit")
+        XCTAssertEqual(store.configuredSubtypeKeys(ownerUserID: "a"), ["cafe"])
+        try store.retainRecoveredDefinitions([question], ownerUserID: "a", subtypeKey: "park", defaultQuestionIDs: [])
+        XCTAssertEqual(store.configuredSubtypeKeys(ownerUserID: "a"), ["cafe"])
+    }
+
     private final class NotificationCounter: @unchecked Sendable {
         private let lock = NSLock()
         private var value = 0

@@ -103,6 +103,17 @@ async function main() {
         console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
         await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - owner visit details preserve answers without exposing another user’s history");
+        // Isolate pgTAP's per-transaction plan from the later history suite.
+        await client.query("savepoint question_snapshot_smoke");
+        try {
+          await client.query(transactionBody(loadStrictPgTapSQL(
+            new URL("../supabase/tests/question_snapshot_privacy.sql", import.meta.url),
+          ), "rollback"));
+        } finally {
+          await client.query("rollback to savepoint question_snapshot_smoke");
+          await client.query("release savepoint question_snapshot_smoke");
+        }
+        console.log("ok - new and legacy invitations exclude firsthand question answers");
         await runCalendarReservationNotificationSmokeChecks(
           client,
           smokeUserID,
@@ -1203,6 +1214,12 @@ function runLinkedSmokeChecks(
     ),
     "rollback",
   )}\nrollback;`;
+  const questionSnapshotSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(
+      new URL("../supabase/tests/question_snapshot_privacy.sql", import.meta.url),
+    ),
+    "rollback",
+  )}\nrollback;`;
   try {
     const linkedSQL = migrationTestPath
       ? `begin;\n${migrationPreviewSQL}\n${migrationPreviewTestSQL}\nrollback;`
@@ -1212,7 +1229,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");

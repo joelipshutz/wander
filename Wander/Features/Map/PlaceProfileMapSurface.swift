@@ -99,6 +99,7 @@ struct PlaceProfileFullScreen: View {
     let action: PlaceSheetAction
     let initialSection: PlaceProfileInitialSection
     let usesInteractiveHorizontalDismissal: Bool
+    let hidesTabBar: Bool
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
@@ -124,6 +125,7 @@ struct PlaceProfileFullScreen: View {
         attachedSaveDraft: PlaceSaveDraft? = nil,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
+        hidesTabBar: Bool = true,
         onBack: @escaping () -> Void,
         onAction: @escaping () -> Void,
         onAddToList: (() -> Void)? = nil,
@@ -141,6 +143,7 @@ struct PlaceProfileFullScreen: View {
         self.action = action
         self.initialSection = initialSection
         self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
+        self.hidesTabBar = hidesTabBar
         self.onBack = onBack
         self.onAction = onAction
         self.onAddToList = onAddToList
@@ -199,7 +202,7 @@ struct PlaceProfileFullScreen: View {
         )
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
         .onChange(of: currentUserActionState) { _, state in
             guard let snapshot = saveActionSnapshot,
                   snapshot.usesFloatingActions,
@@ -1039,6 +1042,15 @@ private struct PlaceProfilePreviewCard: View {
             )
             try Task.checkCancellation()
 
+            // Show the photo (including fallbacks) before category enrichment,
+            // which can persist the store and wait for remote save retries.
+            await prepareRemoteCard(
+                using: remotePhoto,
+                localPhoto: localPhoto,
+                resolutionKey: resolutionKey
+            )
+            guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+
             if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
                     placeID: place.id,
@@ -1047,24 +1059,31 @@ private struct PlaceProfilePreviewCard: View {
                     backend: backend
                 )
             }
-
-            if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
-                return
-            }
-
-            if remotePhoto.isGooglePlacesPhoto {
-                let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
-                if await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
-                    return
-                }
-            }
-
-            await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         } catch is CancellationError {
             return
         } catch {
             await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         }
+    }
+
+    private func prepareRemoteCard(
+        using remotePhoto: PlacePhoto,
+        localPhoto: PlacePhoto?,
+        resolutionKey: String
+    ) async {
+        if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
+            return
+        }
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+
+        if remotePhoto.isGooglePlacesPhoto,
+           let visibleUserPhoto = try? await backend.visibleUserPlacePhoto(for: place.photoRequest),
+           await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
+            return
+        }
+
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+        await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
     }
 
     @discardableResult

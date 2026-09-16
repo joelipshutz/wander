@@ -1,0 +1,25 @@
+{
+  "offline_branch": {
+    "new_screen_count": 7,
+    "checks_gate_offline_admit": true,
+    "pending_not_server_validated": true,
+    "sync_disabled_offline": true,
+    "conflict_error_treatment": true,
+    "staff_web_surface": true
+  },
+  "screens": 172,
+  "primary_native_mocks": 26,
+  "primary_wireframes": 146,
+  "visible_default_ui_images": 186,
+  "all_inline_images_decoded": true,
+  "desktop_in_place_expand": true,
+  "mobile_in_place_expand": true,
+  "external_requests": [],
+  "new_tabs_on_expand": 0,
+  "search_preserves_all_screens": true,
+  "all_previews_visible_in_print": true,
+  "motion_duration_seconds": 5.603333,
+  "errors": [],
+  "html_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "verified_at": "2026-09-15T20:00:58.343Z"
+}

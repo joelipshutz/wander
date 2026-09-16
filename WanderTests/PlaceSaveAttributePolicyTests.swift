@@ -59,4 +59,44 @@ final class PlaceSaveAttributePolicyTests: XCTestCase {
             original: [], answers: ["custom_question_123": ["yes"]], tags: [], tagKey: "park_tags", status: .been
         ).isEmpty)
     }
+
+    func testOnlyExplicitSharedCustomChannelProducesAPublicEnvelope() throws {
+        let question = CheckInCustomQuestion(id: "custom_question_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", prompt: "Plants?")
+        let result = PlaceSaveAttributePolicy.attributes(
+            original: [], answers: [question.id: ["yes"]], tags: [], tagKey: "coffee_tags", status: .been,
+            customQuestions: [question]
+        )
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(SharedCheckInQuestion.decode(try XCTUnwrap(result.first))?.answer, "yes")
+        XCTAssertTrue(PlaceSaveAttributePolicy.attributes(
+            original: [], answers: [question.id: ["yes"]], tags: [], tagKey: "coffee_tags", status: .wannaGo,
+            customQuestions: [question]
+        ).isEmpty)
+    }
+
+    func testStealthSuppressesBothStalePublicChannelsAndOriginalSharedAttributes() throws {
+        let question = CheckInCustomQuestion(id: "custom_question_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", prompt: "Plants?")
+        let custom = try XCTUnwrap(SharedCheckInQuestion.encode(question: question, answer: "yes"))
+        let catalog = PlaceAttributeDraft(questionKey: "place_detail_outlets", valueType: "single_choice", stringValue: "Plenty")
+        let label = PlaceAttributeDraft(questionKey: "personal_labels", valueType: "personal_label", stringValues: ["Weekend"])
+        let result = PlaceSaveAttributePolicy.attributes(
+            original: [custom, catalog, label], answers: [question.id: ["yes"], catalog.questionKey: ["Plenty"]],
+            tags: ["Weekend"], tagKey: "coffee_tags", status: .been, customQuestions: [question],
+            privateQuestionIDs: [question.id, catalog.questionKey]
+        )
+        XCTAssertEqual(result, [label])
+        XCTAssertTrue(PlaceSaveAttributePolicy.attributes(
+            original: [custom], answers: [question.id: []], tags: [], tagKey: "coffee_tags", status: .been
+        ).isEmpty)
+        XCTAssertEqual(PlaceSaveAttributePolicy.attributes(
+            original: [custom], answers: [:], tags: [], tagKey: "coffee_tags", status: .been
+        ), [custom])
+    }
+
+    func testLegacyPrivateCustomKeyIsNeverRepublishedAsAnOrdinaryField() {
+        let legacy = PlaceAttributeDraft(questionKey: "custom_question_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", valueType: "text", stringValue: "yes")
+        XCTAssertTrue(PlaceSaveAttributePolicy.attributes(
+            original: [legacy], answers: [:], tags: [], tagKey: "coffee_tags", status: .been
+        ).isEmpty)
+    }
 }

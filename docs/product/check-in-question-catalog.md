@@ -2,788 +2,852 @@
 
 This inventory covers every selectable place subtype. Each row is the starting set for an optional Check-in: exactly three questions, with no answers selected. People can customize their set. Leaving a question unanswered means unknown; it does not mean “no.”
 
-The current catalog has **579 selectable subcategories across 14 categories**, **277 reusable questions**, and **47 shared question sets within categories**. There are 234 questions with three choices, 39 with four, and 4 with five. The extra question definitions are available in the optional library; they do not lengthen the initial three-question set.
+The catalog has **590 selectable subcategories across 14 categories**, **236 questions available for new selections**, and **51 historical definitions retained for saved answers**. There are 287 definitions in total. The available library has 3 questions with 2 choices, 197 questions with 3 choices, 32 questions with 4 choices, 4 questions with 5 choices. Optional library questions do not lengthen the initial three-question set.
 
-Questions distinguish the visit from a lasting rule. “Booked ahead” records what the person did. The separate optional “Booking guidance” question records guidance explicitly given by staff or signs. Missing an introduction does not imply that prior experience is required. Descriptions such as outdoor dog access do not assert indoor access or the existence of a patio.
+All 277 original definitions were reviewed for practical, concise wording. Ingredient, ordering and browsing-space trivia has been retired from new selections. Existing keys and all of their stored option values remain compatible. The 10 new questions describe new facts; an old Pilates apparatus answer is never converted into an answer about whether someone attended a reformer class.
 
-This table is generated from the Swift catalog definitions and the selectable taxonomy, in picker order. Change the source catalog first, then regenerate the inventory. Source files: [taxonomy](../../Wander/Services/WanderPlaceCategory.swift), [catalog contract](../../Wander/Features/Add/PlaceCheckInQuestionCatalog.swift), [core questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreQuestions.swift), [core profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreProfiles.swift), [everyday questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayQuestions.swift), [everyday profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayProfiles.swift).
+Questions distinguish a visit from a lasting rule. “Booked ahead” records what the person did. “Booking guidance” records guidance explicitly given by staff or signs. A class being busy describes that visit; it does not establish a fixed class size. Posted dog rules can record leash requirements or no pet dogs. Indoor/outdoor dog access is used for venues with those areas; an outdoor-only route does not receive indoor-access choices. No sign found establishes no permission.
+
+This table is generated from the Swift catalog definitions and selectable taxonomy. Change the source first, then regenerate. Source files: [taxonomy](../../Wander/Services/WanderPlaceCategory.swift), [catalog contract](../../Wander/Features/Add/PlaceCheckInQuestionCatalog.swift), [core questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreQuestions.swift), [core profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreProfiles.swift), [everyday questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayQuestions.swift), [everyday profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayProfiles.swift).
 
 ## Core examples
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Pilates studio | What Pilates equipment did the session use? | How were first-timers introduced to the session? | How many people trained together? |
-| CrossFit gym | Were scaled versions of the workout explained? | How was training structured? | Could a visitor train here? |
-| Functional fitness studio | How was the session organized? | How was technique feedback offered? | How many people trained together? |
-| Volleyball court | What surface did you play on? | Was a net ready to use? | How did you get time on a court? |
-| Park | How much shade did you find? | What bathroom access did you find? | What surface did you use most? |
-| Beach | Could you rinse sand off? | How much shade did you find? | What was the route down to the beach like? |
-| Trail | How easy was the route to follow? | How steep was the route you took? | What surface did you use most? |
+| Coffee shop | Laptops welcome? | Power outlets? | Dogs allowed? |
+| Cafe | Laptops welcome? | Outdoor seating? | Dogs allowed? |
+| Thai | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Pilates studio | Was it a reformer class? | Was the class busy? | Easy to book? |
+| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass or members only? |
+| Functional fitness studio | Coached circuits or individual training? | Did coaches give technique feedback? | Was it busy? |
+| Volleyball court | Sand, grass or hard court? | Volleyball net ready to use? | Open play or book a court? |
+| Beach tennis | Open play or book a court? | Equipment provided? | Court lights on for evening play? |
+| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | How much shade did you find? |
+| Park | Posted dog rules? | How much shade did you find? | Bathroom access? |
+| Beach | Posted dog rules? | How much shade did you find? | Rinse facilities? |
+| Surf | Surfboard rental available? | Was it busy? | Posted dog rules? |
+| Surf break | Crowded in the water? | Rinse facilities? | Posted dog rules? |
+| Stadium | Was your seat covered? | Reserved seats or first come? | Bags checked or stored on entry? |
+| Arena | How was the sound from your spot? | Reserved seats or first come? | Bags checked or stored on entry? |
 
-A park receives shade, bathroom and path questions. Rinse facilities are specific to beaches. Pilates asks about apparatus and introduction; CrossFit asks about workout scaling and session structure; unbranded functional training has its own set. Volleyball asks about surface, net and court access.
+Dogs, laptops and outlets lead the coffee-shop set. Pilates asks about reformer class, busyness and booking; CrossFit asks about workout adaptations, coached WOD/open gym and drop-in access. Parks receive dog rules, shade and bathrooms. Rinse facilities remain specific to beaches and surf breaks.
+
+New types have one picker home: Beach tennis, Beach volleyball, Padel court, Climbing gym and Surf school in Wellness & Fitness; Stadium and Arena in Things To Do; Surf, Surf break and Kayak/canoe rental in Outdoors & Nature; Surf shop in Shopping. Exact provider type tokens preserve these distinctions. MapKit’s broad Surfing type maps to Surf, not to an inferred surf break or school. The existing Volleyball type remains Volleyball court.
 
 ## Fallback contract
 
-Every selectable subtype must have an explicit catalog row. The exhaustive catalog test checks the actual picker and rejects missing rows, duplicate scopes or question references that do not resolve. Runtime fallback is resilience for a user-written or unrecognized subtype; it does not count as curation for a newly added selectable subtype.
+Every selectable subtype must have an explicit catalog row. Exhaustive tests enumerate the actual picker and reject missing rows, duplicate scopes, retired defaults or references that do not resolve. A user-written or unrecognized subtype keeps its own name and customization scope and receives a category fallback. Fallback does not count as curation for a new selectable subtype.
 
-When no subtype is supplied, the category’s normal default subtype is used. “Restaurant” is an additional category default rather than a picker entry:
+For restaurants, the selected Food type can correct a culinary label such as Ramen to Thai. Explicit venue formats such as Taco truck and Food court retain their practical question set when paired with a cuisine; a newly selected venue format takes precedence. Legacy formats such as Buffet and Food truck retain a separate preference scope and use the category fallback if they have no curated row. This resolver changes question context only, not stored category data.
+
+When no subtype is supplied, the category’s normal default subtype is used. Restaurant is an additional category default rather than a picker entry:
 
 | Default | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Restaurant | How did you arrange this visit? | How easy was it to talk? | How were the vegetarian meal choices? |
+| Restaurant | Dogs allowed? | Outdoor seating? | What booking guidance did staff or signs give? |
 
-A custom subtype keeps its own name and customization scope, while starting with the following category fallback. An unrecognized primary category uses the final Place row. These fallbacks also have no selected answers.
+An unrecognized primary category uses Place. These fallback sets also have no selected answers.
 
 | Category fallback | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Restaurants & Food | How did you arrange this visit? | How easy was it to talk? | How were the vegetarian meal choices? |
-| Coffee, Tea, & Sweets | What was the laptop setup? | Could you plug in? | Where were pet dogs allowed? |
-| Bars & Nightlife | How easy was it to talk? | What were the alcohol-free choices like? | What outdoor seating was there? |
-| Outdoors & Nature | How much shade did you find? | What bathroom access did you find? | What surface did you use most? |
-| Things To Do | Was there an admission charge? | How much time would you set aside? | Was there a step-free way in? |
-| Shopping | How much room was there to browse? | Could you get help choosing? | How could you pay? |
-| Wellness & Fitness | Was there a step-free way in? | How long did you wait? | What bathroom access did you find? |
-| Stays | How quiet was your room when you rested? | Was luggage storage available? | Could you adjust your room temperature? |
-| Services & Errands | How did you arrange the visit? | How long did you wait? | Were prices clear before you paid? |
-| Travel & Transit | Was it easy to find the right entrance or area? | Somewhere to sit? | What bathroom access did you find? |
-| Work & Education | How did the Wi-Fi work? | Could you plug in? | How easy was it to talk? |
-| Civic & Faith | How did visitor entry work? | Was there a step-free way in? | Were visiting rules clearly explained? |
-| Areas & Addresses | How did you get around the part you explored? | Could you sit down without buying anything? | Was it easy to find the right entrance or area? |
-| Facilities & Other | Was there a step-free way in? | Somewhere to sit? | What bathroom access did you find? |
-| Place | Was there a step-free way in? | Somewhere to sit? | What bathroom access did you find? |
-
+| Restaurants & Food | Dogs allowed? | Outdoor seating? | What booking guidance did staff or signs give? |
+| Coffee, Tea, & Sweets | Laptops welcome? | Power outlets? | Dogs allowed? |
+| Bars & Nightlife | Easy to have a conversation? | Good alcohol-free options? | Outdoor seating? |
+| Outdoors & Nature | Posted dog rules? | How much shade did you find? | Bathroom access? |
+| Things To Do | Entry fee? | How much time would you allow? | Step-free entrance? |
+| Shopping | Dogs allowed? | Help choosing available? | Card, cash or app? |
+| Wellness & Fitness | Step-free entrance? | Long wait? | Bathroom access? |
+| Stays | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
+| Services & Errands | Walk-in or appointment? | Long wait? | Clear prices before paying? |
+| Travel & Transit | Easy to find your way? | Somewhere to sit? | Bathroom access? |
+| Work & Education | How was the Wi-Fi? | Power outlets? | Easy to have a conversation? |
+| Civic & Faith | How did visitor entry work? | Step-free entrance? | Clear visitor rules? |
+| Areas & Addresses | How did you get around? | Seating without a purchase? | Easy to find your way? |
+| Facilities & Other | Step-free entrance? | Somewhere to sit? | Bathroom access? |
+| Place | Step-free entrance? | Somewhere to sit? | Bathroom access? |
 
 ## Shared sets and rationale
 
-Sharing questions is deliberate when labels describe equivalent practical needs. It does not assert that the places themselves have the same features. Broad national cuisines often do not provide enough information to justify different facilities or service assumptions. A specific format—ramen, hot pot, a taco truck, Pilates, or a volleyball court—provides firmer context for specialized questions.
+There are 57 repeated question sets within categories, treating different order as the same set. Shared defaults reflect overlapping practical needs, not identical places or guaranteed facilities. Broad national cuisine labels do not establish recipes, diet or service. Their defaults ask useful dining questions without manufacturing regional distinctions. Activity and service formats get specialized questions when the type provides that context.
 
-The following lists every repeated set within a category, treating different question order as the same set. Cabin, cottage, campground and RV-park defaults also remain consistent when those identical subtypes occur under both Outdoors and Stays.
+Cabin, cottage, campground and RV-park defaults also stay consistent when those identical subtypes occur under both Outdoors and Stays. Every repeated within-category set is listed below.
 
 | Category | Subcategories sharing a set | Rationale |
 | --- | --- | --- |
-| Areas & Addresses | Locality/city; Region; Country | Answers describe only the area the person visited or explored, not conditions across an entire district or country. |
-| Areas & Addresses | Condominium complex; Address | Answers describe only the area the person visited or explored, not conditions across an entire district or country. |
-| Bars & Nightlife | Jazz club; Live music | Shared venue format and practical needs: sound, entry, show seating. |
-| Bars & Nightlife | Pub; Gastropub | Shared venue format and practical needs: beer selection, food, conversation. |
-| Bars & Nightlife | Club; Disco; Nightclub | Shared venue format and practical needs: coat storage, dancing, entry. |
-| Civic & Faith | Synagogue; Place of worship | Visitor logistics apply across these labels without assuming a visitor’s identity or a venue’s rules. |
-| Civic & Faith | Church; Mosque | Visitor logistics apply across these labels without assuming a visitor’s identity or a venue’s rules. |
-| Coffee, Tea, & Sweets | Candy store; Chocolate shop; Confectionery | Equivalent product and visit needs: dietary information, gifts, samples & tastings. |
-| Coffee, Tea, & Sweets | Ice cream; Gelato | Equivalent product and visit needs: frozen treats, seating, toppings. |
-| Outdoors & Nature | Trail; Hike | Alternative names for the same route or viewing-stop needs. |
-| Outdoors & Nature | Viewpoint; Overlook | Alternative names for the same route or viewing-stop needs. |
-| Restaurants & Food | Portuguese; Basque | A broad cuisine name does not establish a narrower service format. Shared practical questions cover arranging the visit, dietary information, menu help. |
-| Restaurants & Food | Yakiniku; Japanese BBQ | Equivalent table-cooking formats share visit arrangement, smoke and cooking setup. |
-| Restaurants & Food | Malaysian; Singaporean; Indonesian; Filipino; Burmese; Cambodian; Laotian; Asian | A broad cuisine name does not establish a narrower service format. Shared practical questions cover dietary information, menu help, portions. |
-| Restaurants & Food | Chinese; Cantonese | A broad cuisine name does not establish a narrower service format. Shared practical questions cover group seating, menu help, sharing. |
-| Restaurants & Food | German; Austrian; Bavarian; Swiss; American; Canadian | A broad cuisine name does not establish a narrower service format. Shared practical questions cover group seating, portions, vegetarian choices. |
-| Restaurants & Food | Dutch; Belgian | A broad cuisine name does not establish a narrower service format. Shared practical questions cover lunch, menu help, vegetarian choices. |
-| Restaurants & Food | British; Irish | A broad cuisine name does not establish a narrower service format. Shared practical questions cover lunch, conversation, vegetarian choices. |
-| Restaurants & Food | Australian; New Zealand; Fijian; Samoan; Tongan | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, portions, sharing. |
-| Restaurants & Food | Caribbean; Jamaican; Puerto Rican; Dominican; Haitian; Panamanian; Cuban; Hawaiian | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, portions, takeaway. |
-| Restaurants & Food | Somali; Kenyan; Nigerian; Ghanaian; Senegalese; South African; African; Polish; Ukrainian; Russian; Czech; Slovak; Hungarian; Romanian; Croatian; Serbian; Bosnian; Bulgarian; Albanian; Slovenian; Lithuanian; European; Eastern European | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, portions, vegetarian choices. |
-| Restaurants & Food | Scandinavian; Swedish; Norwegian; Finnish; Danish | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, menu format, vegetarian choices. |
-| Restaurants & Food | Afghan; Middle Eastern; Lebanese; Persian; Turkish; Israeli; Palestinian; Syrian; Iraqi; Jordanian; Yemeni | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, shared platters, vegetarian choices. |
-| Restaurants & Food | Korean; Pakistani; Sri Lankan; Bangladeshi; Nepalese; Tibetan; Mongolian; Georgian; Armenian; Uzbek; Egyptian; Moroccan; Tunisian; Algerian; Brazilian; Argentinian; Colombian; Chilean; Peruvian; Venezuelan; Ecuadorian; Bolivian; Uruguayan; Salvadoran; Guatemalan; South American; Latin American | A broad cuisine name does not establish a narrower service format. Shared practical questions cover menu help, sharing, vegetarian choices. |
-| Restaurants & Food | Mediterranean; Greek | A broad cuisine name does not establish a narrower service format. Shared practical questions cover outdoor seating, sharing, vegetarian choices. |
-| Restaurants & Food | Southwestern; Cajun | A broad cuisine name does not establish a narrower service format. Shared practical questions cover portions, spice, vegetarian choices. |
-| Restaurants & Food | Ethiopian; Eritrean | A broad cuisine name does not establish a narrower service format. Shared practical questions cover ordering, shared platters, vegetarian choices. |
-| Restaurants & Food | Thai; Indian; North Indian; South Indian; Mexican | A broad cuisine name does not establish a narrower service format. Shared practical questions cover sharing, spice, vegetarian choices. |
-| Services & Errands | Hair salon; Nail salon | Equivalent service logistics: appointments, payment, wait. Different trade labels do not justify invented answers or irrelevant collection questions. |
-| Services & Errands | Moving; Electrician; Plumber; Painter | Equivalent service logistics: booking channel, cost estimate, service timing. Different trade labels do not justify invented answers or irrelevant collection questions. |
-| Shopping | Store; Asian grocery; Beauty supply | Equivalent shopping needs: browsing space, payment, staff help. The subtype does not establish extra services. |
-| Shopping | General store; Art supply store; Craft store | Equivalent shopping needs: browsing space, prices, staff help. The subtype does not establish extra services. |
-| Shopping | Cosmetics store; Cosmetics | Equivalent shopping needs: prices, testers and samples, staff help. The subtype does not establish extra services. |
-| Stays | Airbnb; Vrbo | Rental platform names do not establish different accommodation amenities. |
-| Things To Do | Concert hall; Philharmonic hall | Shared visitor format and practical needs: sound, coat storage, show seating. |
-| Things To Do | Historical place; Historical landmark | Shared visitor format and practical needs: tours, context, entrance. |
-| Things To Do | Plaza; Town square | Shared visitor format and practical needs: bathroom, seating, shade. |
-| Things To Do | Amusement park; Roller coaster | Shared visitor format and practical needs: ride queues, participation rules, belongings. |
-| Things To Do | Theater; Performing arts theater | Shared visitor format and practical needs: show seating, sightlines, entrance. |
-| Travel & Transit | Car dealer; Truck dealer | Equivalent dealership visit logistics: appointments, parking, staff help. |
-| Wellness & Fitness | Gym; Fitness center | These broad gym labels do not establish that coached classes exist. Studio formats have separate questions. |
-| Wellness & Fitness | Pharmacy; Drugstore | Shared facility or appointment logistics; no invented distinction about treatment, diagnosis or effectiveness. |
-| Wellness & Fitness | Physiotherapist; Physical therapy | Shared facility or appointment logistics; no invented distinction about treatment, diagnosis or effectiveness. |
-| Wellness & Fitness | Doctor; Dermatologist; Foot care; Podiatrist; Mental health/therapy | Shared facility or appointment logistics; no invented distinction about treatment, diagnosis or effectiveness. |
-| Wellness & Fitness | Dentist; Dental clinic; Ophthalmologist | Shared facility or appointment logistics; no invented distinction about treatment, diagnosis or effectiveness. |
-| Work & Education | School; Secondary school | The same visitor-arrival needs apply; no student or institutional affiliation is requested. |
-| Work & Education | Academic department; Educational institution | The same visitor-arrival needs apply; no student or institutional affiliation is requested. |
+| Areas & Addresses | Condominium complex; Address | Answers describe only the part the person explored, not conditions across the whole district or country. |
+| Areas & Addresses | Locality/city; Region; Country | Answers describe only the part the person explored, not conditions across the whole district or country. |
+| Bars & Nightlife | Club; Disco; Nightclub | Equivalent drinking, listening, dancing or entry needs justify the shared set; actual answers remain optional. |
+| Bars & Nightlife | Jazz club; Live music | Equivalent drinking, listening, dancing or entry needs justify the shared set; actual answers remain optional. |
+| Civic & Faith | Church; Mosque | Visitor logistics are shared; no beliefs, attendance purpose or religious practices are inferred. |
+| Civic & Faith | Synagogue; Place of worship | Visitor logistics are shared; no beliefs, attendance purpose or religious practices are inferred. |
+| Coffee, Tea, & Sweets | Acai; Bakery; Pastry shop | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
+| Coffee, Tea, & Sweets | Coffee shop; Coffee lounge | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
+| Coffee, Tea, & Sweets | Coffee stand; Smoothie shop | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
+| Coffee, Tea, & Sweets | Ice cream; Gelato | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
+| Coffee, Tea, & Sweets | Tea store; Candy store; Chocolate shop; Confectionery | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
+| Outdoors & Nature | City park; Garden; Fishing pier | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
+| Outdoors & Nature | Hiking area; Trail; Hike | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
+| Outdoors & Nature | Park; Lake | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
+| Outdoors & Nature | Viewpoint; Overlook | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
+| Outdoors & Nature | Wildlife refuge; Botanical garden | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
+| Restaurants & Food | Asian fusion; Mediterranean; Greek; Burgers | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Australian; New Zealand; Fijian; Samoan; Tongan; Chicken | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Bao buns; Taco | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | British; Irish; Bistro | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Californian; Vegan | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Chinese; Cantonese | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Dutch; Belgian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | German; Austrian; Bavarian; Swiss; American; Canadian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Gyro; Fish & chips; Hot dogs; Taco stand | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Italian; Steakhouse | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Kebab; Caribbean; Jamaican; Puerto Rican; Dominican; Haitian; Panamanian; Cuban; Hawaiian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Korean; Pakistani; Sri Lankan; Bangladeshi; Nepalese; Tibetan; Mongolian; Georgian; Armenian; Uzbek; Afghan; Middle Eastern; Lebanese; Persian; Turkish; Israeli; Palestinian; Syrian; Iraqi; Jordanian; Yemeni; Egyptian; Moroccan; Tunisian; Algerian; Ethiopian; Eritrean; Brazilian; Argentinian; Colombian; Chilean; Peruvian; Venezuelan; Ecuadorian; Bolivian; Uruguayan; Salvadoran; Guatemalan; South American; Latin American | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Malaysian; Singaporean; Indonesian; Filipino; Burmese; Cambodian; Laotian; Asian; Salad | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Noodles; Somali; Kenyan; Nigerian; Ghanaian; Senegalese; South African; African; Polish; Ukrainian; Russian; Czech; Slovak; Hungarian; Romanian; Croatian; Serbian; Bosnian; Bulgarian; Albanian; Slovenian; Lithuanian; European; Eastern European; Tex-Mex | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Portuguese; Basque | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Scandinavian; Swedish; Norwegian; Finnish; Danish | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Taco truck; Bagel | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Thai; Indian; North Indian; South Indian; Mexican; Southwestern; Cajun | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Vietnamese; Dumplings; Taiwanese; Burrito; Soup | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Restaurants & Food | Yakiniku; Japanese BBQ | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
+| Services & Errands | Hair salon; Nail salon | Equivalent appointments or on-site services share scheduling, payment or estimate needs. |
+| Services & Errands | Moving; Electrician; Plumber; Locksmith; Painter | Equivalent appointments or on-site services share scheduling, payment or estimate needs. |
+| Shopping | Art supply store; Craft store | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
+| Shopping | Asian grocery; Beauty supply | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
+| Shopping | Cosmetics store; Cosmetics | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
+| Shopping | General store; Pet store | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
+| Stays | Airbnb; Vrbo | Equivalent rental formats share practical arrival, kitchen and room questions. |
+| Things To Do | Amusement park; Roller coaster | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
+| Things To Do | Concert hall; Philharmonic hall | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
+| Things To Do | Historical place; Historical landmark | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
+| Things To Do | Plaza; Town square | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
+| Things To Do | Theater; Performing arts theater | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
+| Travel & Transit | Bus station; Transit station | Equivalent travel or vehicle-purchase settings share arrival and service needs. |
+| Travel & Transit | Car dealer; Truck dealer | Equivalent travel or vehicle-purchase settings share arrival and service needs. |
+| Wellness & Fitness | Dentist; Dental clinic; Ophthalmologist | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
+| Wellness & Fitness | Doctor; Dermatologist; Foot care; Podiatrist; Mental health/therapy | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
+| Wellness & Fitness | Gym; Fitness center | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
+| Wellness & Fitness | Pharmacy; Drugstore | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
+| Wellness & Fitness | Physiotherapist; Physical therapy | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
+| Work & Education | Academic department; Educational institution | Equivalent learning or visitor settings share entry, directions and facility questions. |
+| Work & Education | School; Secondary school | Equivalent learning or visitor settings share entry, directions and facility questions. |
 
 ## Complete selectable inventory
 
-### Restaurants & Food
-
-174 selectable subcategories.
+### Restaurants & Food (174)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Thai | Could you choose the heat level? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Vietnamese | Could you adjust herbs or toppings? | How were the vegetarian meal choices? | Could you get food to take away? |
-| Chinese | Did the food work well for sharing? | How did seating a group work? | Was it easy to choose what to order? |
-| Korean | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Japanese | What menu format was available? | Could you eat at a counter? | How were the vegetarian meal choices? |
-| Indian | Could you choose the heat level? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Asian fusion | Could you make a meal of small plates? | How clearly were ingredients or dietary options labeled? | How easy was it to talk? |
-| Sushi | How could you order sushi? | Could you eat at a counter? | How did you arrange this visit? |
-| Ramen | What broth choices were there? | Could you choose your noodles? | How long did you wait? |
-| Dumplings | How could you try the dumplings? | How were the vegetarian meal choices? | Could you get food to take away? |
-| Bao buns | Could you mix bao fillings? | How were the vegetarian meal choices? | Somewhere to sit? |
-| Noodles | Could you choose your noodles? | How were the vegetarian meal choices? | What kind of meal did a usual order make? |
-| Dim sum | How was dim sum ordered? | Did the food work well for sharing? | How long did you wait? |
-| Hot pot | Could you choose more than one broth? | What broth choices were there? | How smoky did the space feel? |
-| Cantonese | Did the food work well for sharing? | How did seating a group work? | Was it easy to choose what to order? |
-| Taiwanese | Was it easy to choose what to order? | How were the vegetarian meal choices? | Could you get food to take away? |
-| Izakaya | Could you make a meal of small plates? | How easy was it to talk? | How did you arrange this visit? |
-| Yakitori | How were skewers ordered? | Could you eat at a counter? | How smoky did the space feel? |
-| Yakiniku | Was anything cooked at your table? | How smoky did the space feel? | How did you arrange this visit? |
-| North Indian | Could you choose the heat level? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| South Indian | Could you choose the heat level? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Pakistani | Was it easy to choose what to order? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Sri Lankan | Was it easy to choose what to order? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Bangladeshi | Was it easy to choose what to order? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Nepalese | Was it easy to choose what to order? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Malaysian | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Singaporean | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Indonesian | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Filipino | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Burmese | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Cambodian | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Laotian | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Asian | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Tibetan | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Mongolian | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Georgian | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Armenian | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Uzbek | Did the food work well for sharing? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Mongolian BBQ | Was anything cooked at your table? | How did you order? | How clearly were ingredients or dietary options labeled? |
-| Korean BBQ | Was anything cooked at your table? | How smoky did the space feel? | How did seating a group work? |
-| Japanese BBQ | Was anything cooked at your table? | How smoky did the space feel? | How did you arrange this visit? |
-| Japanese curry | How did curry orders come? | Could you choose the heat level? | Could you eat at a counter? |
-| Tonkatsu | What menu format was available? | How did fried food hold up to takeaway? | Could you eat at a counter? |
-| Afghan | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Middle Eastern | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Lebanese | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Persian | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Turkish | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Israeli | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Palestinian | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Syrian | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Iraqi | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Jordanian | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Yemeni | Could you order a platter for the table? | How were the vegetarian meal choices? | Was it easy to choose what to order? |
-| Egyptian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Moroccan | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Tunisian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Algerian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Ethiopian | Could you order a platter for the table? | How were the vegetarian meal choices? | How did you order? |
-| Eritrean | Could you order a platter for the table? | How were the vegetarian meal choices? | How did you order? |
-| Somali | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Kenyan | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Nigerian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Ghanaian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Senegalese | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| South African | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| African | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Falafel | How were the vegan meal choices? | Could you try several dips or sides? | Could you get food to take away? |
-| Gyro | What kind of meal did a usual order make? | Could you get food to take away? | Somewhere to sit? |
-| Kebab | What was the grilled-food selection like? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Shawarma | What kind of meal did a usual order make? | How did you order? | Could you get food to take away? |
-| Halal | How was halal information provided? | How were the vegetarian meal choices? | How did seating a group work? |
-| Italian | What menu format was available? | How was the by-the-glass selection? | How did you arrange this visit? |
-| Mediterranean | How were the vegetarian meal choices? | Did the food work well for sharing? | What outdoor seating was there? |
-| Greek | Did the food work well for sharing? | How were the vegetarian meal choices? | What outdoor seating was there? |
-| French | What menu format was available? | How was the by-the-glass selection? | How did the meal unfold? |
-| Spanish | Could you make a meal of small plates? | How was the by-the-glass selection? | How did the meal unfold? |
-| Tapas | Could you order small plates as you went? | Did the food work well for sharing? | Could you eat at a counter? |
-| Portuguese | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | How did you arrange this visit? |
-| Basque | Was it easy to choose what to order? | How clearly were ingredients or dietary options labeled? | How did you arrange this visit? |
-| German | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Austrian | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Bavarian | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Swiss | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Dutch | Was it easy to choose what to order? | How did it work for lunch? | How were the vegetarian meal choices? |
-| Belgian | Was it easy to choose what to order? | How did it work for lunch? | How were the vegetarian meal choices? |
-| British | How did it work for lunch? | How were the vegetarian meal choices? | How easy was it to talk? |
-| Irish | How did it work for lunch? | How were the vegetarian meal choices? | How easy was it to talk? |
-| Scandinavian | Was it easy to choose what to order? | What menu format was available? | How were the vegetarian meal choices? |
-| Swedish | Was it easy to choose what to order? | What menu format was available? | How were the vegetarian meal choices? |
-| Norwegian | Was it easy to choose what to order? | What menu format was available? | How were the vegetarian meal choices? |
-| Finnish | Was it easy to choose what to order? | What menu format was available? | How were the vegetarian meal choices? |
-| Danish | Was it easy to choose what to order? | What menu format was available? | How were the vegetarian meal choices? |
-| Polish | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Ukrainian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Russian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Czech | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Slovak | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Hungarian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Romanian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Croatian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Serbian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Bosnian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Bulgarian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Albanian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Slovenian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Lithuanian | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| European | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Eastern European | Was it easy to choose what to order? | What kind of meal did a usual order make? | How were the vegetarian meal choices? |
-| Pizza | How was pizza sold? | How long did you wait? | What outdoor seating was there? |
-| Fish & chips | How did fried food hold up to takeaway? | What kind of meal did a usual order make? | Somewhere to sit? |
-| Fondue | How were fondue portions arranged? | How clearly were ingredients or dietary options labeled? | How did you arrange this visit? |
-| American | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Canadian | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did seating a group work? |
-| Mexican | Could you choose the heat level? | How were the vegetarian meal choices? | Did the food work well for sharing? |
-| Tex-Mex | What kind of meal did a usual order make? | How were the vegetarian meal choices? | How did you choose salsa? |
-| Caribbean | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Jamaican | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Puerto Rican | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Dominican | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Haitian | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Panamanian | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Cuban | Was it easy to choose what to order? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Brazilian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Argentinian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Colombian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Chilean | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Peruvian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Venezuelan | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Ecuadorian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Bolivian | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Uruguayan | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Salvadoran | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Guatemalan | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| South American | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Latin American | Was it easy to choose what to order? | Did the food work well for sharing? | How were the vegetarian meal choices? |
-| Southwestern | Could you choose the heat level? | How were the vegetarian meal choices? | What kind of meal did a usual order make? |
-| Cajun | Could you choose the heat level? | How were the vegetarian meal choices? | What kind of meal did a usual order make? |
-| Californian | How clearly were ingredients or dietary options labeled? | What outdoor seating was there? | How did it work for lunch? |
-| Hawaiian | What kind of meal did a usual order make? | Could you get food to take away? | Was it easy to choose what to order? |
-| Poke | Could you build your own bowl? | How clearly were ingredients or dietary options labeled? | Could you get food to take away? |
-| Australian | Was it easy to choose what to order? | What kind of meal did a usual order make? | Did the food work well for sharing? |
-| New Zealand | Was it easy to choose what to order? | What kind of meal did a usual order make? | Did the food work well for sharing? |
-| Fijian | Was it easy to choose what to order? | What kind of meal did a usual order make? | Did the food work well for sharing? |
-| Samoan | Was it easy to choose what to order? | What kind of meal did a usual order make? | Did the food work well for sharing? |
-| Tongan | Was it easy to choose what to order? | What kind of meal did a usual order make? | Did the food work well for sharing? |
-| Burgers | Were non-meat burgers offered? | How long did you wait? | What outdoor seating was there? |
-| Diner | When was breakfast served? | Could you eat at a counter? | What kind of meal did a usual order make? |
-| Hot dogs | Could you choose toppings? | Somewhere to sit? | Could you get food to take away? |
-| Barbecue | How was the barbecue availability? | Did the food work well for sharing? | What outdoor seating was there? |
-| Wings | Could you mix sauces in an order? | Could you choose the heat level? | How did seating a group work? |
-| Steakhouse | How were sides ordered? | How did you arrange this visit? | How was the by-the-glass selection? |
-| Bar & grill | Was food available with drinks? | Could you comfortably watch a game? | What outdoor seating was there? |
-| Taco stand | Could you mix taco fillings? | How did you choose salsa? | Somewhere to sit? |
-| Taco truck | Could you mix taco fillings? | How long did you wait? | Somewhere to sit? |
-| Burrito | What kind of meal did a usual order make? | How were the vegetarian meal choices? | Could you get food to take away? |
-| Taco | Could you mix taco fillings? | How did you choose salsa? | How were the vegetarian meal choices? |
-| Sandwich | Could you adjust your sandwich? | How long did you wait? | Could you get food to take away? |
-| Bagel | Could you adjust your sandwich? | How long did you wait? | Somewhere to sit? |
-| Deli | Could you adjust your sandwich? | How did you order? | How did it work for lunch? |
-| Salad | Could you build your own bowl? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Bistro | What menu format was available? | How did it work for lunch? | How easy was it to talk? |
-| Food court | Somewhere to sit? | How clearly were ingredients or dietary options labeled? | How long did you wait? |
-| Breakfast | When was breakfast served? | Could you eat at a counter? | How long did you wait? |
-| Brunch | How long did you wait? | How did you arrange this visit? | What outdoor seating was there? |
-| Soup | What could you pair with soup? | How were the vegetarian meal choices? | Could you get food to take away? |
-| Chicken | Did the food work well for sharing? | What kind of meal did a usual order make? | How did fried food hold up to takeaway? |
-| Seafood | How was seafood presented? | How did you arrange this visit? | What outdoor seating was there? |
-| Oyster bar | How were oysters ordered? | Could you eat at a counter? | How was the by-the-glass selection? |
-| Vegetarian | How were the vegan meal choices? | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? |
-| Vegan | How clearly were ingredients or dietary options labeled? | What kind of meal did a usual order make? | Could you get food to take away? |
-| Gluten-free | How were gluten-free choices identified? | How clearly were ingredients or dietary options labeled? | Could you get food to take away? |
-| Snack bar | What kind of meal did a usual order make? | Somewhere to sit? | How did you order? |
-| Gastropub | Was food available with drinks? | What was the beer selection like? | How easy was it to talk? |
+| Thai | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Vietnamese | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
+| Chinese | Dogs allowed? | Good for sharing? | Room for a group? |
+| Korean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Japanese | Dogs allowed? | Counter seating? | Vegetarian meal options? |
+| Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Asian fusion | Dogs allowed? | Outdoor seating? | Vegetarian meal options? |
+| Sushi | Dogs allowed? | Counter seating? | What booking guidance did staff or signs give? |
+| Ramen | Dogs allowed? | Vegetarian meal options? | Long wait? |
+| Dumplings | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
+| Bao buns | Dogs allowed? | Vegetarian meal options? | Somewhere to sit? |
+| Noodles | Dogs allowed? | Vegetarian meal options? | Meal or snack? |
+| Dim sum | Dogs allowed? | Good for sharing? | Long wait? |
+| Hot pot | Cook at the table? | Smoky inside? | Vegetarian meal options? |
+| Cantonese | Dogs allowed? | Good for sharing? | Room for a group? |
+| Taiwanese | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
+| Izakaya | Dogs allowed? | Easy to have a conversation? | What booking guidance did staff or signs give? |
+| Yakitori | Dogs allowed? | Counter seating? | Smoky inside? |
+| Yakiniku | Cook at the table? | Smoky inside? | What booking guidance did staff or signs give? |
+| North Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| South Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Pakistani | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Sri Lankan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Bangladeshi | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Nepalese | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Malaysian | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Singaporean | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Indonesian | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Filipino | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Burmese | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Cambodian | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Laotian | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Asian | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Tibetan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Mongolian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Georgian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Armenian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Uzbek | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Mongolian BBQ | Cook at the table? | Table or counter service? | Clear dietary information? |
+| Korean BBQ | Cook at the table? | Smoky inside? | Room for a group? |
+| Japanese BBQ | Cook at the table? | Smoky inside? | What booking guidance did staff or signs give? |
+| Japanese curry | Dogs allowed? | Could you choose the spice level? | Counter seating? |
+| Tonkatsu | Dogs allowed? | Long wait? | Counter seating? |
+| Afghan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Middle Eastern | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Lebanese | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Persian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Turkish | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Israeli | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Palestinian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Syrian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Iraqi | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Jordanian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Yemeni | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Egyptian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Moroccan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Tunisian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Algerian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Ethiopian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Eritrean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Somali | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Kenyan | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Nigerian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Ghanaian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Senegalese | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| South African | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| African | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Falafel | Dogs allowed? | Vegan meal options? | Takeaway available? |
+| Gyro | Dogs allowed? | Takeaway available? | Somewhere to sit? |
+| Kebab | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Shawarma | Dogs allowed? | Table or counter service? | Takeaway available? |
+| Halal | Dogs allowed? | Clear halal information? | Room for a group? |
+| Italian | Dogs allowed? | Wine by the glass? | What booking guidance did staff or signs give? |
+| Mediterranean | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
+| Greek | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
+| French | Dogs allowed? | Easy to book? | Easy to have a conversation? |
+| Spanish | Dogs allowed? | Good for sharing? | Wine by the glass? |
+| Tapas | Dogs allowed? | Good for sharing? | Counter seating? |
+| Portuguese | Dogs allowed? | Clear dietary information? | What booking guidance did staff or signs give? |
+| Basque | Dogs allowed? | Clear dietary information? | What booking guidance did staff or signs give? |
+| German | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Austrian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Bavarian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Swiss | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Dutch | Dogs allowed? | Quick lunch or take your time? | Vegetarian meal options? |
+| Belgian | Dogs allowed? | Quick lunch or take your time? | Vegetarian meal options? |
+| British | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
+| Irish | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
+| Scandinavian | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
+| Swedish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
+| Norwegian | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
+| Finnish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
+| Danish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
+| Polish | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Ukrainian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Russian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Czech | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Slovak | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Hungarian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Romanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Croatian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Serbian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Bosnian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Bulgarian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Albanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Slovenian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Lithuanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| European | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Eastern European | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Pizza | Dogs allowed? | Pizza by the slice? | Outdoor seating? |
+| Fish & chips | Dogs allowed? | Takeaway available? | Somewhere to sit? |
+| Fondue | Dogs allowed? | Good for sharing? | What booking guidance did staff or signs give? |
+| American | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Canadian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
+| Mexican | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Tex-Mex | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
+| Caribbean | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Jamaican | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Puerto Rican | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Dominican | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Haitian | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Panamanian | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Cuban | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Brazilian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Argentinian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Colombian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Chilean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Peruvian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Venezuelan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Ecuadorian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Bolivian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Uruguayan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Salvadoran | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Guatemalan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| South American | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Latin American | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
+| Southwestern | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Cajun | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Californian | Dogs allowed? | Clear dietary information? | Outdoor seating? |
+| Hawaiian | Dogs allowed? | Meal or snack? | Takeaway available? |
+| Poke | Dogs allowed? | Clear dietary information? | Takeaway available? |
+| Australian | Dogs allowed? | Good for sharing? | Meal or snack? |
+| New Zealand | Dogs allowed? | Good for sharing? | Meal or snack? |
+| Fijian | Dogs allowed? | Good for sharing? | Meal or snack? |
+| Samoan | Dogs allowed? | Good for sharing? | Meal or snack? |
+| Tongan | Dogs allowed? | Good for sharing? | Meal or snack? |
+| Burgers | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
+| Diner | Dogs allowed? | When is breakfast served? | Counter seating? |
+| Hot dogs | Dogs allowed? | Takeaway available? | Somewhere to sit? |
+| Barbecue | Dogs allowed? | Good for sharing? | Outdoor seating? |
+| Wings | Dogs allowed? | Could you choose the spice level? | Room for a group? |
+| Steakhouse | Dogs allowed? | What booking guidance did staff or signs give? | Wine by the glass? |
+| Bar & grill | Dogs allowed? | Good screens for watching sports? | Outdoor seating? |
+| Taco stand | Dogs allowed? | Takeaway available? | Somewhere to sit? |
+| Taco truck | Dogs allowed? | Long wait? | Somewhere to sit? |
+| Burrito | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
+| Taco | Dogs allowed? | Vegetarian meal options? | Somewhere to sit? |
+| Sandwich | Dogs allowed? | Long wait? | Takeaway available? |
+| Bagel | Dogs allowed? | Long wait? | Somewhere to sit? |
+| Deli | Dogs allowed? | Table or counter service? | Quick lunch or take your time? |
+| Salad | Dogs allowed? | Clear dietary information? | Meal or snack? |
+| Bistro | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
+| Food court | Dogs allowed? | Somewhere to sit? | Clear dietary information? |
+| Breakfast | Dogs allowed? | When is breakfast served? | Long wait? |
+| Brunch | Dogs allowed? | Long wait? | What booking guidance did staff or signs give? |
+| Soup | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
+| Chicken | Dogs allowed? | Good for sharing? | Meal or snack? |
+| Seafood | Dogs allowed? | What booking guidance did staff or signs give? | Outdoor seating? |
+| Oyster bar | Dogs allowed? | Counter seating? | Wine by the glass? |
+| Vegetarian | Dogs allowed? | Vegan meal options? | Outdoor seating? |
+| Vegan | Dogs allowed? | Clear dietary information? | Outdoor seating? |
+| Gluten-free | Dogs allowed? | Clear gluten-free information? | Outdoor seating? |
+| Snack bar | Dogs allowed? | Somewhere to sit? | Table or counter service? |
+| Gastropub | Dogs allowed? | What kind of beer selection? | Easy to have a conversation? |
 
-### Coffee, Tea, & Sweets
-
-26 selectable subcategories.
+### Coffee, Tea, & Sweets (26)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Coffee shop | What was the laptop setup? | Could you plug in? | Where were pet dogs allowed? |
-| Cafe | What was the laptop setup? | What outdoor seating was there? | Where were pet dogs allowed? |
-| Coffee stand | How long did you wait? | What milk alternatives were offered? | Somewhere to sit? |
-| Coffee lounge | Could you plug in? | How easy was it to talk? | Somewhere to sit? |
-| Roastery | Could you buy beans to take home? | Could you sample or taste before choosing? | Somewhere to sit? |
-| Tea house | How was tea served? | How easy was it to talk? | Somewhere to sit? |
-| Tea store | How could you buy tea? | Could you sample or taste before choosing? | Could you get items packaged as a gift? |
-| Juice shop | How was juice prepared? | How long did you wait? | Somewhere to sit? |
-| Smoothie shop | Could you adjust smoothie ingredients? | What milk alternatives were offered? | How long did you wait? |
-| Acai | Could you choose toppings? | What kind of meal did a usual order make? | Somewhere to sit? |
-| Bakery | What bread could you buy? | What pastry choice was left when you arrived? | Somewhere to sit? |
-| Bagel shop | Could you adjust your sandwich? | How long did you wait? | Somewhere to sit? |
-| Donut shop | What pastry choice was left when you arrived? | How long did you wait? | How clearly were ingredients or dietary options labeled? |
-| Cake shop | How did cake ordering work? | Could you get items packaged as a gift? | Could you get food to take away? |
-| Pastry shop | What pastry choice was left when you arrived? | Somewhere to sit? | Could you get food to take away? |
-| Dessert shop | How were desserts served? | Could you get food to take away? | How clearly were ingredients or dietary options labeled? |
-| Dessert restaurant | How were desserts served? | Did the food work well for sharing? | How did you arrange this visit? |
-| Ice cream | Were dairy-free choices available? | Could you choose toppings? | Somewhere to sit? |
-| Gelato | Were dairy-free choices available? | Could you choose toppings? | Somewhere to sit? |
-| Candy store | Could you get items packaged as a gift? | How clearly were ingredients or dietary options labeled? | Could you sample or taste before choosing? |
-| Chocolate shop | Could you get items packaged as a gift? | Could you sample or taste before choosing? | How clearly were ingredients or dietary options labeled? |
-| Chocolate factory | Could you join a guided tour? | Could you sample or taste before choosing? | Could you get items packaged as a gift? |
-| Chocolate lounge | Could you sample or taste before choosing? | How were desserts served? | Somewhere to sit? |
-| Confectionery | Could you get items packaged as a gift? | Could you sample or taste before choosing? | How clearly were ingredients or dietary options labeled? |
-| Cat cafe | Was there a charge to spend time with the animals? | How did you arrange this visit? | How easy was it to talk? |
-| Dog cafe | Was there a charge to spend time with the animals? | Where were pet dogs allowed? | What outdoor seating was there? |
+| Coffee shop | Laptops welcome? | Power outlets? | Dogs allowed? |
+| Cafe | Laptops welcome? | Outdoor seating? | Dogs allowed? |
+| Coffee stand | Long wait? | Milk alternatives? | Dogs allowed? |
+| Coffee lounge | Laptops welcome? | Power outlets? | Dogs allowed? |
+| Roastery | Beans to take home? | Samples or tastings? | Dogs allowed? |
+| Tea house | Easy to have a conversation? | Outdoor seating? | Dogs allowed? |
+| Tea store | Samples or tastings? | Gift packaging? | Dogs allowed? |
+| Juice shop | Made-to-order juice? | Dogs allowed? | Long wait? |
+| Smoothie shop | Milk alternatives? | Dogs allowed? | Long wait? |
+| Acai | Clear dietary information? | Dogs allowed? | Somewhere to sit? |
+| Bakery | Dogs allowed? | Clear dietary information? | Somewhere to sit? |
+| Bagel shop | Dogs allowed? | Somewhere to sit? | Long wait? |
+| Donut shop | Dogs allowed? | Long wait? | Clear dietary information? |
+| Cake shop | Dogs allowed? | Gift packaging? | Help choosing available? |
+| Pastry shop | Dogs allowed? | Somewhere to sit? | Clear dietary information? |
+| Dessert shop | Dogs allowed? | Takeaway available? | Clear dietary information? |
+| Dessert restaurant | Dogs allowed? | Good for sharing? | Easy to book? |
+| Ice cream | Dogs allowed? | Dairy-free frozen treats? | Somewhere to sit? |
+| Gelato | Dogs allowed? | Dairy-free frozen treats? | Somewhere to sit? |
+| Candy store | Dogs allowed? | Samples or tastings? | Gift packaging? |
+| Chocolate shop | Dogs allowed? | Samples or tastings? | Gift packaging? |
+| Chocolate factory | Guided tours available? | Samples or tastings? | Dogs allowed? |
+| Chocolate lounge | Samples or tastings? | Somewhere to sit? | Dogs allowed? |
+| Confectionery | Dogs allowed? | Samples or tastings? | Gift packaging? |
+| Cat cafe | Entry fee to visit the animals? | Easy to book? | Somewhere to sit? |
+| Dog cafe | Dogs allowed? | Outdoor seating? | Entry fee to visit the animals? |
 
-### Bars & Nightlife
-
-30 selectable subcategories.
+### Bars & Nightlife (30)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Bar | How easy was it to talk? | What were the alcohol-free choices like? | What outdoor seating was there? |
-| Cocktail bar | How did the cocktail menu work? | What were the alcohol-free choices like? | How did you arrange this visit? |
-| Pub | Was food available with drinks? | What was the beer selection like? | How easy was it to talk? |
-| Irish pub | Was there live music during your visit? | Was food available with drinks? | What was the beer selection like? |
-| Billiards | How did getting a game work? | How did you pay to play? | How easy was it to talk? |
-| Sports bar | Could you comfortably watch a game? | How did you arrange this visit? | Was food available with drinks? |
-| Wine bar | How was the by-the-glass selection? | Could you make a meal of small plates? | How easy was it to talk? |
-| Cider bar | Could you compare ciders? | How easy was it to talk? | Was food available with drinks? |
-| Sake bar | Could you try smaller sake pours? | Could you make a meal of small plates? | How easy was it to talk? |
-| Game bar | How did getting a game work? | How did you pay to play? | What were the alcohol-free choices like? |
-| Gastropub | Was food available with drinks? | What was the beer selection like? | How easy was it to talk? |
-| Bar & grill | Was food available with drinks? | Could you comfortably watch a game? | What outdoor seating was there? |
-| Dance hall | Was there room to dance? | Was there live music during your visit? | Was there somewhere to leave a coat? |
-| Club | How did entry work for your visit? | Was there room to dance? | Was there somewhere to leave a coat? |
-| Disco | How did entry work for your visit? | Was there room to dance? | Was there somewhere to leave a coat? |
-| Lounge | How easy was it to talk? | How did you arrange this visit? | How did the cocktail menu work? |
-| Hookah bar | How were smoking and smoke-free areas arranged? | How smoky did the space feel? | What were the alcohol-free choices like? |
-| Beer garden | What outdoor seating was there? | How much shade did you find? | Where were pet dogs allowed? |
-| Jazz club | How was show seating arranged? | How was the sound from your spot? | How did entry work for your visit? |
-| Hi-fi lounge | How was the sound from your spot? | How easy was it to talk? | How did you arrange this visit? |
-| Brewery | What was the beer selection like? | Could you sample or taste before choosing? | What outdoor seating was there? |
-| Brewpub | What was the beer selection like? | Was food available with drinks? | What outdoor seating was there? |
-| Winery | Could you sample or taste before choosing? | How did you arrange this visit? | What outdoor seating was there? |
-| Vineyard | Could you explore outside the tasting room? | Could you sample or taste before choosing? | How much shade did you find? |
-| Nightclub | How did entry work for your visit? | Was there room to dance? | Was there somewhere to leave a coat? |
-| Karaoke | What was the karaoke setup? | How did you arrange this visit? | How was karaoke charged? |
-| Live music | How was the sound from your spot? | How was show seating arranged? | How did entry work for your visit? |
-| Comedy club | How was show seating arranged? | How was the view from your spot? | How did entry work for your visit? |
-| Casino | How were smoking and smoke-free areas arranged? | Was food available with drinks? | Was there somewhere to leave a coat? |
-| Distillery | Could you see how it is made? | Could you sample or taste before choosing? | How did you arrange this visit? |
+| Bar | Easy to have a conversation? | Good alcohol-free options? | Dogs allowed? |
+| Cocktail bar | Classic or house cocktails? | Good alcohol-free options? | Easy to book? |
+| Pub | Dogs allowed? | Food with drinks? | Easy to have a conversation? |
+| Irish pub | Live music on your visit? | Food with drinks? | Dogs allowed? |
+| Billiards | Walk-in games or book ahead? | How did you pay to play? | Easy to have a conversation? |
+| Sports bar | Good screens for watching sports? | Easy to book? | Food with drinks? |
+| Wine bar | Wine by the glass? | Dogs allowed? | Easy to have a conversation? |
+| Cider bar | Cider flights or individual drinks? | Easy to have a conversation? | Food with drinks? |
+| Sake bar | Sake flights or by the glass? | Food with drinks? | Easy to have a conversation? |
+| Game bar | Walk-in games or book ahead? | How did you pay to play? | Good alcohol-free options? |
+| Gastropub | Dogs allowed? | What kind of beer selection? | Easy to have a conversation? |
+| Bar & grill | Dogs allowed? | Good screens for watching sports? | Outdoor seating? |
+| Dance hall | Room to dance? | Live music on your visit? | Coat storage? |
+| Club | Cover charge or ticket? | Room to dance? | Coat storage? |
+| Disco | Cover charge or ticket? | Room to dance? | Coat storage? |
+| Lounge | Easy to have a conversation? | Easy to book? | Classic or house cocktails? |
+| Hookah bar | Smoking areas separated? | Smoky inside? | Good alcohol-free options? |
+| Beer garden | Outdoor seating? | How much shade did you find? | Dogs allowed? |
+| Jazz club | Reserved seats or first come? | How was the sound from your spot? | Cover charge or ticket? |
+| Hi-fi lounge | How was the sound from your spot? | Easy to have a conversation? | Easy to book? |
+| Brewery | What kind of beer selection? | Samples or tastings? | Dogs allowed? |
+| Brewpub | What kind of beer selection? | Food with drinks? | Dogs allowed? |
+| Winery | Samples or tastings? | Easy to book? | Dogs allowed? |
+| Vineyard | Can you explore the vineyard? | Samples or tastings? | Dogs allowed? |
+| Nightclub | Cover charge or ticket? | Room to dance? | Coat storage? |
+| Karaoke | Private rooms or open-stage karaoke? | Easy to book? | Easy to have a conversation? |
+| Live music | How was the sound from your spot? | Reserved seats or first come? | Cover charge or ticket? |
+| Comedy club | Reserved seats or first come? | Clear view from your spot? | Cover charge or ticket? |
+| Casino | Smoking areas separated? | Food with drinks? | Coat storage? |
+| Distillery | Tours or tastings? | Samples or tastings? | Easy to book? |
 
-### Outdoors & Nature
-
-42 selectable subcategories.
+### Outdoors & Nature (45)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Park | How much shade did you find? | What bathroom access did you find? | What surface did you use most? |
-| City park | How much shade did you find? | Somewhere to sit? | What picnic setup did you find? |
-| State park | Was there an admission charge? | How easy was the route to follow? | What bathroom access did you find? |
-| National park | Was there an admission charge? | How easy was the route to follow? | Could you get practical visitor information? |
-| Hiking area | How easy was the route to follow? | How steep was the route you took? | Could you refill drinking water? |
-| Trail | How easy was the route to follow? | How steep was the route you took? | What surface did you use most? |
-| Hike | How easy was the route to follow? | How steep was the route you took? | What surface did you use most? |
-| Beach | Could you rinse sand off? | How much shade did you find? | What was the route down to the beach like? |
-| Dog beach | What pet-dog rule was posted for this area? | Could you rinse sand off? | What was the route down to the beach like? |
-| Lake | How could you reach the water? | What picnic setup did you find? | What bathroom access did you find? |
-| River | How could you reach the water? | What surface did you use most? | How much shade did you find? |
-| Island | How did you get onto the island? | Was there shelter on the route or grounds? | Could you refill drinking water? |
-| Woods/forest | How easy was the route to follow? | What surface did you use most? | Was there shelter on the route or grounds? |
-| Mountain peak | How steep was the route you took? | How easy was the route to follow? | Was there shelter on the route or grounds? |
-| Scenic spot | How much walking to reach the view? | Somewhere to sit? | How much shade did you find? |
-| Viewpoint | How much walking to reach the view? | What surface did you use most? | Somewhere to sit? |
-| Overlook | How much walking to reach the view? | What surface did you use most? | Somewhere to sit? |
-| Waterfall | How close could you get to the falls? | What surface did you use most? | How steep was the route you took? |
-| Hot spring | How was the hot-spring access arranged? | What changing facilities were there? | Was there an admission charge? |
-| Cave | What was the visit format? | What surface did you use most? | How did you arrange this visit? |
-| Nature preserve | How easy was the route to follow? | What viewing setup was available? | What pet-dog rule was posted for this area? |
-| Wildlife refuge | What viewing setup was available? | What surface did you use most? | How much shade did you find? |
-| Wildlife park | What viewing setup was available? | How much walking between exhibits? | Was there an admission charge? |
-| Botanical garden | Were plants identified along the way? | What surface did you use most? | How much shade did you find? |
-| Garden | Somewhere to sit? | How much shade did you find? | What surface did you use most? |
-| Picnic area | What picnic setup did you find? | How much shade did you find? | What bathroom access did you find? |
-| Dog park | Was the play area fenced? | What pet-dog rule was posted for this area? | Could you refill drinking water? |
-| Playground | Who did the play equipment seem designed for? | Was the play area fenced? | How much shade did you find? |
-| Campground | How did you secure your campsite? | What toilet facilities were there? | How level was your pitch? |
-| RV park | What hookups were offered? | What toilet facilities were there? | How did you secure your campsite? |
-| Dispersed camping | What toilet facilities were there? | How level was your pitch? | What did the signed route require? |
-| Cabin | Could you adjust your room temperature? | What cooking facilities could you use? | Could you refill water here? |
-| Cottage | What cooking facilities could you use? | Could you adjust your room temperature? | Where could you park? |
-| Marina | Was there a launch or dock? | What bathroom access did you find? | How was parking on arrival? |
-| Fishing pier | What was provided for fishing on the pier? | Somewhere to sit? | How much shade did you find? |
-| Fishing pond | Was fishing gear available? | How could you fish here? | Somewhere to sit? |
-| Fishing charter | Was fishing gear available? | How did you arrange this visit? | What bathroom access did you find? |
-| Ski resort | What terrain did you find? | Where was rental equipment available? | Where could you put belongings for the activity? |
-| Cycling park | What type of riding was it set up for? | Could you refill drinking water? | How easy was the route to follow? |
-| Skate park | What was the skate setup? | Was the activity area lit for evening use? | Could you refill drinking water? |
-| Off-roading area | What did the signed route require? | How easy was the route to follow? | Was there shelter on the route or grounds? |
-| Adventure sports | How was the activity supervised? | How was equipment provided? | How did you arrange this visit? |
+| Park | Posted dog rules? | How much shade did you find? | Bathroom access? |
+| City park | Posted dog rules? | How much shade did you find? | Somewhere to sit? |
+| State park | Posted dog rules? | Bathroom access? | Entry fee? |
+| National park | Posted dog rules? | Visitor information available? | Entry fee? |
+| Hiking area | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
+| Trail | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
+| Hike | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
+| Beach | Posted dog rules? | How much shade did you find? | Rinse facilities? |
+| Dog beach | Posted dog rules? | Rinse facilities? | Easy route down to the beach? |
+| Lake | Posted dog rules? | How much shade did you find? | Bathroom access? |
+| River | Posted dog rules? | How could you reach the water? | How much shade did you find? |
+| Island | Posted dog rules? | Shelter from the weather? | How did you reach the island? |
+| Woods/forest | Posted dog rules? | Easy to follow the trail? | What was the path surface? |
+| Mountain peak | Posted dog rules? | How steep was your route? | Shelter from the weather? |
+| Scenic spot | Posted dog rules? | How far was the walk to the view? | How much shade did you find? |
+| Viewpoint | Posted dog rules? | How far was the walk to the view? | Somewhere to sit? |
+| Overlook | Posted dog rules? | How far was the walk to the view? | Somewhere to sit? |
+| Waterfall | Posted dog rules? | How far was the walk to the view? | How steep was your route? |
+| Hot spring | Posted dog rules? | Natural or managed hot pools? | Changing rooms and showers? |
+| Cave | Posted dog rules? | Guided or self-guided cave visit? | What booking guidance did staff or signs give? |
+| Nature preserve | Posted dog rules? | Easy to follow the trail? | Where could you watch wildlife? |
+| Wildlife refuge | Posted dog rules? | What was the path surface? | How much shade did you find? |
+| Wildlife park | Posted dog rules? | How spread out were the exhibits? | Entry fee? |
+| Botanical garden | Posted dog rules? | What was the path surface? | How much shade did you find? |
+| Garden | Posted dog rules? | How much shade did you find? | Somewhere to sit? |
+| Picnic area | Posted dog rules? | How much shade did you find? | Picnic spots? |
+| Dog park | Was the play area fenced? | Posted dog rules? | Drinking-water refill? |
+| Playground | Play equipment for which ages? | Was the play area fenced? | How much shade did you find? |
+| Campground | Posted dog rules? | Campsite toilets? | How did you get a campsite? |
+| RV park | Posted dog rules? | Water or power hookups? | Campsite toilets? |
+| Dispersed camping | Posted dog rules? | Campsite toilets? | Posted vehicle requirements? |
+| Cabin | Dogs allowed? | Guest cooking facilities? | Room temperature controls? |
+| Cottage | Dogs allowed? | Guest cooking facilities? | Where could you park? |
+| Marina | Posted dog rules? | Bathroom access? | Parking on arrival? |
+| Fishing pier | Posted dog rules? | Somewhere to sit? | How much shade did you find? |
+| Fishing pond | Posted dog rules? | Fishing gear provided? | How much shade did you find? |
+| Fishing charter | Fishing gear provided? | Bathroom access? | Easy to book? |
+| Ski resort | Posted dog rules? | Ski rental nearby? | What ski terrain did you find? |
+| Cycling park | Posted dog rules? | Easy or technical riding? | Drinking-water refill? |
+| Skate park | Posted dog rules? | Ramps or street features? | Lit for evening use on your visit? |
+| Off-roading area | Posted dog rules? | Posted vehicle requirements? | Shelter from the weather? |
+| Adventure sports | Guided or self-guided activity? | Equipment provided? | Easy to book? |
+| Surf | Surfboard rental available? | Was it busy? | Posted dog rules? |
+| Surf break | Crowded in the water? | Rinse facilities? | Posted dog rules? |
+| Kayak/canoe rental | Equipment provided? | Easy to book? | Dogs allowed in the rental boats? |
 
-### Things To Do
-
-52 selectable subcategories.
-
-| Subcategory | Question 1 | Question 2 | Question 3 |
-| --- | --- | --- | --- |
-| Tourist attraction | Was there an admission charge? | How much time would you set aside? | Was there a step-free way in? |
-| Landmark | Was the place's story explained? | How much walking to reach the view? | How much time would you set aside? |
-| Historical place | Was the place's story explained? | Could you join a guided tour? | Was there a step-free way in? |
-| Historical landmark | Was the place's story explained? | Could you join a guided tour? | Was there a step-free way in? |
-| Monument | Was the place's story explained? | How much walking to reach the view? | Somewhere to sit? |
-| Sculpture | Was the place's story explained? | What photography rule was posted? | Was there a step-free way in? |
-| Fountain | Somewhere to sit? | How much shade did you find? | What photography rule was posted? |
-| Castle | Could you join a guided tour? | How steep was the route you took? | Was there an admission charge? |
-| Plaza | Somewhere to sit? | How much shade did you find? | What bathroom access did you find? |
-| Town square | Somewhere to sit? | How much shade did you find? | What bathroom access did you find? |
-| Visitor center | Could you get practical visitor information? | What bathroom access did you find? | Was there a step-free way in? |
-| Museum | What kind of exhibitions were on? | How much time would you set aside? | Was there an admission charge? |
-| Art museum | What kind of exhibitions were on? | What photography rule was posted? | Somewhere to sit? |
-| History museum | Was the place's story explained? | Could you join a guided tour? | How much time would you set aside? |
-| Art gallery | What kind of exhibitions were on? | What photography rule was posted? | Was there an admission charge? |
-| Art studio | Could visitors make something? | How was equipment provided? | How did you arrange this visit? |
-| Cultural landmark | Was the place's story explained? | Could you join a guided tour? | What photography rule was posted? |
-| Cultural center | Could visitors make something? | Could you get practical visitor information? | Was there an admission charge? |
-| Theater | How was the view from your spot? | How was show seating arranged? | Was there a step-free way in? |
-| Performing arts theater | How was the view from your spot? | How was show seating arranged? | Was there a step-free way in? |
-| Concert hall | How was the sound from your spot? | How was show seating arranged? | Was there somewhere to leave a coat? |
-| Opera house | How was the view from your spot? | How was the sound from your spot? | Was there somewhere to leave a coat? |
-| Philharmonic hall | How was the sound from your spot? | How was show seating arranged? | Was there somewhere to leave a coat? |
-| Amphitheater | How was the view from your spot? | How much shade did you find? | How was show seating arranged? |
-| Auditorium | How was the sound from your spot? | How was the view from your spot? | Was there a step-free way in? |
-| Movie theater | What were the cinema seats like? | How was the view from your spot? | What food was available for the film? |
-| Planetarium | How was show seating arranged? | Was there an admission charge? | How much time would you set aside? |
-| Observation deck | Was the main viewing area indoors or out? | How long did you wait? | How much walking to reach the view? |
-| Aquarium | Were there activities to try yourself? | How much walking between exhibits? | Was there an admission charge? |
-| Zoo | How much walking between exhibits? | How much shade did you find? | What bathroom access did you find? |
-| Amusement park | How did ride queues work? | Where could you put belongings for the activity? | Were height or age requirements easy to find? |
-| Water park | Where could you put belongings for the activity? | What changing facilities were there? | Were height or age requirements easy to find? |
-| Ferris wheel | How did ride queues work? | What was your seat or cabin like? | Was there an admission charge? |
-| Roller coaster | How did ride queues work? | Where could you put belongings for the activity? | Were height or age requirements easy to find? |
-| Arcade | How did you pay to play? | How did getting a game work? | How easy was it to talk? |
-| Bowling | How did you arrange this visit? | How was equipment provided? | How did you pay to play? |
-| Mini golf | How did you pay to play? | How much shade did you find? | How was equipment provided? |
-| Billiards | How did getting a game work? | How did you pay to play? | How did you arrange this visit? |
-| Darts | How was equipment provided? | How did getting a game work? | How did seating a group work? |
-| Axe throwing | What introduction was offered to first-timers? | How was equipment provided? | How did you arrange this visit? |
-| Board game lounge | What was the board-game selection like? | How did you pay to play? | Was food available with drinks? |
-| Go-karting | Were height or age requirements easy to find? | How was equipment provided? | How did ride queues work? |
-| Paintball | How was equipment provided? | What introduction was offered to first-timers? | What changing facilities were there? |
-| Indoor playground | How were play ages separated? | Somewhere to sit? | What bathroom access did you find? |
-| Event venue | How flexible was the space? | What food arrangements were possible? | Was there a step-free way in? |
-| Convention center | Was it easy to find the right entrance or area? | Could you charge a phone? | Was there a step-free way in? |
-| Banquet hall | What food arrangements were possible? | How did seating a group work? | Was there a step-free way in? |
-| Wedding venue | How flexible was the space? | What food arrangements were possible? | What outdoor seating was there? |
-| Community center | Could you get practical visitor information? | How flexible was the space? | Was there a step-free way in? |
-| Internet cafe | How did the Wi-Fi work? | Could you plug in? | How easy was it to talk? |
-| Dance hall | Was there room to dance? | How were lessons arranged? | What changing facilities were there? |
-| Barbecue area | What cooking facilities were there? | What picnic setup did you find? | How much shade did you find? |
-
-### Shopping
-
-46 selectable subcategories.
+### Things To Do (54)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Store | How much room was there to browse? | Could you get help choosing? | How could you pay? |
-| Market | How much room was there to browse? | How could you pay? | Was there shelter while you waited? |
-| Shopping mall | Was it easy to find the right entrance or area? | Somewhere to sit? | What bathroom access did you find? |
-| Department store | Was it easy to find the right entrance or area? | Could you try things on? | Could you get help choosing? |
-| General store | How much room was there to browse? | Could you get help choosing? | Were prices clear before you paid? |
-| Convenience store | How long did you wait? | How could you pay? | Was there a step-free way in? |
-| Discount store | How much room was there to browse? | Were prices clear before you paid? | How long did you wait? |
-| Warehouse store | Was there somewhere to load or unload items? | How could you pay? | How much room was there to browse? |
-| Wholesaler | How did visitor entry work? | Was there somewhere to load or unload items? | Were prices clear before you paid? |
-| Grocery store | How long did you wait? | How could you pay? | Could you refill your own containers? |
-| Supermarket | How much room was there to browse? | How long did you wait? | Where could you park? |
-| Hypermarket | Was it easy to find the right entrance or area? | Where could you park? | Was there somewhere to load or unload items? |
-| Food store | Could you get help choosing? | How could you pay? | How long did you wait? |
-| Farmers market | How could you pay? | Was there shelter while you waited? | Could you sit down without buying anything? |
-| Flea market | How much room was there to browse? | How could you pay? | Could you sit down without buying anything? |
-| Asian grocery | Could you get help choosing? | How much room was there to browse? | How could you pay? |
-| Butcher | Could you get help choosing? | How long did you wait? | How did collection work? |
-| Health food store | Could you refill your own containers? | Could you get help choosing? | Were prices clear before you paid? |
-| Liquor store | Could you get help choosing? | Were prices clear before you paid? | How could you pay? |
-| Book store | How much room was there to browse? | Somewhere to sit? | Could you get help choosing? |
-| Art supply store | Could you get help choosing? | How much room was there to browse? | Were prices clear before you paid? |
-| Craft store | How much room was there to browse? | Were prices clear before you paid? | Could you get help choosing? |
-| Gift shop | Was gift wrapping offered? | Could you get help choosing? | How could you pay? |
-| Toy store | How much room was there to browse? | Was gift wrapping offered? | Could you get help choosing? |
-| Clothing store | Could you try things on? | Could you get help choosing? | How much room was there to browse? |
-| Women's clothing | Could you try things on? | Could you get help choosing? | Were prices clear before you paid? |
-| Shoe store | Could you try things on? | Could you get help choosing? | How long did you wait? |
-| Jewelry store | Could you get help choosing? | Were repair services offered? | How did you arrange the visit? |
-| Cosmetics store | Could you get help choosing? | Could you try a tester or take a sample? | Were prices clear before you paid? |
-| Beauty supply | Could you get help choosing? | How much room was there to browse? | How could you pay? |
-| Sporting goods | Could you get help choosing? | Were repair services offered? | Could you try things on? |
-| Sportswear | Could you try things on? | Could you get help choosing? | How could you pay? |
-| Bicycle store | Were repair services offered? | Could you get help choosing? | When was the work ready? |
-| Electronics | Could you get help choosing? | Were repair services offered? | How long did you wait? |
-| Cell phone store | How long did you wait? | Were the instructions easy to follow? | Were repair services offered? |
-| Home goods | How much room was there to browse? | Was there somewhere to load or unload items? | Was gift wrapping offered? |
-| Home improvement | Could you get help choosing? | Was there somewhere to load or unload items? | How did collection work? |
-| Hardware | Could you get help choosing? | Were repair services offered? | Was there somewhere to load or unload items? |
-| Building materials | Was there somewhere to load or unload items? | How did collection work? | Were prices clear before you paid? |
-| Furniture | How much room was there to browse? | Was there somewhere to load or unload items? | How did collection work? |
-| Garden center | How much room was there to browse? | Could you get help choosing? | Was there somewhere to load or unload items? |
-| Pet store | Could you get help choosing? | How much room was there to browse? | Where were pet dogs allowed? |
-| Auto parts | Could you get help choosing? | How did collection work? | Were repair services offered? |
-| Thrift store | How much room was there to browse? | Could you try things on? | How could you pay? |
-| Discount supermarket | How long did you wait? | How could you pay? | Were prices clear before you paid? |
-| Cosmetics | Could you get help choosing? | Could you try a tester or take a sample? | Were prices clear before you paid? |
+| Tourist attraction | Entry fee? | How much time would you allow? | Step-free entrance? |
+| Landmark | Signs explaining the place? | How far was the walk to the view? | How much time would you allow? |
+| Historical place | Signs explaining the place? | Guided tours available? | Step-free entrance? |
+| Historical landmark | Signs explaining the place? | Guided tours available? | Step-free entrance? |
+| Monument | Signs explaining the place? | How far was the walk to the view? | Somewhere to sit? |
+| Sculpture | Signs explaining the place? | Posted photography rules? | Step-free entrance? |
+| Fountain | Somewhere to sit? | How much shade did you find? | Posted photography rules? |
+| Castle | Guided tours available? | How steep was your route? | Entry fee? |
+| Plaza | Somewhere to sit? | How much shade did you find? | Bathroom access? |
+| Town square | Somewhere to sit? | How much shade did you find? | Bathroom access? |
+| Visitor center | Visitor information available? | Bathroom access? | Step-free entrance? |
+| Museum | Permanent or temporary exhibitions? | How much time would you allow? | Entry fee? |
+| Art museum | Permanent or temporary exhibitions? | Posted photography rules? | Somewhere to sit? |
+| History museum | Signs explaining the place? | Guided tours available? | How much time would you allow? |
+| Art gallery | Permanent or temporary exhibitions? | Posted photography rules? | Entry fee? |
+| Art studio | Art activities or workshops? | Equipment provided? | Booked or walked in? |
+| Cultural landmark | Signs explaining the place? | Guided tours available? | Posted photography rules? |
+| Cultural center | Art activities or workshops? | Visitor information available? | Entry fee? |
+| Theater | Clear view from your spot? | Reserved seats or first come? | Step-free entrance? |
+| Performing arts theater | Clear view from your spot? | Reserved seats or first come? | Step-free entrance? |
+| Concert hall | How was the sound from your spot? | Reserved seats or first come? | Coat storage? |
+| Opera house | Clear view from your spot? | How was the sound from your spot? | Coat storage? |
+| Philharmonic hall | How was the sound from your spot? | Reserved seats or first come? | Coat storage? |
+| Amphitheater | Clear view from your spot? | How much shade did you find? | Reserved seats or first come? |
+| Auditorium | How was the sound from your spot? | Clear view from your spot? | Step-free entrance? |
+| Movie theater | Comfortable cinema seats? | Clear view from your spot? | Food sold for the film? |
+| Planetarium | Reserved seats or first come? | Entry fee? | How much time would you allow? |
+| Observation deck | Indoor or outdoor viewing? | Long wait? | How far was the walk to the view? |
+| Aquarium | Hands-on activities? | How spread out were the exhibits? | Entry fee? |
+| Zoo | How spread out were the exhibits? | How much shade did you find? | Bathroom access? |
+| Amusement park | How were the ride queues? | Storage during the activity? | Clear height or age requirements? |
+| Water park | Storage during the activity? | Changing rooms and showers? | Clear height or age requirements? |
+| Ferris wheel | How were the ride queues? | Enclosed or open-air ride? | Entry fee? |
+| Roller coaster | How were the ride queues? | Storage during the activity? | Clear height or age requirements? |
+| Arcade | How did you pay to play? | Walk-in games or book ahead? | Easy to have a conversation? |
+| Bowling | Booked or walked in? | Equipment provided? | How did you pay to play? |
+| Mini golf | How did you pay to play? | How much shade did you find? | Equipment provided? |
+| Billiards | Walk-in games or book ahead? | How did you pay to play? | Equipment provided? |
+| Darts | Equipment provided? | Walk-in games or book ahead? | Room for a group? |
+| Axe throwing | Introduction or lessons offered? | Equipment provided? | Booked or walked in? |
+| Board game lounge | What kind of board games? | How did you pay to play? | Food with drinks? |
+| Go-karting | Clear height or age requirements? | Equipment provided? | How were the ride queues? |
+| Paintball | Equipment provided? | Introduction or lessons offered? | Changing rooms and showers? |
+| Indoor playground | Separate play areas by age? | Somewhere to sit? | Bathroom access? |
+| Event venue | Flexible event space? | Food or catering options? | Step-free entrance? |
+| Convention center | Easy to find your way? | Phone charging? | Step-free entrance? |
+| Banquet hall | Food or catering options? | Room for a group? | Step-free entrance? |
+| Wedding venue | Flexible event space? | Food or catering options? | Outdoor seating? |
+| Community center | Visitor information available? | Flexible event space? | Step-free entrance? |
+| Internet cafe | How was the Wi-Fi? | Power outlets? | Easy to have a conversation? |
+| Dance hall | Room to dance? | Group or private lessons? | Changing rooms and showers? |
+| Barbecue area | Grills available? | Picnic spots? | How much shade did you find? |
+| Stadium | Was your seat covered? | Reserved seats or first come? | Bags checked or stored on entry? |
+| Arena | How was the sound from your spot? | Reserved seats or first come? | Bags checked or stored on entry? |
 
-### Wellness & Fitness
-
-49 selectable subcategories.
-
-| Subcategory | Question 1 | Question 2 | Question 3 |
-| --- | --- | --- | --- |
-| Gym | Could a visitor train here? | What was the equipment focus? | What changing facilities were there? |
-| Fitness center | Could a visitor train here? | What was the equipment focus? | What changing facilities were there? |
-| Yoga studio | How did the class move? | How was equipment provided? | How many people trained together? |
-| Pilates studio | What Pilates equipment did the session use? | How were first-timers introduced to the session? | How many people trained together? |
-| CrossFit gym | Were scaled versions of the workout explained? | How was training structured? | Could a visitor train here? |
-| Functional fitness studio | How was the session organized? | How was technique feedback offered? | How many people trained together? |
-| Wellness studio | How many people trained together? | How was equipment provided? | How was changing arranged? |
-| Wellness center | How did you arrange this visit? | How was changing arranged? | Was there a step-free way in? |
-| Sports club | Could a visitor train here? | How did you get time on a court? | What changing facilities were there? |
-| Sports complex | How did you get time on a court? | What changing facilities were there? | Could you get practical visitor information? |
-| Sports coaching | How was technique feedback offered? | How were lessons arranged? | How was equipment provided? |
-| Sports school | How were lessons arranged? | What introduction was offered to first-timers? | How was equipment provided? |
-| Athletic field | What was the playing surface? | Was the activity area lit for evening use? | What bathroom access did you find? |
-| Swimming pool | How was swimming organized? | Was the pool indoors or outdoors? | What changing facilities were there? |
-| Tennis court | What was the court surface? | How did you get time on a court? | Were court lights available? |
-| Golf course | What kind of golf could you play? | Could you hire clubs? | How did you arrange this visit? |
-| Indoor golf | What was the indoor-golf setup? | Could you hire clubs? | How did you arrange this visit? |
-| Ice skating rink | How did public skating work? | How was equipment provided? | Where could you put belongings for the activity? |
-| Volleyball court | What surface did you play on? | Was a net ready to use? | How did you get time on a court? |
-| Soccer field | What was the playing surface? | Were goals already set up? | Was the activity area lit for evening use? |
-| Basketball court | What court setup was available? | How did you get time on a court? | Were court lights available? |
-| Pickleball court | How was the pickleball court set up? | How did you get time on a court? | Were court lights available? |
-| Spa | How did you arrange this visit? | How was changing arranged? | What heat facilities were available? |
-| Massage | Could you choose the massage style or pressure? | How private was the appointment space? | How did you arrange this visit? |
-| Massage spa | Could you choose the massage style or pressure? | How was changing arranged? | How did you arrange this visit? |
-| Sauna | What heat facilities were available? | How was changing arranged? | How did you arrange this visit? |
-| Chiropractor | How did you arrange this visit? | Were preparation instructions clear? | How private was the appointment space? |
-| Dentist | How did you arrange this visit? | Were preparation instructions clear? | Was there a step-free way in? |
-| Dental clinic | How did you arrange this visit? | Were preparation instructions clear? | Was there a step-free way in? |
-| Optometrist | Could you try eyewear at the same place? | How did you arrange this visit? | Was there a step-free way in? |
-| Ophthalmologist | How did you arrange this visit? | Were preparation instructions clear? | Was there a step-free way in? |
-| Eye care center | Could you try eyewear at the same place? | How did you arrange this visit? | How long did you wait? |
-| Doctor | How did you arrange this visit? | How private was the appointment space? | Was there a step-free way in? |
-| Dermatologist | How did you arrange this visit? | How private was the appointment space? | Was there a step-free way in? |
-| Pediatrician | How long did you wait? | Was a baby-changing table available? | Was there a step-free way in? |
-| Urgent care | How long did you wait? | How did you arrange this visit? | How was parking on arrival? |
-| Medical clinic | How did you arrange this visit? | How long did you wait? | Was there a step-free way in? |
-| Medical center | Could you get practical visitor information? | How was parking on arrival? | Was there a step-free way in? |
-| Hospital | Could you get practical visitor information? | How was parking on arrival? | What bathroom access did you find? |
-| Medical lab | How were tests scheduled? | Were preparation instructions clear? | How long did you wait? |
-| Pharmacy | How did collecting a prescription work? | How long did you wait? | Was there a step-free way in? |
-| Drugstore | How did collecting a prescription work? | How long did you wait? | Was there a step-free way in? |
-| Physiotherapist | Was there space for guided exercises? | How private was the appointment space? | Was there a step-free way in? |
-| Physical therapy | Was there space for guided exercises? | How private was the appointment space? | Was there a step-free way in? |
-| Foot care | How did you arrange this visit? | How private was the appointment space? | Was there a step-free way in? |
-| Podiatrist | How did you arrange this visit? | How private was the appointment space? | Was there a step-free way in? |
-| Veterinary care | How were animals separated while waiting? | How did you arrange this visit? | How was parking on arrival? |
-| Mental health/therapy | How private was the appointment space? | How did you arrange this visit? | Was there a step-free way in? |
-| Retreat | How structured was the day? | How clearly were ingredients or dietary options labeled? | Was there a step-free way in? |
-
-### Stays
-
-18 selectable subcategories.
+### Shopping (47)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Hotel | How quiet was your room when you rested? | Was luggage storage available? | Could you adjust your room temperature? |
-| Resort | How quiet was your room when you rested? | How did breakfast work? | Was there a step-free way in? |
-| Motel | How quiet was your room when you rested? | Where could you park? | Could you adjust your room temperature? |
-| Hostel | What space did you stay in? | Were lockers available? | What cooking facilities could you use? |
-| Inn | How quiet was your room when you rested? | How did breakfast work? | How did you get in when you arrived? |
-| Bed & breakfast | How did breakfast work? | What space did you stay in? | How did you get in when you arrived? |
-| Guest house | What space did you stay in? | How did breakfast work? | How quiet was your room when you rested? |
-| Private guest room | What space did you stay in? | What cooking facilities could you use? | How did you get in when you arrived? |
-| Airbnb | What cooking facilities could you use? | How did you get in when you arrived? | How quiet was your room when you rested? |
-| Vrbo | What cooking facilities could you use? | How did you get in when you arrived? | How quiet was your room when you rested? |
-| Extended stay | What cooking facilities could you use? | Was laundry available? | Was there a useful surface to work at? |
-| Cottage | What cooking facilities could you use? | Could you adjust your room temperature? | Where could you park? |
-| Cabin | Could you adjust your room temperature? | What cooking facilities could you use? | Could you refill water here? |
-| Campground | How did you secure your campsite? | What toilet facilities were there? | How level was your pitch? |
-| RV park | What hookups were offered? | What toilet facilities were there? | How did you secure your campsite? |
-| Farm-stay | What space did you stay in? | What cooking facilities could you use? | Where were pet dogs allowed? |
-| Japanese inn | What space did you stay in? | How did breakfast work? | What changing space was available? |
-| Mobile home park | Was laundry available? | Where could you park? | What space did you stay in? |
+| Store | Dogs allowed? | Help choosing available? | Card, cash or app? |
+| Market | Dogs allowed? | Card, cash or app? | Shelter while waiting? |
+| Shopping mall | Easy to find your way? | Somewhere to sit? | Bathroom access? |
+| Department store | Easy to find your way? | Somewhere to try things on? | Help choosing available? |
+| General store | Dogs allowed? | Help choosing available? | Clear prices before paying? |
+| Convenience store | Long wait? | Card, cash or app? | Step-free entrance? |
+| Discount store | Step-free entrance? | Clear prices before paying? | Long wait? |
+| Warehouse store | Space to load or unload? | Card, cash or app? | Where could you park? |
+| Wholesaler | How did visitor entry work? | Space to load or unload? | Clear prices before paying? |
+| Grocery store | Long wait? | Card, cash or app? | Refill your own containers? |
+| Supermarket | Step-free entrance? | Long wait? | Where could you park? |
+| Hypermarket | Easy to find your way? | Where could you park? | Space to load or unload? |
+| Food store | Help choosing available? | Card, cash or app? | Long wait? |
+| Farmers market | Card, cash or app? | Shelter while waiting? | Seating without a purchase? |
+| Flea market | Dogs allowed? | Card, cash or app? | Seating without a purchase? |
+| Asian grocery | Help choosing available? | Step-free entrance? | Card, cash or app? |
+| Butcher | Help choosing available? | Long wait? | How did collection work? |
+| Health food store | Refill your own containers? | Help choosing available? | Clear prices before paying? |
+| Liquor store | Help choosing available? | Clear prices before paying? | Card, cash or app? |
+| Book store | Dogs allowed? | Somewhere to sit? | Help choosing available? |
+| Art supply store | Help choosing available? | Step-free entrance? | Clear prices before paying? |
+| Craft store | Step-free entrance? | Clear prices before paying? | Help choosing available? |
+| Gift shop | Gift wrapping offered? | Help choosing available? | Card, cash or app? |
+| Toy store | Step-free entrance? | Gift wrapping offered? | Help choosing available? |
+| Clothing store | Somewhere to try things on? | Help choosing available? | Dogs allowed? |
+| Women's clothing | Somewhere to try things on? | Help choosing available? | Clear prices before paying? |
+| Shoe store | Somewhere to try things on? | Help choosing available? | Long wait? |
+| Jewelry store | Help choosing available? | Repairs offered? | Walk-in or appointment? |
+| Cosmetics store | Help choosing available? | Testers or samples available? | Clear prices before paying? |
+| Beauty supply | Help choosing available? | Step-free entrance? | Card, cash or app? |
+| Sporting goods | Help choosing available? | Repairs offered? | Somewhere to try things on? |
+| Sportswear | Somewhere to try things on? | Help choosing available? | Card, cash or app? |
+| Bicycle store | Repairs offered? | Help choosing available? | When was the work ready? |
+| Electronics | Help choosing available? | Repairs offered? | Long wait? |
+| Cell phone store | Long wait? | Clear instructions? | Repairs offered? |
+| Home goods | Dogs allowed? | Space to load or unload? | Gift wrapping offered? |
+| Home improvement | Help choosing available? | Space to load or unload? | How did collection work? |
+| Hardware | Help choosing available? | Repairs offered? | Space to load or unload? |
+| Building materials | Space to load or unload? | How did collection work? | Clear prices before paying? |
+| Furniture | Step-free entrance? | Space to load or unload? | How did collection work? |
+| Garden center | Dogs allowed? | Help choosing available? | Space to load or unload? |
+| Pet store | Help choosing available? | Clear prices before paying? | Dogs allowed? |
+| Auto parts | Help choosing available? | How did collection work? | Repairs offered? |
+| Thrift store | Dogs allowed? | Somewhere to try things on? | Card, cash or app? |
+| Discount supermarket | Long wait? | Card, cash or app? | Clear prices before paying? |
+| Cosmetics | Help choosing available? | Testers or samples available? | Clear prices before paying? |
+| Surf shop | Surfboard rental available? | Repairs offered? | Dogs allowed? |
 
-### Services & Errands
-
-49 selectable subcategories.
-
-| Subcategory | Question 1 | Question 2 | Question 3 |
-| --- | --- | --- | --- |
-| Bank | How long did you wait? | How did you arrange the visit? | Was there a step-free way in? |
-| ATM | Could you withdraw cash? | Was any withdrawal fee clear before confirmation? | Was there a step-free way in? |
-| Accounting | How did you arrange the visit? | Was the cost explained before work began? | Where did the service happen? |
-| Insurance | Were the instructions easy to follow? | How did you contact or book with them? | Was the cost explained before work began? |
-| Real estate | How did you arrange the visit? | How did you contact or book with them? | Where did the service happen? |
-| Lawyer | How did you arrange the visit? | Was the cost explained before work began? | Was there a place to wait? |
-| Consultant | How did you arrange the visit? | Was the cost explained before work began? | How did you contact or book with them? |
-| Marketing consultant | Was the cost explained before work began? | How did you contact or book with them? | Where did the service happen? |
-| Employment agency | How did you arrange the visit? | How long did you wait? | How did visitor entry work? |
-| Nonprofit | How did visitor entry work? | How did you contact or book with them? | Was there a step-free way in? |
-| Association | How did visitor entry work? | How did you contact or book with them? | Was it easy to find the right entrance or area? |
-| Florist | Could you get help choosing? | How did collection work? | Was gift wrapping offered? |
-| Catering | Was the cost explained before work began? | How did collection work? | How did you contact or book with them? |
-| Food delivery | How did you contact or book with them? | Were prices clear before you paid? | Were the instructions easy to follow? |
-| Child care | How did visitor entry work? | How did you arrange the visit? | Was it easy to find the right entrance or area? |
-| Summer camp | How did you arrange the visit? | Were visiting rules clearly explained? | How did drop-off work? |
-| Laundry | Was it self-service or staffed? | Were machines available when you arrived? | How could you pay? |
-| Tailor | Could you try things on? | When was the work ready? | Was the cost explained before work began? |
-| Courier | How did drop-off work? | How long did you wait? | How could you pay? |
-| Shipping | How did drop-off work? | Were the supplies you needed provided? | How long did you wait? |
-| Storage | How did visitor entry work? | Was there somewhere to load or unload items? | Where could you park? |
-| Moving | Was the cost explained before work began? | Did the service happen at the arranged time? | How did you contact or book with them? |
-| Electrician | Was the cost explained before work began? | How did you contact or book with them? | Did the service happen at the arranged time? |
-| Plumber | Was the cost explained before work began? | How did you contact or book with them? | Did the service happen at the arranged time? |
-| Locksmith | When was the work ready? | Was the cost explained before work began? | How did you contact or book with them? |
-| Painter | Was the cost explained before work began? | How did you contact or book with them? | Did the service happen at the arranged time? |
-| Roofing contractor | Was the cost explained before work began? | Did the service happen at the arranged time? | Where did the service happen? |
-| General contractor | Was the cost explained before work began? | How did you arrange the visit? | Did the service happen at the arranged time? |
-| Pet care | How did you arrange the visit? | How did drop-off work? | Was the cost explained before work began? |
-| Pet boarding | How did you arrange this visit? | How did drop-off work? | Were visiting rules clearly explained? |
-| Funeral home | How did visitor entry work? | Was there a place to wait? | Was there a step-free way in? |
-| Cemetery | Was it easy to find the right entrance or area? | Could you sit down without buying anything? | How much shade did you find? |
-| Astrologer | How did you arrange the visit? | Were prices clear before you paid? | Where did the service happen? |
-| Psychic | How did you arrange the visit? | Were prices clear before you paid? | Was there a place to wait? |
-| Tour agency | How did you arrange this visit? | Were the instructions easy to follow? | How did you contact or book with them? |
-| Travel agency | How did you arrange the visit? | Could you get help choosing? | Were prices clear before you paid? |
-| Tourist information | Were visiting rules clearly explained? | Could you get help choosing? | How long did you wait? |
-| Chauffeur | How did you arrange this visit? | How did you contact or book with them? | Were prices clear before you paid? |
-| Aircraft rental | How did you arrange this visit? | Were visiting rules clearly explained? | Were prices clear before you paid? |
-| Telecommunications | How long did you wait? | How did you arrange the visit? | Where did the service happen? |
-| Beauty service | How did you arrange the visit? | Were prices clear before you paid? | Was there a step-free way in? |
-| Skin care clinic | How did you arrange the visit? | Were the instructions easy to follow? | Was there a place to wait? |
-| Tanning studio | How did you arrange the visit? | What changing space was available? | Were prices clear before you paid? |
-| Hair salon | How did you arrange the visit? | How long did you wait? | How could you pay? |
-| Barber | How long did you wait? | How did you arrange the visit? | Were prices clear before you paid? |
-| Nail salon | How did you arrange the visit? | How long did you wait? | How could you pay? |
-| Makeup artist | How did you arrange the visit? | Where did the service happen? | Were the supplies you needed provided? |
-| Body art | How did you arrange the visit? | Were prices clear before you paid? | Were visiting rules clearly explained? |
-| Tattoo/piercing | How did you arrange the visit? | Was the cost explained before work began? | Were visiting rules clearly explained? |
-
-### Travel & Transit
-
-38 selectable subcategories.
+### Wellness & Fitness (54)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Airport | Was it easy to find the right entrance or area? | Where was the area you used? | Was luggage storage available? |
-| International airport | Where was the area you used? | Could you charge a phone? | Were showers available? |
-| Airstrip | How did visitor entry work? | Was there a place to wait? | Where could you park? |
-| Heliport | How did visitor entry work? | What was your route to boarding like? | Was there a place to wait? |
-| Train station | Was it easy to find the right entrance or area? | What was your route to boarding like? | What bathroom access did you find? |
-| Subway station | What was your route to boarding like? | Was it easy to find the right entrance or area? | Where was the area you used? |
-| Light rail | What was your route to boarding like? | Was there shelter while you waited? | Were the instructions easy to follow? |
-| Tram stop | Was there shelter while you waited? | What was your route to boarding like? | Somewhere to sit? |
-| Bus stop | Was there shelter while you waited? | Somewhere to sit? | Were the instructions easy to follow? |
-| Bus station | Was there a place to wait? | What bathroom access did you find? | Was it easy to find the right entrance or area? |
-| Ferry terminal | What was your route to boarding like? | Was there shelter while you waited? | Was there a place to wait? |
-| Ferry service | What was your route to boarding like? | Somewhere to sit? | What bathroom access did you find? |
-| Transit station | Was it easy to find the right entrance or area? | What bathroom access did you find? | Where was the area you used? |
-| Transit stop | Was there shelter while you waited? | Somewhere to sit? | Was it easy to find the right entrance or area? |
-| Transit depot | How did visitor entry work? | Was it easy to find the right entrance or area? | Was there a place to wait? |
-| Taxi stand | Was there shelter while you waited? | How long did you wait? | How could you pay? |
-| Taxi service | How did you contact or book with them? | How long did you wait? | How could you pay? |
-| Bike share station | How did collecting a bike work? | Were the instructions easy to follow? | Was there a bike available when you arrived? |
-| Parking | How could you pay? | What was the parking surface like? | Was there a step-free way in? |
-| Parking lot | How could you pay? | What was the parking surface like? | Was it easy to find the right entrance or area? |
-| Parking garage | How could you pay? | Was there a step-free way in? | Was it easy to find the right entrance or area? |
-| Park & ride | How could you pay? | Was there shelter while you waited? | What was your route to boarding like? |
-| Gas station | How could you pay? | What bathroom access did you find? | Was there an air pump for tires? |
-| EV charging | Could you start charging? | What did you need to start charging? | Was there a place to wait? |
-| E-bike charging | Could you start charging? | What did you need to start charging? | Was there shelter while you waited? |
-| Rest stop | What bathroom access did you find? | Could you sit down without buying anything? | Could you refill water here? |
-| Truck stop | Were showers available? | What bathroom access did you find? | Where could you park? |
-| Toll station | How could you pay? | Were the instructions easy to follow? | How long did you wait? |
-| Bridge | What was the part you walked like? | How was walking space separated from vehicles? | How much shade did you find? |
-| Car dealer | How did you arrange the visit? | Could you get help choosing? | Where could you park? |
-| Car rental | How long did you wait? | How did collection work? | Were prices clear before you paid? |
-| Car repair | How did you arrange the visit? | Was the cost explained before work began? | When was the work ready? |
-| Car wash | Was it self-service or staffed? | How long did you wait? | How could you pay? |
-| Tire shop | How long did you wait? | Was the cost explained before work began? | When was the work ready? |
-| Truck dealer | How did you arrange the visit? | Where could you park? | Could you get help choosing? |
-| Transportation service | How did you arrange this visit? | How did you contact or book with them? | How long did you wait? |
-| Dump station | How could you pay? | Were the instructions easy to follow? | Were the supplies you needed provided? |
-| RV water refill | Could you refill water here? | How could you pay? | Were the instructions easy to follow? |
+| Gym | Day pass or members only? | What kind of gym equipment? | Changing rooms and showers? |
+| Fitness center | Day pass or members only? | What kind of gym equipment? | Changing rooms and showers? |
+| Yoga studio | Slow or energetic yoga? | Was the class busy? | Easy to book? |
+| Pilates studio | Was it a reformer class? | Was the class busy? | Easy to book? |
+| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass or members only? |
+| Functional fitness studio | Coached circuits or individual training? | Did coaches give technique feedback? | Was it busy? |
+| Wellness studio | Easy to book? | Equipment provided? | Private changing space? |
+| Wellness center | Walk-in or appointment? | Private changing space? | Step-free entrance? |
+| Sports club | Day pass or members only? | Open play or book a court? | Changing rooms and showers? |
+| Sports complex | Open play or book a court? | Changing rooms and showers? | Visitor information available? |
+| Sports coaching | Did coaches give technique feedback? | Group or private lessons? | Equipment provided? |
+| Sports school | Group or private lessons? | Introduction or lessons offered? | Equipment provided? |
+| Athletic field | Grass or artificial playing surface? | Lit for evening use on your visit? | Bathroom access? |
+| Swimming pool | Lap lanes or open swim? | Indoor or outdoor pool? | Changing rooms and showers? |
+| Tennis court | What was the tennis court surface? | Open play or book a court? | Court lights on for evening play? |
+| Golf course | Full course or practice facilities? | Club rental available? | Booked or walked in? |
+| Indoor golf | Simulator or indoor practice? | Club rental available? | Booked or walked in? |
+| Ice skating rink | Drop-in or booked skating? | Equipment provided? | Storage during the activity? |
+| Volleyball court | Sand, grass or hard court? | Volleyball net ready to use? | Open play or book a court? |
+| Soccer field | Grass or artificial playing surface? | Goals already set up? | Lit for evening use on your visit? |
+| Basketball court | Full or half basketball court? | Open play or book a court? | Court lights on for evening play? |
+| Pickleball court | Dedicated or shared pickleball courts? | Open play or book a court? | Court lights on for evening play? |
+| Spa | Walk-in or appointment? | Private changing space? | Dry sauna or steam room? |
+| Massage | Choice of massage style or pressure? | Private appointment space? | Walk-in or appointment? |
+| Massage spa | Choice of massage style or pressure? | Private changing space? | Walk-in or appointment? |
+| Sauna | Dry sauna or steam room? | Private changing space? | Booked or walked in? |
+| Chiropractor | Walk-in or appointment? | Clear instructions before the visit? | Private appointment space? |
+| Dentist | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
+| Dental clinic | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
+| Optometrist | Eyewear to try on? | Walk-in or appointment? | Step-free entrance? |
+| Ophthalmologist | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
+| Eye care center | Eyewear to try on? | Walk-in or appointment? | Long wait? |
+| Doctor | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
+| Dermatologist | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
+| Pediatrician | Long wait? | Baby-changing table? | Step-free entrance? |
+| Urgent care | Long wait? | Walk-in or appointment? | Parking on arrival? |
+| Medical clinic | Walk-in or appointment? | Long wait? | Step-free entrance? |
+| Medical center | Visitor information available? | Parking on arrival? | Step-free entrance? |
+| Hospital | Visitor information available? | Parking on arrival? | Bathroom access? |
+| Medical lab | Walk-in or booked lab visit? | Clear instructions before the visit? | Long wait? |
+| Pharmacy | Prescription ready on arrival? | Long wait? | Step-free entrance? |
+| Drugstore | Prescription ready on arrival? | Long wait? | Step-free entrance? |
+| Physiotherapist | Space for guided exercises? | Private appointment space? | Step-free entrance? |
+| Physical therapy | Space for guided exercises? | Private appointment space? | Step-free entrance? |
+| Foot care | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
+| Podiatrist | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
+| Veterinary care | Separate animal waiting areas? | Walk-in or appointment? | Parking on arrival? |
+| Mental health/therapy | Private appointment space? | Walk-in or appointment? | Step-free entrance? |
+| Retreat | Scheduled or flexible retreat? | Clear dietary information? | Step-free entrance? |
+| Beach tennis | Open play or book a court? | Equipment provided? | Court lights on for evening play? |
+| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | How much shade did you find? |
+| Padel court | Open play or book a court? | Indoor or outdoor courts? | Equipment provided? |
+| Climbing gym | Bouldering or ropes? | Equipment provided? | Was it busy? |
+| Surf school | Equipment provided? | Was the class busy? | Easy to book? |
 
-### Work & Education
-
-17 selectable subcategories.
-
-| Subcategory | Question 1 | Question 2 | Question 3 |
-| --- | --- | --- | --- |
-| Co-working space | Could you use it for a single day or session? | Could you find a quiet place to concentrate? | Could you plug in? |
-| Business center | Could you use it for a single day or session? | Could you use a separate study or meeting room? | How did the Wi-Fi work? |
-| Corporate office | How did visitor entry work? | Was it easy to find the right entrance or area? | Was there a place to wait? |
-| Manufacturer | How did visitor entry work? | How did you arrange the visit? | Where could you park? |
-| Supplier | How did visitor entry work? | How did collection work? | Was there somewhere to load or unload items? |
-| Farm | How did visitor entry work? | What was the part you walked like? | Where could you park? |
-| Ranch | Were visiting rules clearly explained? | What was the part you walked like? | Where could you park? |
-| Television studio | How did visitor entry work? | What happened with bags on entry? | Were visiting rules clearly explained? |
-| Library | Could you find a quiet place to concentrate? | Could you use a separate study or meeting room? | Could visitors print documents? |
-| University | Was it easy to find the right entrance or area? | How did visitor entry work? | Could you sit down without buying anything? |
-| School | How did visitor entry work? | Was it easy to find the right entrance or area? | How did you arrange the visit? |
-| Preschool | How did visitor entry work? | How did you arrange the visit? | Was there a place to wait? |
-| Primary school | How did visitor entry work? | How did you arrange the visit? | Was there a step-free way in? |
-| Secondary school | How did visitor entry work? | How did you arrange the visit? | Was it easy to find the right entrance or area? |
-| Academic department | Was it easy to find the right entrance or area? | How did visitor entry work? | Was there a step-free way in? |
-| Educational institution | How did visitor entry work? | Was there a step-free way in? | Was it easy to find the right entrance or area? |
-| Research institute | How did visitor entry work? | How did you arrange the visit? | What happened with bags on entry? |
-
-### Civic & Faith
-
-16 selectable subcategories.
+### Stays (18)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| City hall | How did visitor entry work? | Was it easy to find the right entrance or area? | Was there a step-free way in? |
-| Government office | How did you arrange the visit? | How long did you wait? | Was it easy to find the right entrance or area? |
-| Local government office | How did you arrange the visit? | How long did you wait? | Was there a step-free way in? |
-| Courthouse | What happened with bags on entry? | Was it easy to find the right entrance or area? | Was there a place to wait? |
-| Embassy | How did you arrange the visit? | What happened with bags on entry? | Was there a place to wait? |
-| Post office | How long did you wait? | How did drop-off work? | Were the supplies you needed provided? |
-| Police | How did visitor entry work? | Was it easy to find the right entrance or area? | Was there a place to wait? |
-| Neighborhood police station | How did visitor entry work? | Was there a place to wait? | Was there a step-free way in? |
-| Fire station | How did visitor entry work? | Were visiting rules clearly explained? | Was it easy to find the right entrance or area? |
-| Church | Were visiting rules clearly explained? | Was there a step-free way in? | Somewhere to sit? |
-| Mosque | Were visiting rules clearly explained? | Was there a step-free way in? | Somewhere to sit? |
-| Synagogue | How did visitor entry work? | Were visiting rules clearly explained? | Was there a step-free way in? |
-| Hindu temple | Were visiting rules clearly explained? | What did posted rules or staff say about photos? | Was there a step-free way in? |
-| Buddhist temple | Were visiting rules clearly explained? | What did posted rules or staff say about photos? | Somewhere to sit? |
-| Shinto shrine | Were visiting rules clearly explained? | What was the part you walked like? | What did posted rules or staff say about photos? |
-| Place of worship | Were visiting rules clearly explained? | How did visitor entry work? | Was there a step-free way in? |
+| Hotel | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
+| Resort | Quiet room when you rested? | Breakfast included? | Step-free entrance? |
+| Motel | Quiet room when you rested? | Where could you park? | Room temperature controls? |
+| Hostel | Entire place or shared stay? | Lockers available? | Guest cooking facilities? |
+| Inn | Quiet room when you rested? | Breakfast included? | Self check-in or staff welcome? |
+| Bed & breakfast | Breakfast included? | Entire place or shared stay? | Self check-in or staff welcome? |
+| Guest house | Entire place or shared stay? | Breakfast included? | Quiet room when you rested? |
+| Private guest room | Entire place or shared stay? | Guest cooking facilities? | Self check-in or staff welcome? |
+| Airbnb | Guest cooking facilities? | Self check-in or staff welcome? | Quiet room when you rested? |
+| Vrbo | Guest cooking facilities? | Self check-in or staff welcome? | Quiet room when you rested? |
+| Extended stay | Guest cooking facilities? | Laundry available? | Somewhere to work? |
+| Cottage | Dogs allowed? | Guest cooking facilities? | Where could you park? |
+| Cabin | Dogs allowed? | Guest cooking facilities? | Room temperature controls? |
+| Campground | Posted dog rules? | Campsite toilets? | How did you get a campsite? |
+| RV park | Posted dog rules? | Water or power hookups? | Campsite toilets? |
+| Farm-stay | Entire place or shared stay? | Guest cooking facilities? | Dogs allowed? |
+| Japanese inn | Entire place or shared stay? | Breakfast included? | Private or shared changing space? |
+| Mobile home park | Laundry available? | Where could you park? | Entire place or shared stay? |
 
-### Areas & Addresses
-
-15 selectable subcategories.
-
-| Subcategory | Question 1 | Question 2 | Question 3 |
-| --- | --- | --- | --- |
-| Apartment building | Was it easy to find the right entrance or area? | Was there a step-free way in? | Where could you park? |
-| Apartment complex | Was it easy to find the right entrance or area? | Where could you park? | What was the part you walked like? |
-| Condominium complex | Was it easy to find the right entrance or area? | Was there a step-free way in? | What was the part you walked like? |
-| Housing complex | Was it easy to find the right entrance or area? | What was the part you walked like? | Could you sit down without buying anything? |
-| Neighborhood | How did you get around the part you explored? | Could you sit down without buying anything? | How much shade did you find? |
-| Locality/city | How did you get around the part you explored? | What stood out in the part you explored? | How much time did you spend exploring? |
-| Postal area | How did you get around the part you explored? | Was it easy to find the right entrance or area? | How much time did you spend exploring? |
-| Town | How did you get around the part you explored? | What stood out in the part you explored? | Could you sit down without buying anything? |
-| Region | How did you get around the part you explored? | How much time did you spend exploring? | What stood out in the part you explored? |
-| Country | What stood out in the part you explored? | How did you get around the part you explored? | How much time did you spend exploring? |
-| Route/street | What was the part you walked like? | Could you sit down without buying anything? | How much shade did you find? |
-| Address | Was it easy to find the right entrance or area? | Was there a step-free way in? | What was the part you walked like? |
-| Intersection | How did you cross here? | What was the part you walked like? | Was it easy to find the right entrance or area? |
-| Landmark | Was it easy to find the right entrance or area? | Could you sit down without buying anything? | How much time did you spend exploring? |
-| Plus code | Was it easy to find the right entrance or area? | How did you get around the part you explored? | What was the part you walked like? |
-
-### Facilities & Other
-
-7 selectable subcategories.
+### Services & Errands (49)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Public bathroom | Was there a charge to use the toilet? | Was there a place to wash your hands? | Was there a step-free way in? |
-| Public bath | What changing space was available? | Were lockers available? | Were showers available? |
-| Restroom | Was there a charge to use the toilet? | Was there a place to wash your hands? | Was a baby-changing table available? |
-| Stable | How did you arrange this visit? | Could you borrow or hire riding equipment? | Were visiting rules clearly explained? |
-| Generic establishment | How did visitor entry work? | Was there a step-free way in? | How could you pay? |
-| Point of interest | Was it easy to find the right entrance or area? | Somewhere to sit? | How much time did you spend exploring? |
-| Unknown | Was it easy to find the right entrance or area? | How did visitor entry work? | Was there a step-free way in? |
+| Bank | Long wait? | Walk-in or appointment? | Step-free entrance? |
+| ATM | Could you withdraw cash? | Was the withdrawal fee clear? | Step-free entrance? |
+| Accounting | Walk-in or appointment? | Cost explained before work began? | Where did the service happen? |
+| Insurance | Clear instructions? | How did you book or contact them? | Cost explained before work began? |
+| Real estate | Walk-in or appointment? | How did you book or contact them? | Where did the service happen? |
+| Lawyer | Walk-in or appointment? | Cost explained before work began? | Somewhere to wait? |
+| Consultant | Walk-in or appointment? | Cost explained before work began? | How did you book or contact them? |
+| Marketing consultant | Cost explained before work began? | How did you book or contact them? | Where did the service happen? |
+| Employment agency | Walk-in or appointment? | Long wait? | How did visitor entry work? |
+| Nonprofit | How did visitor entry work? | How did you book or contact them? | Step-free entrance? |
+| Association | How did visitor entry work? | How did you book or contact them? | Easy to find your way? |
+| Florist | Help choosing available? | How did collection work? | Gift wrapping offered? |
+| Catering | Cost explained before work began? | How did collection work? | How did you book or contact them? |
+| Food delivery | How did you book or contact them? | Clear prices before paying? | Clear instructions? |
+| Child care | How did visitor entry work? | Walk-in or appointment? | Easy to find your way? |
+| Summer camp | Walk-in or appointment? | Clear visitor rules? | Counter or self-service drop-off? |
+| Laundry | Self-service or staffed? | Machines available on arrival? | Card, cash or app? |
+| Tailor | Somewhere to try things on? | When was the work ready? | Cost explained before work began? |
+| Courier | Counter or self-service drop-off? | Long wait? | Card, cash or app? |
+| Shipping | Counter or self-service drop-off? | Supplies provided? | Long wait? |
+| Storage | How did visitor entry work? | Space to load or unload? | Where could you park? |
+| Moving | Cost explained before work began? | Did the service start on time? | How did you book or contact them? |
+| Electrician | Cost explained before work began? | How did you book or contact them? | Did the service start on time? |
+| Plumber | Cost explained before work began? | How did you book or contact them? | Did the service start on time? |
+| Locksmith | Did the service start on time? | Cost explained before work began? | How did you book or contact them? |
+| Painter | Cost explained before work began? | How did you book or contact them? | Did the service start on time? |
+| Roofing contractor | Cost explained before work began? | Did the service start on time? | Where did the service happen? |
+| General contractor | Cost explained before work began? | Walk-in or appointment? | Did the service start on time? |
+| Pet care | Walk-in or appointment? | Counter or self-service drop-off? | Cost explained before work began? |
+| Pet boarding | Booked or walked in? | Counter or self-service drop-off? | Clear visitor rules? |
+| Funeral home | How did visitor entry work? | Somewhere to wait? | Step-free entrance? |
+| Cemetery | Easy to find your way? | Seating without a purchase? | How much shade did you find? |
+| Astrologer | Walk-in or appointment? | Clear prices before paying? | Where did the service happen? |
+| Psychic | Walk-in or appointment? | Clear prices before paying? | Somewhere to wait? |
+| Tour agency | Booked or walked in? | Clear instructions? | How did you book or contact them? |
+| Travel agency | Walk-in or appointment? | Help choosing available? | Clear prices before paying? |
+| Tourist information | Clear visitor rules? | Help choosing available? | Long wait? |
+| Chauffeur | Booked or walked in? | How did you book or contact them? | Clear prices before paying? |
+| Aircraft rental | Booked or walked in? | Clear visitor rules? | Clear prices before paying? |
+| Telecommunications | Long wait? | Walk-in or appointment? | Where did the service happen? |
+| Beauty service | Walk-in or appointment? | Clear prices before paying? | Step-free entrance? |
+| Skin care clinic | Walk-in or appointment? | Clear instructions? | Somewhere to wait? |
+| Tanning studio | Walk-in or appointment? | Private or shared changing space? | Clear prices before paying? |
+| Hair salon | Walk-in or appointment? | Long wait? | Card, cash or app? |
+| Barber | Long wait? | Walk-in or appointment? | Clear prices before paying? |
+| Nail salon | Walk-in or appointment? | Long wait? | Card, cash or app? |
+| Makeup artist | Walk-in or appointment? | Where did the service happen? | Supplies provided? |
+| Body art | Walk-in or appointment? | Clear prices before paying? | Clear visitor rules? |
+| Tattoo/piercing | Walk-in or appointment? | Cost explained before work began? | Clear visitor rules? |
+
+### Travel & Transit (38)
+
+| Subcategory | Question 1 | Question 2 | Question 3 |
+| --- | --- | --- | --- |
+| Airport | Easy to find your way? | How was the Wi-Fi? | Luggage storage? |
+| International airport | Luggage storage? | Phone charging? | Showers available? |
+| Airstrip | How did visitor entry work? | Somewhere to wait? | Where could you park? |
+| Heliport | How did visitor entry work? | Step-free route to boarding? | Somewhere to wait? |
+| Train station | Easy to find your way? | Step-free route to boarding? | Bathroom access? |
+| Subway station | Step-free route to boarding? | Easy to find your way? | Was it busy? |
+| Light rail | Step-free route to boarding? | Shelter while waiting? | Clear instructions? |
+| Tram stop | Shelter while waiting? | Step-free route to boarding? | Somewhere to sit? |
+| Bus stop | Shelter while waiting? | Somewhere to sit? | Clear instructions? |
+| Bus station | Somewhere to wait? | Bathroom access? | Easy to find your way? |
+| Ferry terminal | Step-free route to boarding? | Shelter while waiting? | Somewhere to wait? |
+| Ferry service | Step-free route to boarding? | Somewhere to sit? | Bathroom access? |
+| Transit station | Easy to find your way? | Bathroom access? | Somewhere to wait? |
+| Transit stop | Shelter while waiting? | Somewhere to sit? | Easy to find your way? |
+| Transit depot | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
+| Taxi stand | Shelter while waiting? | Long wait? | Card, cash or app? |
+| Taxi service | How did you book or contact them? | Long wait? | Card, cash or app? |
+| Bike share station | How did you collect a bike? | Clear instructions? | Bikes available when you arrived? |
+| Parking | Card, cash or app? | What was the parking surface? | Step-free entrance? |
+| Parking lot | Card, cash or app? | What was the parking surface? | Easy to find your way? |
+| Parking garage | Card, cash or app? | Step-free entrance? | Easy to find your way? |
+| Park & ride | Card, cash or app? | Shelter while waiting? | Step-free route to boarding? |
+| Gas station | Card, cash or app? | Bathroom access? | Tire air pump? |
+| EV charging | Could you start charging? | Card or app to start charging? | Somewhere to wait? |
+| E-bike charging | Could you start charging? | Card or app to start charging? | Shelter while waiting? |
+| Rest stop | Bathroom access? | Seating without a purchase? | Water refill? |
+| Truck stop | Showers available? | Bathroom access? | Where could you park? |
+| Toll station | Card, cash or app? | Clear instructions? | Long wait? |
+| Bridge | What was your walking route like? | Walking path separate from traffic? | How much shade did you find? |
+| Car dealer | Walk-in or appointment? | Help choosing available? | Where could you park? |
+| Car rental | Long wait? | How did collection work? | Clear prices before paying? |
+| Car repair | Walk-in or appointment? | Cost explained before work began? | When was the work ready? |
+| Car wash | Self-service or staffed? | Long wait? | Card, cash or app? |
+| Tire shop | Long wait? | Cost explained before work began? | When was the work ready? |
+| Truck dealer | Walk-in or appointment? | Where could you park? | Help choosing available? |
+| Transportation service | Booked or walked in? | How did you book or contact them? | Long wait? |
+| Dump station | Card, cash or app? | Clear instructions? | Supplies provided? |
+| RV water refill | Water refill? | Card, cash or app? | Clear instructions? |
+
+### Work & Education (17)
+
+| Subcategory | Question 1 | Question 2 | Question 3 |
+| --- | --- | --- | --- |
+| Co-working space | Day or session pass? | Quiet place to concentrate? | Power outlets? |
+| Business center | Day or session pass? | Separate study or meeting rooms? | How was the Wi-Fi? |
+| Corporate office | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
+| Manufacturer | How did visitor entry work? | Walk-in or appointment? | Where could you park? |
+| Supplier | How did visitor entry work? | How did collection work? | Space to load or unload? |
+| Farm | How did visitor entry work? | What was your walking route like? | Where could you park? |
+| Ranch | Clear visitor rules? | What was your walking route like? | Where could you park? |
+| Television studio | How did visitor entry work? | Bags checked or stored on entry? | Clear visitor rules? |
+| Library | Quiet place to concentrate? | Separate study or meeting rooms? | Visitor printing? |
+| University | Easy to find your way? | How did visitor entry work? | Seating without a purchase? |
+| School | How did visitor entry work? | Easy to find your way? | Walk-in or appointment? |
+| Preschool | How did visitor entry work? | Walk-in or appointment? | Somewhere to wait? |
+| Primary school | How did visitor entry work? | Walk-in or appointment? | Step-free entrance? |
+| Secondary school | How did visitor entry work? | Walk-in or appointment? | Easy to find your way? |
+| Academic department | Easy to find your way? | How did visitor entry work? | Step-free entrance? |
+| Educational institution | How did visitor entry work? | Step-free entrance? | Easy to find your way? |
+| Research institute | How did visitor entry work? | Walk-in or appointment? | Bags checked or stored on entry? |
+
+### Civic & Faith (16)
+
+| Subcategory | Question 1 | Question 2 | Question 3 |
+| --- | --- | --- | --- |
+| City hall | How did visitor entry work? | Easy to find your way? | Step-free entrance? |
+| Government office | Walk-in or appointment? | Long wait? | Easy to find your way? |
+| Local government office | Walk-in or appointment? | Long wait? | Step-free entrance? |
+| Courthouse | Bags checked or stored on entry? | Easy to find your way? | Somewhere to wait? |
+| Embassy | Walk-in or appointment? | Bags checked or stored on entry? | Somewhere to wait? |
+| Post office | Long wait? | Counter or self-service drop-off? | Supplies provided? |
+| Police | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
+| Neighborhood police station | How did visitor entry work? | Somewhere to wait? | Step-free entrance? |
+| Fire station | How did visitor entry work? | Clear visitor rules? | Easy to find your way? |
+| Church | Clear visitor rules? | Step-free entrance? | Somewhere to sit? |
+| Mosque | Clear visitor rules? | Step-free entrance? | Somewhere to sit? |
+| Synagogue | How did visitor entry work? | Clear visitor rules? | Step-free entrance? |
+| Hindu temple | Clear visitor rules? | What did staff or signs say about photos? | Step-free entrance? |
+| Buddhist temple | Clear visitor rules? | What did staff or signs say about photos? | Somewhere to sit? |
+| Shinto shrine | Clear visitor rules? | What was your walking route like? | What did staff or signs say about photos? |
+| Place of worship | Clear visitor rules? | How did visitor entry work? | Step-free entrance? |
+
+### Areas & Addresses (15)
+
+| Subcategory | Question 1 | Question 2 | Question 3 |
+| --- | --- | --- | --- |
+| Apartment building | Easy to find your way? | Step-free entrance? | Where could you park? |
+| Apartment complex | Easy to find your way? | Where could you park? | What was your walking route like? |
+| Condominium complex | Easy to find your way? | Step-free entrance? | What was your walking route like? |
+| Housing complex | Easy to find your way? | What was your walking route like? | Seating without a purchase? |
+| Neighborhood | How did you get around? | Seating without a purchase? | How much shade did you find? |
+| Locality/city | How did you get around? | What stood out where you explored? | How long did you spend exploring? |
+| Postal area | How did you get around? | Easy to find your way? | How long did you spend exploring? |
+| Town | How did you get around? | What stood out where you explored? | Seating without a purchase? |
+| Region | How did you get around? | How long did you spend exploring? | What stood out where you explored? |
+| Country | What stood out where you explored? | How did you get around? | How long did you spend exploring? |
+| Route/street | What was your walking route like? | Seating without a purchase? | How much shade did you find? |
+| Address | Easy to find your way? | Step-free entrance? | What was your walking route like? |
+| Intersection | Marked crossing or bridge? | What was your walking route like? | Easy to find your way? |
+| Landmark | Easy to find your way? | Seating without a purchase? | How long did you spend exploring? |
+| Plus code | Easy to find your way? | How did you get around? | What was your walking route like? |
+
+### Facilities & Other (7)
+
+| Subcategory | Question 1 | Question 2 | Question 3 |
+| --- | --- | --- | --- |
+| Public bathroom | Toilet fee? | Handwashing facilities? | Step-free entrance? |
+| Public bath | Private or shared changing space? | Lockers available? | Showers available? |
+| Restroom | Toilet fee? | Handwashing facilities? | Baby-changing table? |
+| Stable | Booked or walked in? | Riding equipment provided? | Clear visitor rules? |
+| Generic establishment | How did visitor entry work? | Step-free entrance? | Card, cash or app? |
+| Point of interest | Easy to find your way? | Somewhere to sit? | How long did you spend exploring? |
+| Unknown | Easy to find your way? | How did visitor entry work? | Step-free entrance? |
+
+## Historical compatibility
+
+`allQuestions` and `question(id:)` retain every historical definition. `availableQuestions` excludes the explicit `retiredQuestionIDs` set for new selections. Previously saved answers retain their original key and options; they are not migrated to superficially similar new questions. Retired definitions are retained below as an audit of the smaller library, not as new defaults.
+
+| Historical key | Original subject |
+| --- | --- |
+| `place_detail_bao` | Bao |
+| `place_detail_barbecue` | Barbecue availability |
+| `place_detail_bowl` | Bowls |
+| `place_detail_bread` | Bread to buy |
+| `place_detail_broth` | Broth choices |
+| `place_detail_burger` | Burger alternatives |
+| `place_detail_cake` | Cake orders |
+| `place_detail_class_size` | Session size |
+| `place_detail_coffee_after` | After-meal coffee |
+| `place_detail_crispy_takeaway` | Takeaway texture |
+| `place_detail_curry` | Curry portions |
+| `place_detail_dessert` | Dessert portions |
+| `place_detail_dim_sum` | Dim sum service |
+| `place_detail_dips` | Dips & sides |
+| `place_detail_dumplings` | Dumplings |
+| `place_detail_everyday_barrier` | Access area |
+| `place_detail_everyday_browsing` | Browsing space |
+| `place_detail_fishing_pier_setup` | Pier facilities |
+| `place_detail_flatbread` | Flatbreads |
+| `place_detail_fondue` | Fondue |
+| `place_detail_fresh_herbs` | Herbs & extras |
+| `place_detail_garden_labels` | Plant labels |
+| `place_detail_grilled` | Grilled dishes |
+| `place_detail_hotpot` | Hot-pot broth |
+| `place_detail_karaoke_charge` | Karaoke payment |
+| `place_detail_menu_guidance` | Menu help |
+| `place_detail_noodles` | Noodles |
+| `place_detail_oysters` | Oysters |
+| `place_detail_pasta` | Pasta portions |
+| `place_detail_pastry` | Pastry availability |
+| `place_detail_pilates_format` | Pilates format |
+| `place_detail_pilates_intro` | Pilates introduction |
+| `place_detail_rice` | Rice dishes |
+| `place_detail_roast_meats` | Roast dishes |
+| `place_detail_salsa` | Salsa |
+| `place_detail_sandwich` | Sandwiches |
+| `place_detail_seafood` | Seafood choices |
+| `place_detail_shared_platter` | Shared platters |
+| `place_detail_skewers` | Skewers |
+| `place_detail_small_plates` | Small plates |
+| `place_detail_smoothie` | Smoothie changes |
+| `place_detail_soup` | Soup meal |
+| `place_detail_steak` | Steak sides |
+| `place_detail_stew` | Stews & slow cooking |
+| `place_detail_sushi_menu` | Sushi ordering |
+| `place_detail_tacos` | Taco ordering |
+| `place_detail_tapas` | Tapas pace |
+| `place_detail_tea` | Tea service |
+| `place_detail_tea_shop` | Tea to take home |
+| `place_detail_toppings` | Toppings |
+| `place_detail_wings` | Wing flavors |

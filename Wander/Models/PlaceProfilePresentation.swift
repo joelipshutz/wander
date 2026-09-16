@@ -301,6 +301,9 @@ struct ParsedTag: Hashable {
 
 enum PlaceProfileAttributePresentation {
     static func displayValues(from attribute: LocalPlaceAttribute) -> [String] {
+        if SharedCheckInQuestion.isSharedQuestion(attribute.questionKey) {
+            return SharedCheckInQuestion.decode(attribute).map { [$0.displayValue] } ?? []
+        }
         let values = PlaceAttributeValuePresentation.strings(from: attribute.valueJSON)
         guard PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey) else {
             return values
