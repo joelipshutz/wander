@@ -118,6 +118,43 @@ final class CommonGroundMockDataTests: XCTestCase {
         }
     }
 
+    func testMutualWannaStillRecommendsAPlaceWithCheckInsAndMultipleWannaEvents() throws {
+        let candidate = try place("not-no-bar")
+        XCTAssertEqual(candidate.youVisits, 1)
+        XCTAssertEqual(candidate.youEvidence.wannaCount, 2)
+        XCTAssertTrue(candidate.youWanna)
+        XCTAssertTrue(candidate.joeWanna)
+        XCTAssertEqual(candidate.kind, .mutualWanna)
+        XCTAssertEqual(candidate.reason, "In both of your Wannas")
+        XCTAssertTrue(CommonGroundMockData.mix().contains { $0.id == candidate.id })
+        XCTAssertEqual(candidate.narrativeTitle, "You both want to go to Not No Bar.")
+        XCTAssertFalse(CommonGroundInvitationDraft(place: candidate).message.contains("finally"))
+    }
+
+    func testWannaEventsCanCreateEitherRecommendationDirectionAfterACheckIn() {
+        let joesFavorite = CommonGroundMockPlace(
+            id: "repeat", name: "Repeat", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
+            systemImage: "cup.and.saucer", youRating: 4, joeRating: 5,
+            youVisits: 1, joeVisits: 8, youWanna: false, joeWanna: false,
+            youWannaEventIDs: ["wanna-1", "wanna-2"], reason: "In your Wannas"
+        )
+        XCTAssertEqual(joesFavorite.kind, .introduce)
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Repeat. Go back with him?")
+
+        let yourFavorite = CommonGroundMockPlace(
+            id: "repeat", name: "Repeat", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
+            systemImage: "cup.and.saucer", youRating: 5, joeRating: 4,
+            youVisits: 8, joeVisits: 1, youWanna: false, joeWanna: false,
+            joeWannaEventIDs: ["wanna-3"], reason: "In Joe’s Wannas"
+        )
+        XCTAssertEqual(yourFavorite.kind, .introduce)
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You and Joe could go back to Repeat.")
+        for candidate in [joesFavorite, yourFavorite] {
+            XCTAssertEqual(CommonGroundInvitationDraft(place: candidate).message,
+                           "We both know Repeat. Let’s go back together?")
+        }
+    }
+
     func testAvailableCitiesUseTheUnionOfVisitsAndExcludeWannaOnlyCities() {
         XCTAssertEqual(CommonGroundMockData.availableCities, ["Los Angeles", "London"])
         let london = CommonGroundMockData.places.filter { $0.city == "London" }
@@ -155,7 +192,7 @@ final class CommonGroundMockDataTests: XCTestCase {
             id: "evidence", name: "Evidence", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
             systemImage: "cup.and.saucer", youRating: youRating, joeRating: joeRating,
             youVisits: youVisits, joeVisits: joeVisits, youWanna: false, joeWanna: false,
-            reason: "Threshold fixture", kind: .history
+            reason: "Threshold fixture"
         )
     }
 }

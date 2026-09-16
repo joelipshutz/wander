@@ -7,7 +7,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         let expectations: [(String, String, String)] = [
             ("narwhal", "Shared regulars", "We’re both Narwhal people. Coffee together?"),
             ("grove-gardens", "Shared love", "We both loved Grove Gardens. Round two?"),
-            ("not-no-bar", "Both wanna go", "We’ve both had Not No Bar saved. Let’s finally go?"),
+            ("not-no-bar", "Both wanna go", "We both wanna go to Not No Bar. Let’s make a plan?"),
             ("mudwater", "Joe’s regular spot", "You keep going back to Mudwater. Take me next time?"),
             ("the-little-room", "Ryan’s regular spot", "I keep going back to The Little Room. Let me show you why.")
         ]
@@ -30,14 +30,14 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         XCTAssertEqual(ratings.reasonSymbol, "heart.fill")
         XCTAssertFalse(ratings.place.bothRegulars)
 
-        XCTAssertEqual(try draft("not-no-bar").reasonDetail, "On Ryan’s and Joe’s Wanna Go maps.")
+        XCTAssertEqual(try draft("not-no-bar").reasonDetail, "In both of your Wannas")
         XCTAssertEqual(
             try draft("mudwater").reasonDetail,
-            "Joe: 5 check-ins · On Ryan’s Wanna Go map."
+            "Joe: 5 check-ins · In Ryan’s Wannas."
         )
         XCTAssertEqual(
             try draft("the-little-room").reasonDetail,
-            "Ryan: 7 check-ins · On Joe’s Wanna Go map."
+            "Ryan: 7 check-ins · In Joe’s Wannas."
         )
     }
 

@@ -46,14 +46,69 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
     let systemImage: String
     let youRating: Double?
     let joeRating: Double?
-    let youVisits: Int
-    let joeVisits: Int
-    let youWanna: Bool
-    let joeWanna: Bool
+    let youEvidence: CommonGroundPersonEvidence
+    let joeEvidence: CommonGroundPersonEvidence
     let reason: String
-    let kind: CommonGroundMockKind
 
+    var kind: CommonGroundMockKind {
+        if bothLoved { return .returnTogether }
+        if youWanna && joeWanna { return .mutualWanna }
+        if youWanna && joeVisits >= 3 && (joeRating ?? 0) >= 4.5 { return .introduce }
+        if joeWanna && youVisits >= 3 && (youRating ?? 0) >= 4.5 { return .introduce }
+        return .history
+    }
+
+    var youVisits: Int { youEvidence.visitCount }
+    var joeVisits: Int { joeEvidence.visitCount }
+    var youWanna: Bool { youEvidence.hasWanna }
+    var joeWanna: Bool { joeEvidence.hasWanna }
     var totalVisits: Int { youVisits + joeVisits }
+
+    init(
+        id: String, name: String, category: String, area: String, city: String,
+        systemImage: String, youRating: Double?, joeRating: Double?,
+        youVisits: Int, joeVisits: Int, youWanna: Bool, joeWanna: Bool,
+        youWannaEventIDs: [String] = [], joeWannaEventIDs: [String] = [],
+        reason: String
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.area = area
+        self.city = city
+        self.systemImage = systemImage
+        self.youRating = youRating
+        self.joeRating = joeRating
+        self.reason = reason
+        // Fixtures mirror separate check-in and Wanna events. In the live
+        // adapter, pass all visible events after canonical place resolution,
+        // including Wanna events attached to a Been summary (REC-497).
+        func evidence(owner: String, visits: Int, legacyWanna: Bool, wannaIDs: [String]) -> CommonGroundPersonEvidence {
+            var records = (0..<max(0, visits)).map {
+                CommonGroundEvidenceRecord(id: "\(id)-\(owner)-visit-\($0)", ownerID: owner,
+                                           canonicalPlaceID: id, kind: .checkIn)
+            }
+            records += wannaIDs.map {
+                CommonGroundEvidenceRecord(id: $0, ownerID: owner, canonicalPlaceID: id, kind: .wanna)
+            }
+            if legacyWanna {
+                records.append(CommonGroundEvidenceRecord(id: "\(id)-\(owner)-legacy-wanna", ownerID: owner,
+                                                          canonicalPlaceID: id, kind: .legacyWanna))
+            }
+            return .aggregate(personID: owner, canonicalPlaceID: id, records: records)
+        }
+        youEvidence = evidence(owner: "ryan", visits: youVisits, legacyWanna: youWanna, wannaIDs: youWannaEventIDs)
+        joeEvidence = evidence(owner: "joe", visits: joeVisits, legacyWanna: joeWanna, wannaIDs: joeWannaEventIDs)
+    }
+
+    var previewPhotoTile: Int? {
+        switch category {
+        case "Bar": 3
+        case "Restaurant": 2
+        case "Coffee": id == "mudwater" || id == "canal-coffee" ? 1 : 0
+        default: nil
+        }
+    }
 
     var bothLoved: Bool {
         guard let youRating, let joeRating else { return false }
@@ -66,9 +121,12 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         switch narrative {
         case .sharedRegulars: "You both love \(name)."
         case .sharedRatings: "\(name) won you both over."
-        case .mutualWanna: "You both want to try \(name)."
-        case .joeIntroduces: "Joe loves \(name). You’re next?"
-        case .youIntroduce: "You could show Joe \(name)."
+        case .mutualWanna:
+            totalVisits > 0 ? "You both want to go to \(name)." : "You both want to try \(name)."
+        case .joeIntroduces:
+            youVisits > 0 ? "Joe loves \(name). Go back with him?" : "Joe loves \(name). You’re next?"
+        case .youIntroduce:
+            joeVisits > 0 ? "You and Joe could go back to \(name)." : "You could show Joe \(name)."
         case .history: "You’ve both saved \(name)."
         }
     }
@@ -108,80 +166,71 @@ enum CommonGroundMockData {
             systemImage: "cup.and.saucer",
             youRating: 5, joeRating: 5, youVisits: 18, joeVisits: 17,
             youWanna: false, joeWanna: false,
-            reason: "18 check-ins for you. 17 for Joe.",
-            kind: .returnTogether
+            reason: "18 check-ins for you. 17 for Joe."
         ),
         CommonGroundMockPlace(
             id: "grove-gardens", name: "Grove Gardens", category: "Garden", area: "Los Feliz", city: "Los Angeles",
             systemImage: "leaf",
             youRating: 5, joeRating: 4.5, youVisits: 1, joeVisits: 1,
             youWanna: false, joeWanna: false,
-            reason: "You: 5/5. Joe: 4.5/5. One check-in each.",
-            kind: .returnTogether
+            reason: "You: 5/5. Joe: 4.5/5. One check-in each."
         ),
         CommonGroundMockPlace(
             id: "not-no-bar", name: "Not No Bar", category: "Bar", area: "Echo Park", city: "Los Angeles",
             systemImage: "wineglass",
-            youRating: nil, joeRating: nil, youVisits: 0, joeVisits: 0,
-            youWanna: true, joeWanna: true,
-            reason: "On both Wanna Go maps.",
-            kind: .mutualWanna
+            youRating: 4, joeRating: nil, youVisits: 1, joeVisits: 0,
+            youWanna: false, joeWanna: true,
+            youWannaEventIDs: ["not-no-bar-ryan-wanna-1", "not-no-bar-ryan-wanna-2"],
+            reason: "In both of your Wannas"
         ),
         CommonGroundMockPlace(
             id: "mudwater", name: "Mudwater", category: "Coffee", area: "Los Feliz", city: "Los Angeles",
             systemImage: "cup.and.saucer",
             youRating: nil, joeRating: 4.5, youVisits: 0, joeVisits: 5,
             youWanna: true, joeWanna: false,
-            reason: "Joe: 5 check-ins. On your Wanna Go map.",
-            kind: .introduce
+            reason: "Joe: 5 check-ins. In your Wannas."
         ),
         CommonGroundMockPlace(
             id: "the-little-room", name: "The Little Room", category: "Restaurant", area: "Atwater Village", city: "Los Angeles",
             systemImage: "fork.knife",
             youRating: 5, joeRating: nil, youVisits: 7, joeVisits: 0,
             youWanna: false, joeWanna: true,
-            reason: "You: 7 check-ins. On Joe’s Wanna Go map.",
-            kind: .introduce
+            reason: "You: 7 check-ins. In Joe’s Wannas."
         ),
         CommonGroundMockPlace(
             id: "canal-coffee", name: "Canal Coffee", category: "Coffee", area: "Hackney", city: "London",
             systemImage: "cup.and.saucer",
             youRating: nil, joeRating: 4.5, youVisits: 0, joeVisits: 4,
             youWanna: true, joeWanna: false,
-            reason: "Joe: 4 check-ins. On your Wanna Go map.",
-            kind: .introduce
+            reason: "Joe: 4 check-ins. In your Wannas."
         ),
         CommonGroundMockPlace(
             id: "sundial-books", name: "Sundial Books", category: "Bookshop", area: "Islington", city: "London",
             systemImage: "books.vertical",
             youRating: nil, joeRating: nil, youVisits: 0, joeVisits: 0,
             youWanna: true, joeWanna: true,
-            reason: "On both Wanna Go maps.",
-            kind: .mutualWanna
+            reason: "In both of your Wannas"
         ),
         CommonGroundMockPlace(
             id: "paper-lantern", name: "Paper Lantern", category: "Bookshop", area: "Nakagyo", city: "Kyoto",
             systemImage: "books.vertical",
             youRating: nil, joeRating: nil, youVisits: 0, joeVisits: 0,
             youWanna: true, joeWanna: true,
-            reason: "On both Wanna Go maps.",
-            kind: .mutualWanna
+            reason: "In both of your Wannas"
         ),
         CommonGroundMockPlace(
             id: "lantern-kitchen", name: "Lantern Kitchen", category: "Restaurant", area: "Echo Park", city: "Los Angeles",
             systemImage: "fork.knife",
             youRating: 4.5, joeRating: 3, youVisits: 2, joeVisits: 1,
             youWanna: false, joeWanna: false,
-            reason: "Your saved ratings differ.",
-            kind: .history
+            reason: "Your saved ratings differ."
         ),
         CommonGroundMockPlace(
             id: "terrace", name: "Terrace", category: "Park", area: "Silver Lake", city: "Los Angeles",
             systemImage: "tree",
             youRating: nil, joeRating: nil, youVisits: 1, joeVisits: 1,
             youWanna: false, joeWanna: false,
-            reason: "One check-in each, no ratings yet.",
-            kind: .history
+            reason: "One check-in each, no ratings yet."
         )
     ]
 

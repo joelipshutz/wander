@@ -18,11 +18,17 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         case .sharedLove:
             return "We both loved \(place.name). Round two?"
         case .mutualWanna:
-            return "We’ve both had \(place.name) saved. Let’s finally go?"
+            return place.totalVisits > 0
+                ? "We both wanna go to \(place.name). Let’s make a plan?"
+                : "We’ve both had \(place.name) saved. Let’s finally go?"
         case .joesRegular:
-            return "You keep going back to \(place.name). Take me next time?"
+            return place.youVisits > 0
+                ? "We both know \(place.name). Let’s go back together?"
+                : "You keep going back to \(place.name). Take me next time?"
         case .ryansRegular:
-            return "I keep going back to \(place.name). Let me show you why."
+            return place.joeVisits > 0
+                ? "We both know \(place.name). Let’s go back together?"
+                : "I keep going back to \(place.name). Let me show you why."
         case .history:
             return "Want to go to \(place.name)?"
         }
@@ -46,11 +52,11 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         case .sharedLove:
             "\(ratingEvidence(name: "Ryan", rating: place.youRating)) · \(ratingEvidence(name: "Joe", rating: place.joeRating))"
         case .mutualWanna:
-            "On Ryan’s and Joe’s Wanna Go maps."
+            "In both of your Wannas"
         case .joesRegular:
-            "\(visitEvidence(name: "Joe", count: place.joeVisits)) · On Ryan’s Wanna Go map."
+            "\(visitEvidence(name: "Joe", count: place.joeVisits)) · In Ryan’s Wannas."
         case .ryansRegular:
-            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · On Joe’s Wanna Go map."
+            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · In Joe’s Wannas."
         }
     }
 

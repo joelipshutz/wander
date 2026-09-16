@@ -8,6 +8,40 @@ final class CommonGroundMockupUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testPlacePhotosOpenTheirOwnProfilesAndInviteTheSelectedPlace() {
+        let app = launch(page: "mix")
+        XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 8))
+
+        for (id, name) in [("narwhal", "Narwhal"), ("not-no-bar", "Not No Bar"),
+                           ("mudwater", "Mudwater"), ("the-little-room", "The Little Room")] {
+            let photo = app.buttons["common-ground.place.\(id)"]
+            XCTAssertTrue(scrollPhotoCenterIntoView(photo, in: app), name)
+            // Tap the image's center, not the small arrow overlay.
+            photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let profileName = app.staticTexts["common-ground.place-profile.name"]
+            XCTAssertTrue(profileName.waitForExistence(timeout: 4), name)
+            XCTAssertEqual(profileName.label, name)
+            capture("rec486-photo-profile-\(id)")
+
+            let invite = app.buttons["common-ground.place-profile.invite"]
+            XCTAssertTrue(scrollTo(invite, in: app))
+            invite.tap()
+            XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 4))
+            XCTAssertEqual(app.staticTexts["common-ground.invitation.place"].label, name)
+            app.navigationBars["Your invitation"].buttons.firstMatch.tap()
+            XCTAssertTrue(profileName.waitForExistence(timeout: 4))
+            app.navigationBars[name].buttons.firstMatch.tap()
+            XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 4))
+        }
+
+        selectCity("London", in: app)
+        let londonPhoto = app.buttons["common-ground.place.canal-coffee"]
+        XCTAssertTrue(scrollTo(londonPhoto, in: app))
+        londonPhoto.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.place-profile.name"].waitForExistence(timeout: 4))
+        XCTAssertEqual(app.staticTexts["common-ground.place-profile.name"].label, "Canal Coffee")
+    }
+
     func testNarrativeRecommendationsCitySelectionAndInvitationReturn() {
         let app = launch(page: "detail")
         let openMix = app.buttons["common-ground.open-mix"]
@@ -40,6 +74,7 @@ final class CommonGroundMockupUITests: XCTestCase {
 
         let invite = app.buttons["common-ground.invite.not-no-bar"]
         XCTAssertTrue(scrollTo(invite, in: app))
+        XCTAssertEqual(app.staticTexts["common-ground.wanna.not-no-bar"].label, "In both of your Wannas")
         invite.tap()
         let previewMessages = app.buttons["common-ground.invitation.messages"]
         XCTAssertTrue(previewMessages.waitForExistence(timeout: 5))
@@ -267,6 +302,20 @@ final class CommonGroundMockupUITests: XCTestCase {
         return element.exists && element.isHittable
     }
 
+    private func scrollPhotoCenterIntoView(_ photo: XCUIElement, in app: XCUIApplication) -> Bool {
+        let viewport = app.scrollViews.firstMatch.frame.intersection(app.frame)
+        let top = max(viewport.minY, app.navigationBars.firstMatch.frame.maxY) + 8
+        let bottom = viewport.maxY - 24
+        for _ in 0..<10 {
+            if photo.exists && photo.isHittable && photo.frame.midY > top && photo.frame.midY < bottom {
+                return true
+            }
+            if photo.exists && photo.frame.midY < top { app.swipeDown() }
+            else { app.swipeUp() }
+        }
+        return false
+    }
+
     // The Messages presentation preserves its composer. Verify
     // the visible postcard rather than accepting either copy in the AX tree.
     private func visibleText(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
@@ -341,7 +390,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         let narratives = [
             ("narwhal", "You both love Narwhal."),
             ("grove-gardens", "Grove Gardens won you both over."),
-            ("not-no-bar", "You both want to try Not No Bar."),
+            ("not-no-bar", "You both want to go to Not No Bar."),
             ("mudwater", "Joe loves Mudwater. You’re next?"),
             ("the-little-room", "You could show Joe The Little Room.")
         ]

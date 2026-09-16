@@ -205,7 +205,7 @@ struct CGInvitationPostcard: View {
                     }
                     Spacer(minLength: 0)
                     if !dynamicTypeSize.isAccessibilitySize && !compact {
-                        CommonGroundPhoto(tile: draft.place.category == "Bar" ? 3 : 0)
+                        CommonGroundPlaceArtwork(place: draft.place)
                             .frame(width: 78, height: 96)
                             .padding(5).padding(.bottom, 12)
                             .background(brand.raisedBackground)

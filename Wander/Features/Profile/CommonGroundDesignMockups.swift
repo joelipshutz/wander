@@ -163,7 +163,7 @@ private struct CommonGroundDetailMockup: View {
                         CommonGroundSectionHeading(title: "Your common ground")
                         evidenceLink("Both loved", detail: "The ones you’d happily go back to", count: CommonGroundMockData.places.filter(\.bothLoved).count, icon: "heart")
                         evidenceLink("Both regulars", detail: "Part of both your routines", count: CommonGroundMockData.places.filter(\.bothRegulars).count, icon: "arrow.counterclockwise")
-                        evidenceLink("Both wanna go", detail: "Already on both your maps", count: CommonGroundMockData.places.filter { $0.youWanna && $0.joeWanna }.count, icon: "bookmark")
+                        evidenceLink("Both wanna go", detail: "In both of your Wannas", count: CommonGroundMockData.places.filter { $0.youWanna && $0.joeWanna }.count, icon: "bookmark")
                         evidenceLink("All shared places", detail: "The familiar, the new, the different takes", count: CommonGroundMockData.places.count, icon: "mappin.and.ellipse")
                     }
                 }
@@ -378,13 +378,14 @@ private struct CommonGroundPlaceStory: View {
                 if place.bothLoved && !place.bothRegulars {
                     sharedRatings
                 } else {
-                    photo(height: place.bothRegulars ? 212 : 184)
-                    if place.bothRegulars {
+                    photo(height: place.kind == .returnTogether ? 212 : 184)
+                    if place.kind == .returnTogether {
                         regulars
                     } else {
-                        Label("On both your Wanna Go maps", systemImage: "bookmark.fill")
+                        Label("In both of your Wannas", systemImage: "bookmark.fill")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brand.secondaryText)
+                            .accessibilityIdentifier("common-ground.wanna.\(place.id)")
                     }
                 }
             }
@@ -449,7 +450,7 @@ private struct CommonGroundPlaceStory: View {
                         .padding(.leading, 8).accessibilityHidden(true)
                 }
             }
-            Text("One visit each. A shared soft spot.")
+            Text("A shared soft spot.")
                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
         }
         .padding(.vertical, 6)
@@ -480,17 +481,7 @@ private struct CommonGroundPlaceStory: View {
 
     private func photo(height: CGFloat) -> some View {
         Button(action: openPlace) {
-            Group {
-                if place.category == "Bookshop" {
-                    Image(systemName: "books.vertical")
-                        .font(.system(size: 42, weight: .ultraLight))
-                        .foregroundStyle(brand.accentText)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(brand.raisedBackground)
-                } else {
-                    CommonGroundPhoto(tile: photoTile)
-                }
-            }
+            CommonGroundPlaceArtwork(place: place)
             .frame(height: height)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(alignment: .bottomTrailing) {
@@ -501,17 +492,11 @@ private struct CommonGroundPlaceStory: View {
                     .background(brand.background, in: Circle())
                     .padding(10)
             }
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("View \(place.name), \(place.category), \(place.area)")
         .accessibilityIdentifier("common-ground.place.\(place.id)")
-    }
-
-    private var photoTile: Int {
-        if place.category == "Bar" { return 3 }
-        if place.category == "Restaurant" { return 2 }
-        if place.id == "mudwater" || place.id == "canal-coffee" { return 1 }
-        return 0
     }
 
     private var footer: some View {
@@ -576,7 +561,7 @@ private extension CommonGroundMockKind {
     var shortLabel: String {
         switch self {
         case .returnTogether: "Go back together"
-        case .mutualWanna: "On both your maps"
+        case .mutualWanna: "In both of your Wannas"
         case .introduce: "Worth an introduction"
         case .history: "Both been"
         }
@@ -656,10 +641,11 @@ private struct CommonGroundPlaceMockup: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                CommonGroundPhoto(tile: place.category == "Bar" ? 3 : 0)
+                CommonGroundPlaceArtwork(place: place)
                     .frame(height: 230).clipShape(RoundedRectangle(cornerRadius: 16))
                 VStack(alignment: .leading, spacing: 8) {
                     Text(place.name).font(AstirTypography.screenTitle)
+                        .accessibilityIdentifier("common-ground.place-profile.name")
                     Text("\(place.category) · \(place.area)").font(AstirTypography.bodySmall)
                         .foregroundStyle(brand.secondaryText)
                 }
@@ -671,6 +657,7 @@ private struct CommonGroundPlaceMockup: View {
                         .font(AstirTypography.control).frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent).tint(brand.accent).foregroundStyle(brand.accentForeground)
+                .accessibilityIdentifier("common-ground.place-profile.invite")
                 CommonGroundSampleCaption()
             }.padding(20)
         }
@@ -694,11 +681,33 @@ private struct CommonGroundEvidence: View {
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
         return layout {
             Text(name).font(AstirTypography.control).fixedSize()
-            Text(wanna ? "Wanna go" : "\(visits) \(visits == 1 ? "check-in" : "check-ins")")
+            Text([visits > 0 ? "\(visits) \(visits == 1 ? "check-in" : "check-ins")" : nil,
+                  wanna ? "Wanna" : nil].compactMap { $0 }.joined(separator: " · "))
                 .foregroundStyle(brand.secondaryText)
             if let rating { Text(String(format: "★ %.1f / 5", rating)).foregroundStyle(brand.accentText) }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Keep the selected place's artwork consistent across its story, profile, and invitation.
+struct CommonGroundPlaceArtwork: View {
+    @Environment(\.astirBrandMode) private var brand
+    let place: CommonGroundMockPlace
+
+    var body: some View {
+        Group {
+            if let tile = place.previewPhotoTile {
+                CommonGroundPhoto(tile: tile)
+            } else {
+                Image(systemName: place.systemImage)
+                    .font(.system(size: 42, weight: .ultraLight))
+                    .foregroundStyle(brand.accentText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(brand.raisedBackground)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
