@@ -311,7 +311,7 @@ final class MapPlaceListPickerTests: XCTestCase {
         let source = try XCTUnwrap(rendered.cgImage)
         // A center pixel between rows measures opaque sheet fill without edge antialiasing.
         let crop = try XCTUnwrap(source.cropping(to: CGRect(
-            x: 10 * image.scale, y: 9 * image.scale, width: 1, height: 1
+            x: 10 * rendered.scale, y: 9 * rendered.scale, width: 1, height: 1
         )))
         var rgba = [UInt8](repeating: 0, count: 4)
         try rgba.withUnsafeMutableBytes { bytes in
