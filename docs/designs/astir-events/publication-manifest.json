@@ -3,11 +3,11 @@
   "planning_only": true,
   "app_source_baseline": "f8d258e869503a28d70518a050dff36a344134c6",
   "packaging_main_baseline": "f8493c026503cf270f6c6c21295093fd7df5bef0",
-  "flowchart_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581",
+  "flowchart_sha256": "1edc72eba2dd941bd84b329dddef1bb35e0f7b7f23b1f124eaaceeff91f9770d",
   "files": {
     "astir-events-flowchart.html": {
-      "source_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581",
-      "published_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581"
+      "source_sha256": "1edc72eba2dd941bd84b329dddef1bb35e0f7b7f23b1f124eaaceeff91f9770d",
+      "published_sha256": "1edc72eba2dd941bd84b329dddef1bb35e0f7b7f23b1f124eaaceeff91f9770d"
     },
     "astir-events-wireframes.html": {
       "source_sha256": "13a7c90871ef60361b7e48e3d5300eac58426084ac16c3f3c9c584a7fedb69bf",
@@ -266,16 +266,16 @@
       "published_sha256": "7e9296d0f65616afde6f8e992ce5c749915c85f8affc5227a6cf482297e5b37a"
     },
     "flowchart/canvas-review.js": {
-      "source_sha256": "6156c8cabac293f4aa1700888c3f71a45df34534385ea11ba87c10f3438cb974",
-      "published_sha256": "6156c8cabac293f4aa1700888c3f71a45df34534385ea11ba87c10f3438cb974"
+      "source_sha256": "475e01c6e29f6bb48e7eec2199b7fc1ddbdfff9de0def7a543000d77479db8e7",
+      "published_sha256": "475e01c6e29f6bb48e7eec2199b7fc1ddbdfff9de0def7a543000d77479db8e7"
     },
     "flowchart/canvas.css": {
       "source_sha256": "1a5a4b773aaf5225489838153bbc543d4b9f939b2d9e796b8f38532b1305a013",
       "published_sha256": "1a5a4b773aaf5225489838153bbc543d4b9f939b2d9e796b8f38532b1305a013"
     },
     "flowchart/build-canvas.py": {
-      "source_sha256": "56b85da88fa9c99d18375208166ab6b19f9669c0ab5bdfb244467fc8b9a81163",
-      "published_sha256": "56b85da88fa9c99d18375208166ab6b19f9669c0ab5bdfb244467fc8b9a81163"
+      "source_sha256": "1095e73ace6ec5b07349cbedfe68a97134b0648c1140f3193931b2d83845200c",
+      "published_sha256": "1095e73ace6ec5b07349cbedfe68a97134b0648c1140f3193931b2d83845200c"
     },
     "flowchart/continuous-layout.json": {
       "source_sha256": "ef50d7b318e370e8204abb28e12b0a5e9b7cf80a4ce74ed4c3ba85cf2a65a14c",
@@ -284,9 +284,34 @@
     "flowchart/canvas-verification.json": {
       "source_sha256": "15353e8f30d703e8fa84b392944c19a0a3a8cfcc263a96aa6b122208771e9c95",
       "published_sha256": "15353e8f30d703e8fa84b392944c19a0a3a8cfcc263a96aa6b122208771e9c95"
+    },
+    "flowchart/decision-layout.js": {
+      "source_sha256": "19fb7517ab960bcdea72bb56751f7f9a2078dcd639ca61c3333564a5a3af116a",
+      "published_sha256": "19fb7517ab960bcdea72bb56751f7f9a2078dcd639ca61c3333564a5a3af116a"
+    },
+    "flowchart/decision-tree.css": {
+      "source_sha256": "bae5fb7e4d732ba02e37cf47ee0c26fa70a0a74d86314474895d8c66d2b8ed36",
+      "published_sha256": "bae5fb7e4d732ba02e37cf47ee0c26fa70a0a74d86314474895d8c66d2b8ed36"
+    },
+    "flowchart/decision-tree.json": {
+      "source_sha256": "c30290fdd8ab495da8571195fd79ba1c379b5ba871d43966d36aec55258f1f6c",
+      "published_sha256": "c30290fdd8ab495da8571195fd79ba1c379b5ba871d43966d36aec55258f1f6c"
+    },
+    "flowchart/verify-decision-layout.js": {
+      "source_sha256": "f67cfb38bf6a66049f3094c32df3f8bf95eb40ccd723ea381a77550ed99fff67",
+      "published_sha256": "f67cfb38bf6a66049f3094c32df3f8bf95eb40ccd723ea381a77550ed99fff67"
+    },
+    "flowchart/verify-decision-tree.py": {
+      "source_sha256": "6dfa7504556a30328f4b84529748f629e375eafa3fb6bdf439435cfaae618269",
+      "published_sha256": "6dfa7504556a30328f4b84529748f629e375eafa3fb6bdf439435cfaae618269"
+    },
+    "flowchart/decision-tree-verification.json": {
+      "source_sha256": "74d9001338e10f4b9db92346ff9d679bdc18dfed919497a9cef6b582449cb6f0",
+      "published_sha256": "74d9001338e10f4b9db92346ff9d679bdc18dfed919497a9cef6b582449cb6f0"
     }
   },
   "portability": "Markdown links to app evidence use immutable GitHub source; native gallery link uses equivalent embedded flowchart comparisons. Local transcript/design-authoring links are explicitly labeled; raw attachments are not added. Historical audits retain their dated snapshot status. Published TSV files use LF line endings.",
   "linear_review_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
-  "review_shell": "Pannable canvas; earlier browser checks apply only to preserved astir-events-linear.html."
+  "review_shell": "Pannable decision trees with explicit conditions and inline outcome screens; static/synthetic checks only, browser visual pass remains unavailable.",
+  "decision_tree_main_baseline": "e7ace7eb7a97c6f6330a58dd73bfe44cdd2b404d"
 }
