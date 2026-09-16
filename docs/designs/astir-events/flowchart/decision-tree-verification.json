@@ -1,0 +1,139 @@
+{
+  "verification": "static-only",
+  "passed": true,
+  "check_count": 263,
+  "passed_checks": 263,
+  "failures": [],
+  "screen_count": 172,
+  "embedded_image_assets": 408,
+  "image_tags": 212,
+  "embedded_videos": 1,
+  "stages": [
+    {
+      "stage": "entry",
+      "nodes": 16,
+      "screens": 5,
+      "decisions": 6,
+      "edges": 17,
+      "open_nodes": 0
+    },
+    {
+      "stage": "surfaces",
+      "nodes": 45,
+      "screens": 13,
+      "decisions": 13,
+      "edges": 45,
+      "open_nodes": 1
+    },
+    {
+      "stage": "account",
+      "nodes": 44,
+      "screens": 20,
+      "decisions": 15,
+      "edges": 56,
+      "open_nodes": 1
+    },
+    {
+      "stage": "reservation",
+      "nodes": 32,
+      "screens": 10,
+      "decisions": 12,
+      "edges": 41,
+      "open_nodes": 2
+    },
+    {
+      "stage": "texts",
+      "nodes": 43,
+      "screens": 18,
+      "decisions": 12,
+      "edges": 46,
+      "open_nodes": 3
+    },
+    {
+      "stage": "install",
+      "nodes": 25,
+      "screens": 14,
+      "decisions": 7,
+      "edges": 34,
+      "open_nodes": 1
+    },
+    {
+      "stage": "door",
+      "nodes": 23,
+      "screens": 11,
+      "decisions": 7,
+      "edges": 27,
+      "open_nodes": 1
+    },
+    {
+      "stage": "offline-door",
+      "nodes": 19,
+      "screens": 7,
+      "decisions": 7,
+      "edges": 23,
+      "open_nodes": 1
+    },
+    {
+      "stage": "return",
+      "nodes": 32,
+      "screens": 13,
+      "decisions": 10,
+      "edges": 39,
+      "open_nodes": 2
+    },
+    {
+      "stage": "recap",
+      "nodes": 41,
+      "screens": 18,
+      "decisions": 12,
+      "edges": 56,
+      "open_nodes": 3
+    },
+    {
+      "stage": "map",
+      "nodes": 32,
+      "screens": 10,
+      "decisions": 11,
+      "edges": 38,
+      "open_nodes": 3
+    },
+    {
+      "stage": "home",
+      "nodes": 19,
+      "screens": 9,
+      "decisions": 6,
+      "edges": 18,
+      "open_nodes": 1
+    },
+    {
+      "stage": "console",
+      "nodes": 48,
+      "screens": 24,
+      "decisions": 11,
+      "edges": 49,
+      "open_nodes": 0
+    }
+  ],
+  "sha256": {
+    "linear_html": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+    "decision_tree_html": "1edc72eba2dd941bd84b329dddef1bb35e0f7b7f23b1f124eaaceeff91f9770d",
+    "decision_tree_json": "c30290fdd8ab495da8571195fd79ba1c379b5ba871d43966d36aec55258f1f6c",
+    "embedded_assets": "d30fdbd394c40b9a04f3b0855336399c9d82b356bd8f9592b56675934198e19d"
+  },
+  "limitations": [
+    "No browser was launched and no browser/security restriction was bypassed.",
+    "No visual, gesture, click, keyboard, accessibility or performance behavior was tested.",
+    "Resource checks inspect source literals only; they are not a browser network trace.",
+    "Graph structure and explicit open labels are checked; product semantics still require human review."
+  ],
+  "synthetic_geometry": {
+    "check": "synthetic decision layout",
+    "scenarios": 39,
+    "labelsChecked": 1467,
+    "nodeCollisions": 0,
+    "labelCollisions": 0,
+    "detachedLabels": 0,
+    "browserTest": false
+  },
+  "syntax_check": "Bun browser target successfully parsed canvas-review.js and decision-layout.js."
+}

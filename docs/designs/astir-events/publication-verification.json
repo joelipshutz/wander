@@ -1,0 +1,16 @@
+{
+  "planning_only": true,
+  "flowchart_screens": 172,
+  "flowchart_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581",
+  "manifest_hashes_checked": 70,
+  "markdown_links_valid": true,
+  "immutable_app_source_links_checked": 58,
+  "tasks": 22,
+  "task_dag_acyclic": true,
+  "review_report_terminal": true,
+  "open_decision_groups": 9,
+  "application_tests_run": false,
+  "application_benchmarks_run": false,
+  "canvas_browser_verified": false,
+  "canvas_checks": "See flowchart/canvas-verification.json; prior preview browser checks apply to astir-events-linear.html."
+}
