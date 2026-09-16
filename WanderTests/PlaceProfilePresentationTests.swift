@@ -1572,6 +1572,58 @@ final class PlaceProfilePresentationTests: XCTestCase {
         ).isEmpty)
     }
 
+    func testHistoryAndMapAgreeAcrossDuplicatePlacesAndViewerPermissions() throws {
+        let first = profile(id: "first", handle: "first")
+        let second = profile(id: "second", handle: "second")
+        let third = profile(id: "third", handle: "third")
+        let original = place(id: "original", category: "restaurant")
+        original.canonicalName = "Fixture Sushi"
+        original.address = "100 Main Street"
+        original.sourceProviderPlaceID = "provider-original"
+        let duplicate = place(id: "duplicate", category: "restaurant")
+        duplicate.canonicalName = original.canonicalName
+        duplicate.address = nil
+        duplicate.locality = nil
+        duplicate.sourceProviderPlaceID = "provider-duplicate"
+        let firstWanna = summary(owner: first, place: duplicate, status: .wannaGo, ratingScore: nil, tags: [])
+        let secondWanna = summary(owner: second, place: original, status: .wannaGo, ratingScore: nil, tags: [])
+        let thirdCheckIn = summary(owner: third, place: original, status: .been, ratingScore: 4, tags: [])
+
+        // The first viewer follows only the second. The second follows both.
+        // The repository enforces permissions before either projection runs.
+        for (viewer, authorized) in [
+            (first, [firstWanna, secondWanna]),
+            (second, [firstWanna, secondWanna, thirdCheckIn])
+        ] {
+            for seed in authorized {
+                for snapshot in [authorized, authorized.reversed().map { $0 }] {
+                    let available = snapshot.map(\.visiblePlace)
+                    let history = PlaceProfileHistoryPolicy.summaries(
+                        candidate: PlaceSheetPlace(visiblePlace: seed.visiblePlace).saveCandidate,
+                        seeds: [seed.visiblePlace], available: available,
+                        currentUserID: viewer.id, viewerFollows: { $0 != viewer.id }
+                    )
+                    XCTAssertEqual(Set(history.map(\.id)), Set(authorized.map(\.id)))
+                    let groups = VisiblePlaceGrouping.groups(from: available, currentUserID: viewer.id)
+                    XCTAssertEqual(groups.count, 1)
+                    XCTAssertEqual(Set(groups.flatMap(\.places).map(\.id)), Set(history.map(\.id)))
+                    let outlines = try XCTUnwrap(MapPinOutlineBuilder.outlineCatalog(
+                        for: available, currentUserID: viewer.id
+                    )[seed.id])
+                    XCTAssertEqual(outlines.first { $0.ownership == .currentUser }?.status, .wannaGo)
+                    XCTAssertEqual(outlines.first { $0.ownership == .social }?.status,
+                                   viewer.id == first.id ? .wannaGo : .been)
+                    let wannas = history.filter { $0.visiblePlace.userPlace.status == .wannaGo }
+                    for wanna in wannas {
+                        let entry = PlaceActivityEntry(summary: wanna, visit: nil, kind: .currentWant, currentUserID: viewer.id)
+                        XCTAssertTrue(PlaceActivityFilter.all.includes(entry))
+                        XCTAssertFalse(PlaceActivityFilter.myVisits.includes(entry))
+                    }
+                }
+            }
+        }
+    }
+
     func testMyCheckInsExcludesCurrentAndHistoricalWannasForEveryOwner() {
         let viewer = profile(id: "viewer", handle: "viewer")
         let friend = profile(id: "friend", handle: "friend")
