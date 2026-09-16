@@ -1370,6 +1370,7 @@ struct MapScreen: View {
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
+    @State private var retainedSelectionCache = MapRetainedSelectionCache()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedNativeMapFeatureID: String?
@@ -1389,7 +1390,6 @@ struct MapScreen: View {
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var isPlaceProfileMounted: Bool
-    @State private var placeProfilePreloadTask: Task<Void, Never>?
     @State private var placeProfilePresentationID: UUID?
     @State private var placeProfileDismissalID: UUID?
     @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
@@ -1414,6 +1414,7 @@ struct MapScreen: View {
     @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var featuredViewportAccountID: String?
     @State private var featuredPlacesRevision: UInt64 = 0
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportLoader = MapFeaturedViewportLoader()
@@ -1620,31 +1621,39 @@ struct MapScreen: View {
         _routedVisiblePlaceGroup = State(initialValue: nil)
     }
 
+    private var authorizedSelectionPlaces: [VisiblePlace] {
+        MapActivePinRetention.authorizationCorpus(
+            socialPlaces: store.visiblePlaces(),
+            featuredPlaces: featuredViewportPlaces ?? [],
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id
+        )
+    }
+
+    private var authorizedRetainedSelection: MapRetainedSelectionCache.Selection {
+        retainedSelectionCache.value(
+            sourceIdentity: ObjectIdentifier(store),
+            revision: store.presentationRevision,
+            featuredRevision: featuredPlacesRevision,
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id,
+            retainedPlace: routedVisiblePlace,
+            retainedGroup: routedVisiblePlaceGroup,
+            submittedGroups: submittedSavedSearchGroups,
+            authorizedPlaces: { authorizedSelectionPlaces }
+        )
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = store.visiblePlaces()
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedPlaces = MapActivePinRetention.places(
             from: renderProjection.visiblePlaces,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup
+            retaining: authorized.place,
+            retainingGroup: authorized.group
         )
         return MapActivePinRetention.places(
             from: activeRetainedPlaces,
-            retainingGroups: authorizedSubmittedGroups
+            retainingGroups: authorized.submittedGroups
         )
     }
 
@@ -1672,31 +1681,16 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = store.visiblePlaces()
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedGroups = MapActivePinRetention.groups(
             from: renderProjection.visiblePlaceGroups,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup,
+            retaining: authorized.place,
+            retainingGroup: authorized.group,
             currentUserID: store.currentUser.id
         )
         return MapActivePinRetention.groups(
             from: activeRetainedGroups,
-            retainingGroups: authorizedSubmittedGroups,
+            retainingGroups: authorized.submittedGroups,
             currentUserID: store.currentUser.id
         )
     }
@@ -1800,7 +1794,7 @@ struct MapScreen: View {
     private var mapFilterEmptyMessage: String? {
         guard MapActivePinRetention.authorizedPlace(
                   routedVisiblePlace,
-                  within: store.visiblePlaces()
+                  within: authorizedSelectionPlaces
               ) == nil,
               mapSearchCandidates.isEmpty,
               Self.normalized(mapQuery).isEmpty,
@@ -2374,7 +2368,6 @@ struct MapScreen: View {
                 initialMapSourceLoadID = nil
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
-                placeProfilePreloadTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -2432,8 +2425,6 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
-            placeProfilePreloadTask?.cancel()
-            placeProfilePreloadTask = nil
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
@@ -2809,7 +2800,7 @@ struct MapScreen: View {
     }
 
     private func handleMapSearchAuthorizationChange() {
-        let authorizedPlaces = store.visiblePlaces()
+        let authorizedPlaces = authorizedSelectionPlaces
         let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
             routedVisiblePlace,
             within: authorizedPlaces
@@ -3402,6 +3393,7 @@ struct MapScreen: View {
 
     private func updateFeaturedViewportPlaces(_ places: [VisiblePlace]) {
         featuredViewportPlaces = places
+        featuredViewportAccountID = store.currentUser.id
         featuredPlacesRevision &+= 1
     }
 
@@ -3617,28 +3609,6 @@ struct MapScreen: View {
         if compactCardReadyIdentity != identity {
             compactCardReadyIdentity = identity
             presentCompactCard()
-        }
-        preloadSelectedPlaceProfile(for: identity)
-    }
-
-    private func preloadSelectedPlaceProfile(for identity: String) {
-        guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled,
-                  identity == compactSelectionIdentity,
-                  hasSelectedProfile,
-                  !isPlaceProfileMounted,
-                  !isPlaceProfilePresented
-            else { return }
-
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isPlaceProfileMounted = true
-            }
-            placeProfilePreloadTask = nil
         }
     }
 
@@ -4038,6 +4008,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4078,6 +4049,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4111,6 +4083,7 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: .none,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4121,8 +4094,6 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = nil
         placeProfilePresentationID = nil
         placeProfileDismissalID = nil
         placeProfileDismissalCompletion = nil
@@ -6856,8 +6827,11 @@ private struct NativeMapView: UIViewRepresentable {
                 isDark: parent.isDark,
                 reduceMotion: parent.reduceMotion
             )
-            view.onAccessibilityActivate = { [weak self, weak annotation] in
-                guard let self, let annotation else { return }
+            view.onAccessibilityActivate = { [weak self, weak annotation, weak view] in
+                guard let self, let annotation,
+                      let mapView = self.tapRecognizer.view as? MKMapView,
+                      MapHitTesting.isAnnotationViewVisible(view, in: mapView)
+                else { return }
                 self.parent.onAnnotationTap(annotation.kind)
             }
         }
@@ -6906,6 +6880,11 @@ private struct NativeMapView: UIViewRepresentable {
                     let center = mapView.convert(annotation.coordinate, toPointTo: mapView)
                     let distance = hypot(point.x - center.x, point.y - center.y)
                     guard distance <= MapHitTesting.markerTapRadius else { return nil }
+                    // Viewport membership includes pins suppressed by MapKit's
+                    // collision layout. Only a currently rendered pin is tappable.
+                    guard MapHitTesting.isAnnotationViewVisible(
+                        mapView.view(for: annotation), in: mapView
+                    ) else { return nil }
                     return (annotation, center, distance)
                 }
 
@@ -8064,6 +8043,30 @@ enum MapHitTesting {
     static let passiveTapAllowableMovement: CGFloat = 10
     static let colocatedMarkerTolerance: CGFloat = 1
     static let equalDistanceTolerance: CGFloat = 0.5
+
+    @MainActor
+    static func isAnnotationViewVisible(
+        _ view: MKAnnotationView?,
+        in mapView: MKMapView
+    ) -> Bool {
+        guard let view,
+              view.isDescendant(of: mapView),
+              !view.bounds.isEmpty,
+              view.convert(view.bounds, to: mapView).intersects(mapView.bounds)
+        else { return false }
+
+        var ancestor: UIView? = view
+        var opacity: Float = 1
+        while let current = ancestor {
+            let renderedLayer = current.layer.presentation() ?? current.layer
+            guard !current.isHidden, !renderedLayer.isHidden else { return false }
+            opacity *= renderedLayer.opacity
+            guard opacity > 0.01 else { return false }
+            if current === mapView { return true }
+            ancestor = current.superview
+        }
+        return false
+    }
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
@@ -10264,7 +10267,89 @@ enum MapPinSelectionMotionStyle {
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
+/// One authorized selection snapshot per store revision. No cross-account or
+/// historical entries are retained; changed access is checked before reuse.
+@MainActor
+final class MapRetainedSelectionCache {
+    struct Selection {
+        let place: VisiblePlace?
+        let group: VisiblePlaceGroup?
+        let submittedGroups: [VisiblePlaceGroup]
+    }
+
+    private struct Key: Equatable {
+        let sourceIdentity: ObjectIdentifier
+        let revision: UInt64
+        let featuredRevision: UInt64
+        let featuredAccountID: String?
+        let currentUserID: String
+        let retainedPlaceID: String?
+        let retainedGroupIDs: [String]?
+        let submittedGroupIDs: [[String]]
+    }
+
+    private var key: Key?
+    private var selection: Selection?
+
+    func value(
+        sourceIdentity: ObjectIdentifier,
+        revision: UInt64,
+        featuredRevision: UInt64 = 0,
+        featuredAccountID: String? = nil,
+        currentUserID: String,
+        retainedPlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup],
+        authorizedPlaces: () -> [VisiblePlace]
+    ) -> Selection {
+        let nextKey = Key(
+            sourceIdentity: sourceIdentity,
+            revision: revision,
+            featuredRevision: featuredRevision,
+            featuredAccountID: featuredAccountID,
+            currentUserID: currentUserID,
+            retainedPlaceID: retainedPlace?.userPlace.id,
+            retainedGroupIDs: retainedGroup?.places.map(\.userPlace.id),
+            submittedGroupIDs: submittedGroups.map { $0.places.map(\.userPlace.id) }
+        )
+        if key == nextKey, let selection { return selection }
+        let places = authorizedPlaces()
+        let place = MapActivePinRetention.authorizedPlace(retainedPlace, within: places)
+        let result = Selection(
+            place: place,
+            group: MapActivePinRetention.authorizedGroup(
+                retainedGroup, requiring: place, within: places, currentUserID: currentUserID
+            ),
+            submittedGroups: MapActivePinRetention.authorizedGroups(
+                submittedGroups, within: places, currentUserID: currentUserID
+            )
+        )
+        key = nextKey
+        selection = result
+        return result
+    }
+}
+
 enum MapActivePinRetention {
+    /// Featured's anonymous place aggregates are server-authorized separately
+    /// from personal/social saves. Use the unranked response so recentering or
+    /// the Featured presentation cap cannot revoke the selected place.
+    /// Named saves must still pass the store's current authorization checks.
+    static func authorizationCorpus(
+        socialPlaces: [VisiblePlace],
+        featuredPlaces: [VisiblePlace],
+        featuredAccountID: String?,
+        currentUserID: String
+    ) -> [VisiblePlace] {
+        guard featuredAccountID == currentUserID else { return socialPlaces }
+        var seen = Set(socialPlaces.map(\.userPlace.id))
+        return socialPlaces + featuredPlaces.filter {
+            $0.isCommunityAggregate
+                && $0.userPlace.deletedAt == nil
+                && seen.insert($0.userPlace.id).inserted
+        }
+    }
+
     static func authorizedPlace(
         _ retainedPlace: VisiblePlace?,
         within authorizedPlaces: [VisiblePlace]
@@ -17352,7 +17437,8 @@ struct PlaceActivitySection: View {
                         PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
                     }
 
-                    if entries.isEmpty {
+                    if entries.isEmpty,
+                       store.shouldShowLegacyCheckInSummary(for: userPlace.serverID ?? userPlace.id) {
                         entries.append(
                             PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
                         )
@@ -17408,8 +17494,8 @@ struct PlaceActivitySection: View {
         Array(
             Set(
                 saves.compactMap { summary in
-                    let serverID = summary.visiblePlace.userPlace.serverID
-                    return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                    let serverID = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
+                    return UUID(uuidString: serverID) == nil ? nil : serverID
                 }
             )
         )
@@ -17646,6 +17732,7 @@ private struct PlaceActivityCard: View {
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
                 isEngagementEnabled: isEngagementResolved,
+                resolveContext: resolveEngagementContext,
                 reportSubjectOverride: reportableUserPlaceSubject
             )
 
@@ -17734,7 +17821,7 @@ private struct PlaceActivityCard: View {
         let visiblePlace = entry.summary.visiblePlace
         let match = store.placeActivityEngagementMatch(
             userPlaceID: entry.userPlace.serverID ?? entry.userPlace.id,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         )
         let location = [visiblePlace.place.locality, visiblePlace.place.region]
@@ -17767,13 +17854,27 @@ private struct PlaceActivityCard: View {
         )
     }
 
+    @MainActor
+    private func resolveEngagementContext() async -> ActivityEngagementContext? {
+        if isEngagementResolved { return engagementContext }
+        let requestUserID = store.currentUser.id
+        let userPlaceID = entry.userPlace.serverID ?? entry.userPlace.id
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: [userPlaceID], backend: backend)
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return nil }
+        if isEngagementResolved { return engagementContext }
+        // Refresh the source as well: an owner deletion removes the tile instead
+        // of leaving an unresolved action row attached to stale visit data.
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [userPlaceID], backend: backend)
+        return nil
+    }
+
     private var isEngagementResolved: Bool {
-        guard let serverID = entry.userPlace.serverID,
-              UUID(uuidString: serverID) != nil
+        let serverID = entry.userPlace.serverID ?? entry.userPlace.id
+        guard UUID(uuidString: serverID) != nil
         else { return true }
         return store.placeActivityEngagementMatch(
             userPlaceID: serverID,
-            visitID: entry.visit?.serverID,
+            visitID: entry.visit?.id,
             preferredKinds: engagementKinds
         ) != nil
     }

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Astir — Activity grouping scenarios</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2e9db;color:#141714;font:16px 'Avenir Next',system-ui,sans-serif}header,main,footer{max-width:1160px;margin:auto;padding:24px 30px}header{padding-bottom:0}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:700;color:#6a6b60}h1{font:500 clamp(28px,4vw,42px) Georgia,serif;margin:12px 0}header p{color:#65685c;max-width:700px;line-height:1.6;margin:0}nav{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0;border-bottom:1px solid #ccc7b8;padding-bottom:16px}button{font:inherit;cursor:pointer;color:inherit;border:1px solid #c9c3b7;background:transparent;padding:11px 15px;border-radius:24px;min-height:44px}button[aria-selected=true]{background:#141714;color:#f2e9db;border-color:#141714}button:focus-visible,a:focus-visible{outline:3px solid #b23620;outline-offset:3px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start;margin:0 0 18px}h2{font:500 27px Georgia,serif;margin:0 0 9px}.summary p{margin:0;line-height:1.55;color:#626557}.rule{padding:12px 16px;border-left:3px solid #b23620;font-size:14px;line-height:1.6}.shots{display:flex;justify-content:center;gap:36px;padding:18px 24px 24px;background:#e7dece;border:1px solid #d7cebc;border-radius:22px}.shot{margin:0;min-width:0;text-align:center}.shot img{display:block;width:auto;max-width:100%;height:65vh;object-fit:contain;border-radius:28px;background:#141714;box-shadow:0 8px 28px #14171418}.shot figcaption{font-size:12px;font-weight:600;margin-bottom:12px;color:#55594e}footer{padding-top:0;font-size:12px;color:#64685c;line-height:1.6}a{color:#9b321f} @media(max-width:650px){header,main,footer{padding:20px}.summary{grid-template-columns:1fr;gap:14px}.shots{gap:14px;padding:16px 12px}.shot img{height:auto;width:100%;border-radius:14px}nav{gap:6px}button{font-size:13px;padding:10px 12px}}@media(prefers-reduced-motion:no-preference){button{transition:background .15s,color .15s}}
+</style>
+<header>
+<div class="eyebrow">ASTIR / NATIVE SWIFTUI PREVIEW</div>
+<h1>One moment, less repetition.</h1>
+<p>Explore when activity combines, what the inline sequence reveals, and what stays separate. These are captures from the working SwiftUI mock app.</p>
+<nav role="tablist" aria-label="Activity scenarios"></nav>
+</header>
+<main id="panel" role="tabpanel" aria-live="polite"></main>
+<footer>The dropdown is the production SwiftUI component. Surrounding cards use sample activity and an illustrative storefront. Screenshots are for visual review; the standalone SwiftUI app also supports live expansion, collapse, and sample destinations.</footer>
+<script>
+const scenarios=[
+{title:'All three actions',heading:'Three actions become one card.',copy:'Rachel marks Wanna, checks in, and adds Laurel Supply to a list within six minutes. The check-in leads; the history stays one tap away.',rule:'Same person + same place + within 30 minutes. The expanded sequence runs oldest to newest.',shots:[['01-combined-collapsed','Collapsed · one place card'],['02-combined-expanded','Expanded · the exact sequence']]},
+{title:'Wanna + list',heading:'A plan, without implying a visit.',copy:'The card leads with Wanna. The list is useful context, and both actions remain visible in the timeline.',rule:'No check-in is inferred. Original post and list links remain available.',shots:[['03-wanna-list','Expanded · two related actions']]},
+{title:'Several lists',heading:'One summary, every list preserved.',copy:'Several additions share one card. The summary shows the first list plus a count; expansion reveals each named list and its timestamp.',rule:'Different list additions remain distinct events inside the same card.',shots:[['04-multiple-lists-collapsed','Collapsed · “+2 more”'],['05-multiple-lists-expanded','Expanded · all three lists']]},
+{title:'Outside 30 minutes',heading:'A later action becomes a new card.',copy:'Wanna at 2:00 and a check-in at 2:45 are shown separately. The newer card appears first.',rule:'The 30-minute window starts at the first event and does not slide forward.',shots:[['06-outside-window','Separate · 45 minutes apart']]},
+{title:'Another check-in',heading:'Each visit keeps its own story.',copy:'Two check-ins remain two cards, even when they are only 20 minutes apart.',rule:'A second check-in starts a new group. Distinct visits are preserved.',shots:[['07-separate-visits','Separate · two visits']]},
+{title:'Different people',heading:'Each person keeps their post.',copy:'Alex and Rachel save the same place two minutes apart. Their actions remain separate.',rule:'Grouping requires the same person and the same place.',shots:[['08-different-people','Separate · two people']]}
+];
+const nav=document.querySelector('nav'),panel=document.querySelector('main');
+scenarios.forEach((s,i)=>{const b=document.createElement('button');b.textContent=s.title;b.id='tab-'+i;b.setAttribute('role','tab');b.setAttribute('aria-controls','panel');b.onclick=()=>select(i);nav.append(b)});
+function select(i){const s=scenarios[i];[...nav.children].forEach((b,n)=>b.setAttribute('aria-selected',String(n===i)));panel.setAttribute('aria-labelledby','tab-'+i);panel.innerHTML=`<div class="summary"><div><h2>${s.heading}</h2><p>${s.copy}</p></div><div class="rule">${s.rule}</div></div><div class="shots">${s.shots.map(([file,label])=>`<figure class="shot"><figcaption>${label}</figcaption><a href="captures/${file}.png" target="_blank" aria-label="Open full-size ${label}"><img src="captures/${file}.png" alt="SwiftUI activity mockup: ${label}"></a></figure>`).join('')}</div>`;}
+nav.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return; e.preventDefault();let i=[...nav.children].findIndex(b=>b.getAttribute('aria-selected')==='true');i=e.key==='Home'?0:e.key==='End'?scenarios.length-1:(i+(e.key==='ArrowRight'?1:-1)+scenarios.length)%scenarios.length;select(i);nav.children[i].focus()});select(0);
+</script>
+</html>

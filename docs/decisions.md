@@ -4,6 +4,39 @@ Last updated: 2026-09-16
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Astir Events engineering direction (REC-467)
+
+The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
+plans the complete Events journey with two changing work lanes: parallel backend/history
+and native/Clip/web foundations, then before-event/admission and after-event/history.
+Keep the existing Supabase identity, canonical place and visit history. App Clip/browser
+RSVP and management precede the required app QR at the door. Admission, explicit
+check-in and historical completion remain distinct. Issued waitlist offers hold seats;
+manual pending review and phone verification do not. Use one full-access Team admin
+console role and a prepared offline roster with durable reconciliation.
+
+The [engineering plan](designs/astir-events/engineering-plan.md) records exact D1–D19
+approvals, including code allowance, rescheduling and registration deadlines. This
+entry approves no additional operating default and claims no implemented Events code.
+[Open decisions](designs/astir-events/engineering-open-decisions.md) remain explicit.
+
+## Feed activity grouping (REC-494)
+
+The Feed combines already-visible check-in, Wanna, and list-addition events from
+the same actor and canonical place within 30 minutes of the first event. The
+window does not slide. A second check-in starts a new group; list creation,
+missing-place events, and ambiguous legacy social saves remain separate.
+Check-in leads over Wanna, then list addition. Group identity and Feed ordering
+stay anchored to the first event, so later organization does not bump the card.
+
+One card shows the place artwork and headline, with visible list context and an
+inline **View activity / Hide activity** disclosure. Expanded rows show the
+chronological action and timestamp and open the original post or visible list.
+Original event IDs, likes, comments, shares, and authorization remain intact;
+the main action row belongs to the headline event. No conversations or stored
+events are merged. Grouping covers the events loaded in the current Feed page,
+and a refresh recomputes it solely from currently visible events.
+
 ## Product Decisions
 
 | Decision | Status | Notes |

@@ -65,6 +65,14 @@ struct ProfileHeaderMotionState {
     }
 }
 
+enum ProfileHeaderPhotoLayout {
+    /// Hold the photo in the header until its inline position catches up on
+    /// return. The bio/name transition can run while that position is offscreen.
+    static func center(inlineFrame: CGRect, pinnedY: CGFloat) -> CGPoint {
+        CGPoint(x: inlineFrame.midX, y: max(inlineFrame.midY, pinnedY))
+    }
+}
+
 private struct ProfileHeaderMotionKey: EnvironmentKey {
     static let defaultValue: ProfileHeaderMotionVariant? = .compact
 }
@@ -225,16 +233,21 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
         .accessibilityHidden(true)
     }
 
-    private var identity: some View {
-        ZStack(alignment: .topLeading) {
+    @ViewBuilder
+    private var photo: some View {
+        if variant == .compact {
+            avatar.position(ProfileHeaderPhotoLayout.center(inlineFrame: avatarRect, pinnedY: destination.y))
+        } else {
             avatar
                 .modifier(ProfileMotionTransform(
                     progress: photoProgress, source: motion.expanded ? (entryAvatar ?? avatarRect) : avatarRect,
-                    destination: destination, scale: variant == .compact ? 1 : 1.2,
-                    arc: variant == .compact ? 0 : -16
+                    destination: destination, scale: 1.2, arc: -16
                 ))
+        }
+    }
 
-
+    private var identity: some View {
+        ZStack(alignment: .topLeading) {
             if variant == .compact {
                 displayName(color: brandMode.primaryText)
                     .position(x: nameRect.midX, y: nameRect.midY)
@@ -282,6 +295,7 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
                 .offset(y: toolbarBottom)
                 .opacity(surfaceProgress)
                 .allowsHitTesting(false)
+                photo
                 identity
                 brandMode.background.frame(height: toolbarBottom).allowsHitTesting(false)
                 brandMode.background.frame(height: topInset).offset(y: -topInset).allowsHitTesting(false)
@@ -289,6 +303,11 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             navigation
                 .frame(width: navigationRect.width, height: navigationRect.height)
                 .position(x: width / 2, y: (initialNavigation ?? navigationRect).midY)
+            if variant == .compact {
+                // The photo must stay above both the toolbar and its text mask.
+                // Keep one live control throughout scrolling and restoration.
+                photo
+            }
         }
         .onAppear {
             if initialAvatar == nil {

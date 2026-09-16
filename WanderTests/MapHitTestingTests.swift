@@ -2019,6 +2019,141 @@ final class MapSelectionMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testRetainedSelectionCacheReusesGroupingAcrossRepeatedMapReads() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let selected = try XCTUnwrap(places.first)
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        for _ in 0..<1_000 {
+            let result = cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: {
+                    reads += 1
+                    return places
+                }
+            )
+            XCTAssertEqual(result.place?.userPlace.id, selected.userPlace.id)
+            XCTAssertTrue(try XCTUnwrap(result.group).places.contains {
+                $0.userPlace.id == selected.userPlace.id
+            })
+        }
+        XCTAssertEqual(reads, 1)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheRevokesAllRetainedContentOnRevisionChange() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let group = try XCTUnwrap(VisiblePlaceGrouping.groups(
+            from: places, currentUserID: store.currentUser.id
+        ).first)
+        let cache = MapRetainedSelectionCache()
+        let before = cache.value(
+            sourceIdentity: ObjectIdentifier(store), revision: 1,
+            currentUserID: store.currentUser.id, retainedPlace: group.primary,
+            retainedGroup: group, submittedGroups: [group], authorizedPlaces: { places }
+        )
+        XCTAssertNotNil(before.place)
+        XCTAssertNotNil(before.group)
+        XCTAssertFalse(before.submittedGroups.isEmpty)
+        let revokedIDs = Set(group.places.map(\.userPlace.id))
+        let after = cache.value(
+            sourceIdentity: ObjectIdentifier(store), revision: 2,
+            currentUserID: store.currentUser.id, retainedPlace: group.primary,
+            retainedGroup: group, submittedGroups: [group], authorizedPlaces: {
+                places.filter { !revokedIDs.contains($0.userPlace.id) }
+            }
+        )
+        XCTAssertNil(after.place)
+        XCTAssertNil(after.group)
+        XCTAssertTrue(after.submittedGroups.isEmpty)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheHonorsRealStoreBlockImmediately() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let selected = try XCTUnwrap(store.visiblePlaces().first { $0.userPlace.userID == "user_ryan" })
+        let cache = MapRetainedSelectionCache()
+        func read() -> MapRetainedSelectionCache.Selection {
+            cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: { store.visiblePlaces() }
+            )
+        }
+        XCTAssertNotNil(read().place)
+        let revision = store.presentationRevision
+        store.block(userID: "user_ryan")
+        XCTAssertNotEqual(store.presentationRevision, revision)
+        XCTAssertNil(read().place)
+        XCTAssertNil(read().group)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheInvalidatesForAccountStoreAndRouteChanges() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let replacementStore = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let groups = VisiblePlaceGrouping.groups(from: places, currentUserID: store.currentUser.id)
+        let group = try XCTUnwrap(groups.first)
+        let second = try XCTUnwrap(places.first { $0.userPlace.id != group.primary.userPlace.id })
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        func read(source: WanderStore, user: String, place: VisiblePlace?, retained: VisiblePlaceGroup?, submitted: [VisiblePlaceGroup]) {
+            _ = cache.value(
+                sourceIdentity: ObjectIdentifier(source), revision: 1,
+                currentUserID: user, retainedPlace: place, retainedGroup: retained,
+                submittedGroups: submitted, authorizedPlaces: {
+                    reads += 1
+                    return places
+                }
+            )
+        }
+        read(source: store, user: "one", place: group.primary, retained: nil, submitted: [])
+        read(source: store, user: "two", place: group.primary, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 2)
+        read(source: replacementStore, user: "two", place: group.primary, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 3)
+        read(source: replacementStore, user: "two", place: second, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 4)
+        read(source: replacementStore, user: "two", place: second, retained: group, submitted: [])
+        XCTAssertEqual(reads, 5)
+        read(source: replacementStore, user: "two", place: second, retained: group, submitted: [group])
+        XCTAssertEqual(reads, 6)
+        read(source: replacementStore, user: "two", place: nil, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 7)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheRefreshesFeaturedCorpusWithoutStoreMutation() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let selected = try XCTUnwrap(places.first)
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        func read(featuredRevision: UInt64, accountID: String, corpus: [VisiblePlace]) -> MapRetainedSelectionCache.Selection {
+            cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                featuredRevision: featuredRevision, featuredAccountID: accountID,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: {
+                    reads += 1
+                    return corpus
+                }
+            )
+        }
+        XCTAssertNotNil(read(featuredRevision: 1, accountID: "first", corpus: places).place)
+        XCTAssertNotNil(read(featuredRevision: 1, accountID: "first", corpus: places).place)
+        XCTAssertEqual(reads, 1)
+        XCTAssertNil(read(featuredRevision: 2, accountID: "first", corpus: []).place)
+        XCTAssertEqual(reads, 2)
+        XCTAssertNotNil(read(featuredRevision: 2, accountID: "second", corpus: places).place)
+        XCTAssertEqual(reads, 3)
+    }
+
+    @MainActor
     func testActivePinRetentionDropsAGroupAfterAuthorizationIsRevoked() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
         let currentUserID = store.currentUser.id
@@ -2516,7 +2651,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.view(for: mapView.userLocation)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
-        XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
+        XCTAssertTrue(map.contains("retainingGroup: authorized.group"))
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
         XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
@@ -3268,6 +3403,88 @@ final class MapFilterSelectionTests: XCTestCase {
 }
 
 final class MapFeaturedSelectionTests: XCTestCase {
+    func testFeaturedAggregateSelectionSurvivesRerankingWithoutASocialSave() throws {
+        let viewerID = "viewer"
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Community Coffee",
+            status: .been,
+            communitySaveCount: 1
+        )
+        // The server can return this anonymous place even when the viewer has
+        // deleted their own save and does not follow any of its contributors.
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: []))
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [],
+            featuredPlaces: [aggregate],
+            featuredAccountID: viewerID,
+            currentUserID: viewerID
+        )
+        let selected = try XCTUnwrap(
+            MapActivePinRetention.authorizedPlace(aggregate, within: corpus)
+        )
+        let selectedGroup = try XCTUnwrap(MapActivePinRetention.authorizedGroup(
+            nil, requiring: selected, within: corpus, currentUserID: viewerID
+        ))
+        // Recenter/ranking has omitted the selected pin from the presentation.
+        let groups = MapActivePinRetention.groups(
+            from: [], retaining: selected, retainingGroup: selectedGroup,
+            currentUserID: viewerID
+        )
+        XCTAssertEqual(MapActivePinRetention.groupKey(for: selected, in: groups), selectedGroup.key)
+        XCTAssertEqual(groups.first?.primary.communitySaveCount, 1)
+        XCTAssertTrue(try XCTUnwrap(groups.first).primary.isCommunityAggregate)
+    }
+
+    func testFeaturedSelectionCorpusCannotRestoreRevokedNamedSaveOrDeletedAggregate() {
+        let viewerID = "viewer"
+        let named = visiblePlace(owner: profile(id: "friend"), name: "Coffee", status: .been)
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Deleted Coffee", status: .been
+        )
+        aggregate.userPlace.deletedAt = .now
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [], featuredPlaces: [named, aggregate],
+            featuredAccountID: viewerID, currentUserID: viewerID
+        )
+        XCTAssertTrue(corpus.isEmpty)
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(named, within: corpus))
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: corpus))
+    }
+
+    func testFeaturedAggregateSelectionExpiresWithItsAccountOrServerResponse() {
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Coffee", status: .been
+        )
+        for accountID in [nil, "previous-viewer"] as [String?] {
+            let corpus = MapActivePinRetention.authorizationCorpus(
+                socialPlaces: [], featuredPlaces: [aggregate],
+                featuredAccountID: accountID, currentUserID: "viewer"
+            )
+            XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: corpus))
+        }
+        let refreshedCorpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [], featuredPlaces: [],
+            featuredAccountID: "viewer", currentUserID: "viewer"
+        )
+        XCTAssertNil(MapActivePinRetention.authorizedPlace(aggregate, within: refreshedCorpus))
+    }
+
+    func testFeaturedSelectionCorpusPreservesSocialSavesAndDeduplicatesAggregates() {
+        let social = visiblePlace(owner: profile(id: "viewer"), name: "My Coffee", status: .been)
+        let aggregate = visiblePlace(
+            owner: profile(id: FeaturedCommunityPlaceSignal.ownerID),
+            name: "Community Coffee", status: .been
+        )
+        let corpus = MapActivePinRetention.authorizationCorpus(
+            socialPlaces: [social], featuredPlaces: [aggregate, aggregate, social],
+            featuredAccountID: "viewer", currentUserID: "viewer"
+        )
+        XCTAssertEqual(corpus.map(\.id), [social.id, aggregate.id])
+    }
+
     private let losAngelesRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)

@@ -513,12 +513,14 @@ struct FeedScreen: View {
 
     private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
         guard let activityID,
-              page?.activity.contains(where: { $0.id == activityID }) == true
+              let group = FeedPresentation.groupedActivity(page?.activity ?? []).first(where: {
+                  $0.activities.contains { $0.id == activityID }
+              })
         else { return }
         Task { @MainActor in
             await Task.yield()
             withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo(activityID, anchor: .center)
+                proxy.scrollTo(group.id, anchor: .center)
             }
         }
     }
@@ -1535,16 +1537,17 @@ private struct FeedActivityList: View {
 
     var body: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
-            ForEach(activity) { event in
+            let groups = FeedPresentation.groupedActivity(activity)
+            ForEach(groups) { group in
                 FeedActivityModule(
-                    activity: event,
+                    group: group,
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
                 )
-                .id(event.id)
+                .id(group.id)
                 .walkthroughTarget(
-                    event.id == activity.first?.id ? .feedActivity : nil
+                    group.id == groups.first?.id ? .feedActivity : nil
                 )
             }
         }
@@ -1562,7 +1565,8 @@ private enum FeedFeaturedLayout {
 }
 
 private struct FeedActivityModule: View {
-    let activity: FeedActivity
+    let group: FeedActivityGroup
+    private var activity: FeedActivity { group.primaryActivity }
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
@@ -1573,7 +1577,7 @@ private struct FeedActivityModule: View {
             context: engagementContext ?? fallbackPostcardContext,
             visiblePlace: activity.place,
             metadataIcon: metadataIcon,
-            secondaryMetadataTitle: secondaryMetadataTitle,
+            secondaryMetadataTitle: group.isCombined ? nil : secondaryMetadataTitle,
             secondaryMetadataAction: listDestinationAction,
             secondaryMetadataAccessibilityLabel: secondaryMetadataAccessibilityLabel,
             artworkAction: activityDestinationAction,
@@ -1584,7 +1588,9 @@ private struct FeedActivityModule: View {
             actorAccessibilityIdentifier: "feed.activity.\(activity.id).actor",
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
-            showsEngagementActions: engagementContext != nil
+            showsEngagementActions: engagementContext != nil,
+            activityGroup: group.isCombined ? group : nil,
+            openActivityList: openList
         )
         .environment(\.activityPostcardVisualStyle, .astir)
     }

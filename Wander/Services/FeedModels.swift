@@ -107,6 +107,52 @@ struct FeedFeaturedPlace: Identifiable {
     var id: String { visiblePlace.id }
 }
 
+/// A display-only collection of already-authorized events. Original event IDs
+/// remain the targets for likes, comments, sharing, and notification links.
+struct FeedActivityGroup: Identifiable {
+    let firstActivity: FeedActivity
+    private(set) var activities: [FeedActivity]
+
+    init(_ activity: FeedActivity) {
+        firstActivity = activity
+        activities = [activity]
+    }
+
+    var id: String { firstActivity.id }
+    var occurredAt: Date { firstActivity.occurredAt }
+    var isCombined: Bool { activities.count > 1 }
+
+    var primaryActivity: FeedActivity {
+        activities.dropFirst().reduce(firstActivity) { primary, candidate in
+            candidate.kind.groupingPriority > primary.kind.groupingPriority ? candidate : primary
+        }
+    }
+
+    var lists: [LocalPlaceList] {
+        var seen = Set<String>()
+        return activities.compactMap { activity in
+            guard activity.kind == .listItemAdded, let list = activity.list,
+                  seen.insert(list.id).inserted else { return nil }
+            return list
+        }
+    }
+
+    fileprivate mutating func append(_ activity: FeedActivity) {
+        activities.append(activity)
+    }
+}
+
+private extension FeedActivityKind {
+    var groupingPriority: Int {
+        switch self {
+        case .placeBeen: 3
+        case .placeWannaGo: 2
+        case .listItemAdded: 1
+        case .placeSaved, .listCreated: 0
+        }
+    }
+}
+
 struct FollowedFeedPage {
     let activity: [FeedActivity]
     let featuredPlaces: [FeedFeaturedPlace]
@@ -134,6 +180,57 @@ enum FeedRefreshPolicy {
 
 enum FeedPresentation {
     private static let futureClockSkewTolerance: TimeInterval = 5 * 60
+    static let activityGroupingWindow: TimeInterval = 30 * 60
+
+    /// Visible events -> chronological groups -> newest moment first.
+    /// The window never slides, and a second check-in starts a new moment.
+    /// Grouping uses place identity, never a name or a mutable save status.
+    static func groupedActivity(
+        _ activity: [FeedActivity],
+        relativeTo now: Date = .now
+    ) -> [FeedActivityGroup] {
+        struct Key: Hashable {
+            let actorID: String
+            let placeID: String
+        }
+        var seen = Set<String>()
+        let chronological = activity.filter { seen.insert($0.id).inserted }.sorted {
+            if $0.occurredAt != $1.occurredAt { return $0.occurredAt < $1.occurredAt }
+            return $0.id < $1.id
+        }
+        var groups: [FeedActivityGroup] = []
+        var latestGroup: [Key: Int] = [:]
+
+        for event in chronological {
+            // Legacy social saves infer their ticket from mutable status; they
+            // cannot safely stand in for a specific immutable Wanna or visit.
+            guard event.kind != .placeSaved, event.kind != .listCreated,
+                  let place = event.place,
+                  !place.place.id.isEmpty,
+                  event.occurredAt > .distantPast,
+                  event.occurredAt.timeIntervalSince(now) <= futureClockSkewTolerance
+            else {
+                groups.append(FeedActivityGroup(event))
+                continue
+            }
+            let key = Key(actorID: event.actor.id, placeID: place.place.id)
+            if let index = latestGroup[key],
+               event.occurredAt.timeIntervalSince(groups[index].occurredAt) <= activityGroupingWindow,
+               !(event.kind == .placeBeen && groups[index].activities.contains { $0.kind == .placeBeen }) {
+                groups[index].append(event)
+            } else {
+                latestGroup[key] = groups.count
+                groups.append(FeedActivityGroup(event))
+            }
+        }
+
+        return groups.sorted {
+            let lhs = safeSortDate($0.occurredAt, relativeTo: now)
+            let rhs = safeSortDate($1.occurredAt, relativeTo: now)
+            if lhs != rhs { return lhs > rhs }
+            return $0.id < $1.id
+        }
+    }
 
     static func newestFirst(
         _ activity: [FeedActivity],

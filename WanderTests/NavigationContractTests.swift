@@ -173,7 +173,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
-        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage("))
+        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -4055,7 +4055,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
         XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
-        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
@@ -5330,7 +5329,7 @@ final class NavigationContractTests: XCTestCase {
             1,
             "The empty Feed state must provide a stable activity walkthrough target."
         )
-        XCTAssertTrue(feed.contains("event.id == activity.first?.id ? .feedActivity : nil"))
+        XCTAssertTrue(feed.contains("group.id == groups.first?.id ? .feedActivity : nil"))
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 
         let backHandler = try sourceSection(

@@ -1,0 +1,22 @@
+{
+  "screen_count": 172,
+  "section_count": 13,
+  "guest_stages": 10,
+  "supporting_branches": [
+    "offline-door",
+    "home",
+    "console"
+  ],
+  "screen_content_preserved": true,
+  "all_embedded_assets_preserved": true,
+  "reserved_image_dimensions": 212,
+  "reserved_video_dimensions": true,
+  "old_scroll_handlers_removed": true,
+  "syntax_check_passed": true,
+  "camera_synthetic_gesture_checks": "Passed in collaborator harness: anchored zoom, pan, threshold/click suppression, pinch transitions, wheel modes and cleanup. Not a real browser test.",
+  "static_peer_review": "Two findings fixed: collapse selection preservation; intrinsic media geometry before lazy decoding.",
+  "browser_verified": false,
+  "browser_limit": "Local file URL was blocked by built-in browser security policy; no workaround attempted. gstack standalone browser also lacked its installed Chromium runtime.",
+  "source_linear_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "canvas_sha256": "b38d13b3b350e841dab987aa168c4d6672b6f78f0a67af52f3845f0b7e190581"
+}
