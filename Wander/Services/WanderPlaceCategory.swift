@@ -318,7 +318,7 @@ enum PlaceMemoryDefaultCatalog {
             }
         case WanderPlaceCategory.coffeeTeaSweets:
             if containsAny(detail, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "gelato", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
-                options = ["sweet treat", "bring home", "gift idea", "after dinner", "bring visitors", "weekend treat", returning]
+                options = ["sweet treat", "bring home", "gift idea", "after dinner", "bring visitors", returning]
             } else {
                 options = ["morning stop", "work session", "catch up", "solo time", "sweet treat", "bring visitors", returning]
             }
@@ -341,25 +341,26 @@ enum PlaceMemoryDefaultCatalog {
         case WanderPlaceCategory.shopping:
             options = ["gift idea", "browse day", "errand stop", "home project", "treat myself", "bring visitors", returning]
         case WanderPlaceCategory.wellnessFitness:
-            if containsAny(detail, ["gym", "fitness", "crossfit", "pilates", "yoga", "studio", "court", "sport", "field", "pool", "climbing", "boxing", "dance", "golf", "rink"]) {
-                options = ["workout", "with friends", "practice", "try a class", "while traveling", "weekly routine", returning]
+            let isAdditionalSportsSubtype = ["beach tennis", "beach volleyball", "surf school"].contains(detail)
+            if isAdditionalSportsSubtype || containsAny(detail, ["gym", "fitness", "crossfit", "pilates", "yoga", "studio", "court", "sport", "field", "pool", "climbing", "boxing", "dance", "golf", "rink"]) {
+                options = ["workout", "with friends", "practice", "try a class", "while traveling", returning]
             } else {
-                options = ["regular care", "self-care", "recovery", "with a friend", "while traveling", "backup option", returning]
+                options = ["self-care", "recovery", "with a friend", "while traveling", "backup option", returning]
             }
         case WanderPlaceCategory.stays:
             options = ["weekend away", "work trip", "family trip", "trip base", "special occasion", "longer stay", status == .been ? "stay again" : "next trip"]
         case WanderPlaceCategory.servicesErrands:
-            options = ["errand stop", "home project", "life admin", "regular service", "while traveling", "backup option", returning]
+            options = ["errand stop", "home project", "life admin", "while traveling", "backup option", returning]
         case WanderPlaceCategory.travelTransit:
-            options = ["road trip", "airport trip", "daily commute", "route stop", "meet here", "backup route", status == .been ? "usual route" : "next trip"]
+            options = ["road trip", "airport trip", "commute", "route stop", "meet here", "backup route", status == .been ? "usual route" : "next trip"]
         case WanderPlaceCategory.workEducation:
-            options = ["study session", "work session", "meeting", "research", "learning", "regular routine", returning]
+            options = ["study session", "work session", "meeting", "research", "learning", returning]
         case WanderPlaceCategory.civicFaith:
             options = ["community", "service visit", "faith", "bring visitors", "research", "family visit", returning]
         case WanderPlaceCategory.areasAddresses:
             options = ["meet here", "area to explore", "trip base", "neighborhood walk", "bring visitors", "address to keep", returning]
         default:
-            options = ["route stop", "while traveling", "meet here", "daily routine", "backup option", "address to keep", returning]
+            options = ["route stop", "while traveling", "meet here", "backup option", "address to keep", returning]
         }
         return options
     }

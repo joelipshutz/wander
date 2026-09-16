@@ -17,6 +17,7 @@ struct CheckInQuestionPanel: View {
     @State private var loadedScope = ""
     @State private var customDefinitions: [CheckInCustomQuestion] = []
     @State private var showsCustomization = false
+    @State private var showsAdditionalQuestions = false
     private let preferenceStore: CheckInQuestionPreferenceStore
 
     init(
@@ -57,17 +58,29 @@ struct CheckInQuestionPanel: View {
             }
 
             if !additionalQuestions.isEmpty {
-                DisclosureGroup {
+                Button {
+                    showsAdditionalQuestions.toggle()
+                } label: {
+                    HStack {
+                        Text("Also noted (\(additionalQuestions.count))")
+                            .font(AstirTypography.control)
+                        Spacer()
+                        Image(systemName: showsAdditionalQuestions ? "chevron.down" : "chevron.right")
+                            .accessibilityHidden(true)
+                    }
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(brandMode.accentText)
+                .accessibilityIdentifier("save.questions.alsoNoted")
+                .accessibilityValue(showsAdditionalQuestions ? "Expanded" : "Collapsed")
+
+                if showsAdditionalQuestions {
                     ForEach(additionalQuestions) { question in
                         answerRow(question)
                     }
-                } label: {
-                    Text("Also noted (\(additionalQuestions.count))")
-                        .font(AstirTypography.control)
-                        .frame(minHeight: WanderTheme.tapMinimum)
                 }
-                .tint(brandMode.accentText)
-                .accessibilityIdentifier("save.questions.alsoNoted")
             }
         }
         .foregroundStyle(brandMode.primaryText)
@@ -118,13 +131,16 @@ struct CheckInQuestionPanel: View {
     }
 
     private var customizeButton: some View {
-        Button("Customize") { showsCustomization = true }
-            .font(AstirTypography.control)
-            .foregroundStyle(brandMode.accentText)
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .disabled(ownerUserID.isEmpty)
-            .accessibilityLabel("Customize questions for \(subtypeTitle)")
-            .accessibilityIdentifier("save.questions.customize")
+        Button { showsCustomization = true } label: {
+            Text("Customize")
+                .font(AstirTypography.control)
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(brandMode.accentText)
+        .disabled(ownerUserID.isEmpty)
+        .accessibilityLabel("Customize questions for \(subtypeTitle)")
+        .accessibilityIdentifier("save.questions.customize")
     }
 
     private var currentConfiguration: CheckInQuestionConfiguration {
@@ -332,9 +348,15 @@ private struct CheckInQuestionAnswerRow: View {
         question.options + selectedValues.filter { !question.options.contains($0) }.sorted()
     }
 
-    private var columns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 1 : min(3, max(1, displayOptions.count))
-        return Array(repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2), count: count)
+    private var columnCount: Int {
+        dynamicTypeSize.isAccessibilitySize ? 1 : min(3, max(1, displayOptions.count))
+    }
+
+    private var optionRows: [[String]] {
+        let options = displayOptions
+        return stride(from: 0, to: options.count, by: columnCount).map { start in
+            Array(options[start..<min(start + columnCount, options.count)])
+        }
     }
 
     var body: some View {
@@ -342,6 +364,7 @@ private struct CheckInQuestionAnswerRow: View {
             Text(question.prompt)
                 .font(AstirTypography.cardTitle)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("save.question.row.\(question.id)")
 
             if question.isPrivate {
                 Label("Stealth", systemImage: "eye.slash")
@@ -349,37 +372,22 @@ private struct CheckInQuestionAnswerRow: View {
                     .foregroundStyle(brandMode.secondaryText)
             }
 
-            LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                ForEach(displayOptions, id: \.self) { option in
-                    let selected = selectedValues.contains(option)
-                    Button {
-                        onSelect(option)
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            if selected {
-                                Image(systemName: "checkmark")
-                                    .accessibilityHidden(true)
-                            }
-                            Text(option)
-                                .fixedSize(horizontal: false, vertical: true)
+            // These small option sets must remain in the accessibility tree
+            // while their enclosing save sheet scrolls or changes detents.
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                ForEach(Array(optionRows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                        ForEach(row, id: \.self) { option in
+                            optionButton(option)
+                                .frame(maxWidth: .infinity)
                         }
-                        .font(AstirTypography.control)
-                        .foregroundStyle(selected ? brandMode.accentText : brandMode.primaryText)
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .background(selected ? brandMode.accentWash : brandMode.raisedBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                .stroke(selected ? brandMode.accentText : brandMode.border, lineWidth: 1)
+                        ForEach(0..<(columnCount - row.count), id: \.self) { _ in
+                            Color.clear
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 0)
+                                .accessibilityHidden(true)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(question.prompt) \(option)")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                    .accessibilityHint(selected ? "Tap again to clear this answer." : "Select this answer.")
-                    .accessibilityIdentifier("save.question.\(question.id).\(option)")
                 }
             }
 
@@ -392,7 +400,38 @@ private struct CheckInQuestionAnswerRow: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("save.question.row.\(question.id)")
+    }
+
+    private func optionButton(_ option: String) -> some View {
+        let selected = selectedValues.contains(option)
+        return Button {
+            onSelect(option)
+        } label: {
+            HStack(spacing: WanderTheme.spacing1) {
+                if selected {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
+                Text(option)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(AstirTypography.control)
+            .foregroundStyle(selected ? brandMode.accentText : brandMode.primaryText)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .padding(.vertical, WanderTheme.spacing1)
+            .background(selected ? brandMode.accentWash : brandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(selected ? brandMode.accentText : brandMode.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(question.prompt) \(option)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityHint(selected ? "Tap again to clear this answer." : "Select this answer.")
+        .accessibilityIdentifier("save.question.\(question.id).\(option)")
     }
 }
 
@@ -451,6 +490,7 @@ struct CheckInQuestionCustomizationSheet: View {
                                     .accessibilityHidden(true)
                             }
                             .frame(minHeight: WanderTheme.tapMinimum)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(brandMode.raisedBackground)
@@ -509,6 +549,7 @@ struct CheckInQuestionCustomizationSheet: View {
             .foregroundStyle(brandMode.primaryText)
             .navigationTitle("Customize questions")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
             .navigationDestination(isPresented: $showsCatalog) {
                 CheckInAddCatalogQuestionScreen(selectedIDs: Set(configuration.orderedQuestionIDs)) { id, stealth in
                     var updated = configuration
@@ -574,6 +615,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
     @State private var search = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var errorMessage: String?
     @State private var stealth = false
 
@@ -587,8 +629,17 @@ private struct CheckInAddCatalogQuestionScreen: View {
     var body: some View {
         List {
             Section {
-                CheckInQuestionStealthToggle(isOn: $stealth)
-                    .accessibilityIdentifier("save.questions.catalogStealth")
+                CheckInQuestionSearchField(
+                    placeholder: "Find a question",
+                    text: $search,
+                    isFocused: $isSearchFocused,
+                    accessibilityIdentifier: "save.questions.catalogSearch"
+                )
+            }
+            .listRowBackground(brandMode.raisedBackground)
+
+            Section {
+                CheckInQuestionStealthToggle(isOn: $stealth, accessibilityIdentifier: "save.questions.catalogStealth")
             }
             .listRowBackground(brandMode.raisedBackground)
 
@@ -606,6 +657,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
             }
             ForEach(matches, id: \.id) { question in
                 Button {
+                    isSearchFocused = false
                     do {
                         try onAdd(question.id, stealth)
                         dismiss()
@@ -629,13 +681,59 @@ private struct CheckInAddCatalogQuestionScreen: View {
                 .listRowBackground(brandMode.raisedBackground)
             }
         }
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Find a question")
+        .scrollDismissesKeyboard(.interactively)
+        .onDisappear { isSearchFocused = false }
         .environment(\.editMode, .constant(.inactive))
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
         .navigationTitle("Add a question")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+/// Keep search in the screen's content so presenting or popping a question
+/// editor cannot leave a navigation-bar search controller over its controls.
+struct CheckInQuestionSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+    let isFocused: FocusState<Bool>.Binding
+    let accessibilityIdentifier: String
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(brandMode.secondaryText)
+                .accessibilityHidden(true)
+
+            TextField(placeholder, text: $text)
+                .font(AstirTypography.body)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .focused(isFocused)
+                .onSubmit { isFocused.wrappedValue = false }
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .accessibilityLabel(placeholder)
+                .accessibilityIdentifier(accessibilityIdentifier)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                    isFocused.wrappedValue = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(brandMode.secondaryText)
+                        .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+                .accessibilityIdentifier(accessibilityIdentifier + ".clear")
+            }
+        }
     }
 }
 
@@ -669,8 +767,7 @@ private struct CheckInCreateCustomQuestionScreen: View {
             }
             .listRowBackground(brandMode.raisedBackground)
             Section {
-                CheckInQuestionStealthToggle(isOn: $stealth)
-                    .accessibilityIdentifier("save.questions.customStealth")
+                CheckInQuestionStealthToggle(isOn: $stealth, accessibilityIdentifier: "save.questions.customStealth")
             }
             .listRowBackground(brandMode.raisedBackground)
             if let errorMessage {
@@ -706,23 +803,42 @@ private struct CheckInCreateCustomQuestionScreen: View {
 
 private struct CheckInQuestionStealthToggle: View {
     @Binding var isOn: Bool
+    let accessibilityIdentifier: String
     @Environment(\.astirBrandMode) private var brandMode
+
+    private var privacyDescription: String {
+        isOn ? "Only you see this question and your answer." : "Shared with your check-in’s audience."
+    }
 
     var body: some View {
         Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("Stealth")
-                    .font(AstirTypography.control)
-                Text(isOn ? "Only you see this question and your answer." : "Shared with your check-in’s audience.")
+                HStack(spacing: WanderTheme.spacing3) {
+                    Text("Stealth")
+                    Spacer(minLength: 0)
+                    Label(isOn ? "On" : "Off", systemImage: isOn ? "eye.slash.fill" : "eye")
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .padding(.vertical, WanderTheme.spacing1)
+                        .background(isOn ? brandMode.accentWash : brandMode.background)
+                        .clipShape(Capsule())
+                }
+                .font(AstirTypography.control)
+                Text(privacyDescription)
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .foregroundStyle(brandMode.primaryText)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(minHeight: WanderTheme.tapMinimum)
+        .toggleStyle(.button)
+        .buttonStyle(.plain)
         .tint(brandMode.accent)
-        .accessibilityLabel("Stealth")
-        .accessibilityHint(isOn ? "Only you see this question and your answer" : "The question and answer follow your check-in audience")
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityLabel("Stealth. \(privacyDescription)")
+        .accessibilityValue(isOn ? "On" : "Off")
+        .accessibilityHint(isOn ? "Turn Stealth off" : "Turn Stealth on")
     }
 }
 
@@ -756,8 +872,7 @@ private struct CheckInQuestionStealthScreen: View {
                             errorMessage = error.localizedDescription
                         }
                     }
-                ))
-                .accessibilityIdentifier("save.questions.selectedStealth")
+                ), accessibilityIdentifier: "save.questions.selectedStealth")
             }
             .listRowBackground(brandMode.raisedBackground)
             if let errorMessage {

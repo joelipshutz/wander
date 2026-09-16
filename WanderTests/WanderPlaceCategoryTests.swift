@@ -1674,6 +1674,88 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
     }
 
+    func testBeachSportsAndSurfSchoolsSuggestActivityTagsForBothSaveStatuses() {
+        for subtype in ["Beach tennis", "Beach volleyball", "Surf school", "  SURF   SCHOOL  "] {
+            for status in [PlaceStatus.been, .wannaGo] {
+                let suggestions = PlaceMemoryDefaultCatalog.suggestions(
+                    primaryCategory: WanderPlaceCategory.wellnessFitness,
+                    subcategory: subtype, status: status
+                )
+                let tags = Set(suggestions.tagOptions)
+                XCTAssertTrue(tags.contains("workout"), subtype)
+                XCTAssertTrue(tags.contains("practice"), subtype)
+                XCTAssertFalse(tags.contains("regular care"), subtype)
+                XCTAssertFalse(tags.contains("self-care"), subtype)
+                XCTAssertFalse(tags.contains("backup option"), subtype)
+                XCTAssertTrue(tags.contains(status == .been ? "regular spot" : "try soon"), subtype)
+                XCTAssertTrue(suggestions.defaultTags.isEmpty, subtype)
+            }
+        }
+    }
+
+    func testSportsSubtypeRoutingDoesNotMatchUnrelatedCareNames() {
+        for subtype in ["Dermatologist", "Skin resurfacing clinic", "Resource center"] {
+            let suggestions = PlaceMemoryDefaultCatalog.suggestions(
+                primaryCategory: WanderPlaceCategory.wellnessFitness,
+                subcategory: subtype, status: .been
+            )
+            let tags = Set(suggestions.tagOptions)
+            XCTAssertTrue(tags.contains("self-care"), subtype)
+            XCTAssertFalse(tags.contains("workout"), subtype)
+            XCTAssertFalse(tags.contains("practice"), subtype)
+        }
+    }
+
+    func testCuratedTagsKeepOneHabitualUseOrTreatSuggestionWithoutFiller() {
+        let cases = [
+            (WanderPlaceCategory.wellnessFitness, "Pilates"),
+            (WanderPlaceCategory.wellnessFitness, "Doctor"),
+            (WanderPlaceCategory.servicesErrands, "Laundry"),
+            (WanderPlaceCategory.workEducation, "Library"),
+            (WanderPlaceCategory.facilitiesOther, "Restroom"),
+            (WanderPlaceCategory.coffeeTeaSweets, "Gelato")
+        ]
+        let removed: Set<String> = [
+            "weekly routine", "regular care", "regular service", "regular routine", "daily routine", "weekend treat"
+        ]
+        for (category, subtype) in cases {
+            for status in [PlaceStatus.been, .wannaGo] {
+                let tags = PlaceMemoryDefaultCatalog.suggestions(
+                    primaryCategory: category, subcategory: subtype, status: status
+                ).tagOptions
+                XCTAssertEqual(tags.count, 6, subtype)
+                XCTAssertTrue(removed.isDisjoint(with: tags), subtype)
+                XCTAssertTrue(tags.contains(status == .been ? "regular spot" : "try soon"), subtype)
+                if subtype == "Gelato" {
+                    XCTAssertTrue(tags.contains("sweet treat"))
+                }
+            }
+        }
+        let transit = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.travelTransit, subcategory: "Train station", status: .been
+        ).tagOptions
+        XCTAssertTrue(transit.contains("commute"))
+        XCTAssertFalse(transit.contains("daily commute"))
+        XCTAssertTrue(transit.contains("usual route"))
+    }
+
+    func testLearnedHabitualAndTreatTagsDoNotDuplicateCurrentSuggestions() {
+        let fitness = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.wellnessFitness, subcategory: "Pilates", status: .been,
+            localTagOptions: ["weekly routine"], localLabelOptions: ["regular routine"]
+        ).tagOptions
+        XCTAssertTrue(fitness.contains("weekly routine"))
+        XCTAssertFalse(fitness.contains("regular spot"))
+        XCTAssertFalse(fitness.contains("regular routine"))
+
+        let sweets = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Gelato", status: .been,
+            localTagOptions: ["weekend treat"]
+        ).tagOptions
+        XCTAssertTrue(sweets.contains("weekend treat"))
+        XCTAssertFalse(sweets.contains("sweet treat"))
+    }
+
     func testTagSuggestionsReflectSpecificOccasionsAndStatusWithoutAmenityClaims() {
         let thai = PlaceMemoryDefaultCatalog.suggestions(
             primaryCategory: WanderPlaceCategory.restaurantsFood, subcategory: "Restaurant", cuisine: "Thai", status: .been

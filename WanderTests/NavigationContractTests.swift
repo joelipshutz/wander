@@ -4073,7 +4073,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
         XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(isPlaceProfileAccessibilityModal ? .isModal : [])"))
+        XCTAssertTrue(mapScreen.contains("isAccessibilityModal: isPlaceProfileAccessibilityModal"))
+        let profileModality = try XCTUnwrap(
+            mapScreen.components(separatedBy: "private var isPlaceProfileAccessibilityModal: Bool {").last?
+                .components(separatedBy: "private func presentWalkthroughPlaceMemory()").first
+        )
+        XCTAssertTrue(profileModality.contains("isPlaceProfilePresented && attachedMapSaveFlow == nil"))
+        XCTAssertTrue(profileModality.contains("mapSaveFlow == nil && mapActivityEditFlow == nil"))
+        XCTAssertTrue(profileModality.contains("mapPlaceListTarget == nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
         XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
@@ -4092,6 +4100,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("let content: Content"))
         XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
         XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: !reduceMotion)"))
+        XCTAssertTrue(placeProfile.contains("controller.setAccessibilityModal(isAccessibilityModal)"))
         XCTAssertTrue(placeProfile.contains("controller.updateRootView(content)"))
         XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
         XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
@@ -4193,6 +4202,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(controller.view.accessibilityElementsHidden)
         XCTAssertNil(hostedView.superview)
         XCTAssertEqual(completedStates, [true, false])
+    }
+
+    @MainActor
+    func testPlaceProfileRelinquishesAccessibilityModalityWithoutDismissing() throws {
+        var completedStates: [Bool] = []
+        let controller = PlaceProfileSlidingHostingController(
+            rootView: Text("Profile"),
+            isPresented: true,
+            onTransitionCompleted: { completedStates.append($0) }
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        controller.view.layoutIfNeeded()
+        let hostedView = try XCTUnwrap(controller.view.subviews.first)
+
+        XCTAssertTrue(controller.view.accessibilityViewIsModal)
+        controller.setAccessibilityModal(false)
+
+        XCTAssertFalse(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(controller.isPresented)
+        XCTAssertFalse(controller.view.accessibilityElementsHidden)
+        XCTAssertFalse(hostedView.accessibilityElementsHidden)
+        XCTAssertFalse(hostedView.isHidden)
+        XCTAssertEqual(hostedView.transform, .identity)
+        XCTAssertTrue(hostedView.superview === controller.view)
+        XCTAssertTrue(completedStates.isEmpty)
+
+        controller.setAccessibilityModal(true)
+        XCTAssertTrue(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(completedStates.isEmpty)
+
+        controller.setPresented(false, animated: false)
+        XCTAssertFalse(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(controller.view.accessibilityElementsHidden)
+        XCTAssertEqual(completedStates, [false])
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
@@ -4804,7 +4848,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains("selection: $selectedDetent"))
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
-        XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.resizes)"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.scrolls)"))
         XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
         XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))
         XCTAssertFalse(placeProfile.contains("compactDetent"))

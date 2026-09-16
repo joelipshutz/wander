@@ -3880,6 +3880,7 @@ struct MapScreen: View {
         if isPlaceProfileMounted && hasSelectedProfile {
             PlaceProfileVerticalContainer(
                 isPresented: isPlaceProfilePresented,
+                isAccessibilityModal: isPlaceProfileAccessibilityModal,
                 onTransitionCompleted: handlePlaceProfileTransitionCompleted
             ) {
                 NavigationStack {
@@ -3913,7 +3914,7 @@ struct MapScreen: View {
             .allowsHitTesting(isPlaceProfilePresented)
             .offset(x: placeProfileBackSwipeOffset)
             .accessibilityElement(children: .contain)
-            .accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])
+            .accessibilityAddTraits(isPlaceProfileAccessibilityModal ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
@@ -3925,6 +3926,14 @@ struct MapScreen: View {
 
     private var isPlaceProfileOverlayBlockingInteraction: Bool {
         hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)
+    }
+
+    private var isPlaceProfileAccessibilityModal: Bool {
+        // A native sheet owns accessibility focus while the profile stays
+        // visually mounted behind it. Keeping both modal traps sheet actions.
+        isPlaceProfilePresented && attachedMapSaveFlow == nil
+            && mapSaveFlow == nil && mapActivityEditFlow == nil
+            && mapPlaceListTarget == nil
     }
 
     private func presentWalkthroughPlaceMemory() {
@@ -12624,7 +12633,7 @@ struct MapPlaceSaveFlowSheet: View {
         .presentationCornerRadius(WanderTheme.radiusSheet)
         .presentationBackground(astirBrandMode.background)
         .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
-        .presentationContentInteraction(.resizes)
+        .presentationContentInteraction(.scrolls)
     }
 
     private func expand() {
@@ -13409,6 +13418,7 @@ struct MapPlaceSaveEditor: View {
         ) {
             save()
         }
+        .accessibilityIdentifier("save.submit")
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
         .shadow(color: Color.black.opacity(0.2), radius: 16, y: 8)
@@ -15170,26 +15180,45 @@ private struct MapSaveDestructiveButton: View {
 }
 
 private struct PlaceTypeRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     let value: String
     var isPlaceholderValue = false
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Text(title)
-                .font(AstirTypography.label)
-                .foregroundStyle(WanderTheme.textMuted.color)
-            Spacer()
-            Text(value)
-                .font(AstirTypography.control)
-                .foregroundStyle(isPlaceholderValue ? WanderTheme.textFaint.color : WanderTheme.textInk.color)
-                .lineLimit(1)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    titleLabel
+                    valueLabel
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                titleLabel
+                Spacer()
+                valueLabel.lineLimit(1)
+            }
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .black))
                 .foregroundStyle(WanderTheme.textFaint.color)
         }
         .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? WanderTheme.spacing2 : 0)
         .frame(minHeight: WanderTheme.tapMinimum)
+        .contentShape(Rectangle())
+    }
+
+    private var titleLabel: some View {
+        Text(title)
+            .font(AstirTypography.label)
+            .foregroundStyle(WanderTheme.textMuted.color)
+    }
+
+    private var valueLabel: some View {
+        Text(value)
+            .font(AstirTypography.control)
+            .foregroundStyle(isPlaceholderValue ? WanderTheme.textFaint.color : WanderTheme.textInk.color)
     }
 }
 
@@ -15959,6 +15988,7 @@ private struct PlaceTypeSelectionFooter: View {
             Spacer(minLength: 0)
 
             Button("Done", action: onDone)
+                .accessibilityIdentifier("save.placeType.done")
                 .font(AstirTypography.control)
                 .padding(.horizontal, WanderTheme.spacing4)
                 .frame(minHeight: 48)
@@ -16637,14 +16667,13 @@ private struct MapSaveUnifiedTagsSection: View {
     var body: some View {
         MapSaveQuestionBlock(title: block.title, tag: "optional") {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                ScrollView(.vertical, showsIndicators: allOptions.count > maximumVisibleTagCount) {
+                ScrollView(.vertical) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
                         ForEach(allOptions) { option in
                             tagButton(option)
                         }
                     }
                 }
-                .scrollDisabled(allOptions.count <= maximumVisibleTagCount)
                 .frame(height: tagPickerHeight)
                 .accessibilityIdentifier("save.tags.picker")
 
@@ -16659,10 +16688,6 @@ private struct MapSaveUnifiedTagsSection: View {
             repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2, alignment: .topLeading),
             count: count
         )
-    }
-
-    private var maximumVisibleTagCount: Int {
-        gridColumns.count * 4
     }
 
     private var tagPickerHeight: CGFloat {

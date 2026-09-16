@@ -278,15 +278,18 @@ struct PlaceProfileFullScreen: View {
 struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPresented: Bool
+    let isAccessibilityModal: Bool
     let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
         isPresented: Bool,
+        isAccessibilityModal: Bool = true,
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
         self.isPresented = isPresented
+        self.isAccessibilityModal = isAccessibilityModal
         self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
@@ -295,6 +298,7 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
         PlaceProfileSlidingHostingController(
             rootView: content,
             isPresented: isPresented,
+            isAccessibilityModal: isAccessibilityModal,
             onTransitionCompleted: onTransitionCompleted
         )
     }
@@ -304,6 +308,7 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
         context: Context
     ) {
         controller.onTransitionCompleted = onTransitionCompleted
+        controller.setAccessibilityModal(isAccessibilityModal)
         if controller.isPresented == isPresented {
             controller.updateRootView(content)
         } else if isPresented {
@@ -324,15 +329,18 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
     private var pendingRootView: Content?
     private var appliesInitialPosition = true
     private(set) var isPresented: Bool
+    private var isAccessibilityModal: Bool
     var onTransitionCompleted: @MainActor (Bool) -> Void
 
     init(
         rootView: Content,
         isPresented: Bool,
+        isAccessibilityModal: Bool = true,
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void
     ) {
         hostingController = UIHostingController(rootView: rootView)
         self.isPresented = isPresented
+        self.isAccessibilityModal = isAccessibilityModal
         self.onTransitionCompleted = onTransitionCompleted
         super.init(nibName: nil, bundle: nil)
     }
@@ -373,6 +381,14 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         } else {
             hostingController.rootView = rootView
         }
+    }
+
+    func setAccessibilityModal(_ isAccessibilityModal: Bool) {
+        self.isAccessibilityModal = isAccessibilityModal
+        guard isViewLoaded else { return }
+        // Sheet presentation does not change the profile's visual state, so
+        // modality must update independently of setPresented(_:animated:).
+        updateAccessibilityVisibility(isPresented: isPresented)
     }
 
     func setPresented(_ isPresented: Bool, animated: Bool) {
@@ -470,7 +486,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
     private func updateAccessibilityVisibility(isPresented: Bool) {
         view.accessibilityElementsHidden = !isPresented
-        view.accessibilityViewIsModal = isPresented
+        view.accessibilityViewIsModal = isPresented && isAccessibilityModal
         hostingController.view.accessibilityElementsHidden = !isPresented
     }
 }

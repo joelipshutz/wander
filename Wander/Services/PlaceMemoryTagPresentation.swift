@@ -22,7 +22,7 @@ enum PlaceMemoryTagPresentation {
         ["gift idea", "gift list", "giftable"],
         ["bring visitors", "visitor idea", "visitor list", "visitor context"],
         ["try soon", "try next", "try next time"],
-        ["regular spot", "go-to", "go to", "neighborhood standby", "neighborhood staple"],
+        ["regular spot", "go-to", "go to", "neighborhood standby", "neighborhood staple", "weekly routine", "regular care", "regular service", "regular routine", "daily routine"],
         ["meet here", "meeting spot", "meetup spot", "meetup idea"],
         ["stay again", "book again"],
         ["errand stop", "errand loop", "quick errand", "errand idea"],
@@ -30,7 +30,8 @@ enum PlaceMemoryTagPresentation {
         ["drinks with friends", "group drinks", "group shortlist"],
         ["dinner with friends", "group dinner", "group dinner idea"],
         ["night out", "night-out list", "night-out shortlist"],
-        ["sweet treat", "treat stop", "treat list", "dessert list", "dessert shortlist"]
+        ["sweet treat", "treat stop", "treat list", "dessert list", "dessert shortlist", "weekend treat"],
+        ["commute", "daily commute"]
     ]
 
     private static let aliases: [String: String] = {

@@ -14,6 +14,38 @@ final class PlaceMemoryTagPresentationTests: XCTestCase {
         XCTAssertEqual(PlaceMemoryTagPresentation.options(suggestions: [], selected: Set(labels)).count, labels.count)
     }
 
+    func testReviewedHabitualTreatAndCommuteAliasesUseOneSuggestionEach() {
+        XCTAssertEqual(PlaceMemoryTagPresentation.suggestions([
+            "regular spot", "weekly routine", "regular care", "regular service", "regular routine", "daily routine",
+            "sweet treat", "weekend treat", "commute", "daily commute"
+        ]), ["regular spot", "sweet treat", "commute"])
+        let distinct = ["morning stop", "regular spot", "weekly routine with Dad", "weekend treat with Mom"]
+        XCTAssertEqual(PlaceMemoryTagPresentation.suggestions(distinct), distinct)
+    }
+
+    func testHabitualAndTreatGroupsPreserveSavedValuesUntilExplicitClear() {
+        let habitual: Set<String> = [
+            "regular spot", " Weekly   Routine ", "regular care", "regular service", "regular routine", "daily routine"
+        ]
+        let treats: Set<String> = ["sweet treat", "Weekend Treat"]
+        let personal: Set<String> = ["weekly routine with Dad"]
+        let originals = habitual.union(treats).union(personal)
+        let options = PlaceMemoryTagPresentation.options(
+            suggestions: ["regular spot", "sweet treat"], selected: originals
+        )
+        XCTAssertEqual(options.count, 3)
+        XCTAssertEqual(options.first { $0.id == "regular spot" }?.selectedValues, habitual)
+        XCTAssertEqual(options.first { $0.id == "sweet treat" }?.selectedValues, treats)
+        XCTAssertEqual(Set(options.flatMap(\.selectedValues)), originals)
+        XCTAssertEqual(
+            PlaceMemoryTagPresentation.toggling("regular spot", selected: originals), treats.union(personal)
+        )
+        XCTAssertEqual(
+            PlaceMemoryTagPresentation.toggling("weekend treat", selected: originals), habitual.union(personal)
+        )
+        XCTAssertEqual(originals.count, 9, "Displaying and clearing a chip must not mutate the supplied saved set.")
+    }
+
     func testGroupedSelectedOptionsRetainEveryOriginalPersistedValue() {
         let originals: Set<String> = [" Morning   Routine ", "morning spot", "MORNING ROUTINE", "with Dad"]
         let options = PlaceMemoryTagPresentation.options(suggestions: ["morning stop", "work session"], selected: originals)

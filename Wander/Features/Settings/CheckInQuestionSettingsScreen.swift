@@ -6,6 +6,7 @@ struct CheckInQuestionSettingsScreen: View {
     let ownerUserID: String
     @Environment(\.astirBrandMode) private var brandMode
     @State private var search = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var scopes: [CheckInQuestionSettingsScope] = []
     @State private var selectedScope: CheckInQuestionSettingsScope?
     private let preferenceStore = CheckInQuestionPreferenceStore()
@@ -23,6 +24,16 @@ struct CheckInQuestionSettingsScreen: View {
 
     var body: some View {
         List {
+            Section {
+                CheckInQuestionSearchField(
+                    placeholder: "Find a category or place type",
+                    text: $search,
+                    isFocused: $isSearchFocused,
+                    accessibilityIdentifier: "questions.settings.search"
+                )
+            }
+            .listRowBackground(brandMode.raisedBackground)
+
             if query.isEmpty {
                 Section {
                     Text("Choose the questions you see for each place type.")
@@ -70,9 +81,11 @@ struct CheckInQuestionSettingsScreen: View {
         .navigationTitle("Check-in questions")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Find a category or place type")
+        .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("questions.settings.screen")
+        .onDisappear { isSearchFocused = false }
         .onChange(of: ownerUserID, initial: true) { _, _ in
+            isSearchFocused = false
             selectedScope = nil
             reloadScopes()
         }
@@ -83,7 +96,10 @@ struct CheckInQuestionSettingsScreen: View {
     }
 
     private func scopeButton(_ scope: CheckInQuestionSettingsScope) -> some View {
-        Button { selectedScope = scope } label: {
+        Button {
+            isSearchFocused = false
+            selectedScope = scope
+        } label: {
             Text(scope.title)
                 .font(AstirTypography.body)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
@@ -128,6 +144,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
     let scopes: [CheckInQuestionSettingsScope]
     @Environment(\.astirBrandMode) private var brandMode
     @State private var search = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var selectedScope: CheckInQuestionSettingsScope?
 
     private var matches: [CheckInQuestionSettingsScope] {
@@ -137,13 +154,26 @@ private struct CheckInQuestionTypeSettingsScreen: View {
 
     var body: some View {
         List {
+            Section {
+                CheckInQuestionSearchField(
+                    placeholder: "Find a place type",
+                    text: $search,
+                    isFocused: $isSearchFocused,
+                    accessibilityIdentifier: "questions.settings.typeSearch"
+                )
+            }
+            .listRowBackground(brandMode.raisedBackground)
+
             if matches.isEmpty {
                 Text("No matching place types.")
                     .foregroundStyle(brandMode.secondaryText)
                     .listRowBackground(brandMode.raisedBackground)
             }
             ForEach(matches) { scope in
-                Button { selectedScope = scope } label: {
+                Button {
+                    isSearchFocused = false
+                    selectedScope = scope
+                } label: {
                     Text(scope.title)
                         .font(AstirTypography.body)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
@@ -159,7 +189,8 @@ private struct CheckInQuestionTypeSettingsScreen: View {
         .navigationTitle(categoryTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Find a place type")
+        .scrollDismissesKeyboard(.interactively)
+        .onDisappear { isSearchFocused = false }
         .sheet(item: $selectedScope) { scope in
             CheckInQuestionSettingsScopeEditor(ownerUserID: ownerUserID, scope: scope)
         }

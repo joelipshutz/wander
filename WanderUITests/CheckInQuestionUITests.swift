@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class CheckInQuestionUITests: XCTestCase {
@@ -12,6 +13,8 @@ final class CheckInQuestionUITests: XCTestCase {
         restoreSuggestions(in: app)
 
         let options = catalogAnswerButtons(in: app)
+        reveal(options.firstMatch, in: app)
+        XCTAssertTrue(options.firstMatch.waitForExistence(timeout: 3))
         XCTAssertGreaterThan(options.count, 0)
         XCTAssertTrue(options.allElementsBoundByIndex.allSatisfy { !$0.isSelected })
         let first = options.firstMatch
@@ -55,28 +58,31 @@ final class CheckInQuestionUITests: XCTestCase {
             .press(forDuration: 0.5, thenDragTo: firstCell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
         XCTAssertLessThan(recurringElement(lastID, in: app).frame.minY, recurringElement(firstID, in: app).frame.minY)
 
-        let remove = recurringCell(lastID, in: app).buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Delete", "Remove")
-        ).firstMatch
-        XCTAssertTrue(remove.exists)
-        remove.tap()
+        // The native edit control shares its row's accessibility identifier;
+        // target the leading minus, not the row's privacy-navigation button.
+        recurringCell(lastID, in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
         let confirmDelete = app.buttons["Delete"].firstMatch
         if confirmDelete.waitForExistence(timeout: 2) { confirmDelete.tap() }
+        XCTAssertTrue(app.buttons["save.questions.done"].exists)
         XCTAssertTrue(recurringElement(lastID, in: app).waitForNonExistence(timeout: 3))
+        XCTAssertEqual(recurringIDs(in: app).count, 2)
 
         let addCatalog = app.buttons["save.questions.addCatalog"]
         reveal(addCatalog, in: app)
         XCTAssertTrue(addCatalog.isEnabled, "Adding a question stays available while native reorder controls are shown.")
         addCatalog.tap()
-        let catalogStealth = app.switches["save.questions.catalogStealth"]
+        let catalogStealth = app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch
         XCTAssertTrue(catalogStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(catalogStealth.value as? String, "0")
+        XCTAssertEqual(catalogStealth.value as? String, "Off")
+        capture("REC-485 question library Stealth control")
         catalogStealth.tap()
-        XCTAssertEqual(catalogStealth.value as? String, "1")
-        let search = app.searchFields.firstMatch
+        let stealthEnabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "On"), object: catalogStealth)
+        XCTAssertEqual(XCTWaiter.wait(for: [stealthEnabled], timeout: 3), .completed, catalogStealth.debugDescription)
+        XCTAssertEqual(catalogStealth.value as? String, "On")
+        let search = app.textFields["save.questions.catalogSearch"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
-        search.typeText("outlet")
+        search.typeText("outlet\n")
         let outlets = app.buttons["save.questions.catalog.place_detail_outlets"]
         XCTAssertTrue(outlets.waitForExistence(timeout: 3))
         outlets.tap()
@@ -87,13 +93,13 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(createCustom, in: app)
         XCTAssertTrue(createCustom.isEnabled, "Creating a question stays available while native reorder controls are shown.")
         createCustom.tap()
-        let customStealth = app.switches["save.questions.customStealth"]
+        let customStealth = app.descendants(matching: .any)["save.questions.customStealth"].firstMatch
         XCTAssertTrue(customStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(customStealth.value as? String, "1")
+        XCTAssertEqual(customStealth.value as? String, "On")
         reveal(customStealth, in: app)
         customStealth.tap()
-        XCTAssertEqual(customStealth.value as? String, "0")
-        let prompt = app.textFields["save.questions.customPrompt"]
+        XCTAssertEqual(customStealth.value as? String, "Off")
+        let prompt = app.descendants(matching: .any)["save.questions.customPrompt"].firstMatch
         XCTAssertTrue(prompt.waitForExistence(timeout: 3))
         reveal(prompt, in: app, upwards: false)
         prompt.tap()
@@ -118,11 +124,11 @@ final class CheckInQuestionUITests: XCTestCase {
         openCustomize(in: app)
         XCTAssertEqual(recurringIDs(in: app), expectedIDs)
         recurringElement(customID, in: app).tap()
-        let selectedStealth = app.switches["save.questions.selectedStealth"]
+        let selectedStealth = app.descendants(matching: .any)["save.questions.selectedStealth"].firstMatch
         XCTAssertTrue(selectedStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(selectedStealth.value as? String, "0")
+        XCTAssertEqual(selectedStealth.value as? String, "Off")
         selectedStealth.tap()
-        XCTAssertEqual(selectedStealth.value as? String, "1")
+        XCTAssertEqual(selectedStealth.value as? String, "On")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertEqual(recurringElement(customID, in: app).value as? String, "Stealth")
         app.buttons["save.questions.done"].tap()
@@ -133,7 +139,8 @@ final class CheckInQuestionUITests: XCTestCase {
         let app = launchPlace()
         openCheckIn(in: app)
         restoreSuggestions(in: app)
-        let first = catalogAnswerButtons(in: app).firstMatch
+        // Pick a Hike detail that is not also one of Beach's defaults.
+        let first = app.buttons["save.question.place_detail_incline.Mostly level"]
         reveal(first, in: app)
         let previousID = first.identifier
         first.tap()
@@ -143,17 +150,21 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(subtype.isHittable)
         subtype.tap()
         let search = app.textFields["Search types"]
-        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        let pickerOpened = search.waitForExistence(timeout: 3)
+        if !pickerOpened { capture("REC-485 subtype picker did not open") }
+        XCTAssertTrue(pickerOpened)
         search.tap()
-        search.typeText("Beach")
+        search.typeText("Beach\n")
         let beach = app.buttons.matching(NSPredicate(format: "label == %@", "Beach")).firstMatch
         XCTAssertTrue(beach.waitForExistence(timeout: 3))
         beach.tap()
-        app.buttons["Done"].firstMatch.tap()
+        let pickerDone = app.buttons["save.placeType.done"]
+        pickerDone.tap()
+        XCTAssertTrue(pickerDone.waitForNonExistence(timeout: 3))
 
         let customize = app.buttons["save.questions.customize"]
         reveal(customize, in: app)
-        XCTAssertTrue(customize.label.contains("Beach"))
+        XCTAssertTrue(customize.label.contains("Beach"), customize.label)
         restoreSuggestions(in: app)
         XCTAssertTrue(catalogAnswerButtons(in: app).allElementsBoundByIndex.allSatisfy { !$0.isSelected })
         let alsoNoted = app.descendants(matching: .any)["save.questions.alsoNoted"].firstMatch
@@ -168,7 +179,7 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-485 subtype change keeps earlier answers reviewable")
     }
 
-    func testAccessibilityTextKeepsAnswerControlsReadableAndTappable() {
+    func testAccessibilityTextKeepsAnswerControlsReadableAndTappable() throws {
         let app = launchPlace(accessibilityText: true)
         openCheckIn(in: app)
         restoreSuggestions(in: app)
@@ -186,6 +197,19 @@ final class CheckInQuestionUITests: XCTestCase {
         first.tap()
         openCustomize(in: app)
         capture("REC-485 accessibility text customization")
+        let questionID = try XCTUnwrap(recurringIDs(in: app).first)
+        recurringElement(questionID, in: app).tap()
+        let stealth = app.descendants(matching: .any)["save.questions.selectedStealth"].firstMatch
+        XCTAssertTrue(stealth.waitForExistence(timeout: 3))
+        reveal(stealth, in: app)
+        XCTAssertGreaterThanOrEqual(stealth.frame.height, 44)
+        let initialStealth = stealth.value as? String
+        stealth.tap()
+        XCTAssertNotEqual(stealth.value as? String, initialStealth)
+        capture("REC-485 accessibility text Stealth toggle")
+        stealth.tap()
+        XCTAssertEqual(stealth.value as? String, initialStealth)
+        app.navigationBars.buttons.firstMatch.tap()
         app.buttons["save.questions.done"].tap()
     }
 
@@ -200,19 +224,25 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(foodType.isHittable)
         foodType.tap()
         let foodTypeSearch = app.textFields["Search food types"]
-        XCTAssertTrue(foodTypeSearch.waitForExistence(timeout: 3))
+        let pickerOpened = foodTypeSearch.waitForExistence(timeout: 3)
+        if !pickerOpened { capture("REC-485 food type picker did not open") }
+        XCTAssertTrue(pickerOpened)
         XCTAssertFalse(app.textFields["Search types"].exists)
         foodTypeSearch.tap()
-        foodTypeSearch.typeText("Thai")
+        foodTypeSearch.typeText("Thai\n")
         let thai = app.buttons.matching(NSPredicate(format: "label == %@", "Thai")).firstMatch
         reveal(thai, in: app)
         XCTAssertTrue(thai.isHittable)
         thai.tap()
-        app.buttons["Done"].firstMatch.tap()
+        let selectedThai = app.buttons.matching(NSPredicate(format: "label == %@ AND value == %@", "Thai", "Selected")).firstMatch
+        XCTAssertTrue(selectedThai.waitForExistence(timeout: 3))
+        let pickerDone = app.buttons["save.placeType.done"]
+        pickerDone.tap()
+        XCTAssertTrue(pickerDone.waitForNonExistence(timeout: 3))
 
         let customize = app.buttons["save.questions.customize"]
         reveal(customize, in: app)
-        XCTAssertTrue(customize.label.contains("Thai"))
+        XCTAssertTrue(customize.label.contains("Thai"), customize.label)
         restoreSuggestions(in: app)
         for id in ["place_detail_dog_access", "place_detail_spice", "place_detail_vegetarian"] {
             XCTAssertTrue(app.descendants(matching: .any)["save.question.row.\(id)"].firstMatch.exists)
@@ -233,12 +263,14 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
         reveal(entry, in: app)
         entry.tap()
-        let search = app.searchFields.firstMatch
+        let search = app.textFields["questions.settings.search"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
-        search.typeText("Volleyball court")
+        search.typeText("Volleyball court\n")
         let scope = app.buttons["questions.settings.scope.wellness_fitness:volleyball court"]
         XCTAssertTrue(scope.waitForExistence(timeout: 3))
+        reveal(scope, in: app)
+        XCTAssertTrue(scope.isHittable)
         scope.tap()
         let openedEditor = app.buttons["save.questions.done"].waitForExistence(timeout: 8)
         if !openedEditor { capture("REC-485 Settings subtype presentation failure") }
@@ -251,10 +283,10 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(add, in: app, upwards: false)
         XCTAssertTrue(add.isEnabled)
         add.tap()
-        XCTAssertTrue(app.switches["save.questions.catalogStealth"].waitForExistence(timeout: 3))
-        let questionSearch = app.searchFields.firstMatch
+        XCTAssertTrue(app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch.waitForExistence(timeout: 3))
+        let questionSearch = app.textFields["save.questions.catalogSearch"]
         questionSearch.tap()
-        questionSearch.typeText("outlet")
+        questionSearch.typeText("outlet\n")
         let outlets = app.buttons["save.questions.catalog.place_detail_outlets"]
         XCTAssertTrue(outlets.waitForExistence(timeout: 3))
         outlets.tap()
@@ -277,7 +309,7 @@ final class CheckInQuestionUITests: XCTestCase {
             "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"
         ]
         if accessibilityText {
-            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityExtraLarge"]
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", UIContentSizeCategory.accessibilityExtraLarge.rawValue]
         }
         app.launch()
         return app
@@ -303,7 +335,11 @@ final class CheckInQuestionUITests: XCTestCase {
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
         restore.tap()
-        app.buttons["save.questions.done"].tap()
+        let done = app.buttons["save.questions.done"]
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 5))
+        capture("REC-485 composer after restoring questions")
     }
 
     private func catalogAnswerButtons(in app: XCUIApplication) -> XCUIElementQuery {
@@ -314,7 +350,7 @@ final class CheckInQuestionUITests: XCTestCase {
         let prefix = "save.questions.recurring."
         var seen = Set<String>()
         return app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
-            .allElementsBoundByIndex.sorted { $0.frame.minY < $1.frame.minY }
+            .allElementsBoundByAccessibilityElement.sorted { $0.frame.minY < $1.frame.minY }
             .compactMap { element in
                 let id = String(element.identifier.dropFirst(prefix.count))
                 return seen.insert(id).inserted ? id : nil
@@ -330,21 +366,45 @@ final class CheckInQuestionUITests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, upwards: Bool = true) {
-        for _ in 0..<9 where !element.isHittable {
+        for _ in 0..<16 {
             let exists = element.exists
             let frame = exists ? element.frame : .zero
             let id = exists ? element.identifier : ""
             let composerTarget = id == "save.questions.customize" || id == "save.questions.alsoNoted"
                 || id.hasPrefix("save.question.") || id.hasPrefix("save.placeType.")
             let editor = app.scrollViews["save.editorScroll"]
-            let surface = composerTarget && editor.isHittable ? editor : app
-            let viewport = surface.frame.intersection(app.frame)
+            let composerVisible = editor.isHittable && !app.buttons["save.questions.done"].exists
+            let usesEditor = (composerTarget || !exists) && composerVisible
+            let surface = usesEditor ? editor : app
+            var viewport = surface.frame.intersection(app.frame)
+            if usesEditor {
+                // A partly exposed control can be hittable while its center is
+                // behind the fixed save action. Scroll within the visible body.
+                let submit = app.buttons["save.submit"]
+                if submit.exists {
+                    viewport.size.height = max(0, min(viewport.maxY, submit.frame.minY) - viewport.minY)
+                }
+                viewport = viewport.insetBy(dx: 12, dy: 12)
+            }
+            if element.isHittable && (!usesEditor || viewport.contains(CGPoint(x: frame.midX, y: frame.midY))) {
+                return
+            }
             let scrollUp = frame.isEmpty ? upwards : frame.midY >= viewport.midY
-            // Start in the form's side gutter. A whole-screen swipe can land
-            // on the rating slider and change the score instead of scrolling.
-            let top = surface.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.25))
-            let bottom = surface.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.75))
-            (scrollUp ? bottom : top).press(forDuration: 0.05, thenDragTo: scrollUp ? top : bottom)
+            if usesEditor && viewport.height > 80 {
+                let origin = app.coordinate(withNormalizedOffset: .zero)
+                let lower = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.78))
+                let upper = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.22))
+                (scrollUp ? lower : upper).press(
+                    forDuration: 0.05,
+                    thenDragTo: scrollUp ? upper : lower,
+                    withVelocity: .slow,
+                    thenHoldForDuration: 0.2
+                )
+            } else if scrollUp {
+                surface.swipeUp(velocity: .slow)
+            } else {
+                surface.swipeDown(velocity: .slow)
+            }
         }
     }
 
