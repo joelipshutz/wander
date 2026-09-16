@@ -42,7 +42,7 @@ final class PlaceWannaSaveTests: XCTestCase {
         XCTAssertEqual(entry.status, .wannaGo)
         XCTAssertNotEqual(entry.note, parent.note)
         XCTAssertNil(entry.ratingScore)
-        XCTAssertFalse(entry.canEdit)
+        XCTAssertTrue(entry.canEdit)
         XCTAssertEqual(entry.sortBucket, 0, "New Wanna events sort by their own date in ALL")
     }
 
@@ -264,6 +264,119 @@ final class PlaceWannaSaveTests: XCTestCase {
         })
     }
 
+    func testRepeatWannaCelebratesEveryNewSubmissionButNotRetryOrEdit() async throws {
+        let store = WanderStore(fixtures: .seed())
+        _ = await store.saveNewWanna(candidate, visibility: .followers, note: "First", plannedDate: nil, attributes: [], backend: nil)
+        if let first = store.saveStreakCelebration { store.dismissSaveStreakCelebration(id: first.id) }
+        let id = UUID().uuidString.lowercased()
+        _ = await store.saveNewWanna(candidate, operationID: id, visibility: .followers, note: "Repeat", plannedDate: nil, attributes: [], backend: nil)
+        let celebration = try XCTUnwrap(store.saveStreakCelebration)
+        XCTAssertEqual(celebration.kind, .sameDayConfetti)
+        XCTAssertEqual(celebration.status, .wannaGo)
+        store.dismissSaveStreakCelebration(id: celebration.id)
+        _ = await store.saveNewWanna(candidate, operationID: id, visibility: .followers, note: "Repeat", plannedDate: nil, attributes: [], backend: nil)
+        XCTAssertNil(store.saveStreakCelebration)
+        let wanna = try XCTUnwrap(store.placeWannaSaves.first)
+        _ = store.updateWanna(wanna, visibility: .followers, note: "Edited", plannedDate: nil, attributes: [])
+        XCTAssertNil(store.saveStreakCelebration)
+    }
+
+    func testEditingOneWannaPreservesOthersAndCheckInAcrossRestart() async throws {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 })
+        let store = WanderStore(fixtures: .seed(), persistence: persistence)
+        let saved = store.saveCandidate(candidate, status: .been, visibility: .followers, note: "Visit", sourceType: .manual, ratingScore: 4)
+        for note in ["First repeat", "Second repeat"] {
+            _ = await store.saveNewWanna(candidate, visibility: .followers, note: note, plannedDate: nil, attributes: [], backend: nil)
+        }
+        let target = store.placeWannaSaves[0]
+        let untouched = store.placeWannaSaves[1]
+        let plannedDate = WannaGoDate.normalized(Date.now.addingTimeInterval(86400))
+        XCTAssertNotNil(store.updateWanna(target, visibility: .selfOnly, note: "Edited only first",
+            plannedDate: plannedDate, attributes: [PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", valueJSON: "[\"quiet\"]")]))
+        let restored = WanderStore(fixtures: .seed(), persistence: persistence)
+        let updated = try XCTUnwrap(restored.placeWannaSaves.first { $0.id == target.id })
+        XCTAssertEqual(updated.note, "Edited only first")
+        XCTAssertEqual(updated.visibility, .selfOnly)
+        XCTAssertEqual(updated.plannedDate, plannedDate)
+        XCTAssertEqual(updated.occurredAt, target.occurredAt)
+        XCTAssertFalse(updated.isSynced)
+        XCTAssertNotNil(updated.editedAt)
+        XCTAssertEqual(restored.placeWannaSaves.first { $0.id == untouched.id }, untouched)
+        let parent = try XCTUnwrap(restored.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID })
+        XCTAssertEqual(parent.userPlace.status, .been)
+        XCTAssertEqual(parent.userPlace.note, "Visit")
+        XCTAssertEqual(parent.userPlace.ratingScore, 4)
+        let context = MapPlaceSaveContext.editWanna(updated, visiblePlace: parent)
+        XCTAssertEqual(context.editedWanna?.id, target.id)
+        XCTAssertEqual(context.initialNote, "Edited only first")
+        XCTAssertEqual(context.initialPlannedDate, plannedDate)
+        XCTAssertFalse(context.showsRemoveControl)
+    }
+
+    func testRefreshAndInFlightCreateCannotEraseNewerWannaEdit() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let saved = store.saveCandidate(candidate, status: .been, visibility: .followers, note: "Visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        _ = await store.saveNewWanna(candidate, visibility: .followers, note: "Before edit", plannedDate: nil, attributes: [], backend: nil)
+        let original = store.placeWannaSaves[0]
+        repository.onSave = {
+            repository.onSave = nil
+            _ = store.updateWanna(original, visibility: .followers, note: "Edited during create", plannedDate: nil, attributes: [])
+        }
+        _ = await store.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(store.placeWannaSaves[0].note, "Edited during create")
+        XCTAssertTrue(store.placeWannaSaves[0].isSynced)
+        repository.onRead = {
+            _ = store.updateWanna(store.placeWannaSaves[0], visibility: .selfOnly, note: "Pending newer edit", plannedDate: nil, attributes: [])
+            var stale = original; stale.isSynced = true
+            return [stale]
+        }
+        await store.refreshWannaSaves(userPlaceIDs: [parent.id], backend: backend)
+        XCTAssertEqual(store.placeWannaSaves.count, 1)
+        XCTAssertEqual(store.placeWannaSaves[0].note, "Pending newer edit")
+        XCTAssertFalse(store.placeWannaSaves[0].isSynced)
+    }
+
+    func testEveryOwnedActivityKindHasEditButOtherPeoplesDoNot() throws {
+        let store = WanderStore(fixtures: .seed())
+        let saved = store.saveCandidate(candidate, status: .been, visibility: .followers, note: "Visit", sourceType: .manual)
+        let visible = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID })
+        let summary = PlaceSaveSummary(visiblePlace: visible, attributes: [])
+        for kind in [PlaceActivityEntryKind.visit, .currentWant, .historicalWant, .legacyBeenSummary] {
+            let entry = PlaceActivityEntry(summary: summary, visit: nil, kind: kind, currentUserID: store.currentUser.id)
+            XCTAssertTrue(entry.canEdit)
+            let other = PlaceActivityEntry(summary: summary, visit: nil, kind: kind, currentUserID: "different-viewer")
+            XCTAssertFalse(other.canEdit)
+        }
+    }
+
+    func testEditedOriginalWannaSurvivesLastCheckInDeletionAndRemainsEditable() async throws {
+        let store = WanderStore(fixtures: .seed())
+        _ = await store.saveNewWanna(candidate, visibility: .followers, note: "Original",
+                                     plannedDate: nil, attributes: [], backend: nil)
+        let saved = store.saveCandidate(candidate, status: .been, visibility: .followers,
+                                        note: "Visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace)
+        let original = PlaceWannaSave(id: UUID().uuidString.lowercased(), ownerID: store.currentUser.id,
+            userPlaceID: parent.id, occurredAt: try XCTUnwrap(parent.historicalWantedAt), note: "Original",
+            visibility: .followers, plannedDate: nil, attributeAnswersJSON: "[]", isHistoricalOriginal: true)
+        XCTAssertNotNil(store.updateWanna(original, visibility: .selfOnly, note: nil, plannedDate: nil, attributes: []))
+        let visit = try XCTUnwrap(store.visits(for: parent.id).first)
+        XCTAssertTrue(store.deleteVisit(visitID: visit.id))
+        XCTAssertEqual(parent.status, .wannaGo)
+        XCTAssertNil(parent.note, "Clearing the original note must not resurrect its old text")
+        XCTAssertEqual(parent.visibility, .selfOnly)
+        XCTAssertNotNil(store.updateWanna(store.placeWannaSaves[0], visibility: .selfOnly,
+                                          note: "Edited after deletion", plannedDate: nil, attributes: []))
+        XCTAssertEqual(parent.note, "Edited after deletion")
+        XCTAssertEqual(store.placeWannaSaves.count, 1)
+    }
+
     func testRightActionIsFreshWannaForEveryEditablePlaceState() throws {
         for state in [PlaceProfileSaveActionState.unsaved, .wanna, .checkInHistory] {
             let actions = PlaceProfileSaveActionPolicy.resolve(state: state).actions
@@ -298,6 +411,10 @@ private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRep
         attempts.append(wanna.id)
         await onSave?()
         if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
+    }
+    func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave {
+        if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
+        return wanna
     }
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
         await onRead?() ?? []

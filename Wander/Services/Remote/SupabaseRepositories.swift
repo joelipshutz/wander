@@ -859,6 +859,14 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         )
     }
 
+    func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave {
+        try CommunityContentPolicy.validate(wanna.note)
+        try CommunityContentPolicy.validateJSONText(wanna.attributeAnswersJSON)
+        let row: RemoteWannaSaveDTO = try await rpc.call(
+            "update_own_place_wanna", params: SaveOwnPlaceWannaParams(wanna: wanna))
+        return row.model
+    }
+
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
         let rows: [RemoteWannaSaveDTO] = try await rpc.call(
             "visible_place_wannas", params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
@@ -4168,7 +4176,11 @@ private struct SaveOwnPlaceWannaParams: Encodable {
 
     init(wanna: PlaceWannaSave) throws {
         inputUserPlaceID = wanna.userPlaceID
-        inputWanna = Payload(id: wanna.id, occurredAt: wanna.occurredAt, note: wanna.note,
+        let editFormatter = ISO8601DateFormatter()
+        editFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        inputWanna = Payload(id: wanna.id, occurredAt: wanna.occurredAt,
+                            editedAt: wanna.editedAt.map { editFormatter.string(from: $0) },
+                            isHistoricalOriginal: wanna.isHistoricalOriginal, note: wanna.note,
                             visibility: wanna.visibility, plannedDate: wanna.plannedDate.map { WannaGoDate.storageString(from: $0) },
                             attributeAnswers: try JSONDecoder().decode(JSONValue.self,
                                 from: Data(wanna.attributeAnswersJSON.utf8)))
@@ -4182,12 +4194,16 @@ private struct SaveOwnPlaceWannaParams: Encodable {
     struct Payload: Encodable {
         let id: String
         let occurredAt: Date
+        let editedAt: String?
+        let isHistoricalOriginal: Bool?
         let note: String?
         let visibility: PlaceVisibility
         let plannedDate: String?
         let attributeAnswers: JSONValue
         enum CodingKeys: String, CodingKey {
             case id, note, visibility
+            case editedAt = "edited_at"
+            case isHistoricalOriginal = "is_historical_original"
             case occurredAt = "occurred_at"
             case plannedDate = "planned_date"
             case attributeAnswers = "attribute_answers"
@@ -4200,6 +4216,8 @@ private struct RemoteWannaSaveDTO: Decodable {
     let ownerID: String
     let userPlaceID: String
     let occurredAt: Date
+    let editedAt: Date?
+    let isHistoricalOriginal: Bool?
     let note: String?
     let visibility: PlaceVisibility
     let plannedDate: String?
@@ -4209,6 +4227,8 @@ private struct RemoteWannaSaveDTO: Decodable {
         case id, note, visibility
         case ownerID = "owner_id"
         case userPlaceID = "user_place_id"
+        case editedAt = "edited_at"
+        case isHistoricalOriginal = "is_historical_original"
         case occurredAt = "occurred_at"
         case plannedDate = "planned_date"
         case attributeAnswersJSON = "attribute_answers_json"
@@ -4218,6 +4238,6 @@ private struct RemoteWannaSaveDTO: Decodable {
         PlaceWannaSave(id: id, ownerID: ownerID, userPlaceID: userPlaceID,
                       occurredAt: occurredAt, note: note, visibility: visibility,
                       plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) }, attributeAnswersJSON: attributeAnswersJSON,
-                      isSynced: true)
+                      isSynced: true, editedAt: editedAt, isHistoricalOriginal: isHistoricalOriginal)
     }
 }

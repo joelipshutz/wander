@@ -7,15 +7,18 @@ struct PlaceWannaSave: Identifiable, Codable, Equatable {
     let ownerID: String
     var userPlaceID: String
     let occurredAt: Date
-    let note: String?
-    let visibility: PlaceVisibility
-    let plannedDate: Date?
-    let attributeAnswersJSON: String
+    var note: String?
+    var visibility: PlaceVisibility
+    var plannedDate: Date?
+    var attributeAnswersJSON: String
     var isSynced: Bool = false
+    var editedAt: Date? = nil
+    var isHistoricalOriginal: Bool? = nil
 }
 
 @MainActor
 protocol WannaSaveRepository {
     func saveWanna(_ wanna: PlaceWannaSave) async throws
+    func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave]
 }

@@ -2466,6 +2466,30 @@ final class OnboardingUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists,
                           "Each Wanna must remain in ALL history: \(marker)")
         }
+        let pencils = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "place-activity.edit."))
+        let pencil = pencils.allElementsBoundByIndex.first { $0.isHittable && $0.label == "Edit want" }
+        XCTAssertNotNil(pencil, "Every owned Wanna tile should offer its edit pencil")
+        guard let pencil else { return }
+        pencil.tap()
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 4))
+        let original = note.value as? String ?? ""
+        XCTAssertTrue(original.contains("Wanna record"), "Editing must load this event's own details")
+        note.tap()
+        note.typeText(" edited")
+        let updated = (note.value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        app.buttons["Update Wanna"].firstMatch.tap()
+        XCTAssertTrue(note.waitForNonExistence(timeout: 6))
+        for _ in 0..<3 { history.swipeUp() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", updated)).firstMatch.exists)
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] where marker != original {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists,
+                          "Editing one Wanna must preserve its siblings")
+        }
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Independent Wanna history after editing one record"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testCompactWannaFormScrollsWithoutPullingTheSheet() {

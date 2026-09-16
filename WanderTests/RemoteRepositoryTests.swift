@@ -34,6 +34,16 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rows.first?.note, "Go again")
         XCTAssertEqual(rows.first?.isSynced, true)
         XCTAssertEqual(rows.first?.plannedDate.map { WannaGoDate.storageString(from: $0) }, "2026-09-20")
+        rpc.responses["update_own_place_wanna"] = Data(response.utf8)
+        var edited = wanna
+        edited.editedAt = Date(timeIntervalSince1970: 1_789_387_200.123)
+        _ = try await repository.updateWanna(edited)
+        let firstEdit = try XCTUnwrap(rpc.rawBodies.last?["input_wanna"] as? [String: Any])
+        edited.editedAt = try XCTUnwrap(edited.editedAt).addingTimeInterval(0.001)
+        _ = try await repository.updateWanna(edited)
+        let nextEdit = try XCTUnwrap(rpc.rawBodies.last?["input_wanna"] as? [String: Any])
+        XCTAssertNotEqual(firstEdit["edited_at"] as? String, nextEdit["edited_at"] as? String,
+                          "Millisecond edit revisions must survive the wire encoder")
     }
 
     func testListSnapshotUploadUsesPrivateStorageThenOwnerRPC() async throws {

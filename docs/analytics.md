@@ -113,6 +113,8 @@ least one active device token. The zero bucket is therefore meaningful. The
 snapshot RPC performs the per-recipient calculation inside Supabase and returns
 only aggregates to the Edge Function/PostHog.
 
+Every new Wanna, including repeats at the same place, uses the existing save-streak celebration events. Retrying or editing that record does not emit another save or celebration.
+
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
 
 Discover place search keeps query text out of analytics. `trusted_place_search_remote_results`

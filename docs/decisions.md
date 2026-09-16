@@ -184,3 +184,12 @@ state, rating, and unique-place profile counters. Wanna → Check-in → Wanna
 stays Been and does not increase the profile Wanna count. Repeat Wanna-only
 saves still count as one place. This supersedes REC-357's proposed active-Wanna
 after-check-in relationship rule, without adopting its planning/invitation work.
+
+Repeat Wanna creation uses the same save celebration as an initial save. Every
+owned activity tile exposes its edit pencil. Wanna edits update only that event's
+details and preserve its identity and original activity timestamp, including the
+original Wanna archived by a later check-in. Pending revisions remain durable and
+are protected from stale reads and acknowledgements; edits never trigger a new
+save celebration or change check-in state or unique-place counters. If the last
+check-in is deleted, an edited original Wanna is restored with its own content
+and visibility; later edits keep that Wanna summary consistent.
