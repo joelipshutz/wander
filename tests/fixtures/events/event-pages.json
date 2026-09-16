@@ -1,0 +1,10 @@
+[
+  {"name":"complete_empty","valid":true,"limit":10,"page":{"items":[],"next_cursor":null,"has_more":false,"permission_version":"v1"}},
+  {"name":"next_page","valid":true,"limit":10,"page":{"items":["guest1"],"next_cursor":"opaque:scope:tie-breaker","has_more":true,"permission_version":"v1"}},
+  {"name":"missing_cursor","valid":false,"limit":10,"page":{"items":[],"has_more":false,"permission_version":"v1"}},
+  {"name":"whitespace_cursor","valid":false,"limit":10,"page":{"items":[],"next_cursor":"   ","has_more":true,"permission_version":"v1"}},
+  {"name":"cursor_disagrees","valid":false,"limit":10,"page":{"items":[],"next_cursor":"cursor1","has_more":false,"permission_version":"v1"}},
+  {"name":"too_many_items","valid":false,"limit":1,"page":{"items":["guest1","guest2"],"next_cursor":null,"has_more":false,"permission_version":"v1"}},
+  {"name":"unbounded_request","valid":false,"limit":101,"page":{"items":[],"next_cursor":null,"has_more":false,"permission_version":"v1"}},
+  {"name":"whitespace_version","valid":false,"limit":10,"page":{"items":[],"next_cursor":null,"has_more":false,"permission_version":"   "}}
+]

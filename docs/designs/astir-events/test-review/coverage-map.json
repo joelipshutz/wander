@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-15T23:17:09.400169+00:00",
+  "generated_at": "2026-09-16T20:20:00.826039+00:00",
   "title": "Astir Events planned acceptance-to-test map",
   "status": "planning_only_not_implemented_not_run",
   "source": "events-exit-criteria.md",
-  "source_sha256": "4c643549a1b67fe63f1e2558bf145a9e90cdb31580b134af3634e0ec16e0013f",
+  "source_sha256": "2644d79cf41e84c13b29fe0058f9a35e069c4e7be449192dc38a802cc4e1fe4f",
   "source_case_count": 121,
   "mapped_case_count": 121,
   "additional_risk_count": 24,
@@ -15,7 +15,7 @@
   "fragments": [
     {
       "file": "native-entry.json",
-      "sha256": "b98f5ea1dc90ea901ab66549aa463d55cc2e11a6ea5e9898d965036f9557c02f",
+      "sha256": "e12f06b769c3f1317e8033c5f4feb89943bd3f2eeaaa00bbdcdb367458e23b83",
       "baseline": {
         "checkout": "wander-events-flowchart-review",
         "commit": "f8d258e869503a28d70518a050dff36a344134c6",
@@ -916,7 +916,8 @@
         "Provide service-confirmed proof for the same current account/phone and already-known name; reuse those fields and proof without redundant collection or SMS sends.",
         "No proof from a different account/old number or a locally populated phone string qualifies; those controls route to verification.",
         "Even with reusable identity, evaluate current event registration, invitation code, approval and capacity; identity reuse does not imply confirmation.",
-        "A refresh or repeated tap does not create a new challenge, booking or confirmation message for an already-completed operation."
+        "A refresh or repeated tap does not create a new challenge, booking or confirmation message for an already-completed operation.",
+        "Explicit missing-name variant: retain current matching verified phone proof, collect only the missing name, and assert zero phone-challenge creation/SMS sends before continuing RSVP. T01 contract field-selection proof alone does not satisfy the provider/UI send-count assertion."
       ],
       "owner_package": "Entry/identity foundation, then Before-event/door; data/rules owner supplies authoritative fixtures and server-state oracle",
       "requires_real_device": false,
@@ -938,7 +939,7 @@
       "fragment": "native-entry.json",
       "source": {
         "start": "Existing recognized account already has matching verified phone and saved identity; RSVP.",
-        "expected": "Reuse actual verified status and known fields; do not resend/recollect unnecessarily; still evaluate current event eligibility/capacity.",
+        "expected": "Reuse actual verified status and known fields; do not resend/recollect unnecessarily; still evaluate current event eligibility/capacity. Explicit variant: missing name with current matching verified phone collects only the name and starts/sends no phone challenge.",
         "authority": "D17; agreed"
       },
       "authority_status": "inherit_source_trace; mapping grants no new product approval",

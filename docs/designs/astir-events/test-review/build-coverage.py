@@ -109,7 +109,7 @@ for item in ordered + additional:
 (out/'coverage-map.md').write_text('\n'.join(lines))
 
 with (out/'coverage-map.tsv').open('w', newline='') as file:
-    writer = csv.writer(file, delimiter='\t')
+    writer = csv.writer(file, delimiter='\t', lineterminator='\n')
     writer.writerow(['ID','Kind','Owner','Layers','Planned files','Assertions','Authority','Implementation','Execution'])
     for item in ordered + additional:
         writer.writerow([item['id'],item['kind'],item['owner_package'],'; '.join(item['layers']),'; '.join(item['planned_files']),' | '.join(item['assertions']),item.get('source',{}).get('authority','technical requirement derived from engineering plan'),item['implementation_status'],item['execution_status']])

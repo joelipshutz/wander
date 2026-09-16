@@ -1,8 +1,24 @@
 # Decisions
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Astir Events shared contract boundary (REC-525)
+
+The Events v1 client contract lives in a Foundation-only local Swift package and
+matching TypeScript decoders, with one language-neutral fixture set. This keeps
+the future App Clip independent of the full app's map/store and authentication UI;
+it does not create a new identity or backend. Shipping-host integration follows
+in T03. Unknown/failed lookup is separate from explicit authenticated no-booking.
+Current response rights are validated and account/event/session fenced; unknown
+rights fail closed and additive fields are discarded from decoded projections.
+Commands preserve operation identity across uncertain outcomes and return current
+state separately from their historical effect. Wire time preserves microseconds,
+while the server remains authoritative for eligibility. Guest and Team admin
+projections remain separate. See [contract usage](../AstirEventsShared/README.md).
+This boundary resolves no outstanding Events product policy and does not alter
+the build already submitted for App Review.
 
 ## Astir Events engineering direction (REC-467)
 

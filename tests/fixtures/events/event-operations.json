@@ -1,0 +1,20 @@
+{
+  "console_access": ["team_admin", "denied", "revoked"],
+  "delivery_statuses": ["queued", "claimed", "provider_accepted", "delivery_confirmed", "retryable_failure", "terminal_failure", "suppressed", "unknown"],
+  "offline_statuses": ["durable_pending", "syncing", "acknowledged", "conflict", "unknown"],
+  "offline_operation": {
+    "operation_id": "op_fixture_door_1",
+    "acting_admin_id": "acct_fixture_rachel",
+    "event_id": "evt_fixture_vinyl",
+    "booking_id": "booking_fixture_joe",
+    "generation_id": "generation_fixture_joe_1",
+    "roster_snapshot_id": "snapshot_fixture_1",
+    "roster_version": 1,
+    "local_recorded_at": "2026-09-21T02:01:00Z",
+    "local_status": "durable_pending"
+  },
+  "booking_effect": {"booking_id":"booking_fixture_rachel","generation_id":"generation_fixture_1"},
+  "admission_effect": {"admission_id":"admission_fixture_1","booking_id":"booking_fixture_rachel","generation_id":"generation_fixture_1"},
+  "completion_effect": {"completion_id":"completion_fixture_1","visit_id":"visit_fixture_1"},
+  "analytics": {"surface":"browser","action":"rsvp","outcome":"unknown","phone":"MUST_NOT_SURVIVE","event_title":"MUST_NOT_SURVIVE"}
+}
