@@ -139,7 +139,7 @@ final class CommonGroundMockDataTests: XCTestCase {
             youWannaEventIDs: ["wanna-1", "wanna-2"], reason: "In your Wannas"
         )
         XCTAssertEqual(joesFavorite.kind, .introduce)
-        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Repeat. Go back with him?")
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Repeat. Go back together?")
 
         let yourFavorite = CommonGroundMockPlace(
             id: "repeat", name: "Repeat", category: "Coffee", area: "Silver Lake", city: "Los Angeles",

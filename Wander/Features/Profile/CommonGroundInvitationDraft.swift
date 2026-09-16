@@ -1,7 +1,7 @@
 #if DEBUG
 import Foundation
 
-/// One value travels from Ryan's composer to Joe's recipient preview. Evidence
+/// One value travels from the composer to sharing or the recipient preview. Evidence
 /// uses names so its meaning does not change when the reader changes.
 struct CommonGroundInvitationDraft: Hashable, Sendable {
     let place: CommonGroundMockPlace
@@ -39,8 +39,8 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         case .sharedRegulars: "Shared regulars"
         case .sharedLove: "Shared love"
         case .mutualWanna: "Both Wanna Go"
-        case .joesRegular: "Joe’s regular spot"
-        case .ryansRegular: "Ryan’s regular spot"
+        case .joesRegular: "\(place.partner.shortName)’s regular spot"
+        case .ryansRegular: "\(place.viewer.shortName)’s regular spot"
         case .history: "Shared place"
         }
     }
@@ -48,15 +48,15 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
     var reasonDetail: String {
         switch reason {
         case .sharedRegulars, .history:
-            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · \(visitEvidence(name: "Joe", count: place.joeVisits))"
+            "\(visitEvidence(name: place.viewer.shortName, count: place.youVisits)) · \(visitEvidence(name: place.partner.shortName, count: place.joeVisits))"
         case .sharedLove:
-            "\(ratingEvidence(name: "Ryan", rating: place.youRating)) · \(ratingEvidence(name: "Joe", rating: place.joeRating))"
+            "\(ratingEvidence(name: place.viewer.shortName, rating: place.youRating)) · \(ratingEvidence(name: place.partner.shortName, rating: place.joeRating))"
         case .mutualWanna:
             "In both of your Wannas"
         case .joesRegular:
-            "\(visitEvidence(name: "Joe", count: place.joeVisits)) · In Ryan’s Wannas"
+            "\(visitEvidence(name: place.partner.shortName, count: place.joeVisits)) · In \(place.viewer.shortName)’s Wannas"
         case .ryansRegular:
-            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · In Joe’s Wannas"
+            "\(visitEvidence(name: place.viewer.shortName, count: place.youVisits)) · In \(place.partner.shortName)’s Wannas"
         }
     }
 
@@ -80,17 +80,33 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         suggestedDate?.formatted(date: .abbreviated, time: .shortened)
     }
 
-    /// Text for a local sharing preview; no invented delivery state or URL.
+    var shareContent: WanderShareContent? {
+        WanderShareContent.place(
+            serverID: place.photoReference?.request.placeID,
+            name: "A plan for us",
+            message: shareText
+        )
+    }
+
+    /// The proposed message and date travel with the existing place link.
     var shareText: String {
         var paragraphs = [
             message,
-            "\(place.name) · \(place.area), \(place.city)",
+            [place.name, locationText].filter { !$0.isEmpty }.joined(separator: " · "),
             "\(reasonTitle): \(reasonDetail)"
         ]
         if let whenText {
             paragraphs.append("When: \(whenText)")
         }
         return paragraphs.joined(separator: "\n\n")
+    }
+
+    private var locationText: String {
+        let parts = place.area.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        if place.city.isEmpty || parts.contains(where: { $0.caseInsensitiveCompare(place.city) == .orderedSame }) {
+            return place.area
+        }
+        return [place.area, place.city].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     static let preview = Self(

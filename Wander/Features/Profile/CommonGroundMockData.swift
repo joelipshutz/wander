@@ -49,6 +49,10 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
     let youEvidence: CommonGroundPersonEvidence
     let joeEvidence: CommonGroundPersonEvidence
     let reason: String
+    let viewer: CommonGroundPerson
+    let partner: CommonGroundPerson
+    let photoReference: CommonGroundPlacePhotoReference?
+    let sourcePlaceID: String?
 
     var kind: CommonGroundMockKind {
         if bothLoved { return .returnTogether }
@@ -80,6 +84,10 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         self.youRating = youRating
         self.joeRating = joeRating
         self.reason = reason
+        viewer = .previewViewer
+        partner = .previewPartner
+        photoReference = nil
+        sourcePlaceID = nil
         // Fixtures mirror separate check-in and Wanna events. In the live
         // adapter, pass all visible events after canonical place resolution,
         // including Wanna events attached to a Been summary (REC-497).
@@ -101,8 +109,33 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         joeEvidence = evidence(owner: "joe", visits: joeVisits, legacyWanna: joeWanna, wannaIDs: joeWannaEventIDs)
     }
 
+    init(
+        id: String, name: String, category: String, area: String, city: String,
+        systemImage: String, youRating: Double?, joeRating: Double?,
+        youEvidence: CommonGroundPersonEvidence, joeEvidence: CommonGroundPersonEvidence,
+        reason: String, viewer: CommonGroundPerson, partner: CommonGroundPerson,
+        photoReference: CommonGroundPlacePhotoReference?, sourcePlaceID: String?
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.area = area
+        self.city = city
+        self.systemImage = systemImage
+        self.youRating = youRating
+        self.joeRating = joeRating
+        self.youEvidence = youEvidence
+        self.joeEvidence = joeEvidence
+        self.reason = reason
+        self.viewer = viewer
+        self.partner = partner
+        self.photoReference = photoReference
+        self.sourcePlaceID = sourcePlaceID
+    }
+
     var previewPhotoTile: Int? {
-        switch category {
+        guard sourcePlaceID == nil else { return nil }
+        return switch category {
         case "Bar": 3
         case "Restaurant": 2
         case "Coffee": id == "mudwater" || id == "canal-coffee" ? 1 : 0
@@ -124,9 +157,9 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         case .mutualWanna:
             totalVisits > 0 ? "You both want to go to \(name)." : "You both want to try \(name)."
         case .joeIntroduces:
-            youVisits > 0 ? "Joe loves \(name). Go back with him?" : "Joe loves \(name). You’re next?"
+            youVisits > 0 ? "\(partner.shortName) loves \(name). Go back together?" : "\(partner.shortName) loves \(name). You’re next?"
         case .youIntroduce:
-            joeVisits > 0 ? "You and Joe could go back to \(name)." : "You could show Joe \(name)."
+            joeVisits > 0 ? "You and \(partner.shortName) could go back to \(name)." : "You could show \(partner.shortName) \(name)."
         case .history: "You’ve both saved \(name)."
         }
     }

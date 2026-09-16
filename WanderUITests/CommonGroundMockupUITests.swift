@@ -403,9 +403,12 @@ final class CommonGroundMockupUITests: XCTestCase {
         ]
         for (id, expectedTitle) in narratives {
             let title = app.staticTexts["common-ground.narrative.\(id)"]
-            XCTAssertTrue(title.waitForExistence(timeout: 3), "Missing narrative for \(id).")
+            XCTAssertTrue(scrollTo(title, in: app), "Missing narrative for \(id).")
             XCTAssertEqual(title.label, expectedTitle)
         }
+        let picker = app.buttons["common-ground.area"]
+        for _ in 0..<8 where !picker.isHittable { app.swipeDown() }
+        XCTAssertTrue(picker.isHittable)
     }
 
     private func assertPositivePlaceCount(

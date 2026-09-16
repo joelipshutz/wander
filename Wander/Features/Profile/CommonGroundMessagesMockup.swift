@@ -26,7 +26,7 @@ private struct CGMessagesConversation: View {
     @State private var showsRecipient = false
     @State private var reply = ""
 
-    private var contact: String { isReply ? "Ryan" : "Joe" }
+    private var contact: String { isReply ? draft.place.viewer.shortName : draft.place.partner.shortName }
     private var messageBlue: Color { Color(red: 0.025, green: 0.38, blue: 0.80) }
     private var linkBlue: Color {
         colorScheme == .dark ? Color(red: 0.38, green: 0.65, blue: 1) : messageBlue
@@ -65,7 +65,7 @@ private struct CGMessagesConversation: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Open invitation to \(draft.place.name). \(draft.reasonTitle)")
                             .accessibilityValue(draft.whenText ?? "No time proposed")
-                            .accessibilityHint("Opens Ryan’s invitation in this preview")
+                            .accessibilityHint("Opens \(draft.place.viewer.shortName)’s invitation in this preview")
                             .accessibilityIdentifier("common-ground.messages.open-invitation")
                         }
                         if isReply { Spacer(minLength: messageIndent) }

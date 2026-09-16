@@ -267,25 +267,51 @@ private struct CommonGroundMixCover: View {
     }
 }
 
-private struct CommonGroundMixMockup: View {
+struct CommonGroundMixMockup: View {
     @Environment(\.astirBrandMode) private var brand
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var area = "Los Angeles"
+    @State private var area: String
     let sparse: Bool
+    let livePlaces: [CommonGroundMockPlace]?
+    let cities: [String]
+    let viewer: CommonGroundPerson
+    let partner: CommonGroundPerson
     let openPlace: (CommonGroundMockPlace) -> Void
     let invite: (CommonGroundMockPlace) -> Void
 
+    init(
+        sparse: Bool = false,
+        livePlaces: [CommonGroundMockPlace]? = nil,
+        cities: [String] = CommonGroundMockData.availableCities,
+        viewer: CommonGroundPerson = .previewViewer,
+        partner: CommonGroundPerson = .previewPartner,
+        openPlace: @escaping (CommonGroundMockPlace) -> Void,
+        invite: @escaping (CommonGroundMockPlace) -> Void
+    ) {
+        self.sparse = sparse
+        self.livePlaces = livePlaces
+        self.cities = cities
+        self.viewer = viewer
+        self.partner = partner
+        self.openPlace = openPlace
+        self.invite = invite
+        _area = State(initialValue: livePlaces == nil ? "Los Angeles" : "All places")
+    }
+
     private var places: [CommonGroundMockPlace] {
-        CommonGroundMockData.mix(area: area, sparse: sparse)
+        if let livePlaces {
+            return livePlaces.filter { area == "All places" || $0.city == area }
+        }
+        return CommonGroundMockData.mix(area: area, sparse: sparse)
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            LazyVStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 16) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("Ryan + Joe")
+                            Text("\(viewer.shortName) + \(partner.shortName)")
                                 .font(AstirTypography.caption)
                                 .foregroundStyle(brand.secondaryText)
                             (Text("In ") + Text("Common").italic())
@@ -298,7 +324,10 @@ private struct CommonGroundMixMockup: View {
                         .layoutPriority(1)
                         Spacer(minLength: 0)
                         if !dynamicTypeSize.isAccessibilitySize {
-                            CommonGroundAvatarPair(size: 38)
+                            HStack(spacing: -7) {
+                                CommonGroundPersonAvatar(person: viewer, size: 38)
+                                CommonGroundPersonAvatar(person: partner, size: 38)
+                            }
                         }
                     }
                     HStack(alignment: .center) {
@@ -314,9 +343,9 @@ private struct CommonGroundMixMockup: View {
                     ContentUnavailableView {
                         Label("A little more to discover", systemImage: "map")
                     } description: {
-                        Text("There aren’t any picks for you two in this city yet.")
+                        Text(livePlaces == nil ? "There aren’t any picks for you two in this city yet" : "Places you both save will show up here")
                     } actions: {
-                        Button("Back to Los Angeles") { area = "Los Angeles" }
+                        Button(livePlaces == nil ? "Back to Los Angeles" : "All places") { area = livePlaces == nil ? "Los Angeles" : "All places" }
                             .buttonStyle(.bordered).frame(minHeight: 44)
                     }
                 } else {
@@ -329,18 +358,22 @@ private struct CommonGroundMixMockup: View {
                         }
                     }
                 }
-                CommonGroundSampleCaption()
+                if livePlaces == nil { CommonGroundSampleCaption() }
             }
             .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 32)
         }
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .astirScreen()
+        .onChange(of: cities) { _, cities in
+            if livePlaces != nil && area != "All places" && !cities.contains(area) { area = "All places" }
+        }
     }
 
     private var areaPicker: some View {
         Menu {
             Picker("City", selection: $area) {
-                ForEach(CommonGroundMockData.availableCities, id: \.self) { city in
+                if livePlaces != nil { Text("All places").tag("All places") }
+                ForEach(cities, id: \.self) { city in
                     Text(city).tag(city)
                 }
             }
@@ -382,7 +415,8 @@ private struct CommonGroundPlaceStory: View {
                     if place.kind == .returnTogether {
                         regulars
                     } else {
-                        Label("In both of your Wannas", systemImage: "bookmark.fill")
+                        Label(place.kind == .mutualWanna ? "In both of your Wannas" : place.reason,
+                              systemImage: place.kind == .mutualWanna ? "bookmark.fill" : "mappin.and.ellipse")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brand.secondaryText)
                             .accessibilityIdentifier("common-ground.wanna.\(place.id)")
@@ -428,9 +462,9 @@ private struct CommonGroundPlaceStory: View {
 
     private var regulars: some View {
         footerLayout {
-            personEvidence(name: "You", tile: 0, value: "\(place.youVisits) check-ins")
+            personEvidence(name: "You", person: place.viewer, value: "\(place.youVisits) check-ins")
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 12) }
-            personEvidence(name: "Joe", tile: 1, value: "\(place.joeVisits) check-ins")
+            personEvidence(name: place.partner.shortName, person: place.partner, value: "\(place.joeVisits) check-ins")
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
         .accessibilityElement(children: .combine)
@@ -442,7 +476,7 @@ private struct CommonGroundPlaceStory: View {
             footerLayout {
                 rating(name: "You", value: place.youRating)
                 if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 16) }
-                rating(name: "Joe", value: place.joeRating)
+                rating(name: place.partner.shortName, value: place.joeRating)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 36, weight: .light))
@@ -458,9 +492,9 @@ private struct CommonGroundPlaceStory: View {
         .accessibilityLabel(place.reason)
     }
 
-    private func personEvidence(name: String, tile: Int, value: String) -> some View {
+    private func personEvidence(name: String, person: CommonGroundPerson, value: String) -> some View {
         HStack(spacing: 9) {
-            CommonGroundAvatar(tile: tile, size: 30)
+            CommonGroundPersonAvatar(person: person, size: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 Text(value).font(AstirTypography.label).foregroundStyle(brand.primaryText)
@@ -516,7 +550,7 @@ private struct CommonGroundPlaceStory: View {
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
             Button(action: invite) {
                 HStack(spacing: 9) {
-                    Text("Invite Joe")
+                    Text("Invite \(place.partner.shortName)")
                     Image(systemName: "arrow.up.right")
                 }
                 .font(AstirTypography.control)
@@ -697,7 +731,9 @@ struct CommonGroundPlaceArtwork: View {
 
     var body: some View {
         Group {
-            if let tile = place.previewPhotoTile {
+            if let reference = place.photoReference {
+                CommonGroundLivePlaceArtwork(reference: reference, systemImage: place.systemImage)
+            } else if let tile = place.previewPhotoTile {
                 CommonGroundPhoto(tile: tile)
             } else {
                 Image(systemName: place.systemImage)

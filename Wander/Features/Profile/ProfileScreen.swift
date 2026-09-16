@@ -2437,6 +2437,9 @@ private struct SavedPlacesListScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var showsInCommonMap = false
+    #if DEBUG
+    @State private var commonGroundInvitation: CommonGroundMockPlace?
+    #endif
 
     init(mode: SavedPlacesListMode, profileID: String) {
         self.mode = mode
@@ -2492,6 +2495,78 @@ private struct SavedPlacesListScreen: View {
     }
 
     var body: some View {
+        Group {
+            #if DEBUG
+            if isInCommonRoot {
+                liveInCommonContent
+            } else {
+                legacyContent
+            }
+            #else
+            legacyContent
+            #endif
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if usesInlineNavigationHeader {
+                inlineNavigationHeader
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isInCommonRoot, !allModePlaces.isEmpty {
+                Button {
+                    showsInCommonMap = true
+                } label: {
+                    Label("Open your shared map", systemImage: "map.fill")
+                        .font(AstirTypography.control)
+                        .foregroundStyle(brandMode.accentForeground)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(brandMode.accent)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: WanderTheme.radiusLarge,
+                                style: .continuous
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing2)
+                .background(brandMode.background.opacity(0.96))
+                .accessibilityHint("Shows every place you have in common on a map")
+            }
+        }
+        .navigationDestination(isPresented: $showsInCommonMap) {
+            InCommonReleaseMapScreen(
+                places: allModePlaces,
+                currentUserID: store.currentUser.id,
+                onSelect: { selectedPlace = $0 }
+            )
+        }
+        .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+            selectedPlaceDestination
+        }
+        .sheet(item: $placeSaveFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await saveProfileFlowSubmission(submission)
+            } onRemove: { context in
+                await removeProfileSave(context)
+            }
+        }
+        .astirScreen()
+        .tint(brandMode.accent)
+        .navigationTitle(navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
+        .fullPageBackSwipe(
+            isEnabled: usesInlineNavigationHeader && selectedPlace == nil
+                && !showsInCommonMap && placeSaveFlow == nil && !hasCommonGroundInvitation,
+            onBack: { dismiss() }
+        )
+    }
+
+    private var legacyContent: some View {
         let filteredPlaces = places
         let overviewPlaces = allModePlaces
         let mapPresentation = collection?.source.presentsInteractiveMap == true
@@ -2507,7 +2582,7 @@ private struct SavedPlacesListScreen: View {
             )
             : nil
 
-        ScrollView {
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let mapPresentation, let mapOverview {
                     ProfilePlaceCollectionMap(
@@ -2573,64 +2648,50 @@ private struct SavedPlacesListScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if usesInlineNavigationHeader {
-                inlineNavigationHeader
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isInCommonRoot, !allModePlaces.isEmpty {
-                Button {
-                    showsInCommonMap = true
-                } label: {
-                    Label("Open your shared map", systemImage: "map.fill")
-                        .font(AstirTypography.control)
-                        .foregroundStyle(brandMode.accentForeground)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(brandMode.accent)
-                        .clipShape(
-                            RoundedRectangle(
-                                cornerRadius: WanderTheme.radiusLarge,
-                                style: .continuous
-                            )
-                        )
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing2)
-                .background(brandMode.background.opacity(0.96))
-                .accessibilityHint("Shows every place you have in common on a map")
-            }
-        }
-        .navigationDestination(isPresented: $showsInCommonMap) {
-            InCommonReleaseMapScreen(
-                places: allModePlaces,
-                currentUserID: store.currentUser.id,
-                onSelect: { selectedPlace = $0 }
-            )
-        }
-        .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
-            selectedPlaceDestination
-        }
-        .sheet(item: $placeSaveFlow, onDismiss: {
-            store.saveFlowDidDismiss(.saveSheet)
-        }) { context in
-            MapPlaceSaveFlowSheet(context: context) { submission in
-                await saveProfileFlowSubmission(submission)
-            } onRemove: { context in
-                await removeProfileSave(context)
-            }
-        }
-        .astirScreen()
-        .tint(brandMode.accent)
-        .navigationTitle(navigationTitle)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
-        .fullPageBackSwipe(
-            isEnabled: usesInlineNavigationHeader && selectedPlace == nil
-                && !showsInCommonMap && placeSaveFlow == nil,
-            onBack: { dismiss() }
+    }
+
+    #if DEBUG
+    private var liveInCommonContent: some View {
+        let snapshot = CommonGroundLiveData.snapshot(store: store, profileID: profileID)
+        return CommonGroundMixMockup(
+            livePlaces: snapshot.places,
+            cities: snapshot.availableCities,
+            viewer: CommonGroundPerson(profile: store.currentUser),
+            partner: store.profile(for: profileID).map(CommonGroundPerson.init(profile:))
+                ?? CommonGroundPerson(id: profileID, name: "Friend", avatarURL: nil, sampleAvatarTile: nil),
+            openPlace: { place in
+                // Resolve against the current authorized projection, never a fixture or stale row.
+                selectedPlace = (store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID))
+                    .first { $0.id == place.sourcePlaceID }
+            },
+            invite: { commonGroundInvitation = $0 }
         )
+        .navigationDestination(item: $commonGroundInvitation) { selected in
+            if selected.viewer.id == store.currentUser.id,
+               let current = snapshot.places.first(where: { $0.id == selected.id }) {
+                CommonGroundInvitationMockup(
+                    draft: CommonGroundInvitationDraft(place: current),
+                    liveSharing: true,
+                    canShare: { draftPlace in
+                        store.currentUser.id == draftPlace.viewer.id
+                            && CommonGroundLiveData.places(store: store, profileID: profileID).contains(draftPlace)
+                    }
+                )
+            } else {
+                ContentUnavailableView("This plan is no longer available", systemImage: "lock",
+                                       description: Text("Head back to In Common for your current shared places"))
+                    .toolbar(.visible, for: .navigationBar)
+            }
+        }
+    }
+    #endif
+
+    private var hasCommonGroundInvitation: Bool {
+        #if DEBUG
+        commonGroundInvitation != nil
+        #else
+        false
+        #endif
     }
 
     private var navigationTitle: String {
