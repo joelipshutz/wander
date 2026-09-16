@@ -43,6 +43,57 @@ final class PlaceWannaSaveTests: XCTestCase {
         XCTAssertNotEqual(entry.note, parent.note)
         XCTAssertNil(entry.ratingScore)
         XCTAssertFalse(entry.canEdit)
+        XCTAssertEqual(entry.sortBucket, 0, "New Wanna events sort by their own date in ALL")
+    }
+
+    func testCompletedWannaAndCheckInFormsKeepDistinctDetailsAcrossRestart() async throws {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 })
+        let store = WanderStore(fixtures: .seed(), persistence: persistence)
+        let statuses: [PlaceStatus] = [.wannaGo, .wannaGo, .been, .been, .wannaGo]
+        let plannedDate = WannaGoDate.normalized(Date.now.addingTimeInterval(86400 * 10))
+        var operationIDs = Set<UUID>()
+        var parentID: String?
+        for (index, status) in statuses.enumerated() {
+            let existing = MapPlaceSaveContext.currentUserSave(matching: candidate, in: store.currentUserVisiblePlaces)
+            let base = MapPlaceSaveContext.addCandidate(candidate, sourceType: .manual,
+                defaultVisibility: .followers, currentUserSave: existing,
+                latestVisit: existing.flatMap { store.visits(for: $0.userPlace.id).first })
+            let state = PlaceProfileSaveActionPolicy.state(currentUserSave: existing,
+                hasSharedVisitInvitation: false, isReadOnly: false)
+            let action = try XCTUnwrap(PlaceProfileSaveActionPolicy.resolve(state: state).actions.first {
+                $0.destinationStatus == status
+            })
+            let context = PlaceProfileSaveActionPolicy.attachedSaveContext(route: .floatingActions,
+                state: state, action: action, baseContext: base) ?? base.preselectingStatus(status)
+            let draft = try XCTUnwrap(PlaceSaveDraft.restorableFlow(ownerUserID: store.currentUser.id, context: context))
+            XCTAssertTrue(operationIDs.insert(draft.id).inserted)
+            let submission = MapPlaceSaveSubmission(context: context, candidate: candidate, status: status,
+                visibility: .followers, ratingScore: status == .been ? 4 : nil,
+                note: "Record \(index)", attributes: [PlaceAttributeDraft(questionKey: "coffee_tags",
+                    valueType: "multi_tag", valueJSON: "[\"tag-\(index)\"]")],
+                photoAttachments: [], inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+                visitedAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index) * 86400),
+                plannedDate: status == .wannaGo ? plannedDate : nil, wannaOperationID: draft.id)
+            let saved = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil)
+            let result = try XCTUnwrap(saved)
+            parentID = result.userPlaceID
+        }
+        let data = try JSONEncoder().encode(try XCTUnwrap(snapshot))
+        snapshot = try JSONDecoder().decode(WanderStoreSnapshot.self, from: data)
+        let restored = WanderStore(fixtures: .seed(), persistence: persistence)
+        let parent = try XCTUnwrap(restored.currentUserVisiblePlaces.first { $0.userPlace.id == parentID }?.userPlace)
+        XCTAssertEqual(parent.status, .been)
+        XCTAssertEqual(parent.historicalWantNote, "Record 0")
+        let wannas = restored.wannaSaves(for: parent)
+        XCTAssertEqual(Set(wannas.compactMap(\.note)), ["Record 1", "Record 4"])
+        XCTAssertEqual(Set(wannas.map(\.id)).count, 2)
+        XCTAssertTrue(wannas.allSatisfy { $0.plannedDate == plannedDate })
+        XCTAssertTrue(wannas.allSatisfy { $0.attributeAnswersJSON.contains("tag-") })
+        let visits = restored.visits(for: parent.id)
+        XCTAssertEqual(Set(visits.compactMap(\.note)), ["Record 2", "Record 3"])
+        XCTAssertEqual(Set(visits.map(\.id)).count, 2)
+        XCTAssertEqual(Set(visits.map(\.visitedAt)).count, 2)
     }
 
     func testRepeatWannaOnlyCountsPlaceOnceAndPersistsAcrossRestart() async throws {

@@ -2245,7 +2245,7 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testFirstMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
+    func testFirstMapWannaOpensAFreshDraftEachTime() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2293,7 +2293,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
-            "Wanna sunset draft"
+            "what you'll want to remember, who told you..."
         )
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -2312,7 +2312,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
-            "Wanna sunset draft"
+            "what you'll want to remember, who told you..."
         )
     }
 
@@ -2351,7 +2351,7 @@ final class OnboardingUITests: XCTestCase {
             attachedTray.waitForNonExistence(timeout: 4),
             "One physical tap should submit and dismiss the Wanna editor."
         )
-        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isSelected)
+        XCTAssertFalse(app.buttons["place-profile.floating-action.wanna"].isSelected)
     }
 
     func testMapCheckInRespondsToSinglePhysicalTap() {
@@ -2438,6 +2438,66 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
+    func testEachWannaSubmissionFromPlaceProfileCreatesVisibleHistory() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs", "-WanderMapPlace", "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] {
+            let wanna = app.buttons["place-profile.floating-action.wanna"]
+            XCTAssertTrue(wanna.waitForExistence(timeout: 6))
+            wanna.tap()
+            let note = app.textFields["save.note"]
+            XCTAssertTrue(note.waitForExistence(timeout: 4))
+            XCTAssertFalse((note.value as? String ?? "").contains("Wanna record"))
+            note.tap()
+            note.typeText(marker)
+            let save = app.buttons["Add to Wanna"].firstMatch
+            XCTAssertTrue(save.waitForExistence(timeout: 3))
+            save.tap()
+            XCTAssertTrue(note.waitForNonExistence(timeout: 6), "Every submission should finish")
+        }
+        let history = app.scrollViews["place-profile.scroll"].firstMatch
+        for _ in 0..<5 { history.swipeUp() }
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists,
+                          "Each Wanna must remain in ALL history: \(marker)")
+        }
+    }
+
+    func testCompactWannaFormScrollsWithoutPullingTheSheet() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs", "-WanderMapPlace", "Woodcat Coffee",
+            "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 6))
+        wanna.tap()
+        let scroll = app.scrollViews["save.editorScroll"].firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: 4))
+        let compactTop = scroll.frame.minY
+        let heading = app.staticTexts["a note for future you"].firstMatch
+        let headingTop = heading.frame.minY
+        let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
+        let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.35))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        let scrolled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            heading.frame.minY < headingTop - 60 && abs(scroll.frame.minY - compactTop) < 30
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [scrolled], timeout: 3), .completed,
+                       "An ordinary upward content gesture must scroll the compact form without sheet snapback")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Wanna form after compact content scroll"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testAttachedWannaSheetCanExpandAndDismissFromItsNativeGrabber() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -2481,7 +2541,7 @@ final class OnboardingUITests: XCTestCase {
         }
 
         let compactMinY = attachedTray.frame.minY
-        let expandTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.14))
+        let expandTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
         grabberCoordinate(for: attachedTray)
             .press(forDuration: 0.05, thenDragTo: expandTarget)
 

@@ -12538,8 +12538,11 @@ struct MapPlaceSaveFlowSheet: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(WanderTheme.radiusSheet)
         .presentationBackground(astirBrandMode.background)
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
-        .presentationContentInteraction(.resizes)
+        .presentationBackgroundInteraction(.disabled)
+        // Form swipes scroll immediately at either detent. Native resize-first
+        // gestures can consume short swipes and spring back to the compact height.
+        // The grabber and explicit content expansion still resize the sheet.
+        .presentationContentInteraction(.scrolls)
     }
 
     private func expand() {
@@ -17199,6 +17202,10 @@ struct PlaceActivityEntry: Identifiable {
         }
     }
 
+    // A newly appended Wanna is current activity, not the archived pre-check-in
+    // summary. Keep its own timestamp in ALL rather than burying it below older saves.
+    var sortBucket: Int { wanna == nil ? kind.sortBucket : 0 }
+
     var owner: LocalProfile {
         summary.visiblePlace.owner
     }
@@ -17477,8 +17484,8 @@ struct PlaceActivitySection: View {
                 return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)] + wannaEntries
             }
             .sorted { lhs, rhs in
-                if lhs.kind.sortBucket != rhs.kind.sortBucket {
-                    return lhs.kind.sortBucket < rhs.kind.sortBucket
+                if lhs.sortBucket != rhs.sortBucket {
+                    return lhs.sortBucket < rhs.sortBucket
                 }
                 if lhs.timestamp != rhs.timestamp {
                     return lhs.timestamp > rhs.timestamp
