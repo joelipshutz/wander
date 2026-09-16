@@ -28,7 +28,7 @@ final class CommonGroundMockupUITests: XCTestCase {
             invite.tap()
             XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 4))
             XCTAssertEqual(app.staticTexts["common-ground.invitation.place"].label, name)
-            app.navigationBars["Your invitation"].buttons.firstMatch.tap()
+            app.navigationBars.firstMatch.buttons.firstMatch.tap()
             XCTAssertTrue(profileName.waitForExistence(timeout: 4))
             app.navigationBars[name].buttons.firstMatch.tap()
             XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 4))
@@ -51,6 +51,7 @@ final class CommonGroundMockupUITests: XCTestCase {
 
         let collectionTitle = app.staticTexts["common-ground.collection-title"]
         XCTAssertTrue(collectionTitle.waitForExistence(timeout: 5))
+        XCTAssertEqual(collectionTitle.label, "In Common")
         let count = app.staticTexts["common-ground.mix-count"]
         assertPositivePlaceCount(on: count)
         let losAngelesCount = count.label
@@ -81,7 +82,10 @@ final class CommonGroundMockupUITests: XCTestCase {
         let postcardPlace = app.staticTexts["common-ground.invitation.place"]
         let postcardReason = app.staticTexts["common-ground.invitation.reason-title"]
         XCTAssertEqual(postcardPlace.label, "Not No Bar")
-        XCTAssertFalse(postcardReason.label.isEmpty)
+        XCTAssertEqual(postcardReason.label, "Both Wanna Go")
+        XCTAssertFalse(app.navigationBars["Your invitation"].exists)
+        XCTAssertFalse(app.staticTexts["In both of your Wannas"].isHittable)
+        XCTAssertFalse(app.staticTexts["From Ryan, with a little help."].isHittable)
         let expectedReason = postcardReason.label
         capture("rec486-flow-03-invitation")
         previewMessages.tap()
@@ -99,6 +103,9 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertEqual(visibleText("common-ground.invitation.place", in: app).label, "Not No Bar")
         XCTAssertEqual(visibleText("common-ground.invitation.reason-title", in: app).label, expectedReason)
         XCTAssertTrue(app.buttons["Reply in Messages"].exists)
+        XCTAssertFalse(app.navigationBars["From Ryan"].exists)
+        XCTAssertFalse(app.staticTexts["In both of your Wannas"].isHittable)
+        XCTAssertFalse(app.staticTexts["Like the sound of it? Take it back to your chat."].isHittable)
         capture("rec486-flow-05-opened-recipient")
 
         closeRecipientToMessages(in: app)
@@ -106,7 +113,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         app.buttons["common-ground.messages.close"].tap()
         XCTAssertTrue(previewMessages.waitForExistence(timeout: 3))
         XCTAssertTrue(previewMessages.isHittable)
-        let invitationNavigation = app.navigationBars["Your invitation"]
+        let invitationNavigation = app.navigationBars.firstMatch
         XCTAssertTrue(invitationNavigation.exists)
         invitationNavigation.buttons.firstMatch.tap()
 
@@ -208,7 +215,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         ]
 
         for page in pages {
-            XCTContext.runActivity(named: "Capture Common Ground: \(page)") { _ in
+            XCTContext.runActivity(named: "Capture In Common: \(page)") { _ in
                 let app = launch(page: page)
                 assertReady(page: page, in: app)
                 capture("rec486-state-\(page)")
@@ -281,7 +288,7 @@ final class CommonGroundMockupUITests: XCTestCase {
             XCTAssertFalse(mix.label.isEmpty)
         case "loading":
             let loading = app.descendants(matching: .any).matching(
-                NSPredicate(format: "label == %@", "Finding your common ground…")
+                NSPredicate(format: "label == %@", "Finding what you have in common…")
             ).firstMatch
             XCTAssertTrue(loading.waitForExistence(timeout: 3))
             XCTAssertFalse(app.buttons["common-ground.open-mix"].exists)

@@ -14,21 +14,21 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         switch reason {
         case .sharedRegulars:
             let suggestion = place.category == "Coffee" ? "Coffee together?" : "Go together?"
-            return "We’re both \(place.name) people. \(suggestion)"
+            return "We’re both \(place.name) people\n\(suggestion)"
         case .sharedLove:
-            return "We both loved \(place.name). Round two?"
+            return "We both loved \(place.name)\nRound two?"
         case .mutualWanna:
             return place.totalVisits > 0
-                ? "We both wanna go to \(place.name). Let’s make a plan?"
-                : "We’ve both had \(place.name) saved. Let’s finally go?"
+                ? "We both wanna go to \(place.name)\nLet’s make a plan?"
+                : "We’ve both had \(place.name) saved\nLet’s finally go?"
         case .joesRegular:
             return place.youVisits > 0
-                ? "We both know \(place.name). Let’s go back together?"
-                : "You keep going back to \(place.name). Take me next time?"
+                ? "We both know \(place.name)\nLet’s go back together?"
+                : "You keep going back to \(place.name)\nTake me next time?"
         case .ryansRegular:
             return place.joeVisits > 0
-                ? "We both know \(place.name). Let’s go back together?"
-                : "I keep going back to \(place.name). Let me show you why."
+                ? "We both know \(place.name)\nLet’s go back together?"
+                : "I keep going back to \(place.name)\nLet me show you why"
         case .history:
             return "Want to go to \(place.name)?"
         }
@@ -38,7 +38,7 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         switch reason {
         case .sharedRegulars: "Shared regulars"
         case .sharedLove: "Shared love"
-        case .mutualWanna: "Both wanna go"
+        case .mutualWanna: "Both Wanna Go"
         case .joesRegular: "Joe’s regular spot"
         case .ryansRegular: "Ryan’s regular spot"
         case .history: "Shared place"
@@ -54,10 +54,15 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         case .mutualWanna:
             "In both of your Wannas"
         case .joesRegular:
-            "\(visitEvidence(name: "Joe", count: place.joeVisits)) · In Ryan’s Wannas."
+            "\(visitEvidence(name: "Joe", count: place.joeVisits)) · In Ryan’s Wannas"
         case .ryansRegular:
-            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · In Joe’s Wannas."
+            "\(visitEvidence(name: "Ryan", count: place.youVisits)) · In Joe’s Wannas"
         }
+    }
+
+    var postcardReasonDetail: String? {
+        if case .mutualWanna = reason { return nil }
+        return reasonDetail
     }
 
     var reasonSymbol: String {

@@ -110,13 +110,13 @@ private extension CommonGroundMockPage {
         switch self {
         case .profile: "Joe’s profile"
         case .ownProfile: "Your profile"
-        case .detail: "Common Ground"
-        case .mix: "In good company"
+        case .detail: "In Common · Overview"
+        case .mix: "In Common · Places"
         case .invitation: "Make an invitation"
         case .recipient: "Receive an invitation"
         case .messages: "In Messages"
         case .recipientOpened: "Opened invitation"
-        case .sparse: "A little common ground"
+        case .sparse: "In Common · A few places"
         case .loading: "Loading"
         case .unavailable: "Unavailable"
         }
@@ -144,13 +144,13 @@ private struct CommonGroundDetailMockup: View {
                     }
                 }
                 if state == .loading {
-                    ProgressView("Finding your common ground…")
+                    ProgressView("Finding what you have in common…")
                         .font(AstirTypography.body).frame(maxWidth: .infinity, minHeight: 220)
                 } else if state == .unavailable {
                     ContentUnavailableView {
                         Label("A little out of reach", systemImage: "arrow.triangle.2.circlepath")
                     } description: {
-                        Text("Your common ground couldn’t load. Give it another try.")
+                        Text("In Common couldn’t load. Give it another try.")
                     } actions: {
                         Button("Try again", action: retry).buttonStyle(.bordered)
                     }
@@ -160,10 +160,10 @@ private struct CommonGroundDetailMockup: View {
                         CommonGroundMixCover(count: CommonGroundMockData.mix(sparse: state == .sparse).count, action: openMix)
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        CommonGroundSectionHeading(title: "Your common ground")
+                        CommonGroundSectionHeading(title: "What you have in common")
                         evidenceLink("Both loved", detail: "The ones you’d happily go back to", count: CommonGroundMockData.places.filter(\.bothLoved).count, icon: "heart")
                         evidenceLink("Both regulars", detail: "Part of both your routines", count: CommonGroundMockData.places.filter(\.bothRegulars).count, icon: "arrow.counterclockwise")
-                        evidenceLink("Both wanna go", detail: "In both of your Wannas", count: CommonGroundMockData.places.filter { $0.youWanna && $0.joeWanna }.count, icon: "bookmark")
+                        evidenceLink("Both Wanna Go", detail: "In both of your Wannas", count: CommonGroundMockData.places.filter { $0.youWanna && $0.joeWanna }.count, icon: "bookmark")
                         evidenceLink("All shared places", detail: "The familiar, the new, the different takes", count: CommonGroundMockData.places.count, icon: "mappin.and.ellipse")
                     }
                 }
@@ -171,7 +171,7 @@ private struct CommonGroundDetailMockup: View {
             }
             .padding(20).padding(.bottom, 24)
         }
-        .navigationTitle("Common Ground")
+        .navigationTitle("In Common")
         .navigationBarTitleDisplayMode(.inline)
         .astirScreen()
     }
@@ -239,7 +239,7 @@ private struct CommonGroundMixCover: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("PICKED BY ASTIR").font(AstirTypography.metadata).tracking(1.5)
-                        Text("In good\ncompany.").font(AstirTypography.screenTitle)
+                        Text("In Common").font(AstirTypography.screenTitle)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
@@ -262,7 +262,7 @@ private struct CommonGroundMixCover: View {
             .background(WanderTheme.terracottaTint.color, in: RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("In good company, \(count) places for you and Joe")
+        .accessibilityLabel("In Common, \(count) places for you and Joe")
         .accessibilityIdentifier("common-ground.open-mix")
     }
 }
@@ -288,10 +288,10 @@ private struct CommonGroundMixMockup: View {
                             Text("Ryan + Joe")
                                 .font(AstirTypography.caption)
                                 .foregroundStyle(brand.secondaryText)
-                            (Text("In good ") + Text("company.").italic())
+                            (Text("In ") + Text("Common").italic())
                                 .font(.system(.title, design: .serif).weight(.medium))
                                 .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityLabel("In good company")
+                                .accessibilityLabel("In Common")
                                 .accessibilityAddTraits(.isHeader)
                                 .accessibilityIdentifier("common-ground.collection-title")
                         }
@@ -580,7 +580,7 @@ private struct CommonGroundSharedMockup: View {
     @Environment(\.astirBrandMode) private var brand
     @State private var filter = "All shared"
     let openPlace: (CommonGroundMockPlace) -> Void
-    private let filters = ["All shared", "Both loved", "Both regulars", "Both wanna go", "Worth introducing", "Both been", "Different takes"]
+    private let filters = ["All shared", "Both loved", "Both regulars", "Both Wanna Go", "Worth introducing", "Both been", "Different takes"]
 
     init(initialFilter: String, openPlace: @escaping (CommonGroundMockPlace) -> Void) {
         _filter = State(initialValue: initialFilter)
@@ -592,7 +592,7 @@ private struct CommonGroundSharedMockup: View {
             switch filter {
             case "Both loved": place.bothLoved
             case "Both regulars": place.bothRegulars
-            case "Both wanna go": place.youWanna && place.joeWanna
+            case "Both Wanna Go": place.youWanna && place.joeWanna
             case "Worth introducing": place.kind == .introduce
             case "Both been": place.youVisits > 0 && place.joeVisits > 0
             case "Different takes": place.youRating != nil && place.joeRating != nil && abs((place.youRating ?? 0) - (place.joeRating ?? 0)) >= 1
@@ -740,7 +740,7 @@ private struct CommonGroundProfileMockup: View {
                 }
                 if !isOwner {
                     VStack(alignment: .leading, spacing: 16) {
-                        CommonGroundSectionHeading(title: "Common Ground")
+                        CommonGroundSectionHeading(title: "In Common")
                         HStack(spacing: 12) {
                             CommonGroundAvatarPair(size: 34)
                             Text("You both love Narwhal.").font(AstirTypography.cardTitle)
@@ -751,7 +751,7 @@ private struct CommonGroundProfileMockup: View {
                             HStack(spacing: 12) {
                                 Image(systemName: "envelope.open").font(.title2)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("In good company").font(AstirTypography.sectionTitle)
+                                    Text("In Common").font(AstirTypography.sectionTitle)
                                     Text("\(CommonGroundMockData.mix().count) places picked for you two").font(AstirTypography.bodySmall)
                                 }
                                 Spacer(minLength: 0)
@@ -860,7 +860,7 @@ private struct CommonGroundAvatarPair: View {
     }
 }
 
-private struct CommonGroundAvatar: View {
+struct CommonGroundAvatar: View {
     let tile: Int
     let size: CGFloat
     var body: some View {
@@ -899,9 +899,9 @@ private struct CommonGroundSampleCaption: View {
     }
 }
 
-#Preview("Common Ground") { CommonGroundDesignMockupRoot(page: .detail) }
-#Preview("In good company") { CommonGroundDesignMockupRoot(page: .mix) }
+#Preview("In Common · Overview") { CommonGroundDesignMockupRoot(page: .detail) }
+#Preview("In Common · Places") { CommonGroundDesignMockupRoot(page: .mix) }
 #Preview("Member profile") { CommonGroundDesignMockupRoot(page: .profile) }
 #Preview("Your profile") { CommonGroundDesignMockupRoot(page: .ownProfile) }
-#Preview("Common Ground · Dark") { CommonGroundDesignMockupRoot(page: .detail).preferredColorScheme(.dark) }
+#Preview("In Common · Dark") { CommonGroundDesignMockupRoot(page: .detail).preferredColorScheme(.dark) }
 #endif

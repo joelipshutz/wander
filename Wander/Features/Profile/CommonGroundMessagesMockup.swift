@@ -132,17 +132,14 @@ private struct CGMessagesConversation: View {
     private var invitationPreview: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 18) {
-                Image(systemName: draft.reasonSymbol)
-                    .font(.system(size: 34, weight: .medium))
-                    .foregroundStyle(brand.accentText)
-                    .frame(width: 72, height: 72)
-                    .background(brand.accentWash, in: RoundedRectangle(cornerRadius: 20))
-                    .rotationEffect(.degrees(-7))
+                CommonGroundPlaceArtwork(place: draft.place)
+                    .frame(width: 88, height: 88)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Astir")
+                    Text("ASTIR")
                         .font(.system(.title2, design: .serif).weight(.semibold))
-                    Text("A little plan\nfor us.")
+                    Text("A plan for us")
                         .font(.system(.subheadline, design: .serif))
                 }
                 .foregroundStyle(brand.primaryText)

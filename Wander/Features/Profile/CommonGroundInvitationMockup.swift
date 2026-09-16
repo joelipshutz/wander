@@ -26,9 +26,9 @@ struct CommonGroundInvitationMockup: View {
                     recipient
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Astir’s taking the wheel.")
+                        Text("ASTIR’s taking the wheel")
                             .font(AstirTypography.sheetTitle).accessibilityAddTraits(.isHeader)
-                        Text("You bring the company.")
+                        Text("You bring the company")
                             .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
                     }
                     postcard
@@ -38,7 +38,7 @@ struct CommonGroundInvitationMockup: View {
             .padding(20).padding(.bottom, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(opensEnvelope ? "From Ryan" : "Your invitation")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !opensEnvelope || envelopeOpened { bottomAction }
@@ -114,18 +114,16 @@ struct CommonGroundInvitationMockup: View {
     private var recipient: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 12) {
-                CGInvitationInitials(initials: "R", size: 42)
+                CommonGroundAvatar(tile: 0, size: 42)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Ryan’s got a plan.").font(AstirTypography.sheetTitle)
-                    Text("And a pretty good reason for it.")
+                    Text("Ryan’s got a plan").font(AstirTypography.sheetTitle)
+                    Text("And a pretty good reason for it")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
             }
             if envelopeOpened {
                 postcard
                     .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 16)))
-                Text("Like the sound of it? Take it back to your chat.")
-                    .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
             } else {
                 Button {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.85)) {
@@ -139,7 +137,7 @@ struct CommonGroundInvitationMockup: View {
                     VStack(spacing: 22) {
                         CGInvitationEnvelopeArtwork(symbol: draft.reasonSymbol)
                             .aspectRatio(1.25, contentMode: .fit)
-                        Text("A little plan for us.").font(AstirTypography.screenTitle)
+                        Text("A plan for us").font(AstirTypography.screenTitle)
                         Label("Take a peek", systemImage: "envelope.open")
                             .font(AstirTypography.control).foregroundStyle(brand.accentText)
                             .frame(minHeight: 44)
@@ -188,7 +186,7 @@ struct CGInvitationPostcard: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("RYAN + JOE").font(AstirTypography.metadata).tracking(2)
-                        Text("Good company.\nGood excuse.")
+                        Text("Good company\nGood excuse")
                             .font(AstirTypography.sectionTitle)
                     }
                     Spacer(minLength: 8)
@@ -238,15 +236,15 @@ struct CGInvitationPostcard: View {
                             .accessibilityIdentifier("common-ground.invitation.reason-title")
                     } icon: { Image(systemName: draft.reasonSymbol) }
                     .font(AstirTypography.label).foregroundStyle(brand.accentText)
-                    Text(draft.reasonDetail)
-                        .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let evidence = draft.postcardReasonDetail {
+                        Text(evidence)
+                            .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 HStack {
-                    Text("From Ryan, with a little help.").font(AstirTypography.caption)
-                        .foregroundStyle(brand.secondaryText)
                     Spacer(minLength: 12)
-                    Text("astir").font(.system(.title3, design: .serif).italic())
+                    Text("ASTIR").font(.system(.title3, design: .serif).italic())
                 }.padding(.top, 3)
             }
             .padding(compact ? 18 : 22)
@@ -281,17 +279,6 @@ private struct CGInvitationPerforation: Shape {
     }
 }
 
-private struct CGInvitationInitials: View {
-    @Environment(\.astirBrandMode) private var brand
-    let initials: String
-    let size: CGFloat
-    var body: some View {
-        Text(initials).font(AstirTypography.control)
-            .foregroundStyle(brand.accentText).frame(width: size, height: size)
-            .background(brand.accentWash, in: Circle()).accessibilityHidden(true)
-    }
-}
-
 private struct CGInvitationEnvelopeArtwork: View {
     @Environment(\.astirBrandMode) private var brand
     let symbol: String
@@ -311,7 +298,7 @@ private struct CGInvitationEnvelopeArtwork: View {
                 }.stroke(brand.accentText.opacity(0.22), lineWidth: 1.2)
                 VStack(spacing: 3) {
                     Text("JOE,").font(AstirTypography.metadata).tracking(2)
-                    Text("this one’s for us.").font(AstirTypography.sectionTitle)
+                    Text("this one’s for us").font(AstirTypography.sectionTitle)
                 }
                 .foregroundStyle(brand.primaryText)
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.2)
@@ -342,7 +329,7 @@ private struct CGInvitationDatePicker: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Text("Put a little something on the calendar.")
+                    Text("Put a little something on the calendar")
                         .font(AstirTypography.sheetTitle)
                     DatePicker("Day", selection: $date, displayedComponents: .date)
                         .datePickerStyle(.graphical)
@@ -350,7 +337,7 @@ private struct CGInvitationDatePicker: View {
                     DatePicker("Time", selection: $date, displayedComponents: .hourAndMinute)
                         .datePickerStyle(.compact).font(AstirTypography.control)
                         .frame(minHeight: 44)
-                    Text("Just a proposal. You can work out the details in your chat.")
+                    Text("Just a proposal — work out the details in your chat")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }.padding(20)
             }

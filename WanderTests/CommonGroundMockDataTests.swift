@@ -151,7 +151,7 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertEqual(yourFavorite.narrativeTitle, "You and Joe could go back to Repeat.")
         for candidate in [joesFavorite, yourFavorite] {
             XCTAssertEqual(CommonGroundInvitationDraft(place: candidate).message,
-                           "We both know Repeat. Let’s go back together?")
+                           "We both know Repeat\nLet’s go back together?")
         }
     }
 

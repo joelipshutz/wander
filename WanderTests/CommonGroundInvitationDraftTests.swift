@@ -5,11 +5,11 @@ import XCTest
 final class CommonGroundInvitationDraftTests: XCTestCase {
     func testFiveContextualMessagesPreserveTheDirectionOfTheInvitation() throws {
         let expectations: [(String, String, String)] = [
-            ("narwhal", "Shared regulars", "We’re both Narwhal people. Coffee together?"),
-            ("grove-gardens", "Shared love", "We both loved Grove Gardens. Round two?"),
-            ("not-no-bar", "Both wanna go", "We both wanna go to Not No Bar. Let’s make a plan?"),
-            ("mudwater", "Joe’s regular spot", "You keep going back to Mudwater. Take me next time?"),
-            ("the-little-room", "Ryan’s regular spot", "I keep going back to The Little Room. Let me show you why.")
+            ("narwhal", "Shared regulars", "We’re both Narwhal people\nCoffee together?"),
+            ("grove-gardens", "Shared love", "We both loved Grove Gardens\nRound two?"),
+            ("not-no-bar", "Both Wanna Go", "We both wanna go to Not No Bar\nLet’s make a plan?"),
+            ("mudwater", "Joe’s regular spot", "You keep going back to Mudwater\nTake me next time?"),
+            ("the-little-room", "Ryan’s regular spot", "I keep going back to The Little Room\nLet me show you why")
         ]
         for (id, reason, message) in expectations {
             let invitation = try draft(id)
@@ -23,6 +23,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         let repeats = try draft("narwhal")
         XCTAssertEqual(repeats.reasonDetail, "Ryan: 18 check-ins · Joe: 17 check-ins")
         XCTAssertEqual(repeats.reasonSymbol, "flame.fill")
+        XCTAssertEqual(repeats.postcardReasonDetail, repeats.reasonDetail)
         XCTAssertFalse(repeats.reasonDetail.contains("/5"))
 
         let ratings = try draft("grove-gardens")
@@ -31,13 +32,14 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         XCTAssertFalse(ratings.place.bothRegulars)
 
         XCTAssertEqual(try draft("not-no-bar").reasonDetail, "In both of your Wannas")
+        XCTAssertNil(try draft("not-no-bar").postcardReasonDetail)
         XCTAssertEqual(
             try draft("mudwater").reasonDetail,
-            "Joe: 5 check-ins · In Ryan’s Wannas."
+            "Joe: 5 check-ins · In Ryan’s Wannas"
         )
         XCTAssertEqual(
             try draft("the-little-room").reasonDetail,
-            "Ryan: 7 check-ins · In Joe’s Wannas."
+            "Ryan: 7 check-ins · In Joe’s Wannas"
         )
     }
 
@@ -49,7 +51,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         XCTAssertEqual(invitation.reasonDetail, initialEvidence)
         XCTAssertTrue(invitation.shareText.hasPrefix(invitation.message))
         invitation.note = " \n\t "
-        XCTAssertEqual(invitation.message, "You keep going back to Mudwater. Take me next time?")
+        XCTAssertEqual(invitation.message, "You keep going back to Mudwater\nTake me next time?")
     }
 
     func testDateIsOptionalAndTheExactDraftSurvivesARecipientHandoff() throws {
@@ -79,7 +81,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         XCTAssertTrue(payload.contains(invitation.message))
         XCTAssertTrue(payload.contains("The Little Room · Atwater Village, Los Angeles"))
         XCTAssertTrue(payload.contains(invitation.reasonDetail))
-        for unsupported in ["https://", "http://", "recme://", "Sent", "Delivered", "Astir picked"] {
+        for unsupported in ["https://", "http://", "recme://", "Sent", "Delivered", "ASTIR picked"] {
             XCTAssertFalse(payload.contains(unsupported), unsupported)
         }
     }
