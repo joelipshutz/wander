@@ -3,7 +3,8 @@ import SwiftUI
 
 enum OnboardingCarouselTiming {
     static let defaultAutoAdvanceSeconds = 7.0
-    static let slideSeconds = 0.65
+    static let slideSeconds = 0.6
+    static let slideAnimation = Animation.timingCurve(0.32, 0, 0.18, 1, duration: slideSeconds)
 }
 
 /// A persistent lower board lets benefit copy flip while only the upper app UI
@@ -134,7 +135,7 @@ struct LoggedOutCarouselView: View {
                 // Retain the outgoing view until rendering actually finishes.
                 // A wall-clock delay can expire before a busy Map has slid out.
                 withAnimation(
-                    reduceMotion ? nil : .easeInOut(duration: OnboardingCarouselTiming.slideSeconds),
+                    reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
                     completionCriteria: .removed
                 ) {
                     slideProgress = 1
@@ -382,66 +383,11 @@ struct OnboardingSplitFlapBoard: View, @MainActor Animatable {
     let toRows: [String]
     var progress: Double
     var animatableData: Double { get { progress } set { progress = newValue } }
-    var body: some View {
-        GeometryReader { geometry in
-            let columns = max(OnboardingBoardCopy.columns, (fromRows + toRows).map(\.count).max() ?? 0)
-            let gap = max(1, geometry.size.width * 0.004)
-            let cellWidth = (geometry.size.width - gap * Double(columns - 1)) / Double(columns)
-            let rowHeight = (geometry.size.height - gap * 4) / 3
-            VStack(spacing: gap * 2) {
-                ForEach(0..<3, id: \.self) { row in
-                    let source = OnboardingBoardCopy.centered(fromRows.indices.contains(row) ? fromRows[row] : "", columns: columns)
-                    let target = OnboardingBoardCopy.centered(toRows.indices.contains(row) ? toRows[row] : "", columns: columns)
-                    HStack(spacing: gap) {
-                        ForEach(0..<columns, id: \.self) { column in
-                            OnboardingSplitFlapLetter(
-                                frame: OnboardingSplitFlapFrame.at(progress: progress, from: source[column], to: target[column], column: column),
-                                width: cellWidth, height: rowHeight, fontSize: cellWidth * 1.08
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct OnboardingSplitFlapLetter: View {
     @Environment(\.colorScheme) private var colorScheme
-    let frame: OnboardingSplitFlapFrame
-    let width: CGFloat
-    let height: CGFloat
-    let fontSize: CGFloat
-    private var isDark: Bool { colorScheme == .dark }
-    private var isTurning: Bool { frame.from != frame.to && frame.progress > 0 && frame.progress < 1 }
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) { half(frame.to, top: true); half(frame.from, top: false) }
-            if frame.progress < 0.5 {
-                half(frame.from, top: true)
-                    .overlay(Color.black.opacity(isTurning ? frame.progress * 0.24 : 0))
-                    .rotation3DEffect(.degrees(-180 * frame.progress), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.55)
-                    .frame(maxHeight: .infinity, alignment: .top)
-            } else {
-                half(frame.to, top: false)
-                    .overlay(Color.black.opacity(isTurning ? (1 - frame.progress) * 0.2 : 0))
-                    .rotation3DEffect(.degrees(180 * (1 - frame.progress)), axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.55)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-            Rectangle().fill(isDark ? Color.black.opacity(0.55) : Color.black.opacity(0.17)).frame(height: 0.6)
-        }
-        .frame(width: width, height: height).clipShape(RoundedRectangle(cornerRadius: 2))
-        .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.12), lineWidth: 0.5))
-    }
-    private func half(_ character: Character, top: Bool) -> some View {
-        Text(String(character).uppercased())
-            .font(.system(size: fontSize, weight: .bold, design: .monospaced))
-            .foregroundStyle(AstirTheme.signal.color).lineLimit(1).minimumScaleFactor(0.7)
-            .frame(width: width, height: height)
-            .offset(y: top ? height / 4 : -height / 4)
-            .frame(width: width, height: height / 2).clipped()
-            .background(OnboardingBoardColors.face(isDark: isDark, top: top))
+        OnboardingFlapSurface(fromRows: fromRows, toRows: toRows,
+                              progress: progress, isDark: colorScheme == .dark)
+            .accessibilityHidden(true)
     }
 }
 

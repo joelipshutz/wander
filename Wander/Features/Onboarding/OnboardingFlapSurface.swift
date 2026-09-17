@@ -1,0 +1,273 @@
+import SwiftUI
+import UIKit
+
+/// Three native review treatments share the same layout, copy, and mechanism.
+/// The default ships without an environment-dependent style choice.
+enum OnboardingFlapFinish: String, CaseIterable {
+    case station, sculpted, graphic
+
+    static var current: Self {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["WANDER_ONBOARDING_FLAP_FINISH"]
+            .flatMap(Self.init(rawValue:)) ?? .station
+        #else
+        return .station
+        #endif
+    }
+
+    var cornerRadius: CGFloat { self == .sculpted ? 3.2 : (self == .graphic ? 0.8 : 1.4) }
+    var depth: CGFloat { self == .sculpted ? 2.4 : (self == .graphic ? 0.4 : 1.4) }
+    var glyphInset: CGFloat { self == .graphic ? 2 : (self == .sculpted ? 3 : 4) }
+    var fontScale: CGFloat { self == .graphic ? 0.9 : (self == .sculpted ? 0.85 : 0.83) }
+}
+
+/// Rasterize the branded faces only when size or appearance changes. Each flip
+/// then moves retained native layers rather than laying out three Text views
+/// per cell on every animation frame.
+struct OnboardingFlapSurface: UIViewRepresentable {
+    let fromRows: [String]
+    let toRows: [String]
+    let progress: Double
+    let isDark: Bool
+    var finish: OnboardingFlapFinish = .current
+
+    func makeUIView(context: Context) -> OnboardingFlapSurfaceView {
+        OnboardingFlapSurfaceView()
+    }
+
+    func updateUIView(_ view: OnboardingFlapSurfaceView, context: Context) {
+        view.update(from: fromRows, to: toRows, progress: progress, isDark: isDark, finish: finish)
+    }
+}
+
+final class OnboardingFlapSurfaceView: UIView {
+    private var fromRows = [String]()
+    private var toRows = [String]()
+    private var source = [Character]()
+    private var target = [Character]()
+    private var progress = 1.0
+    private var isDark = false
+    private var finish = OnboardingFlapFinish.station
+    private var columns = OnboardingBoardCopy.columns
+    private var tiles = [OnboardingFlapTile]()
+    private var faces = [Character: CGImage]()
+    private var faceSize = CGSize.zero
+    private var renderedScale: CGFloat = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func update(from: [String], to: [String], progress: Double, isDark: Bool,
+                finish: OnboardingFlapFinish = .station) {
+        if self.isDark != isDark || self.finish != finish {
+            self.isDark = isDark
+            self.finish = finish
+            faces.removeAll()
+            tiles.forEach { $0.lastFrame = nil }
+            setNeedsLayout()
+        }
+        if fromRows != from || toRows != to {
+            fromRows = from; toRows = to
+            columns = max(OnboardingBoardCopy.columns, (from + to).map(\.count).max() ?? 0)
+            source = (0..<3).flatMap { OnboardingBoardCopy.centered(from.indices.contains($0) ? from[$0] : "", columns: columns) }
+            target = (0..<3).flatMap { OnboardingBoardCopy.centered(to.indices.contains($0) ? to[$0] : "", columns: columns) }
+            setNeedsLayout()
+        }
+        self.progress = progress
+        render()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let gap = max(1, bounds.width * 0.004)
+        let size = CGSize(width: (bounds.width - gap * CGFloat(columns - 1)) / CGFloat(columns),
+                          height: (bounds.height - gap * 4) / 3)
+        let scale = traitCollection.displayScale
+        if size != faceSize || renderedScale != scale {
+            faceSize = size; renderedScale = scale
+            faces.removeAll()
+            tiles.forEach { $0.lastFrame = nil }
+        }
+        if tiles.count != columns * 3 {
+            tiles.forEach { $0.removeFromSuperlayer() }
+            tiles = (0..<(columns * 3)).map { _ in
+                let tile = OnboardingFlapTile()
+                layer.addSublayer(tile)
+                return tile
+            }
+        }
+        for (index, tile) in tiles.enumerated() {
+            tile.frame = CGRect(x: CGFloat(index % columns) * (size.width + gap),
+                                y: CGFloat(index / columns) * (size.height + gap * 2),
+                                width: size.width, height: size.height)
+            tile.arrange(size: size, scale: scale, isDark: isDark, finish: finish)
+        }
+        // Prepare the small alphabet atlas while the view is being laid out,
+        // before any letters need to turn. There is no text drawing mid-flip.
+        for glyph in Set(Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ ’") + source + target) {
+            _ = face(glyph)
+        }
+        CATransaction.commit()
+        render()
+    }
+
+    private func render() {
+        guard faceSize.width > 0, tiles.count == source.count, source.count == target.count else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for index in tiles.indices {
+            let frame = OnboardingSplitFlapFrame.at(progress: progress, from: source[index],
+                                                  to: target[index], column: index % columns)
+            let tile = tiles[index]
+            guard tile.lastFrame != frame else { continue }
+            tile.apply(frame, from: face(frame.from), to: face(frame.to))
+        }
+        CATransaction.commit()
+    }
+
+    private func face(_ character: Character) -> CGImage {
+        if let cached = faces[character] { return cached }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = renderedScale
+        let image = UIGraphicsImageRenderer(size: faceSize, format: format).image { renderer in
+            let cg = renderer.cgContext
+            let rect = CGRect(origin: .zero, size: faceSize)
+            var colors: [UIColor] = isDark
+                ? [UIColor(red: 0.17, green: 0.19, blue: 0.17, alpha: 1),
+                   UIColor(red: 0.095, green: 0.11, blue: 0.095, alpha: 1)]
+                : [.white, UIColor(red: 0.95, green: 0.945, blue: 0.925, alpha: 1)]
+            if finish == .graphic {
+                let matte = isDark ? UIColor(red: 0.12, green: 0.135, blue: 0.12, alpha: 1) : UIColor.white
+                colors = [matte, matte]
+            } else if finish == .sculpted {
+                colors = isDark
+                    ? [UIColor(red: 0.22, green: 0.24, blue: 0.215, alpha: 1),
+                       UIColor(red: 0.075, green: 0.095, blue: 0.075, alpha: 1)]
+                    : [.white, UIColor(red: 0.90, green: 0.895, blue: 0.875, alpha: 1)]
+            }
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                      colors: colors.map(\.cgColor) as CFArray, locations: [0, 1])!
+            cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: rect.height), options: [])
+
+            // Avenir Next is already the Astir type family. Its condensed heavy
+            // cut gives the board fuller, taller caps without changing the grid.
+            let font = UIFont(name: "AvenirNextCondensed-Heavy", size: rect.height * finish.fontScale)
+                ?? UIFont.systemFont(ofSize: rect.height * finish.fontScale, weight: .heavy)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor(AstirTheme.signal.color)]
+            let text = String(character) as NSString
+            let width = text.size(withAttributes: attributes).width
+            let widest = ("W" as NSString).size(withAttributes: attributes).width
+            let horizontalScale = min(1, (rect.width - finish.glyphInset) / widest)
+            let textHeight = font.lineHeight
+            // Center the actual capital height, not the font's descender space.
+            let y = (rect.height - font.capHeight) / 2 - (font.ascender - font.capHeight)
+            cg.saveGState()
+            cg.translateBy(x: rect.midX, y: 0)
+            cg.scaleBy(x: horizontalScale, y: 1)
+            if finish != .graphic {
+                cg.setShadow(offset: CGSize(width: 0, height: finish == .sculpted ? 1 : 0.55), blur: 0,
+                             color: UIColor.black.withAlphaComponent(isDark ? 0.40 : 0.13).cgColor)
+            }
+            text.draw(in: CGRect(x: -width / 2, y: y, width: width + 1, height: textHeight), withAttributes: attributes)
+            cg.restoreGState()
+
+            // The small bevels and center cut belong to the physical face, so
+            // they travel with it and do not require live shadow rendering.
+            cg.setStrokeColor(UIColor.white.withAlphaComponent(isDark ? 0.13 : 0.9).cgColor)
+            cg.setLineWidth(finish == .sculpted ? 1.1 : 0.6)
+            cg.move(to: CGPoint(x: 1, y: 0.5)); cg.addLine(to: CGPoint(x: rect.width - 1, y: 0.5)); cg.strokePath()
+            cg.setFillColor(UIColor.black.withAlphaComponent(isDark ? 0.85 : 0.25).cgColor)
+            cg.fill(CGRect(x: 0, y: rect.midY - 0.5, width: rect.width, height: 1))
+            cg.setFillColor(UIColor.white.withAlphaComponent(isDark ? 0.11 : 0.8).cgColor)
+            cg.fill(CGRect(x: 0, y: rect.midY + 0.5, width: rect.width, height: 0.45))
+        }.cgImage!
+        faces[character] = image
+        return image
+    }
+}
+
+private final class OnboardingFlapTile: CALayer {
+    let upper = CALayer()
+    let lower = CALayer()
+    let turningUpper = CALayer()
+    let turningLower = CALayer()
+    let upperShade = CALayer()
+    let lowerShade = CALayer()
+    var lastFrame: OnboardingSplitFlapFrame?
+
+    override init() {
+        super.init()
+        [upper, lower, turningUpper, turningLower].forEach {
+            addSublayer($0)
+            $0.isDoubleSided = false
+            $0.masksToBounds = true
+            $0.cornerRadius = 1.4
+        }
+        turningUpper.addSublayer(upperShade)
+        turningLower.addSublayer(lowerShade)
+        [upperShade, lowerShade].forEach { $0.backgroundColor = UIColor.black.cgColor }
+        shadowColor = UIColor.black.cgColor
+    }
+
+    override init(layer: Any) { super.init(layer: layer) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func arrange(size: CGSize, scale: CGFloat, isDark: Bool, finish: OnboardingFlapFinish) {
+        let half = CGSize(width: size.width, height: size.height / 2)
+        for face in [upper, lower, turningUpper, turningLower] {
+            face.bounds = CGRect(origin: .zero, size: half)
+            face.contentsScale = scale
+            face.contentsGravity = .resize
+            face.cornerRadius = finish.cornerRadius
+        }
+        for face in [upper, turningUpper] {
+            face.anchorPoint = CGPoint(x: 0.5, y: 1)
+            face.position = CGPoint(x: size.width / 2, y: size.height / 2)
+            face.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 0.5)
+        }
+        for face in [lower, turningLower] {
+            face.anchorPoint = CGPoint(x: 0.5, y: 0)
+            face.position = CGPoint(x: size.width / 2, y: size.height / 2)
+            face.contentsRect = CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
+        }
+        upperShade.frame = CGRect(origin: .zero, size: half)
+        lowerShade.frame = CGRect(origin: .zero, size: half)
+        shadowOpacity = finish == .graphic ? 0 : (isDark ? 0.5 : 0.18)
+        shadowOffset = CGSize(width: 0, height: finish.depth)
+        shadowRadius = finish == .sculpted ? 1 : 0.7
+        shadowPath = UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: finish.cornerRadius).cgPath
+    }
+
+    func apply(_ frame: OnboardingSplitFlapFrame, from: CGImage, to: CGImage) {
+        lastFrame = frame
+        if frame.from == frame.to || frame.progress >= 1 {
+            upper.contents = to; lower.contents = to
+            turningUpper.isHidden = true; turningLower.isHidden = true
+            return
+        }
+        upper.contents = to; lower.contents = from
+        let firstHalf = frame.progress < 0.5
+        turningUpper.isHidden = !firstHalf
+        turningLower.isHidden = firstHalf
+        var perspective = CATransform3DIdentity
+        perspective.m34 = -1 / max(1, bounds.height * 5)
+        if firstHalf {
+            let fall = pow(frame.progress * 2, 1.65)
+            turningUpper.contents = from
+            turningUpper.transform = CATransform3DRotate(perspective, -.pi / 2 * fall, 1, 0, 0)
+            upperShade.opacity = Float(fall * 0.32)
+        } else {
+            let landing = pow(1 - (frame.progress - 0.5) * 2, 2)
+            turningLower.contents = to
+            turningLower.transform = CATransform3DRotate(perspective, .pi / 2 * landing, 1, 0, 0)
+            lowerShade.opacity = Float(landing * 0.25)
+        }
+    }
+}

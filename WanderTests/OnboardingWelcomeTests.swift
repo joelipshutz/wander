@@ -1,7 +1,59 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 final class OnboardingWelcomeTests: XCTestCase {
+    @MainActor
+    func testRetainedFlapsSettleToTheSamePixelsAsAnInitiallyStaticBoard() throws {
+        let from = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "community")
+        let to = OnboardingBoardCopy.finalRows("a local experiment")
+        for finish in OnboardingFlapFinish.allCases {
+            let animated = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 127))
+            animated.update(from: from, to: to, progress: 0, isDark: true, finish: finish)
+            animated.layoutIfNeeded()
+            for progress in stride(from: 0.0, through: 1.0, by: 0.025) {
+                animated.update(from: from, to: to, progress: progress, isDark: true, finish: finish)
+            }
+            animated.update(from: from, to: to, progress: 1, isDark: true, finish: finish)
+            let held = OnboardingFlapSurfaceView(frame: animated.frame)
+            held.update(from: to, to: to, progress: 1, isDark: true, finish: finish)
+            XCTAssertEqual(try renderedBoard(animated), try renderedBoard(held), "No stale glyph half may survive the last flip: \(finish)")
+        }
+    }
+
+    @MainActor
+    func testRetainedFlapsRebuildTheirFacesWhenAppearanceOrFinishChanges() throws {
+        let rows = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "people")
+        let reused = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 127))
+        reused.update(from: rows, to: rows, progress: 1, isDark: false)
+        let light = try renderedBoard(reused)
+        reused.update(from: rows, to: rows, progress: 1, isDark: true, finish: .sculpted)
+        let dark = try renderedBoard(reused)
+        let fresh = OnboardingFlapSurfaceView(frame: reused.frame)
+        fresh.update(from: rows, to: rows, progress: 1, isDark: true, finish: .sculpted)
+        XCTAssertNotEqual(light, dark)
+        XCTAssertEqual(dark, try renderedBoard(fresh), "A reused board must match a newly created dark/sculpted board.")
+    }
+
+    @MainActor
+    func testRetainedFlapsResizeWithoutStaleGlyphScaleOrClippedRows() throws {
+        let rows = OnboardingBoardCopy.benefitRows(.places)
+        let resized = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 288, height: 104))
+        resized.update(from: rows, to: rows, progress: 1, isDark: false, finish: .graphic)
+        _ = try renderedBoard(resized)
+        resized.frame = CGRect(x: 0, y: 0, width: 440, height: 158)
+        let fresh = OnboardingFlapSurfaceView(frame: resized.frame)
+        fresh.update(from: rows, to: rows, progress: 1, isDark: false, finish: .graphic)
+        XCTAssertEqual(try renderedBoard(resized), try renderedBoard(fresh))
+    }
+
+    @MainActor
+    private func renderedBoard(_ view: UIView) throws -> Data {
+        view.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(size: view.bounds.size).image { view.layer.render(in: $0.cgContext) }
+        return try XCTUnwrap(image.pngData())
+    }
+
     func testExplicitEmptyConfigurationOmitsTickerAndEndsAfterNativeBenefits() {
         let configuration = OnboardingWelcomeConfiguration()
         XCTAssertEqual(configuration.steps, [.places, .people])

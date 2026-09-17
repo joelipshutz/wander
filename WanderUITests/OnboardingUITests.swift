@@ -1991,12 +1991,16 @@ final class OnboardingUITests: XCTestCase {
         // pages receive their reading time before the finite flow opens signup.
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
+        // Start the timed observation with the real Play control. Simulator
+        // automation setup can take longer than the opening's reading interval.
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
         app.launch()
 
         let carouselPage = app.descendants(matching: .any)["onboarding.carouselPage"]
         XCTAssertTrue(carouselPage.waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["onboarding.next"].exists)
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
+        app.buttons["onboarding.pause"].tap()
         let signupDeadline = Date().addingTimeInterval(35)
         expectation(
             for: NSPredicate(format: "value == %@", "2"),

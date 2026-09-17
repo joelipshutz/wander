@@ -39,7 +39,7 @@ struct SignedOutOnboardingFlowView: View {
             }
         }
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: OnboardingCarouselTiming.slideSeconds),
+            reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
             value: auth.isPresentingNativeAuth
         )
         .task {
