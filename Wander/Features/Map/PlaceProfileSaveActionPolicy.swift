@@ -59,6 +59,22 @@ struct PlaceProfileSaveActionSnapshot: Equatable {
 }
 
 enum PlaceProfileSaveActionPolicy {
+    /// Non-map profiles own their editor, but use the same save semantics:
+    /// Wanna always creates a fresh event, even after an existing check-in.
+    static func profileSaveContext(
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        switch (action.kind, action.destinationStatus) {
+        case (.wanna, .wannaGo):
+            baseContext.freshWannaContext()
+        case (.checkIn, .been):
+            baseContext.preselectingStatus(.been)
+        default:
+            nil
+        }
+    }
+
     #if DEBUG
     static let debugEnableLaunchArgument = "-WanderPlaceProfileSaveTrayV1"
     #endif
@@ -261,5 +277,22 @@ enum PlaceProfileSaveActionPolicy {
         case (.checkIn, .wannaGo), (.wanna, .been), (.editHistory, _):
             false
         }
+    }
+}
+
+extension PlaceSheetPlace {
+    var saveCandidate: PlaceCandidate {
+        PlaceCandidate(
+            id: id, name: name, category: category,
+            primaryCategory: primaryCategory, subcategory: subcategory,
+            categorySource: categorySource, categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType,
+            address: address, locality: locality, region: region,
+            latitude: latitude, longitude: longitude,
+            sourceProvider: sourceProvider ?? "mapkit",
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            websiteURLString: websiteURLString, phoneNumber: phoneNumber,
+            actionLinksJSON: actionLinksJSON, confidence: 1
+        )
     }
 }

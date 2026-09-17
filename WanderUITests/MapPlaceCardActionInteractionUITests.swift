@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class MapPlaceCardActionInteractionUITests: XCTestCase {
@@ -119,6 +120,230 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
 
 @MainActor
 final class FeedPostcardInteractionUITests: XCTestCase {
+    func testSearchPlaceUsesFloatingActionsAndPreservesResults() {
+        continueAfterFailure = false
+        let app = profileRoutesApp(initialTab: "discover")
+        app.launch()
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 15))
+        launcher.tap()
+        let field = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("coffee\n")
+        let result = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS[c] %@", "Astir rating"
+        )).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 8))
+        centerProfileEntry(result, in: app)
+        result.tap()
+        assertFloatingProfile(app, name: "Search")
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, "coffee")
+    }
+
+    func testPlaceProfileActionsFromListAndProfileHistory() {
+        continueAfterFailure = false
+        let app = profileRoutesApp(initialTab: "lists")
+        app.launch()
+        let list = app.staticTexts["Date night short list"].firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 15))
+        list.tap()
+        let entry = app.buttons["Open Marigold Table"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        centerProfileEntry(entry, in: app)
+        entry.tap()
+        assertFloatingProfile(app, name: "List")
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        app.terminate()
+
+        let profileApp = profileRoutesApp(initialTab: "profile")
+        profileApp.launch()
+        let activity = profileApp.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Hearthline Coffee,"
+        )).firstMatch
+        for _ in 0..<6 where !activity.isHittable { profileApp.swipeUp() }
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        activity.tap()
+        assertFloatingProfile(profileApp, name: "Profile activity")
+        profileApp.buttons["place-profile.back"].tap()
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+    }
+
+    func testSharedPlaceLinksUseMapProfileActions() throws {
+        continueAfterFailure = false
+        for urlString in [
+            "recme://places/50000000-0000-0000-0000-000000000386",
+            "https://getrec.me/places/50000000-0000-0000-0000-000000000386"
+        ] {
+            let app = linkedProfileRoutesApp()
+            let url = try XCTUnwrap(URL(string: urlString))
+            // XCUIApplication.open starts a clean instance. Keep cold delivery
+            // independent of the runner's ability to issue a warm system URL.
+            app.open(url)
+            let card = app.buttons["map.selectedPlaceCard"]
+            XCTAssertTrue(card.waitForExistence(timeout: 15))
+            XCTAssertTrue(card.label.contains("Dudley Market QA"))
+            tapWhenSettled(card)
+            assertFloatingProfile(app, name: urlString.hasPrefix("https") ? "Universal link" : "Custom link")
+            app.buttons["place-profile.back"].tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
+    func testWarmSharedPlaceLinkReplacesFeedProfile() throws {
+        continueAfterFailure = false
+        let app = linkedProfileRoutesApp()
+        app.launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
+        let feedPlace = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
+        reveal(feedPlace, in: app)
+        centerProfileEntry(feedPlace, in: app)
+        feedPlace.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 5))
+
+        let url = try XCTUnwrap(URL(string: "recme://places/50000000-0000-0000-0000-000000000386"))
+        let urlOpened = expectation(description: "System delivered the warm place link")
+        var deliverySucceeded = false
+        // Completion follows the Open Astir confirmation, so handle the dialog
+        // before waiting. Some simulator runners are rejected as untrusted.
+        UIApplication.shared.open(url, options: [:]) { opened in
+            deliverySucceeded = opened
+            urlOpened.fulfill()
+        }
+        let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
+        if open.waitForExistence(timeout: 5) { tapWhenSettled(open) }
+        wait(for: [urlOpened], timeout: 10)
+        guard deliverySucceeded else {
+            throw XCTSkip("iOS rejected the runner's warm URL request; verify this route from a trusted source on device.")
+        }
+        app.activate()
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        XCTAssertTrue(card.label.contains("Dudley Market QA"))
+        tapWhenSettled(card)
+        assertFloatingProfile(app, name: "Warm custom link")
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+    }
+
+    private func linkedProfileRoutesApp() -> XCUIApplication {
+        let app = profileRoutesApp(initialTab: "discover")
+        // Screenshot mode bypasses AppEntryView's URL handlers.
+        app.launchArguments.removeAll { $0 == "-WanderMapCapture" }
+        app.launchArguments += ["-WanderREC386PhotoFixture"]
+        return app
+    }
+
+    private func profileRoutesApp(initialTab: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderInitialTab", initialTab
+        ]
+        return app
+    }
+
+    private func centerProfileEntry(_ entry: XCUIElement, in app: XCUIApplication) {
+        // Hittable elements can still sit in the floating header/footer's
+        // transition region. Put the entry in the clear middle of the screen.
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        for _ in 0..<3 where entry.frame.midY > app.frame.height * 0.6 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertTrue(entry.isHittable)
+    }
+
+    private func tapWhenSettled(_ element: XCUIElement) {
+        var previousFrame = CGRect.null
+        var stableSince = Date()
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard element.exists, element.isHittable, element.isEnabled else { return false }
+            let frame = element.frame
+            if frame != previousFrame {
+                previousFrame = frame
+                stableSince = Date()
+                return false
+            }
+            return Date().timeIntervalSince(stableSince) >= 0.5
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 10), .completed)
+        element.tap()
+    }
+
+    private func assertFloatingProfile(_ app: XCUIApplication, name: String) {
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable, "\(name) must use the full screen, without the app tab bar")
+        let originalY = checkIn.frame.minY
+        capture("REC-532 \(name) top")
+        let scroll = app.scrollViews["place-profile.scroll"]
+        for _ in 0..<5 { scroll.swipeUp() }
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertEqual(checkIn.frame.minY, originalY, accuracy: 1)
+        XCTAssertLessThan(wanna.frame.maxY, app.frame.maxY - 12)
+        capture("REC-532 \(name) footer")
+        wanna.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        capture("REC-532 \(name) Wanna editor")
+        tapWhenSettled(app.buttons["save.close"])
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+    }
+
+    func testPlaceProfileUsesFloatingActionsAndReturnsToFeed() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderInitialTab", "discover"
+        ]
+        app.launch()
+        let place = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.place"]
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
+        reveal(place, in: app)
+        centerProfileEntry(place, in: app)
+        place.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 5))
+        capture("REC-532 Feed profile top")
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertEqual(checkIn.label, "Check in")
+        XCTAssertEqual(wanna.label, "Wanna")
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
+        let originalY = checkIn.frame.minY
+        let scroll = app.scrollViews["place-profile.scroll"]
+        for _ in 0..<4 { scroll.swipeUp() }
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(wanna.isHittable)
+        XCTAssertEqual(checkIn.frame.minY, originalY, accuracy: 1)
+        XCTAssertLessThan(wanna.frame.maxY, app.frame.maxY - 12)
+        capture("REC-532 Feed profile footer")
+        wanna.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        capture("REC-532 Feed Wanna editor")
+        tapWhenSettled(app.buttons["save.close"])
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        checkIn.tap()
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5))
+        capture("REC-532 Feed Check in editor")
+        tapWhenSettled(app.buttons["save.close"])
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 5))
+        XCTAssertTrue(place.waitForExistence(timeout: 5))
+    }
+
     func testPerformanceFixtureMeasuresFirstScrollHitches() {
         let app = performanceFeedApp()
         app.launch()

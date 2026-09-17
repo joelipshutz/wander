@@ -2464,6 +2464,9 @@ struct MapScreen: View {
               auth.isSignedIn,
               handlingNotificationRequestID != request.id
         else { return }
+        // A link can mount Map before its reset task runs. Apply that reset
+        // first so it cannot clear the place selected by this newer route.
+        handlePresentationResetRequest(presentationResetRequest)
         let navigationRevision = deferredMapNavigationGate.revision
         handlingNotificationRequestID = request.id
         defer {

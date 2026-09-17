@@ -237,9 +237,8 @@ struct ProfileScreen: View {
                         .onAppear(perform: beginSettingsPresentationLifecycle)
                     }
                 }
-                .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
                 .toolbar(
-                    showsSettings || showsYourMapPrototype ? .hidden : .visible,
+                    showsSettings || showsYourMapPrototype ? .hidden : .automatic,
                     for: .tabBar
                 )
                 .sheet(item: $socialGraphTab, onDismiss: {

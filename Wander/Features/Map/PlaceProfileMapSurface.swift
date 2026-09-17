@@ -103,7 +103,7 @@ struct PlaceProfileFullScreen: View {
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
-    let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    let onFloatingAction: ((PlaceProfileSaveAction) -> Void)?
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
@@ -112,6 +112,11 @@ struct PlaceProfileFullScreen: View {
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @State private var localSaveContext: MapPlaceSaveContext?
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
@@ -147,7 +152,7 @@ struct PlaceProfileFullScreen: View {
         self.onBack = onBack
         self.onAction = onAction
         self.onAddToList = onAddToList
-        self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
+        self.onFloatingAction = onFloatingAction
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
         self.onAttachedDraftChange = onAttachedDraftChange
@@ -186,23 +191,33 @@ struct PlaceProfileFullScreen: View {
             saves: saves,
             currentUserID: currentUserID,
             action: action,
-            saveActionSnapshot: saveActionSnapshot,
-            attachedSaveContext: $attachedSaveContext,
-            attachedSaveDraft: attachedSaveDraft,
+            saveActionSnapshot: resolvedSaveActionSnapshot,
+            attachedSaveContext: onFloatingAction == nil ? $localSaveContext : $attachedSaveContext,
+            attachedSaveDraft: onFloatingAction == nil ? localSaveDraft : attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
             onAddToList: onAddToList,
-            onFloatingAction: onFloatingAction,
-            onAttachedDraftChange: onAttachedDraftChange,
-            onAttachedSave: onAttachedSave,
+            onFloatingAction: handleSaveAction,
+            onAttachedDraftChange: updateSaveDraft,
+            onAttachedSave: saveSubmission,
             onAttachedRemove: onAttachedRemove,
-            onAttachedClose: onAttachedClose,
-            onAttachedSaveCompleted: onAttachedSaveCompleted
+            onAttachedClose: closeSave,
+            onAttachedSaveCompleted: completeSave
         )
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
+        .onAppear {
+            // Every entry point captures the same rollout decision once.
+            // Resolve it for the first render too, avoiding an inline-CTA flash.
+            if saveActionSnapshot == nil {
+                saveActionSnapshot = resolvedSaveActionSnapshot
+            }
+        }
+        .onDisappear {
+            if localSaveContext != nil { closeSave() }
+        }
         .onChange(of: currentUserActionState) { _, state in
             guard let snapshot = saveActionSnapshot,
                   snapshot.usesFloatingActions,
@@ -214,11 +229,108 @@ struct PlaceProfileFullScreen: View {
 
     private var currentUserActionState: PlaceProfileSaveActionState {
         PlaceProfileSaveActionPolicy.state(
-            saves: saves,
-            currentUserID: currentUserID,
+            currentUserSave: currentUserSave,
             hasSharedVisitInvitation: false,
-            isReadOnly: false
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
         )
+    }
+
+    private var resolvedSaveActionSnapshot: PlaceProfileSaveActionSnapshot {
+        saveActionSnapshot ?? PlaceProfileSaveActionPolicy.snapshot(
+            state: currentUserActionState,
+            isSignedIn: auth.isSignedIn,
+            resolvedFlagValue: backend.featureFlag(.placeProfileSaveTrayV1, for: currentUserID)
+        )
+    }
+
+    private var currentUserSave: VisiblePlace? {
+        MapPlaceSaveContext.currentUserSave(matching: place.saveCandidate, in: store.currentUserVisiblePlaces)
+            ?? saves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+    }
+
+    private var localSaveDraft: PlaceSaveDraft? {
+        guard let context = localSaveContext,
+              let draft = placeSaveDraftStore.draft,
+              draft.ownerUserID == currentUserID,
+              draft.candidate.id == context.candidate.id
+        else { return nil }
+        return draft
+    }
+
+    private func handleSaveAction(_ action: PlaceProfileSaveAction) {
+        if let onFloatingAction {
+            onFloatingAction(action)
+            return
+        }
+        guard walkthroughs.activeSurface != .placeDetail else { return }
+        auth.requireSignIn(for: .socialSave) {
+            let baseContext: MapPlaceSaveContext
+            if let own = currentUserSave {
+                baseContext = .reselectCurrentUserSave(
+                    own,
+                    defaultVisibility: store.effectiveDefaultVisibility,
+                    attributes: store.attributes(for: own.userPlace.id),
+                    latestVisit: store.visits(for: own.userPlace.id).first
+                )
+            } else if let visible = saves.first?.visiblePlace {
+                baseContext = .addVisiblePlace(
+                    visible,
+                    defaultVisibility: store.effectiveDefaultVisibility,
+                    attributes: visible.attributes
+                )
+            } else {
+                baseContext = .addCandidate(
+                    place.saveCandidate, sourceType: .manual,
+                    defaultVisibility: store.effectiveDefaultVisibility
+                )
+            }
+            guard let context = PlaceProfileSaveActionPolicy.profileSaveContext(
+                action: action, baseContext: baseContext
+            ) else { return }
+            if action.kind != .wanna,
+               let draft = placeSaveDraftStore.draft,
+               draft.ownerUserID == currentUserID,
+               draft.candidate.id == context.candidate.id {
+                var form = draft.form
+                form.step = .details
+                form.selectedStatus = context.initialStatus
+                placeSaveDraftStore.update(draftID: draft.id, form: form, submittedAt: nil)
+            } else if let draft = PlaceSaveDraft.restorableFlow(ownerUserID: currentUserID, context: context) {
+                placeSaveDraftStore.begin(draft)
+            }
+            localSaveContext = context
+        }
+    }
+
+    private func updateSaveDraft(draftID: UUID, form: PlaceSaveDraftForm, submittedAt: Date?) {
+        if onFloatingAction != nil {
+            onAttachedDraftChange(draftID, form, submittedAt)
+        } else {
+            placeSaveDraftStore.update(draftID: draftID, form: form, submittedAt: submittedAt)
+        }
+    }
+
+    private func saveSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        if onFloatingAction != nil { return await onAttachedSave(submission) }
+        return await persistAddPlaceSaveSubmission(submission, store: store, backend: auth.isSignedIn ? backend : nil)
+    }
+
+    private func closeSave() {
+        if onFloatingAction != nil {
+            onAttachedClose()
+        } else {
+            localSaveContext = nil
+            store.saveFlowDidDismiss(.saveSheet)
+        }
+    }
+
+    private func completeSave(_ result: SaveResult) {
+        if onFloatingAction != nil {
+            onAttachedSaveCompleted(result)
+        } else {
+            placeSaveDraftStore.clear()
+            closeSave()
+        }
     }
 
     static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
@@ -1449,7 +1561,9 @@ private struct PlaceProfileFullView: View {
                                 .id(WalkthroughTargetID.placeRatings)
                                 .walkthroughTarget(.placeRatings)
 
-                            if !usesFloatingActions, action != .none {
+                            // Import candidate inspection also has a selection
+                            // callback, independent of saving a Check in/Wanna.
+                            if action == .choose || (!usesFloatingActions && action != .none) {
                                 primaryPlaceAction
                             }
 

@@ -5,6 +5,18 @@ import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testSharedPlaceRoutingResetsMapBeforeSelectingTheLinkedPlace() throws {
+        let map = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
+        let handler = try sourceSection(
+            map,
+            after: "private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {",
+            before: "private func canApplyDeferredMapNavigation("
+        )
+        let reset = try XCTUnwrap(handler.range(of: "handlePresentationResetRequest(presentationResetRequest)"))
+        let select = try XCTUnwrap(handler.range(of: "await openNotificationPlace("))
+        XCTAssertLessThan(reset.lowerBound, select.lowerBound)
+    }
+
     func testAddOptionsUsesMeasuredHeightWithAndWithoutPendingImports() {
         XCTAssertEqual(AddSuggestedPlaces.showMoreHeight, 44)
         for hasPendingImports in [false, true] {
@@ -255,7 +267,8 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
-        XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
+        XCTAssertTrue(root.contains("FeedScreen("))
+        XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
@@ -916,7 +929,9 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss)"))
+        XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 
@@ -3898,7 +3913,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profile.contains(".accessibilityHidden(showsSettings)"))
         XCTAssertTrue(profile.contains(".allowsHitTesting(!showsSettings)"))
         XCTAssertTrue(profile.contains(".transition(.move(edge: .trailing))"))
-        XCTAssertTrue(profile.contains(".toolbar(showsSettings ? .hidden : .visible, for: .tabBar)"))
+        XCTAssertTrue(profile.contains("showsSettings || showsYourMapPrototype ? .hidden : .automatic"))
+        XCTAssertFalse(profile.contains(".toolbar(showsSettings ? .hidden : .visible, for: .tabBar)"))
         XCTAssertTrue(profile.contains("onSettingsDidDismiss()"))
         XCTAssertTrue(root.contains("NavigationStack {\n                        SettingsScreen("))
 
@@ -4581,7 +4597,8 @@ final class NavigationContractTests: XCTestCase {
             before: "private struct PlacePhotoGalleryViewerRoute: Identifiable"
         )
 
-        XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
+        XCTAssertTrue(fullView.contains("if action == .choose || (!usesFloatingActions && action != .none)"))
+        XCTAssertTrue(placeProfile.contains("saveActionSnapshot: resolvedSaveActionSnapshot"))
         XCTAssertTrue(fullView.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(fullView.contains("if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty"))
         XCTAssertTrue(fullView.contains("saveActionSnapshot?.usesFloatingActions == true"))
