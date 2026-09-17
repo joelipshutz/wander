@@ -4,6 +4,58 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testSharedProfileWannaAlwaysStartsFreshForEveryExistingPlaceState() throws {
+        let owner = profile(id: "current", handle: "current")
+        let venue = place(id: "profile-entry", category: "coffee")
+        let wanna = try XCTUnwrap(PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.last)
+        for status in [PlaceStatus.wannaGo, .been] {
+            let own = summary(owner: owner, place: venue, status: status, ratingScore: nil, tags: []).visiblePlace
+            let base = MapPlaceSaveContext.reselectCurrentUserSave(
+                own, defaultVisibility: .selfOnly, attributes: [], latestVisit: nil
+            )
+            let context = try XCTUnwrap(PlaceProfileSaveActionPolicy.profileSaveContext(action: wanna, baseContext: base))
+            XCTAssertEqual(context.initialStatus, .wannaGo)
+            XCTAssertEqual(context.initialVisibility, base.initialVisibility)
+            XCTAssertEqual(context.candidate, base.candidate)
+            XCTAssertNil(context.existingCurrentUserSave)
+            XCTAssertEqual(context.initialNote, "")
+            XCTAssertFalse(context.requiresStatusConfirmation)
+            guard case .add = context.mode else { return XCTFail("Wanna must create a new event, never edit or check in") }
+        }
+    }
+
+    func testSharedProfileCheckInPreservesExistingVisitRouting() throws {
+        let owner = profile(id: "current", handle: "current")
+        let venue = place(id: "profile-entry", category: "coffee")
+        let checkIn = try XCTUnwrap(PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first)
+        for status in [PlaceStatus.wannaGo, .been] {
+            let own = summary(owner: owner, place: venue, status: status, ratingScore: nil, tags: []).visiblePlace
+            let base = MapPlaceSaveContext.reselectCurrentUserSave(
+                own, defaultVisibility: .followers, attributes: [], latestVisit: nil
+            )
+            let context = try XCTUnwrap(PlaceProfileSaveActionPolicy.profileSaveContext(action: checkIn, baseContext: base))
+            XCTAssertEqual(context.initialStatus, .been)
+            XCTAssertEqual(context.existingCurrentUserSave?.id, own.id)
+            guard case .addVisit = context.mode else { return XCTFail("Check in must append a visit to the existing place") }
+        }
+    }
+
+    func testSharedUnsavedProfileActionsPreserveCandidateAndSelectedStatus() throws {
+        let candidate = PlaceCandidate(id: "provider-place", name: "Cafe", category: "coffee",
+            address: "123 Example St", latitude: 34, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "provider-id", confidence: 1)
+        let profilePlace = PlaceSheetPlace(candidate: candidate)
+        XCTAssertEqual(profilePlace.saveCandidate, candidate)
+        let base = MapPlaceSaveContext.addCandidate(candidate, sourceType: .manual, defaultVisibility: .selfOnly)
+        for action in PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions {
+            let context = try XCTUnwrap(PlaceProfileSaveActionPolicy.profileSaveContext(action: action, baseContext: base))
+            XCTAssertEqual(context.candidate, candidate)
+            XCTAssertEqual(context.initialStatus, action.destinationStatus)
+            XCTAssertEqual(context.initialVisibility, .selfOnly)
+            XCTAssertFalse(context.requiresStatusConfirmation)
+        }
+    }
+
     @MainActor
     func testEverySaveEntryPointUsesTheSharedHalfSheetDetent() {
         XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 560)
