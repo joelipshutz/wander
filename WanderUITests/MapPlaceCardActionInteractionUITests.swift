@@ -176,6 +176,9 @@ final class FeedPostcardInteractionUITests: XCTestCase {
             "https://getrec.me/places/50000000-0000-0000-0000-000000000386"
         ] {
             let app = profileRoutesApp(initialTab: "discover")
+            // Screenshot mode bypasses WanderAppSessionRoot and its onOpenURL
+            // handler. Exercise the actual app entry for shared links.
+            app.launchArguments.removeAll { $0 == "-WanderMapCapture" }
             app.launchArguments += ["-WanderREC386PhotoFixture"]
             app.launch()
             XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
