@@ -1,0 +1,326 @@
+[
+  {
+    "name": "applied_confirmation",
+    "valid": true,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "replay_after_cancellation",
+    "valid": true,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "canceled",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "already_applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "replay_after_post_deletion",
+    "valid": true,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "complete_event_checkin",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "completed_post_deleted",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "complete_event_checkin",
+      "outcome": "already_applied",
+      "effect": {
+        "completion_id": "completion_fixture_1",
+        "visit_id": "visit_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "known_rejection",
+    "valid": true,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "authenticated_none",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "rejected",
+      "effect": null,
+      "error": {
+        "code": "capacity_unavailable",
+        "retry_class": "refresh"
+      }
+    }
+  },
+  {
+    "name": "denied_replay",
+    "valid": true,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "event_access_denied",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "rejected",
+      "effect": null,
+      "error": {
+        "code": "permission_denied",
+        "retry_class": "none"
+      }
+    }
+  },
+  {
+    "name": "missing_error",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      }
+    }
+  },
+  {
+    "name": "missing_effect",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "authenticated_none",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "rejected",
+      "error": {
+        "code": "capacity_unavailable",
+        "retry_class": "refresh"
+      }
+    }
+  },
+  {
+    "name": "wrong_operation",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_other",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "success_with_error",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": {
+        "code": "capacity_unavailable",
+        "retry_class": "refresh"
+      }
+    }
+  },
+  {
+    "name": "replay_cannot_bypass_denial",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "event_access_denied",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "already_applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "success_cannot_be_anonymous",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "anonymous_unknown",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "missing_generation_field",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "expected_revision": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  },
+  {
+    "name": "missing_revision_field",
+    "valid": false,
+    "request": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "event_id": "evt_fixture_vinyl",
+      "target_generation_id": null,
+      "payload": {}
+    },
+    "current_state_fixture": "confirmed",
+    "result": {
+      "contract_version": 1,
+      "operation_id": "op_fixture_1",
+      "kind": "submit_rsvp",
+      "outcome": "applied",
+      "effect": {
+        "booking_id": "booking_fixture_rachel",
+        "generation_id": "generation_fixture_1"
+      },
+      "error": null
+    }
+  }
+]

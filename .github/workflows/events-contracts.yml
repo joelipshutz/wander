@@ -1,0 +1,47 @@
+name: Events contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'AstirEventsShared/**'
+      - 'events-web/**'
+      - 'tests/fixtures/events/**'
+      - '.github/workflows/events-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'AstirEventsShared/**'
+      - 'events-web/**'
+      - 'tests/fixtures/events/**'
+      - '.github/workflows/events-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-contracts:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and exercise shared native contract
+        run: swift test --package-path AstirEventsShared
+
+  browser-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned compiler only
+        run: npx --yes pnpm@11.19.0 --dir events-web install --frozen-lockfile --ignore-scripts
+      - name: Check browser contract types
+        run: node events-web/node_modules/typescript/bin/tsc --project events-web/tsconfig.json --noEmit
+      - name: Exercise same wire fixtures in browser contract
+        run: node --test events-web/tests/contracts/*.test.ts

@@ -322,6 +322,7 @@ Planned files: `WanderTests/Events/EventRSVPIdentityTests.swift`, `WanderUITests
 - No proof from a different account/old number or a locally populated phone string qualifies; those controls route to verification.
 - Even with reusable identity, evaluate current event registration, invitation code, approval and capacity; identity reuse does not imply confirmation.
 - A refresh or repeated tap does not create a new challenge, booking or confirmation message for an already-completed operation.
+- Explicit missing-name variant: retain current matching verified phone proof, collect only the missing name, and assert zero phone-challenge creation/SMS sends before continuing RSVP. T01 contract field-selection proof alone does not satisfy the provider/UI send-count assertion.
 
 Source authority: D17; agreed
 
