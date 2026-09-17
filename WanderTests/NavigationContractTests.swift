@@ -5329,7 +5329,10 @@ final class NavigationContractTests: XCTestCase {
             1,
             "The empty Feed state must provide a stable activity walkthrough target."
         )
-        XCTAssertTrue(feed.contains("group.id == groups.first?.id ? .feedActivity : nil"))
+        XCTAssertTrue(
+            feed.contains("group.id == groups.first?.id ? .feedActivity : nil"),
+            "The first displayed activity group must remain the Feed walkthrough target."
+        )
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 
         let backHandler = try sourceSection(
