@@ -6,6 +6,60 @@ import ClerkKit
 
 @MainActor
 final class AuthSessionTests: XCTestCase {
+    func testLegacySessionDecodesWithoutAppleContext() throws {
+        let data = Data(#"{"userID":"legacy","displayName":"Maya","handle":"maya"}"#.utf8)
+        let session = try JSONDecoder().decode(AuthSession.self, from: data)
+        XCTAssertNil(session.isAppleSignIn)
+    }
+
+    func testAppleContextSurvivesOfflineCacheWithoutContactInformation() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let cache = AuthSessionCache.file(url: url)
+        cache.save(AuthSession(userID: "apple_user", displayName: nil, handle: nil,
+                               email: "relay@privaterelay.appleid.com", isAppleSignIn: true))
+        XCTAssertEqual(cache.load()?.isAppleSignIn, true)
+        XCTAssertNil(cache.load()?.email)
+    }
+
+    #if canImport(ClerkKit)
+    func testAppleOnboardingContextSurvivesRefreshRelaunchAndDoesNotLeakToAnotherSession() async throws {
+        let suite = "AppleOnboardingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let context = AppleSignInSessionStore.preferences(defaults)
+        let session = AuthSession(userID: "same_user", displayName: nil, handle: nil)
+        var activeID = "apple_session"
+        func makeService() -> ClerkAuthService {
+            ClerkAuthService(
+                configuration: WanderBackendConfiguration.current { "$(\($0))" },
+                resolveSession: { resolvedSession(session, clerkSessionID: activeID) },
+                resolveSessionID: { activeID },
+                activateSession: { activeID = $0 },
+                sessionCache: .disabled,
+                nativeAuthSessionFenceStore: .disabled,
+                appleSignInSessionStore: context,
+                sessionAdoptionRetryDelaysNanoseconds: [],
+                configureClerk: { $0 }
+            )
+        }
+        let initial = makeService()
+        _ = try await initial.adoptCompletedNativeAuthSession(expectedSessionID: activeID, isAppleSignIn: true)
+        XCTAssertEqual(initial.state.session?.isAppleSignIn, true)
+        await initial.refreshSession()
+        XCTAssertEqual(initial.state.session?.isAppleSignIn, true)
+        let relaunched = makeService()
+        await relaunched.refreshSession()
+        XCTAssertEqual(relaunched.state.session?.isAppleSignIn, true)
+        activeID = "google_or_email_session"
+        await relaunched.refreshSession()
+        XCTAssertNil(relaunched.state.session?.isAppleSignIn)
+        _ = try await relaunched.adoptCompletedNativeAuthSession(expectedSessionID: activeID)
+        XCTAssertNil(context.load())
+        XCTAssertNil(relaunched.state.session?.isAppleSignIn)
+    }
+    #endif
+
     func testCanonicalProductionUserIDPreservesExistingAccountIdentity() {
         XCTAssertEqual(
             ClerkAuthService.resolvedUserID(

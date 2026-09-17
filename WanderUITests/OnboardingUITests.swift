@@ -2836,6 +2836,42 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testAppleIdentityNeedsOnlyUsernameAndContinuesWithoutName() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderAppleOnboardingUITest",
+                               "-WanderOnboardingUITestStep", "identity"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Choose your username"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.textFields["How friends know you"].exists)
+        let username = app.textFields["your_username"]
+        XCTAssertTrue(username.exists)
+        let next = app.buttons["onboarding.identity.continue"]
+        XCTAssertFalse(next.isEnabled)
+        username.tap()
+        username.typeText("apple_review")
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: next)
+        waitForExpectations(timeout: 10)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-530 Apple username only"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Choose your username"].waitForNonExistence(timeout: 10))
+    }
+
+    func testNonAppleIdentityStillShowsNameAndUsername() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "identity"]
+        app.launch()
+        XCTAssertTrue(app.textFields["How friends know you"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textFields["your_username"].exists)
+        XCTAssertFalse(app.staticTexts["Choose your username"].exists)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-530 non-Apple profile unchanged"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testLoggedOutCarouselPagesKeepActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]

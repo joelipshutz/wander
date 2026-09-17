@@ -51,6 +51,8 @@ struct AuthSession: Codable, Equatable, Identifiable, Sendable {
     let handle: String?
     let email: String?
     let phoneNumber: String?
+    // Optional for compatibility with sessions cached before Apple-only onboarding.
+    var isAppleSignIn: Bool?
 
     var id: String { userID }
 
@@ -59,13 +61,15 @@ struct AuthSession: Codable, Equatable, Identifiable, Sendable {
         displayName: String?,
         handle: String?,
         email: String? = nil,
-        phoneNumber: String? = nil
+        phoneNumber: String? = nil,
+        isAppleSignIn: Bool? = nil
     ) {
         self.userID = userID
         self.displayName = displayName
         self.handle = handle
         self.email = email
         self.phoneNumber = phoneNumber
+        self.isAppleSignIn = isAppleSignIn
     }
 }
 
@@ -104,7 +108,8 @@ struct AuthSessionCache {
                     let cachedSession = AuthSession(
                         userID: session.userID,
                         displayName: session.displayName,
-                        handle: session.handle
+                        handle: session.handle,
+                        isAppleSignIn: session.isAppleSignIn
                     )
                     let data = try JSONEncoder().encode(cachedSession)
                     try data.write(
@@ -118,6 +123,29 @@ struct AuthSessionCache {
                     )
                     #endif
                 }
+            }
+        )
+    }
+}
+
+/// UI context only: never used as proof of authentication or account ownership.
+/// Match the exact Clerk session so linked Apple accounts signing in by email
+/// or Google retain their normal onboarding, including after a relaunch.
+@MainActor
+struct AppleSignInSessionStore {
+    let load: () -> String?
+    let save: (String?) -> Void
+
+    static let disabled = AppleSignInSessionStore(load: { nil }, save: { _ in })
+    static let live = preferences(.standard)
+
+    static func preferences(_ defaults: UserDefaults) -> AppleSignInSessionStore {
+        let key = "astir.onboarding.appleSignInSession.v1"
+        return AppleSignInSessionStore(
+            load: { defaults.string(forKey: key) },
+            save: { sessionID in
+                if let sessionID { defaults.set(sessionID, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
             }
         )
     }
