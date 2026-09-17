@@ -5,6 +5,18 @@ import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testSharedPlaceRoutingResetsMapBeforeSelectingTheLinkedPlace() throws {
+        let map = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
+        let handler = try sourceSection(
+            map,
+            after: "private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {",
+            before: "private func canApplyDeferredMapNavigation("
+        )
+        let reset = try XCTUnwrap(handler.range(of: "handlePresentationResetRequest(presentationResetRequest)"))
+        let select = try XCTUnwrap(handler.range(of: "await openNotificationPlace("))
+        XCTAssertLessThan(reset.lowerBound, select.lowerBound)
+    }
+
     func testAddOptionsUsesMeasuredHeightWithAndWithoutPendingImports() {
         XCTAssertEqual(AddSuggestedPlaces.showMoreHeight, 44)
         for hasPendingImports in [false, true] {
