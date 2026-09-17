@@ -292,19 +292,21 @@ final class MapPlaceListPickerTests: XCTestCase {
             XCTAssertEqual(selected.renderingMode, .alwaysOriginal)
             XCTAssertEqual(unselected.renderingMode, .alwaysTemplate)
             XCTAssertEqual(try paperFillRGBA(selected), [240, 90, 60, 255])
-            XCTAssertEqual(
-                try paperFillRGBA(unselected.withTintColor(.white, renderingMode: .alwaysOriginal)),
-                [255, 255, 255, 255]
-            )
+            XCTAssertEqual(try paperFillRGBA(unselected, tintColor: .white), [255, 255, 255, 255])
+            XCTAssertEqual(try paperFillRGBA(unselected, tintColor: .black), [0, 0, 0, 255])
             XCTAssertTrue(selected === PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark))
         }
     }
 
-    private func paperFillRGBA(_ image: UIImage) throws -> [UInt8] {
-        // UIKit can carry tint as rendering metadata while cgImage keeps the
-        // original pixels. Draw the UIImage before inspecting its displayed fill.
-        let rendered = UIGraphicsImageRenderer(size: image.size).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: image.size))
+    private func paperFillRGBA(_ image: UIImage, tintColor: UIColor = .white) throws -> [UInt8] {
+        // Sample UIKit's displayed pixels: cgImage contains the untinted template mask.
+        let imageView = UIImageView(image: image)
+        imageView.tintColor = tintColor
+        imageView.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        let rendered = UIGraphicsImageRenderer(size: image.size, format: format).image { context in
+            imageView.layer.render(in: context.cgContext)
         }
         let source = try XCTUnwrap(rendered.cgImage)
         // A center pixel between rows measures opaque sheet fill without edge antialiasing.

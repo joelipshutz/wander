@@ -673,10 +673,16 @@ private struct PublicSharedPlacePreview: Decodable {
 struct SupabaseFeedRepository: FeedRepository {
     private let rpc: RemoteProcedureCalling
     private let storage: (any RemoteStorageCalling)?
+    private let includesFeaturedPlaces: Bool
 
-    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
+    init(
+        rpc: RemoteProcedureCalling,
+        storage: (any RemoteStorageCalling)? = nil,
+        includesFeaturedPlaces: Bool = FeedPresentation.showsFeaturedPlaces
+    ) {
         self.rpc = rpc
         self.storage = storage ?? (rpc as? any RemoteStorageCalling)
+        self.includesFeaturedPlaces = includesFeaturedPlaces
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
@@ -688,10 +694,27 @@ struct SupabaseFeedRepository: FeedRepository {
         limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
-        let response: RemoteFollowedFeedPageDTO = try await rpc.call(
-            "followed_feed",
-            params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
-        )
+        let boundedLimit = min(max(limit, 1), 50)
+        let response: RemoteFollowedFeedPageDTO
+        do {
+            response = try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(
+                    before: before, limit: boundedLimit,
+                    includeFeatured: includesFeaturedPlaces ? nil : false
+                )
+            )
+        } catch {
+            // Rolling deployments may briefly have the old RPC signature.
+            // Never retry auth, transport, or ordinary server failures here.
+            guard !includesFeaturedPlaces,
+                  Self.isMissingActivityOnlyOverload(error)
+            else { throw error }
+            response = try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(before: before, limit: boundedLimit)
+            )
+        }
         // This projection uses the same server-authorized rows. Media arrives
         // later, so slow storage/signing cannot hold up the first Feed cards.
         let content = try await response.followedFeedPage(
@@ -724,6 +747,11 @@ struct SupabaseFeedRepository: FeedRepository {
             storage: storage,
             mediaByActivityID: mediaByActivityID
         )
+    }
+
+    static func isMissingActivityOnlyOverload(_ error: Error) -> Bool {
+        guard case WanderRemoteError.invalidResponse(let message) = error else { return false }
+        return message.contains("PGRST202") && message.contains("followed_feed")
     }
 }
 
@@ -3535,10 +3563,12 @@ private struct ProfileVisiblePlacesParams: Encodable {
 private struct FollowedFeedParams: Encodable {
     let before: String?
     let limit: Int
+    var includeFeatured: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case before = "input_before"
         case limit = "input_limit"
+        case includeFeatured = "input_include_featured"
     }
 }
 
