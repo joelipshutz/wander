@@ -810,8 +810,7 @@ struct WanderRootView: View {
     }
 
     private var shouldDimBehindAddWalkthrough: Bool {
-        walkthroughs.activeSurface == .add
-            || walkthroughs.activeSurface == .saveFlow
+        walkthroughs.activeSurface == .saveFlow
             || walkthroughs.requestedSurface == .map
     }
 
@@ -1169,7 +1168,8 @@ struct WanderRootView: View {
             if newTab == .add {
                 presentAddSheet()
             } else {
-                walkthroughs.perform(.mapTabs)
+                walkthroughs.finishOverviewForUserNavigation()
+                walkthroughs.dismissCurrentContext()
                 // Preserve the system Liquid Glass bar while committing the
                 // destination content without its long selection transition.
                 withTransaction(Transaction(animation: nil)) {
@@ -1183,11 +1183,8 @@ struct WanderRootView: View {
 
     private func presentAddSheet() {
         dismissKeyboard()
-        if walkthroughs.currentStep?.target == .mapAddAgain {
-            walkthroughs.perform(.mapAddAgain)
-        } else {
-            walkthroughs.perform(.mapAdd)
-        }
+        walkthroughs.finishOverviewForUserNavigation()
+        walkthroughs.dismissCurrentContext()
         walkthroughs.transition(to: .add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
@@ -2173,7 +2170,20 @@ struct WanderRootView: View {
             isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
-        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
+        // Enroll only the new-user cohort (or an explicit enabled debug replay).
+        // Its independent marker keeps unfinished hints available after the
+        // primary tour retires, without introducing NUX to established users.
+        walkthroughs.setContextualEnabled(FirstVisitWalkthroughFeatureFlag.isEnabled(
+            isEligible: isEnabled || walkthroughs.hasContextualEnrollment,
+            isUsingLiveData: fixtureMode == .empty,
+            launchArguments: launchArguments,
+            resolvedValue: resolvedFlag?.isEnabled,
+            entitledDebugOverride: debugNUXOverride,
+            isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
+            isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
+        ), enrollCurrentUser: isEnabled)
+        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePrimaryJourney
+            || walkthroughs.isPresentingLaunchLesson
         walkthroughs.setEnabled(isEnabled)
 
         guard isEnabled else {
@@ -2198,6 +2208,7 @@ struct WanderRootView: View {
                     forceRootCleanup: hadActiveWalkthroughPresentation
                 )
             }
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
             return
         }
 
