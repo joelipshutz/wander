@@ -57,6 +57,7 @@
 		1F0CFA9D6277F7F19F5DE064 /* PlaceSaveDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */; };
 		1F0D588284A12A308B3E26A4 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CF6EFF560365043CF67F3324 /* PostHog */; };
 		1F6050501FF55A31CF052BDD /* OnboardingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5C022AA603520F5AFAA348 /* OnboardingState.swift */; };
+		20911F27377D83B9631D2DDD /* CompactPeopleCardsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */; };
 		20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */; };
 		21DB99956D5231546070A9D5 /* ListPlacePhotoResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */; };
 		22366D3693CFC2DA01B4FB7B /* rec-330-camera-preview-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */; };
@@ -400,6 +401,7 @@
 		1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedActivityDisclosure.swift; sourceTree = "<group>"; };
 		18B541F93C896A5613DCA47F /* MapSnapshotListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotListTests.swift; sourceTree = "<group>"; };
 		19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-liquid-glass-pin-transition-pre.json"; sourceTree = "<group>"; };
+		19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactPeopleCardsUITests.swift; sourceTree = "<group>"; };
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
 		1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPlaceImportMetadata.swift; sourceTree = "<group>"; };
 		1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-360-active-pin-layering-and-tap-post.png"; sourceTree = "<group>"; };
@@ -1180,6 +1182,7 @@
 			isa = PBXGroup;
 			children = (
 				EA454CD7CBC8A79CCEE08BBD /* AppStoreScreenshotsUITests.swift */,
+				19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */,
 				711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */,
 				4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */,
 				7327B8B87EDE207236010857 /* FullPageBackSwipeUITests.swift */,
@@ -1791,6 +1794,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				63B4F0219103EE4D48C147C9 /* AppStoreScreenshotsUITests.swift in Sources */,
+				20911F27377D83B9631D2DDD /* CompactPeopleCardsUITests.swift in Sources */,
 				EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */,
 				D0233FBA3CB9F76B5D6E74CD /* FeedActivityGroupingUITests.swift in Sources */,
 				983E4529E27D443CF4EB85D3 /* FullPageBackSwipeUITests.swift in Sources */,
