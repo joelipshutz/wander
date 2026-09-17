@@ -1619,6 +1619,18 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    /// Recommendations can publish while posts are waiting on the network, and
+    /// posts can publish while recommendations are still pending.
+    func refreshFeedSurface(
+        backend: WanderBackend?, preservingActivityID: String? = nil, force: Bool = false
+    ) async {
+        async let people: Void = refreshDiscoverPeopleRecommendations(backend: backend)
+        _ = await refreshFollowedFeed(
+            backend: backend, preservingActivityID: preservingActivityID, force: force
+        )
+        await people
+    }
+
     /// Loads the local Feed fixture only when a remote Feed repository is not
     /// available. Production data is supplied by the server-side event
     /// projection; the fixture keeps demo and visual-QA launches deterministic.
@@ -5779,11 +5791,42 @@ final class WanderStore: ObservableObject {
         return profiles
     }
 
+    var visibleDiscoverPeopleRecommendations: [DiscoverPeopleRecommendation] {
+        guard case .loaded(let recommendations) = discoverPeopleRecommendationsState else { return [] }
+        return recommendations.filter {
+            $0.id != currentUser.id
+                && $0.profile.isPrivateProfile != true
+                && !isProfilePrivate($0.id)
+                && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+    }
+
     func refreshDiscoverPeopleRecommendations(
         backend: WanderBackend?,
         force: Bool = false,
         limit: Int = 20
     ) async {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderCompactPeopleUITest") {
+            let recommendations = [
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_maya", handle: "maya", displayName: "Maya Chen",
+                    avatarURL: nil, bio: nil, relationship: .follower
+                ), reason: .sharedFollows(3), rank: 0),
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_compact_alex", handle: "alex", displayName: "Alex Rivera",
+                    avatarURL: nil, bio: nil, relationship: .nonFollower
+                ), reason: .followsYou, rank: 1),
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_compact_long", handle: "longname", displayName: "Alexandra Montgomery",
+                    avatarURL: nil, bio: nil, relationship: .nonFollower
+                ), reason: .suggested, rank: 2)
+            ]
+            upsertRemoteProfileShells(recommendations.map(\.profile))
+            discoverPeopleRecommendationsState = .loaded(recommendations)
+            return
+        }
+        #endif
         guard let backend, backend.profileRepository != nil else {
             discoverPeopleRecommendationsState = .idle
             return

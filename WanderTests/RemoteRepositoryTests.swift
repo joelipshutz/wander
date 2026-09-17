@@ -1265,6 +1265,56 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
         XCTAssertNil(rpc.rawBodies[0]["input_before"])
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
+        XCTAssertEqual(rpc.rawBodies[0]["input_include_featured"] as? Bool, false)
+    }
+
+    func testFeedFallsBackOnlyWhenActivityOnlyRPCIsNotDeployed() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+        rpc.errors = [.invalidResponse("RPC followed_feed failed with 404: {\"code\":\"PGRST202\"}")]
+        let repository = SupabaseFeedRepository(rpc: rpc)
+        _ = try await repository.followedFeed(before: "cursor", limit: 25)
+        XCTAssertEqual(rpc.calls.count, 2)
+        XCTAssertEqual(rpc.rawBodies[0]["input_include_featured"] as? Bool, false)
+        XCTAssertNil(rpc.rawBodies[1]["input_include_featured"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_before"] as? String, "cursor")
+        XCTAssertEqual(rpc.rawBodies[1]["input_limit"] as? Int, 25)
+    }
+
+    func testFeedPropagatesFailureOfTheLegacyFallbackWithoutRetryingAgain() async {
+        let rpc = RecordingRPC()
+        rpc.errors = [.invalidResponse("RPC followed_feed failed: PGRST202"), .notAuthenticated]
+        do {
+            _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+            XCTFail("Expected the legacy failure")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+        XCTAssertEqual(rpc.calls.count, 2)
+    }
+
+    func testFeedDoesNotRetryNetworkAuthOrOrdinaryServerFailure() async {
+        for error in [WanderRemoteError.notAuthenticated, .invalidResponse("timeout"),
+                      .invalidResponse("RPC followed_feed failed with 500"),
+                      .invalidResponse("PGRST202 some_other_function")] {
+            let rpc = RecordingRPC()
+            rpc.errors = [error]
+            do {
+                _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+                XCTFail("Expected failure")
+            } catch {
+                XCTAssertEqual(rpc.calls.count, 1)
+            }
+        }
+    }
+
+    func testFeaturedCanStillBeRequestedUsingTheOriginalContract() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+        _ = try await SupabaseFeedRepository(rpc: rpc, includesFeaturedPlaces: true)
+            .followedFeed(before: nil, limit: 100)
+        XCTAssertNil(rpc.rawBodies[0]["input_include_featured"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 50)
     }
 
     func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
@@ -5181,6 +5231,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
 
     var responses: [String: Data] = [:]
     var delays: [String: Duration] = [:]
+    var errors: [WanderRemoteError] = []
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
 
@@ -5193,6 +5244,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         rawBodies.append(body)
         calls.append(Call(name: name, body: anyHashableBody(body)))
         if let delay = delays[name] { try await Task.sleep(for: delay) }
+        if !errors.isEmpty { throw errors.removeFirst() }
 
         if Value.self == EmptyRPCResponse.self {
             return EmptyRPCResponse() as! Value
