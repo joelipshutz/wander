@@ -922,6 +922,13 @@ final class WanderBackend: ObservableObject {
 
     func follow(userID: String) async throws {
         guard let followRepository else {
+            #if DEBUG && targetEnvironment(simulator)
+            // Keep the fixture request pending so UI tests can verify tap feedback
+            // independently of the eventual server outcome.
+            if ProcessInfo.processInfo.arguments.contains("-WanderDelayedFollowUITest") {
+                try await Task.sleep(for: .seconds(5))
+            }
+            #endif
             throw WanderRemoteError.notConfigured
         }
 
