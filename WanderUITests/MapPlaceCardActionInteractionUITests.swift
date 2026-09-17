@@ -178,38 +178,11 @@ final class FeedPostcardInteractionUITests: XCTestCase {
             "recme://places/50000000-0000-0000-0000-000000000386",
             "https://getrec.me/places/50000000-0000-0000-0000-000000000386"
         ] {
-            let app = profileRoutesApp(initialTab: "discover")
-            // Screenshot mode bypasses AppEntryView's URL handlers.
-            app.launchArguments.removeAll { $0 == "-WanderMapCapture" }
-            app.launchArguments += ["-WanderREC386PhotoFixture"]
+            let app = linkedProfileRoutesApp()
             let url = try XCTUnwrap(URL(string: urlString))
-            if url.scheme == "recme" {
-                app.launch()
-                XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
-                // Open a different venue first, then deliver a system URL
-                // without relaunching the app or losing the Feed cover.
-                let feedPlace = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
-                reveal(feedPlace, in: app)
-                centerProfileEntry(feedPlace, in: app)
-                feedPlace.tap()
-                XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 5))
-                // Do not await URL completion: iOS may wait for the user to
-                // accept its Open Astir confirmation before completing it.
-                let urlOpened = expectation(description: "System delivered the warm place link")
-                UIApplication.shared.open(url, options: [:]) { opened in
-                    XCTAssertTrue(opened)
-                    urlOpened.fulfill()
-                }
-                let open = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-                    .alerts.buttons["Open"]
-                if open.waitForExistence(timeout: 5) { tapWhenSettled(open) }
-                wait(for: [urlOpened], timeout: 10)
-                app.activate()
-            } else {
-                // XCUIApplication.open launches a clean instance: exercise
-                // cold-start universal-URL delivery separately.
-                app.open(url)
-            }
+            // XCUIApplication.open starts a clean instance. Keep cold delivery
+            // independent of the runner's ability to issue a warm system URL.
+            app.open(url)
             let card = app.buttons["map.selectedPlaceCard"]
             XCTAssertTrue(card.waitForExistence(timeout: 15))
             XCTAssertTrue(card.label.contains("Dudley Market QA"))
@@ -219,6 +192,50 @@ final class FeedPostcardInteractionUITests: XCTestCase {
             XCTAssertTrue(card.waitForExistence(timeout: 5))
             app.terminate()
         }
+    }
+
+    func testWarmSharedPlaceLinkReplacesFeedProfile() throws {
+        continueAfterFailure = false
+        let app = linkedProfileRoutesApp()
+        app.launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 15))
+        let feedPlace = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
+        reveal(feedPlace, in: app)
+        centerProfileEntry(feedPlace, in: app)
+        feedPlace.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 5))
+
+        let url = try XCTUnwrap(URL(string: "recme://places/50000000-0000-0000-0000-000000000386"))
+        let urlOpened = expectation(description: "System delivered the warm place link")
+        var deliverySucceeded = false
+        // Completion follows the Open Astir confirmation, so handle the dialog
+        // before waiting. Some simulator runners are rejected as untrusted.
+        UIApplication.shared.open(url, options: [:]) { opened in
+            deliverySucceeded = opened
+            urlOpened.fulfill()
+        }
+        let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
+        if open.waitForExistence(timeout: 5) { tapWhenSettled(open) }
+        wait(for: [urlOpened], timeout: 10)
+        guard deliverySucceeded else {
+            throw XCTSkip("iOS rejected the runner's warm URL request; verify this route from a trusted source on device.")
+        }
+        app.activate()
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        XCTAssertTrue(card.label.contains("Dudley Market QA"))
+        tapWhenSettled(card)
+        assertFloatingProfile(app, name: "Warm custom link")
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+    }
+
+    private func linkedProfileRoutesApp() -> XCUIApplication {
+        let app = profileRoutesApp(initialTab: "discover")
+        // Screenshot mode bypasses AppEntryView's URL handlers.
+        app.launchArguments.removeAll { $0 == "-WanderMapCapture" }
+        app.launchArguments += ["-WanderREC386PhotoFixture"]
+        return app
     }
 
     private func profileRoutesApp(initialTab: String) -> XCUIApplication {
