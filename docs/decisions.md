@@ -206,6 +206,12 @@ existing horizontal rail margins. Accessibility sizes widen cards to 240 points
 and allow content to grow vertically. Following and retry feedback stays inside
 the button so standard cards do not jump in height.
 
+Tapping Follow gives one light haptic and immediately shows Following while
+the request syncs in the background. A pending card uses the same appearance as
+a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
+Failed requests restore the in-button retry action; server completion does not
+generate another haptic.
+
 Featured's views, models, and original database projection remain available.
 `FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
 request contract; restoring it uses the original RPC. The additive
