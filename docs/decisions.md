@@ -194,3 +194,28 @@ are protected from stale reads and acknowledgements; edits never trigger a new
 save celebration or change check-in state or unique-place counters. If the last
 check-in is deleted, an edited original Wanna is restored with its own content
 and visibility; later edits keep that Wanna summary consistent.
+
+## 2026-09-17 — Compact people cards and first Feed load (REC-531)
+
+People worth following occupies the former Featured for you position above
+Recent. Its shared cards are 184 points wide and at least 188 points tall at
+standard text sizes: a 48-point circular portrait, name, short accurate follow
+context, and a full-width 44-point Follow control. Handles and bios stay on the
+profile. Cards retain the adaptive Astir palette, Avenir identity text, and
+existing horizontal rail margins. Accessibility sizes widen cards to 240 points
+and allow content to grow vertically. Following and retry feedback stays inside
+the button so standard cards do not jump in height.
+
+Featured's views, models, and original database projection remain available.
+`FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
+request contract; restoring it uses the original RPC. The additive
+`followed_feed(input_include_featured, input_before, input_limit)` overload skips
+Featured's candidate projection when false, while retaining the same authorized
+activity and cursor semantics. Future activity-projection changes must keep both
+overloads aligned and pass `supabase/tests/feed_activity_only.sql`.
+
+People and posts load independently. Existing in-memory feed content remains
+visible during refresh; authorized text can render before media. No new disk
+cache of social content is introduced. Clients fall back to the original RPC
+only when the new overload is absent from the API schema, allowing either
+deployment order without retrying ordinary network or authorization failures.
