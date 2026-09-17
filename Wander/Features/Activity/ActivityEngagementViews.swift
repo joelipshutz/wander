@@ -695,14 +695,21 @@ private struct ActivityPostcardArtwork: View {
             }
             .accessibilityHidden(true)
 
-            if usesAstirPhotoFallback {
+            if usesAstirPhotoFallback,
+               ActivityPostcardArtworkPolicy.showsDecorativeFallback(
+                   hasVisiblePlace: visiblePlace != nil,
+                   mediaCount: media.count
+               ) {
                 AstirPlacePhotoAsset(
                     stableKey: visiblePlace?.place.id ?? fallbackIcon
                 )
                 .accessibilityHidden(true)
             }
 
-            if let visiblePlace {
+            if ActivityPostcardArtworkPolicy.showsPlacePhoto(
+                hasVisiblePlace: visiblePlace != nil,
+                mediaCount: media.count
+            ), let visiblePlace {
                 FeedResolvedPlacePhoto(place: visiblePlace)
             }
 
@@ -744,6 +751,16 @@ private struct ActivityPostcardArtwork: View {
             }
             .accessibilityLabel(media.accessibilityLabel)
         }
+    }
+}
+
+enum ActivityPostcardArtworkPolicy {
+    static func showsPlacePhoto(hasVisiblePlace: Bool, mediaCount: Int) -> Bool {
+        hasVisiblePlace && mediaCount == 0
+    }
+
+    static func showsDecorativeFallback(hasVisiblePlace: Bool, mediaCount: Int) -> Bool {
+        !hasVisiblePlace && mediaCount == 0
     }
 }
 
