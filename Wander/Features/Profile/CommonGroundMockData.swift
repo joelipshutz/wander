@@ -152,16 +152,20 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
 
     var narrativeTitle: String {
         switch narrative {
-        case .sharedRegulars: "You both love \(name)."
-        case .sharedRatings: "\(name) won you both over."
+        case .sharedRegulars: "You both love \(name)"
+        case .sharedRatings: "\(name) won you both over"
         case .mutualWanna:
-            totalVisits > 0 ? "You both want to go to \(name)." : "You both want to try \(name)."
+            "You both want to go to \(name)"
         case .joeIntroduces:
             youVisits > 0 ? "\(partner.shortName) loves \(name). Go back together?" : "\(partner.shortName) loves \(name). You’re next?"
         case .youIntroduce:
-            joeVisits > 0 ? "You and \(partner.shortName) could go back to \(name)." : "You could show \(partner.shortName) \(name)."
-        case .history: "You’ve both saved \(name)."
+            joeVisits > 0 ? "You and \(partner.shortName) could go back to \(name)" : "You could show \(partner.shortName) \(name)"
+        case .history: "You’ve both been to \(name)"
         }
+    }
+
+    var narrativeDetail: String {
+        reason.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
     }
 
     var narrativeSymbol: String {

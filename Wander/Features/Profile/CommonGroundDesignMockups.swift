@@ -184,7 +184,7 @@ private struct CommonGroundDetailMockup: View {
                 Spacer()
                 CommonGroundSparkStamp(symbol: "flame.fill")
             }
-            Text("You both love Narwhal.")
+            Text("You both love Narwhal")
                 .font(AstirTypography.screenTitle).fixedSize(horizontal: false, vertical: true)
             Text("18 check-ins for you. 17 for Joe.\nSafe to say you’ve both found your spot.")
                 .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
@@ -310,25 +310,16 @@ struct CommonGroundMixMockup: View {
             LazyVStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("\(viewer.shortName) + \(partner.shortName)")
-                                .font(AstirTypography.caption)
-                                .foregroundStyle(brand.secondaryText)
-                            (Text("In ") + Text("Common").italic())
-                                .font(.system(.title, design: .serif).weight(.medium))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityLabel("In Common")
-                                .accessibilityAddTraits(.isHeader)
-                                .accessibilityIdentifier("common-ground.collection-title")
+                        HStack(spacing: -10) {
+                            CommonGroundPersonAvatar(person: viewer, size: 52)
+                            CommonGroundPersonAvatar(person: partner, size: 52)
                         }
-                        .layoutPriority(1)
+                        Text("\(viewer.shortName) + \(partner.shortName)")
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brand.primaryText)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                            .layoutPriority(1)
                         Spacer(minLength: 0)
-                        if !dynamicTypeSize.isAccessibilitySize {
-                            HStack(spacing: -7) {
-                                CommonGroundPersonAvatar(person: viewer, size: 38)
-                                CommonGroundPersonAvatar(person: partner, size: 38)
-                            }
-                        }
                     }
                     HStack(alignment: .center) {
                         areaPicker
@@ -363,6 +354,18 @@ struct CommonGroundMixMockup: View {
             .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 32)
         }
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                (Text("In ") + Text("Common").italic())
+                    .font(.system(.headline, design: .serif).weight(.semibold))
+                    .foregroundStyle(brand.primaryText)
+                    .accessibilityLabel("In Common")
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("common-ground.collection-title")
+            }
+        }
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .astirScreen()
         .onChange(of: cities) { _, cities in
             if livePlaces != nil && area != "All places" && !cities.contains(area) { area = "All places" }
@@ -415,7 +418,7 @@ private struct CommonGroundPlaceStory: View {
                     if place.kind == .returnTogether {
                         regulars
                     } else {
-                        Label(place.kind == .mutualWanna ? "In both of your Wannas" : place.reason,
+                        Label(place.kind == .mutualWanna ? "In both of your Wannas" : place.narrativeDetail,
                               systemImage: place.kind == .mutualWanna ? "bookmark.fill" : "mappin.and.ellipse")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brand.secondaryText)
@@ -452,7 +455,7 @@ private struct CommonGroundPlaceStory: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 headline
-                Text(place.reason)
+                Text(place.narrativeDetail)
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brand.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -468,7 +471,7 @@ private struct CommonGroundPlaceStory: View {
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(place.reason)
+        .accessibilityLabel(place.narrativeDetail)
     }
 
     private var sharedRatings: some View {
@@ -489,7 +492,7 @@ private struct CommonGroundPlaceStory: View {
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(place.reason)
+        .accessibilityLabel(place.narrativeDetail)
     }
 
     private func personEvidence(name: String, person: CommonGroundPerson, value: String) -> some View {
@@ -554,15 +557,9 @@ private struct CommonGroundPlaceStory: View {
                     Image(systemName: "arrow.up.right")
                 }
                 .font(AstirTypography.control)
-                .foregroundStyle(place.bothRegulars ? brand.accentForeground : brand.accentText)
+                .foregroundStyle(brand.accentForeground)
                 .padding(.horizontal, 18).frame(minHeight: 44)
-                .background {
-                    if place.bothRegulars {
-                        Capsule().fill(brand.accent)
-                    } else {
-                        Capsule().stroke(brand.border, lineWidth: 1)
-                    }
-                }
+                .background(brand.accent, in: Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("common-ground.invite.\(place.id)")
@@ -779,7 +776,7 @@ private struct CommonGroundProfileMockup: View {
                         CommonGroundSectionHeading(title: "In Common")
                         HStack(spacing: 12) {
                             CommonGroundAvatarPair(size: 34)
-                            Text("You both love Narwhal.").font(AstirTypography.cardTitle)
+                            Text("You both love Narwhal").font(AstirTypography.cardTitle)
                         }
                         Text("35 check-ins between you. And a few new places to make your own.")
                             .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)

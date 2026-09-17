@@ -58,6 +58,8 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         var invitation = try draft("not-no-bar")
         XCTAssertNil(invitation.suggestedDate)
         XCTAssertNil(invitation.whenText)
+        XCTAssertEqual(invitation.linkTitle, "Let’s go to Not No Bar together")
+        XCTAssertEqual(invitation.linkSubtitle, "Date TBD")
         XCTAssertFalse(invitation.shareText.contains("When:"))
 
         let selectedDate = Date(timeIntervalSince1970: 1_789_837_245.25)
@@ -67,6 +69,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         XCTAssertEqual(recipientDraft, invitation)
         XCTAssertEqual(recipientDraft.suggestedDate, selectedDate)
         XCTAssertEqual(recipientDraft.whenText, selectedDate.formatted(date: .abbreviated, time: .shortened))
+        XCTAssertEqual(recipientDraft.linkSubtitle, recipientDraft.whenText)
         XCTAssertEqual(recipientDraft.shareText, invitation.shareText)
         XCTAssertTrue(recipientDraft.shareText.contains("When: \(try XCTUnwrap(recipientDraft.whenText))"))
 
@@ -78,6 +81,8 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
     func testSharePayloadContainsThePlaceAndEvidenceWithoutInventedLinksOrDelivery() throws {
         let invitation = try draft("the-little-room")
         let payload = invitation.shareText
+        XCTAssertEqual(invitation.linkTitle, "Let’s go to The Little Room together")
+        XCTAssertEqual(invitation.linkLocation, "Atwater Village, Los Angeles")
         XCTAssertTrue(payload.contains(invitation.message))
         XCTAssertTrue(payload.contains("The Little Room · Atwater Village, Los Angeles"))
         XCTAssertTrue(payload.contains(invitation.reasonDetail))

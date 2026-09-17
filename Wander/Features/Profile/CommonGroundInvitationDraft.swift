@@ -80,10 +80,25 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         suggestedDate?.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// One title/subtitle contract drives the in-app rehearsal and the rich
+    /// Messages card. The production invite route can publish these same values
+    /// as its Open Graph title and description when that route is introduced.
+    var linkTitle: String {
+        "Let’s go to \(place.name) together"
+    }
+
+    var linkSubtitle: String {
+        whenText ?? "Date TBD"
+    }
+
+    var linkLocation: String {
+        locationText
+    }
+
     var shareContent: WanderShareContent? {
         WanderShareContent.place(
             serverID: place.photoReference?.request.placeID,
-            name: "A plan for us",
+            name: linkTitle,
             message: shareText
         )
     }

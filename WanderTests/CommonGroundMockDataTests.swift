@@ -111,7 +111,7 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertTrue(yourFavorite.joeWanna)
         XCTAssertEqual(yourFavorite.joeVisits, 0)
         XCTAssertGreaterThanOrEqual(yourFavorite.youVisits, 3)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You could show Joe The Little Room.")
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You could show Joe The Little Room")
 
         for candidate in [try place("narwhal"), joesFavorite, yourFavorite] {
             XCTAssertFalse(candidate.reason.contains("/5"), "Repeat evidence should describe check-ins.")
@@ -127,7 +127,8 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertEqual(candidate.kind, .mutualWanna)
         XCTAssertEqual(candidate.reason, "In both of your Wannas")
         XCTAssertTrue(CommonGroundMockData.mix().contains { $0.id == candidate.id })
-        XCTAssertEqual(candidate.narrativeTitle, "You both want to go to Not No Bar.")
+        XCTAssertEqual(candidate.narrativeTitle, "You both want to go to Not No Bar")
+        XCTAssertFalse(candidate.narrativeDetail.hasSuffix("."))
         XCTAssertFalse(CommonGroundInvitationDraft(place: candidate).message.contains("finally"))
     }
 
@@ -148,7 +149,7 @@ final class CommonGroundMockDataTests: XCTestCase {
             joeWannaEventIDs: ["wanna-3"], reason: "In Joe’s Wannas"
         )
         XCTAssertEqual(yourFavorite.kind, .introduce)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You and Joe could go back to Repeat.")
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You and Joe could go back to Repeat")
         for candidate in [joesFavorite, yourFavorite] {
             XCTAssertEqual(CommonGroundInvitationDraft(place: candidate).message,
                            "We both know Repeat\nLet’s go back together?")

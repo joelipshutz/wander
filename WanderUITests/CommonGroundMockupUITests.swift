@@ -52,6 +52,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         let collectionTitle = app.staticTexts["common-ground.collection-title"]
         XCTAssertTrue(collectionTitle.waitForExistence(timeout: 5))
         XCTAssertEqual(collectionTitle.label, "In Common")
+        XCTAssertEqual(app.staticTexts.matching(identifier: "common-ground.collection-title").count, 1)
         let count = app.staticTexts["common-ground.mix-count"]
         assertPositivePlaceCount(on: count)
         let losAngelesCount = count.label
@@ -96,7 +97,8 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertFalse(message.label.contains("Narwhal"), "The invitation should describe the selected place.")
         let invitationLink = app.buttons["common-ground.messages.open-invitation"]
         assertLabelContains("Not No Bar", on: invitationLink)
-        assertLabelContains(expectedReason, on: invitationLink)
+        assertLabelContains("Let’s go to Not No Bar together", on: invitationLink)
+        assertLabelContains("View invitation", on: invitationLink)
         capture("rec486-flow-04-local-messages-preview")
 
         openRecipientFromMessages(in: app)
@@ -135,7 +137,8 @@ final class CommonGroundMockupUITests: XCTestCase {
         let whenButton = app.buttons["common-ground.invitation.when"]
         XCTAssertTrue(whenButton.waitForExistence(timeout: 5))
         let whenValue = app.staticTexts["common-ground.invitation.when-value"]
-        XCTAssertFalse(whenValue.exists, "An invitation from the collection starts without a proposed time.")
+        XCTAssertTrue(whenValue.waitForExistence(timeout: 3))
+        XCTAssertEqual(whenValue.label, "Date TBD", "An invitation from the collection starts without a proposed time.")
 
         let personalNote = "This looks like a good spot for our next catch-up."
         let noteField = identifiedElement("common-ground.invitation.message", in: app)
@@ -395,11 +398,11 @@ final class CommonGroundMockupUITests: XCTestCase {
 
     private func assertLosAngelesNarratives(in app: XCUIApplication) {
         let narratives = [
-            ("narwhal", "You both love Narwhal."),
-            ("grove-gardens", "Grove Gardens won you both over."),
-            ("not-no-bar", "You both want to go to Not No Bar."),
+            ("narwhal", "You both love Narwhal"),
+            ("grove-gardens", "Grove Gardens won you both over"),
+            ("not-no-bar", "You both want to go to Not No Bar"),
             ("mudwater", "Joe loves Mudwater. You’re next?"),
-            ("the-little-room", "You could show Joe The Little Room.")
+            ("the-little-room", "You could show Joe The Little Room")
         ]
         for (id, expectedTitle) in narratives {
             let title = app.staticTexts["common-ground.narrative.\(id)"]

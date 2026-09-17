@@ -38,7 +38,8 @@ struct CommonGroundInvitationMockup: View {
                         Text("You bring the company")
                             .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
                     }
-                    postcard
+                    invitationPreview
+                    invitationContext(includesMessage: false)
                     composerFields
                 }
             }
@@ -85,10 +86,36 @@ struct CommonGroundInvitationMockup: View {
         .astirAdaptiveBrandMode()
     }
 
-    private var postcard: some View {
-        CGInvitationPostcard(draft: draft)
+    private var invitationPreview: some View {
+        CGInvitationLinkPreview(draft: draft, showsViewButton: false)
             .accessibilityElement(children: .contain)
             .accessibilityFocused($postcardFocused)
+    }
+
+    private func invitationContext(includesMessage: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if includesMessage {
+                Text(draft.message)
+                    .font(AstirTypography.sheetTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("common-ground.invitation.copy")
+            }
+            Label {
+                Text(draft.reasonTitle)
+                    .accessibilityIdentifier("common-ground.invitation.reason-title")
+            } icon: {
+                Image(systemName: draft.reasonSymbol)
+            }
+            .font(AstirTypography.label)
+            .foregroundStyle(brand.accentText)
+            if let evidence = draft.postcardReasonDetail {
+                Text(evidence)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brand.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var composerFields: some View {
@@ -152,8 +179,9 @@ struct CommonGroundInvitationMockup: View {
                 }
             }
             if envelopeOpened {
-                postcard
+                invitationPreview
                     .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 16)))
+                invitationContext(includesMessage: true)
             } else {
                 Button {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.85)) {
@@ -208,82 +236,71 @@ struct CommonGroundInvitationMockup: View {
     }
 }
 
-/// Shared artwork, also usable inside the Messages rich-link mock.
-struct CGInvitationPostcard: View {
+/// The single invitation preview contract used by the composer, opened invite,
+/// and Messages rehearsal. The recipient-facing card adds only the View affordance.
+struct CGInvitationLinkPreview: View {
     @Environment(\.astirBrandMode) private var brand
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let draft: CommonGroundInvitationDraft
-    var compact = false
+    var showsViewButton: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("\(draft.place.viewer.shortName) + \(draft.place.partner.shortName)".uppercased()).font(AstirTypography.metadata).tracking(2)
-                        Text("Good company\nGood excuse")
-                            .font(AstirTypography.sectionTitle)
-                    }
-                    Spacer(minLength: 8)
-                    postageStamp
+            ZStack(alignment: .bottomLeading) {
+                CommonGroundPlaceArtwork(place: draft.place)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 188 : 224)
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.12), .black.opacity(0.76)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(draft.place.name)
+                        .font(.system(.title2, design: .serif).weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("common-ground.invitation.place")
+                    Text(draft.linkLocation)
+                        .font(.system(.subheadline, weight: .medium))
                 }
-                HStack(alignment: .center, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(draft.place.name).font(compact ? AstirTypography.sheetTitle : AstirTypography.screenTitle)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("common-ground.invitation.place")
-                        Text("\(draft.place.category) · \(draft.place.area)")
-                            .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    if !dynamicTypeSize.isAccessibilitySize && !compact {
-                        CommonGroundPlaceArtwork(place: draft.place)
-                            .frame(width: 78, height: 96)
-                            .padding(5).padding(.bottom, 12)
-                            .background(brand.raisedBackground)
-                            .rotationEffect(.degrees(6))
-                            .shadow(color: .black.opacity(0.1), radius: 4, y: 3)
-                            .accessibilityHidden(true)
-                    }
-                }
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
+                .padding(18)
             }
-            .padding(compact ? 18 : 22)
-            .background(WanderTheme.terracottaTint.color)
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(draft.message)
-                    .font(compact ? AstirTypography.body : AstirTypography.sheetTitle)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("common-ground.invitation.copy")
-                if let when = draft.whenText {
-                    Label {
-                        Text(when).accessibilityIdentifier("common-ground.invitation.when-value")
-                    } icon: { Image(systemName: "calendar") }
-                    .font(AstirTypography.control).foregroundStyle(brand.accentText)
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: 12) {
+                Text("ASTIR")
+                    .font(.system(size: 11, weight: .bold, design: .serif))
+                    .tracking(1.2)
+                    .foregroundStyle(brand.accentForeground)
+                    .frame(width: 54, height: 54)
+                    .background(brand.accent, in: RoundedRectangle(cornerRadius: 13))
+                    .accessibilityLabel("ASTIR")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(draft.linkTitle)
+                        .font(.system(.headline, design: .serif).weight(.semibold))
+                        .foregroundStyle(brand.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("common-ground.invitation.link-title")
+                    Text(draft.linkSubtitle)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brand.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("common-ground.invitation.when-value")
                 }
-                CGInvitationPerforation().stroke(brand.border, style: StrokeStyle(lineWidth: 1, dash: [3, 5]))
-                    .frame(height: 1).accessibilityHidden(true)
-                footerLayout {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label {
-                            Text(draft.reasonTitle)
-                                .accessibilityIdentifier("common-ground.invitation.reason-title")
-                        } icon: { Image(systemName: draft.reasonSymbol) }
-                        .font(AstirTypography.label).foregroundStyle(brand.accentText)
-                        if let evidence = draft.postcardReasonDetail {
-                            Text(evidence)
-                                .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 12) }
-                    Text("ASTIR").font(.system(.title3, design: .serif).italic())
+                .layoutPriority(1)
+                Spacer(minLength: 0)
+                if showsViewButton {
+                    Text("View")
+                        .font(.system(.subheadline, weight: .semibold))
+                        .foregroundStyle(brand.accentForeground)
+                        .padding(.horizontal, 19)
+                        .frame(minHeight: 44)
+                        .background(brand.accent, in: Capsule())
+                        .accessibilityIdentifier("common-ground.invitation.view")
                 }
             }
-            .padding(.horizontal, compact ? 18 : 22)
-            .padding(.vertical, 16)
+            .padding(14)
             .background(brand.raisedBackground)
         }
         .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -292,33 +309,6 @@ struct CGInvitationPostcard: View {
         }
     }
 
-    private var footerLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-    }
-
-    private var postageStamp: some View {
-        VStack(spacing: 3) {
-            Image(systemName: draft.reasonSymbol).font(.system(size: 24, weight: .semibold))
-            Text("LET’S GO").font(AstirTypography.metadata).tracking(1)
-        }
-        .foregroundStyle(brand.accentText).frame(width: 66, height: 76)
-        .background(brand.raisedBackground.opacity(0.85))
-        .overlay {
-            RoundedRectangle(cornerRadius: 3).stroke(brand.accentText.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
-        }
-        .rotationEffect(.degrees(8)).accessibilityHidden(true)
-    }
-}
-
-private struct CGInvitationPerforation: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        }
-    }
 }
 
 private struct CGInvitationEnvelopeArtwork: View {

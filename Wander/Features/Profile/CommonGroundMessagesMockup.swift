@@ -63,7 +63,7 @@ private struct CGMessagesConversation: View {
                                 invitationPreview
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Open invitation to \(draft.place.name). \(draft.reasonTitle)")
+                            .accessibilityLabel("\(draft.linkTitle). \(draft.linkSubtitle). View invitation")
                             .accessibilityValue(draft.whenText ?? "No time proposed")
                             .accessibilityHint("Opens \(draft.place.viewer.shortName)’s invitation in this preview")
                             .accessibilityIdentifier("common-ground.messages.open-invitation")
@@ -130,58 +130,7 @@ private struct CGMessagesConversation: View {
     }
 
     private var invitationPreview: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 18) {
-                CommonGroundPlaceArtwork(place: draft.place)
-                    .frame(width: 88, height: 88)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("ASTIR")
-                        .font(.system(.title2, design: .serif).weight(.semibold))
-                    Text("A plan for us")
-                        .font(.system(.subheadline, design: .serif))
-                }
-                .foregroundStyle(brand.primaryText)
-                Spacer(minLength: 0)
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, minHeight: 128, alignment: .leading)
-            .background(brand.raisedBackground)
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 9) {
-                Text(draft.place.name)
-                    .font(AstirTypography.sheetTitle)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(draft.reasonTitle)
-                    .font(.system(.subheadline))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let whenText = draft.whenText {
-                    Label(whenText, systemImage: "calendar")
-                        .font(.system(.subheadline))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                HStack(spacing: 6) {
-                    Text("Open invitation")
-                    Image(systemName: "arrow.up.right")
-                }
-                .font(.system(.footnote, weight: .semibold))
-                .foregroundStyle(linkBlue)
-                .padding(.top, 3)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemBackground))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
-        }
+        CGInvitationLinkPreview(draft: draft, showsViewButton: true)
         .contentShape(RoundedRectangle(cornerRadius: 20))
     }
 
