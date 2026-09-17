@@ -4,42 +4,8 @@ enum OnboardingCarouselTiming {
     static let defaultAutoAdvanceSeconds = 7.0
 }
 
-enum OnboardingCarouselLayout {
-    static let heroAspectRatio = 1.07
-}
-
-struct OnboardingCarouselSlide: Identifiable, Equatable {
-    let id: Int
-    let imageName: String
-    let eyebrow: String
-    let title: String
-    let body: String
-
-    static let all: [OnboardingCarouselSlide] = [
-        OnboardingCarouselSlide(
-            id: 0,
-            imageName: "OnboardingMapDiary",
-            eyebrow: "YOUR PLACE DIARY",
-            title: "Everywhere you’ve been",
-            body: "Build a map of the places worth remembering — with notes that bring every visit back."
-        ),
-        OnboardingCarouselSlide(
-            id: 1,
-            imageName: "OnboardingFriendsComments",
-            eyebrow: "STAY CONNECTED",
-            title: "Places your friends love",
-            body: "Follow the people you know and keep their best finds close at hand."
-        ),
-        OnboardingCarouselSlide(
-            id: 2,
-            imageName: "PlaceCarouselPhotos",
-            eyebrow: "TRUSTED DISCOVERY",
-            title: "Places through people you trust",
-            body: "Skip anonymous reviews. Discover the spots that matter to people whose taste you know."
-        )
-    ]
-}
-
+/// Native onboarding content. Benefit scenes render the same map and postcard
+/// components as the app instead of raster illustrations of an interface.
 struct LoggedOutCarouselView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,18 +14,26 @@ struct LoggedOutCarouselView: View {
     let analytics: AnalyticsClient
     let getStarted: () -> Void
     let logIn: () -> Void
+    let configuration: OnboardingWelcomeConfiguration
 
-    @State private var selection = 0
+    @State private var selection: Int
     @State private var autoAdvanceGeneration = 0
+    @State private var isPaused: Bool
+    @State private var didFinish = false
 
-    private var interval: Duration {
-        #if DEBUG
-        if let raw = ProcessInfo.processInfo.environment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"],
-           let seconds = Double(raw) {
-            return .milliseconds(Int(seconds * 1_000))
-        }
-        #endif
-        return .milliseconds(Int(OnboardingCarouselTiming.defaultAutoAdvanceSeconds * 1_000))
+    init(
+        analytics: AnalyticsClient,
+        getStarted: @escaping () -> Void,
+        logIn: @escaping () -> Void,
+        configuration: OnboardingWelcomeConfiguration = .current
+    ) {
+        self.analytics = analytics
+        self.getStarted = getStarted
+        self.logIn = logIn
+        self.configuration = configuration
+        _selection = State(initialValue: configuration.startsAt
+            .flatMap { configuration.steps.firstIndex(of: $0) } ?? 0)
+        _isPaused = State(initialValue: configuration.pausesAutomatically)
     }
 
     private var accessibilityPausesAutoAdvance: Bool {
@@ -71,6 +45,10 @@ struct LoggedOutCarouselView: View {
         return reduceMotion || voiceOverEnabled
     }
 
+    private var isPlaying: Bool {
+        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish
+    }
+
     var body: some View {
         ZStack {
             WanderTheme.surfaceBone.color.ignoresSafeArea()
@@ -79,27 +57,39 @@ struct LoggedOutCarouselView: View {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
                     Spacer()
+                    if !accessibilityPausesAutoAdvance {
+                        Button {
+                            isPaused.toggle()
+                        } label: {
+                            Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                        }
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .accessibilityLabel(isPaused ? "Play introduction" : "Pause introduction")
+                        .accessibilityIdentifier("onboarding.pause")
+                    }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
 
                 TabView(selection: $selection) {
-                    ForEach(OnboardingCarouselSlide.all) { slide in
-                        OnboardingCarouselSlideView(slide: slide)
-                            .tag(slide.id)
+                    ForEach(Array(configuration.steps.enumerated()), id: \.element.id) { index, step in
+                        welcomeScene(step, isPlaying: isPlaying && index == selection)
+                            .tag(index)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .accessibilityLabel("What you can do with Astir")
 
                 HStack(spacing: 7) {
-                    ForEach(OnboardingCarouselSlide.all) { slide in
+                    ForEach(configuration.steps.indices, id: \.self) { index in
                         Capsule()
-                            .fill(slide.id == selection ? WanderTheme.textInk.color : WanderTheme.borderStrong.color)
-                            .frame(width: slide.id == selection ? 24 : 7, height: 7)
-                            .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: selection)
+                            .fill(index == selection ? WanderTheme.textInk.color : WanderTheme.borderStrong.color)
+                            .frame(width: index == selection ? 24 : 7, height: 7)
                     }
                 }
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: selection)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Carousel page")
                 .accessibilityValue(String(selection + 1))
@@ -107,21 +97,13 @@ struct LoggedOutCarouselView: View {
                 .padding(.bottom, WanderTheme.spacing4)
 
                 VStack(spacing: WanderTheme.spacing2) {
-                    WanderPrimaryButton(title: "Get started", systemImage: "arrow.right") {
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingAuthStarted,
-                            properties: ["mode": "sign_up"]
-                        ))
-                        getStarted()
+                    WanderPrimaryButton(title: "Next", systemImage: "arrow.right") {
+                        advance(source: "manual")
                     }
-                    .accessibilityIdentifier("onboarding.getStarted")
+                    .accessibilityIdentifier("onboarding.next")
 
                     Button("Already have an account? Log in") {
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingAuthStarted,
-                            properties: ["mode": "sign_in"]
-                        ))
-                        logIn()
+                        startAuth(mode: .signIn)
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -139,21 +121,62 @@ struct LoggedOutCarouselView: View {
         }
         .task(id: AutoAdvanceID(
             generation: autoAdvanceGeneration,
-            sceneIsActive: scenePhase == .active,
-            accessibilityPaused: accessibilityPausesAutoAdvance
+            selection: selection,
+            isPlaying: isPlaying
         )) {
-            guard scenePhase == .active, !accessibilityPausesAutoAdvance else { return }
+            guard isPlaying else { return }
+            let seconds = configuration.seconds(for: configuration.steps[selection])
             do {
-                try await Task.sleep(for: interval)
-                guard !Task.isCancelled else { return }
-                let next = (selection + 1) % OnboardingCarouselSlide.all.count
-                withAnimation(.snappy(duration: 0.45)) { selection = next }
-                analytics.track(AnalyticsEvent(
-                    name: WanderAnalyticsEvents.onboardingCarouselAdvanced,
-                    properties: ["slide": String(next), "source": "timer"]
-                ))
-            } catch {}
+                try await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled, isPlaying else { return }
+                advance(source: "timer")
+            } catch {
+                // Navigation, backgrounding, Pause and accessibility all cancel
+                // this view-owned task. Returning restarts a full reading interval.
+            }
         }
+    }
+
+    @ViewBuilder
+    private func welcomeScene(_ step: OnboardingWelcomeStep, isPlaying: Bool) -> some View {
+        switch step {
+        case .opening:
+            if let ticker = configuration.ticker {
+                OnboardingTickerView(
+                    content: ticker,
+                    descriptionIsDelayed: configuration.descriptionIsDelayed,
+                    isPlaying: isPlaying
+                )
+            }
+        case .places, .people:
+            OnboardingBenefitScene(step: step, isPlaying: isPlaying)
+        }
+    }
+
+    private func advance(source: String) {
+        guard !didFinish else { return }
+        if selection + 1 < configuration.steps.count {
+            let next = selection + 1
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.42)) {
+                selection = next
+            }
+            analytics.track(AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingCarouselAdvanced,
+                properties: ["slide": String(next), "source": source]
+            ))
+        } else {
+            startAuth(mode: .signUp)
+        }
+    }
+
+    private func startAuth(mode: NativeAuthMode) {
+        guard !didFinish else { return }
+        didFinish = true
+        analytics.track(AnalyticsEvent(
+            name: WanderAnalyticsEvents.onboardingAuthStarted,
+            properties: ["mode": mode == .signUp ? "sign_up" : "sign_in"]
+        ))
+        if mode == .signUp { getStarted() } else { logIn() }
     }
 
     private func trackViewed() {
@@ -166,65 +189,297 @@ struct LoggedOutCarouselView: View {
 
 private struct AutoAdvanceID: Equatable {
     let generation: Int
-    let sceneIsActive: Bool
-    let accessibilityPaused: Bool
+    let selection: Int
+    let isPlaying: Bool
 }
 
-private struct OnboardingCarouselSlideView: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let slide: OnboardingCarouselSlide
+private struct OnboardingBenefitScene: View {
+    let step: OnboardingWelcomeStep
+    let isPlaying: Bool
 
     var body: some View {
         GeometryReader { proxy in
-            let heroWidth = proxy.size.width - 32
-            let heroHeight = max(280, heroWidth / OnboardingCarouselLayout.heroAspectRatio)
-
-            VStack(spacing: WanderTheme.spacing4) {
-                Image(slide.imageName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: heroWidth, height: heroHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                    .overlay {
-                        // Preserve native UI contrast in the comments screenshot.
-                        if brandMode.prefersDarkInterface && slide.id != 1 {
-                            Color.black.opacity(0.14)
-                                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                                .allowsHitTesting(false)
+            ScrollView {
+                VStack(spacing: WanderTheme.spacing4) {
+                    Group {
+                        if step == .places {
+                            OnboardingLocationMapPreview(isPlaying: isPlaying)
+                                .frame(height: min(390, max(260, proxy.size.height * 0.67)))
+                                .accessibilityIdentifier("onboarding.nativeMap")
+                        } else {
+                            OnboardingWelcomePostcard()
                         }
                     }
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+
+                    VStack(spacing: WanderTheme.spacing2) {
+                        Text(step == .places ? "Example places" : "Example activity")
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+
+                        Text(step == .places
+                             ? "Keep track of everywhere you’ve been."
+                             : "Keep up with the people you love.")
+                            .font(AstirTypography.screenTitle)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: 500)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+}
+
+private struct OnboardingWelcomePostcard: View {
+    // The existing public-safe onboarding activity fixture. It is clearly
+    // labelled as an example and cannot invoke signed-in actions or requests.
+    private let context = ActivityEngagementContext(
+        activityID: "00000000-0000-0000-0000-000000000447",
+        actor: ProfileShell(
+            id: "onboarding-Mina", handle: "mina", displayName: "Mina",
+            avatarURL: nil, bio: nil, relationship: .mutual
+        ),
+        placeName: "Marigold Table", placeServerID: nil,
+        placeDetail: "Santa Monica · Restaurant", status: .been,
+        occurredAt: Date().addingTimeInterval(-7200),
+        note: "The patio at golden hour. Get the focaccia!", rating: 5
+    )
+
+    var body: some View {
+        ActivityPostcardView(
+            context: context,
+            visiblePlace: nil,
+            metadataIcon: "fork.knife",
+            secondaryMetadataTitle: nil,
+            secondaryMetadataAction: nil,
+            secondaryMetadataAccessibilityLabel: nil,
+            artworkAction: nil,
+            artworkAccessibilityLabel: nil,
+            destinationAction: nil,
+            destinationAccessibilityLabel: nil,
+            openProfile: nil,
+            actorAccessibilityIdentifier: "onboarding.exampleActor",
+            destinationAccessibilityIdentifier: "onboarding.examplePlace",
+            postcardAccessibilityIdentifier: "onboarding.nativePostcard",
+            showsEngagementActions: false,
+            onSharePreviewPresentation: nil
+        )
+        .environment(\.activityPostcardVisualStyle, .astir)
+    }
+}
+
+/// The confirmed opening uses physical, individually hinged letter flaps.
+/// The supporting line and surrounding pages retain their separate slide motion.
+struct OnboardingTickerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    let content: OnboardingTickerContent
+    let descriptionIsDelayed: Bool
+    let isPlaying: Bool
+
+    @State private var startedAt = Date.now
+    @State private var elapsedBeforePause = 0.0
+
+    private var animates: Bool { isPlaying && !reduceMotion && !voiceOverEnabled }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animates)) { context in
+            let elapsed = elapsedBeforePause + (animates ? context.date.timeIntervalSince(startedAt) : 0)
+            // Accessibility can be enabled mid-flip. Resolve to a whole readable
+            // word rather than freezing half of two different glyphs on screen.
+            let readableElapsed = (reduceMotion || voiceOverEnabled)
+                ? floor(elapsed / OnboardingTickerFrame.wordSeconds) * OnboardingTickerFrame.wordSeconds
+                : elapsed
+            let frame = OnboardingTickerFrame.at(elapsed: readableElapsed, content: content)
+            let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex] : ""
+            let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0] : nil } ?? currentWord
+            let closing = frame.isFinalTransition || frame.showsFinalLockup
+            let descriptionHasArrived = !descriptionIsDelayed
+                || elapsed >= OnboardingTickerFrame.wordSeconds * 1.5
+                || reduceMotion || voiceOverEnabled
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    OnboardingSplitFlapLine(
+                        from: frame.showsFinalLockup ? (content.finalLockup ?? content.stableText) : content.stableText,
+                        to: closing ? (content.finalLockup ?? content.stableText) : content.stableText,
+                        progress: frame.isFinalTransition ? frame.transitionProgress : 1,
+                        choices: [content.stableText, content.finalLockup ?? content.stableText],
+                        color: closing ? WanderTheme.terracotta.color : WanderTheme.textInk.color,
+                        showsHousing: false
                     )
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 18, y: 9)
-                    .accessibilityHidden(true)
+                    OnboardingSplitFlapLine(
+                        from: frame.showsFinalLockup ? "" : currentWord,
+                        to: closing ? "" : nextWord,
+                        progress: frame.isTransitioning ? frame.transitionProgress : 1,
+                        choices: content.words,
+                        color: WanderTheme.terracotta.color,
+                        showsHousing: true
+                    )
+                    .opacity(frame.showsFinalLockup ? 0 : 1)
+                    .accessibilityHidden(closing)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(frame.showsFinalLockup
+                    ? (content.finalLockup ?? "")
+                    : "\(content.stableText) \(content.words.joined(separator: ", "))")
+                .accessibilityIdentifier("onboarding.ticker")
 
-                VStack(spacing: WanderTheme.spacing2) {
-                    Text(slide.eyebrow)
-                        .font(AstirTypography.metadata)
-                        .tracking(1.6)
-                        .foregroundStyle(WanderTheme.terracotta.color)
-
-                    Text(slide.title)
-                        .font(AstirTypography.screenTitle)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(-2)
-                        .minimumScaleFactor(0.82)
-
-                    Text(slide.body)
+                if let description = content.description {
+                    Text(description)
                         .font(AstirTypography.body)
                         .foregroundStyle(WanderTheme.textMuted.color)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(2)
-                        .padding(.horizontal, WanderTheme.spacing4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(closing ? 0 : (descriptionHasArrived ? 1 : 0))
+                        .offset(x: descriptionHasArrived ? 0 : 48)
+                        .animation(animates ? .easeOut(duration: 0.45) : nil, value: descriptionHasArrived)
+                        .animation(animates ? .easeOut(duration: 0.2) : nil, value: closing)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: WanderTheme.spacing6)
             }
+            .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
+            .padding(.top, WanderTheme.spacing6)
+            .frame(maxWidth: .infinity)
         }
-        .accessibilityElement(children: .combine)
+        .onAppear { startedAt = .now }
+        .onChange(of: animates) { _, playing in
+            if playing {
+                startedAt = .now
+            } else {
+                elapsedBeforePause += max(0, Date.now.timeIntervalSince(startedAt))
+            }
+        }
+    }
+}
+
+/// Column widths stay fixed across all words. Each column has two stationary
+/// half-glyphs and two physical flap faces rotating around the same center hinge.
+private struct OnboardingSplitFlapLine: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var pointSize = 34.0
+    let from: String
+    let to: String
+    let progress: Double
+    let choices: [String]
+    let color: Color
+    let showsHousing: Bool
+
+    private var columnWidths: [CGFloat] {
+        let strings = (choices + [from, to]).map(Array.init)
+        let count = strings.map(\.count).max() ?? 0
+        let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
+        let font = UIFont(descriptor: base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor, size: pointSize)
+        return (0..<count).map { index in
+            let width = strings.map { characters -> CGFloat in
+                guard characters.indices.contains(index) else { return 0 }
+                return (String(characters[index]) as NSString).size(withAttributes: [.font: font]).width
+            }.max() ?? 0
+            return max(pointSize * 0.24, width) + (showsHousing ? 5 : 1)
+        }
+    }
+
+    var body: some View {
+        let source = Array(from)
+        let destination = Array(to)
+        let widths = columnWidths
+        GeometryReader { geometry in
+            let gap = showsHousing ? 2.0 : 0.0
+            let total = widths.reduce(0, +) + gap * Double(max(0, widths.count - 1))
+            let scale = min(1, geometry.size.width / max(1, total))
+            HStack(spacing: gap * scale) {
+                ForEach(widths.indices, id: \.self) { index in
+                    let frame = OnboardingSplitFlapFrame.at(
+                        progress: progress,
+                        from: source.indices.contains(index) ? source[index] : " ",
+                        to: destination.indices.contains(index) ? destination[index] : " ",
+                        column: index
+                    )
+                    OnboardingSplitFlapLetter(
+                        frame: frame,
+                        width: widths[index] * scale,
+                        height: pointSize * 1.38 * scale,
+                        fontSize: pointSize * scale,
+                        color: color,
+                        showsHousing: showsHousing
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(height: pointSize * 1.38)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct OnboardingSplitFlapLetter: View {
+    let frame: OnboardingSplitFlapFrame
+    let width: CGFloat
+    let height: CGFloat
+    let fontSize: CGFloat
+    let color: Color
+    let showsHousing: Bool
+
+    private var isTurning: Bool { frame.from != frame.to && frame.progress > 0 && frame.progress < 1 }
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                half(frame.to, top: true)
+                half(frame.from, top: false)
+            }
+            if frame.progress < 0.5 {
+                half(frame.from, top: true)
+                    .overlay(Color.black.opacity(isTurning ? frame.progress * 0.2 : 0))
+                    .rotation3DEffect(
+                        .degrees(-180 * frame.progress),
+                        axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.55
+                    )
+                    .frame(maxHeight: .infinity, alignment: .top)
+            } else {
+                half(frame.to, top: false)
+                    .overlay(Color.black.opacity(isTurning ? (1 - frame.progress) * 0.16 : 0))
+                    .rotation3DEffect(
+                        .degrees(180 * (1 - frame.progress)),
+                        axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.55
+                    )
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+            if showsHousing || isTurning {
+                Rectangle()
+                    .fill(WanderTheme.textInk.color.opacity(showsHousing ? 0.16 : 0.08))
+                    .frame(height: 0.6)
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: showsHousing ? 2 : 0))
+        .overlay {
+            if showsHousing {
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(WanderTheme.textInk.color.opacity(0.06), lineWidth: 0.5)
+            }
+        }
+    }
+
+    private func half(_ character: Character, top: Bool) -> some View {
+        Text(String(character))
+            .font(.system(size: fontSize, weight: .semibold, design: .serif))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
+            .frame(width: width, height: height)
+            .offset(y: top ? height / 4 : -height / 4)
+            .frame(width: width, height: height / 2)
+            .clipped()
+            .background {
+                WanderTheme.surfaceBone.color
+                if showsHousing {
+                    WanderTheme.textInk.color.opacity(top ? 0.018 : 0.045)
+                }
+            }
     }
 }
 

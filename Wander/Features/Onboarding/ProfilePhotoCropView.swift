@@ -154,85 +154,80 @@ struct ProfilePhotoCropView: View {
     @GestureState private var dragTranslation: CGSize = .zero
 
     var body: some View {
-        GeometryReader { proxy in
-            let side = max(220, min(proxy.size.width - 32, proxy.size.height * 0.50))
-            let viewportSize = CGSize(width: side, height: side)
+        NavigationStack {
+            GeometryReader { proxy in
+                let side = max(220, min(proxy.size.width - 32, proxy.size.height * 0.50))
+                let viewportSize = CGSize(width: side, height: side)
 
-            VStack(spacing: 0) {
-                header(viewportSize: viewportSize)
+                VStack(spacing: 0) {
+                    Spacer(minLength: WanderTheme.spacing4)
 
-                Spacer(minLength: WanderTheme.spacing4)
+                    cropCanvas(viewportSize: viewportSize)
+                        .frame(width: side, height: side)
 
-                cropCanvas(viewportSize: viewportSize)
-                    .frame(width: side, height: side)
+                    Text("Pinch to zoom. Drag to reposition.")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .padding(.top, WanderTheme.spacing6)
 
-                Text("Pinch to zoom. Drag to reposition.")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .padding(.top, WanderTheme.spacing6)
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "minus")
+                        Slider(
+                            value: Binding(
+                                get: { crop.scale },
+                                set: {
+                                    crop.setScale(
+                                        $0,
+                                        imageSize: image.size,
+                                        viewportSize: viewportSize
+                                    )
+                                }
+                            ),
+                            in: ProfilePhotoCropState.minimumScale...ProfilePhotoCropState.maximumScale
+                        )
+                        .tint(WanderTheme.terracotta.color)
+                        Image(systemName: "plus")
+                    }
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(.white.opacity(0.84))
+                    .padding(.horizontal, WanderTheme.spacing8)
+                    .padding(.top, WanderTheme.spacing4)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Photo zoom")
+                    .accessibilityValue("\(Int(crop.scale * 100)) percent")
 
-                HStack(spacing: WanderTheme.spacing3) {
-                    Image(systemName: "minus")
-                    Slider(
-                        value: Binding(
-                            get: { crop.scale },
-                            set: {
-                                crop.setScale(
-                                    $0,
-                                    imageSize: image.size,
-                                    viewportSize: viewportSize
-                                )
-                            }
-                        ),
-                        in: ProfilePhotoCropState.minimumScale...ProfilePhotoCropState.maximumScale
-                    )
-                    .tint(WanderTheme.terracotta.color)
-                    Image(systemName: "plus")
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.stateError.color)
+                            .padding(.top, WanderTheme.spacing3)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing4)
                 }
-                .font(.system(size: 16, weight: .black))
-                .foregroundStyle(.white.opacity(0.84))
-                .padding(.horizontal, WanderTheme.spacing8)
-                .padding(.top, WanderTheme.spacing4)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Photo zoom")
-                .accessibilityValue("\(Int(crop.scale * 100)) percent")
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.stateError.color)
-                        .padding(.top, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.ignoresSafeArea())
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", action: cancel)
+                            .foregroundStyle(.white.opacity(0.78))
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(isSaving ? "Saving…" : "Choose") {
+                            saveCrop(viewportSize: viewportSize)
+                        }
+                        .fontWeight(.black)
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .disabled(isSaving)
+                    }
                 }
-
-                Spacer(minLength: WanderTheme.spacing4)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.ignoresSafeArea())
+            .navigationTitle("Crop photo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.black, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
-    }
-
-    private func header(viewportSize: CGSize) -> some View {
-        ZStack {
-            Text("Crop photo")
-                .font(.system(size: 17, weight: .black))
-                .foregroundStyle(.white)
-
-            HStack {
-                Button("Cancel", action: cancel)
-                    .foregroundStyle(.white.opacity(0.78))
-                Spacer()
-                Button(isSaving ? "Saving…" : "Choose") {
-                    saveCrop(viewportSize: viewportSize)
-                }
-                .fontWeight(.black)
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .disabled(isSaving)
-            }
-        }
-        .font(.system(size: 16, weight: .bold))
-        .frame(minHeight: 56)
-        .padding(.horizontal, WanderTheme.spacing4)
     }
 
     private func cropCanvas(viewportSize: CGSize) -> some View {

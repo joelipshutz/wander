@@ -1,8 +1,39 @@
 # Decisions
 
-Last updated: 2026-09-15
+Last updated: 2026-09-17
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Native onboarding review (REC-529)
+
+Onboarding review uses the production Swift views and simulator recordings. The
+review host supplies local sample data through the existing repository interfaces;
+it does not recreate phone screens in HTML or create real accounts/follows.
+
+The welcome sequence starts with Joe’s September 17 confirmed opening:
+“Connect with your” stays fixed while individual split-flap letters change the
+word through community, people, places, and loved ones. The whole headline then
+uses the same hinged-letter motion to become “a local experiment”. Supporting
+copy slides in separately; the entire composition slides into the next screen.
+The flow advances once through
+the places and people benefits into account creation, with Next, pause, and
+direct Log in. Profile setup requires a
+name, available username, and saved photo; its header previews the profile live.
+Following is an explicit action on each person, with search and retry states.
+
+The first-visit tour explains the actual Map controls in order: Featured, Friends,
+More, Search, Plus, then pin meanings. It ends on the usable Map and does not force
+a save. The second-launch import lesson is retired. Short contextual guidance
+appears when an enrolled new user voluntarily opens Plus, Feed, Lists, or a place.
+Established accounts are not newly enrolled by this change.
+
+The delayed supporting line “Keep track of everywhere you’ve been. Keep up with
+the people you love.” is the current review baseline; supporting-copy alternatives
+and timing remain open. The lead-in, four words and final phrase are confirmed.
+Explicit empty preview/test configurations can omit the opening; the production
+default includes it. Broader explorations remain in the REC-529 open questions.
+Native capture routes are DEBUG-only. Validation and native media evidence are
+recorded in the implementation PR and `docs/reviews/rec-529-native-onboarding.md`.
 
 ## Astir Events engineering direction (REC-467)
 

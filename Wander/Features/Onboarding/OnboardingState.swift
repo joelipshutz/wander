@@ -46,13 +46,16 @@ struct OnboardingLocalState: Codable, Equatable {
     var needsServerCompletion: Bool
     var isFirstVisitWalkthroughEligible: Bool? = nil
     var firstVisitWalkthroughEnrollmentGeneration: Int? = nil
+    /// Missing on older installs, where identity did not require a photo.
+    var hasSavedRequiredIdentity: Bool? = nil
 
     static let fresh = OnboardingLocalState(
         nextStep: .identity,
         isComplete: false,
         needsServerCompletion: false,
         isFirstVisitWalkthroughEligible: nil,
-        firstVisitWalkthroughEnrollmentGeneration: nil
+        firstVisitWalkthroughEnrollmentGeneration: nil,
+        hasSavedRequiredIdentity: false
     )
 
     var shouldEnableFirstVisitWalkthrough: Bool {
@@ -179,6 +182,14 @@ final class OnboardingCompletionStore {
     func setNextStep(_ step: OnboardingStep, for userID: String) {
         var value = state(for: userID)
         value.nextStep = step
+        if step == .location { value.hasSavedRequiredIdentity = true }
+        if step == .identity { value.hasSavedRequiredIdentity = false }
+        save(value, for: userID)
+    }
+
+    func confirmRequiredIdentity(for userID: String) {
+        var value = state(for: userID)
+        value.hasSavedRequiredIdentity = true
         save(value, for: userID)
     }
 
@@ -256,7 +267,17 @@ enum AppEntryStateResolver {
                 firstVisitWalkthroughEligible: localState.shouldEnableFirstVisitWalkthrough
             )
         }
-        return .onboarding(session: session, step: localState.nextStep)
+        return .onboarding(
+            session: session,
+            step: hasRequiredIdentity(remoteProfile) ? localState.nextStep : .identity
+        )
+    }
+
+    static func hasRequiredIdentity(_ profile: LocalProfile?) -> Bool {
+        guard let profile,
+              let avatarURL = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !avatarURL.isEmpty else { return false }
+        return ProfileIdentityDraft(displayName: profile.displayName, handle: profile.handle).isValid
     }
 
     static func offlineState(
@@ -273,19 +294,16 @@ enum AppEntryStateResolver {
         return .recoverableFailure(
             session: session,
             message: message,
-            canContinueOffline: canContinueOffline(session: session, localState: localState)
+            canContinueOffline: canContinueOffline(localState: localState)
         )
     }
 
-    private static func canContinueOffline(
-        session: AuthSession,
+    static func canContinueOffline(
         localState: OnboardingLocalState
     ) -> Bool {
-        localState.nextStep != .identity
-            || ProfileIdentityDraft(
-                displayName: session.displayName ?? "",
-                handle: session.handle ?? ""
-            ).isValid
+        // Only advancing from identity proves that its required photo and
+        // identity fields were saved. Auth-session name/handle alone cannot.
+        localState.nextStep != .identity && localState.hasSavedRequiredIdentity == true
     }
 }
 
@@ -464,6 +482,12 @@ final class AppEntryCoordinator: ObservableObject {
                 guard !Task.isCancelled else { return }
                 if profile?.onboardingCompletedAt != nil {
                     completionStore.confirmServerCompletion(for: session.userID)
+                } else if !local.isComplete {
+                    if AppEntryStateResolver.hasRequiredIdentity(profile) {
+                        completionStore.confirmRequiredIdentity(for: session.userID)
+                    } else {
+                        completionStore.setNextStep(.identity, for: session.userID)
+                    }
                 }
                 resolvedUserID = session.userID
                 analytics.identify(userID: session.userID)
@@ -475,7 +499,7 @@ final class AppEntryCoordinator: ObservableObject {
                 )
             } catch {
                 guard !Task.isCancelled else { return }
-                let canContinue = local.nextStep != .identity || validAuthIdentity(session)
+                let canContinue = AppEntryStateResolver.canContinueOffline(localState: local)
                 state = .recoverableFailure(
                     session: session,
                     message: "We couldn’t check your profile. Try again, or continue if you’re offline.",
@@ -496,10 +520,4 @@ final class AppEntryCoordinator: ObservableObject {
         }
     }
 
-    private func validAuthIdentity(_ session: AuthSession) -> Bool {
-        ProfileIdentityDraft(
-            displayName: session.displayName ?? "",
-            handle: session.handle ?? ""
-        ).isValid
-    }
 }

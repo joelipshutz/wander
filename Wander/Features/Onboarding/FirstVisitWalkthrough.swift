@@ -25,6 +25,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case mapMemory
     case mapTabs
     case mapSendoff
+    case mapPinLegend
     case addSearch
     case addPlace
     case addImport
@@ -95,6 +96,8 @@ enum WalkthroughSpotlightStyle: Equatable, Sendable {
 
 enum WalkthroughPresentationStyle: Equatable, Sendable {
     case coach
+    /// A readable hint that leaves the underlying app fully interactive.
+    case contextual
     case delayedTargetOnly(milliseconds: Int)
     case finale
 }
@@ -123,29 +126,35 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 14
+    static let version = 15
+    static var holdsAutomaticAdvanceForCapture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-WanderHoldWalkthroughStep")
+        #else
+        false
+        #endif
+    }
+    static let contextualAutoAdvanceMilliseconds = 5_000
+    static let finaleAutoAdvanceMilliseconds = 6_000
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
     static let nextArrowNudgeDelayMilliseconds = 3_000
     static let discoverResultsPreviewMilliseconds = 4_000
     static let suppressedSurfaces: Set<WalkthroughSurface> = [
-        .placeDetail,
-        .feed,
-        .feedSearch,
-        .lists,
-        .listDetail,
-        .listEditor,
-        .profile
+        .saveFlow, .feedSearch, .listDetail, .listEditor, .profile
     ]
-    static let primaryJourneySurfaces: [WalkthroughSurface] = [
-        .map, .add, .saveFlow, .sendoff
-    ]
+    static let contextualSurfaces: Set<WalkthroughSurface> = [.add, .feed, .lists, .placeDetail]
+    static let primaryJourneySurfaces: [WalkthroughSurface] = [.map, .sendoff]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
-            step(.map, .mapAdd, "Saving a place", "Tap + and we’ll show you how a place becomes part of your map."),
-            step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live.")
+            overview(.mapFeatured, "A place to start", "Featured brings together places chosen for you from check-ins, taste, and your network"),
+            overview(.mapFriends, "See where your people go", "Friends shows places saved by the people you follow", theme: .social),
+            overview(.mapMoreFilters, "Make the map your own", "Filter by category, people, Check Ins, or Wanna Go"),
+            overview(.mapSearch, "Find the place you have in mind", "Search for a place—or places from your people"),
+            overview(.mapAdd, "Keep a place for later", "Tap + to save a place or bring in saves from another app"),
+            overview(.mapPinLegend, "Read the rings", "Solid rings mean Check Ins. Dotted rings mean Wanna Go")
         ],
         .sendoff: [
             step(
@@ -154,30 +163,14 @@ enum FirstVisitWalkthroughContent {
                 "Your map is yours now",
                 "As you move through this life and this world you change things slightly. You leave marks behind, however small.",
                 advance: .next,
-                nextButtonTitle: "Finish",
+                nextButtonTitle: "Skip",
                 coachTheme: .celebration,
                 spotlightStyle: .clearPage,
                 presentationStyle: .finale
             )
         ],
         .add: [
-            step(
-                .add,
-                .addSearch,
-                "Finding a park near you",
-                "We’ll choose a popular nearby park and show you how saving works.",
-                allowsTargetInteraction: false,
-                coachTheme: .map,
-                automaticallyAdvances: true
-            ),
-            step(
-                .add,
-                .addImport,
-                "Bring saves with you",
-                "Import your places and lists from Google Maps, Instagram, Tiktok, and more here.",
-                advance: .next,
-                coachTheme: .save
-            )
+            context(.add, .addImport, "Bring saves with you", "Import places and lists from another app here", theme: .save)
         ],
         .saveFlow: [
             step(
@@ -251,38 +244,7 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .feed: [
-            step(
-                .feed,
-                .feedActivity,
-                "See your friend's check-ins in real time",
-                "Interact with your trusted feed with a like, comment, or share.",
-                advance: .next
-            ),
-            step(
-                .feed,
-                .feedDiscoverSearch,
-                "Ask your circle for a place",
-                "Tap search to open Discover and find places through the context your people saved.",
-                allowsBackNavigation: false,
-                coachTheme: .map
-            ),
-            step(
-                .feed,
-                .feedPeopleSearch,
-                "Find people you trust",
-                "Search a name or @username to build the circle behind your map and feed.",
-                advance: .next,
-                allowsTargetInteraction: true,
-                coachTheme: .social
-            ),
-            step(
-                .feed,
-                .feedInvite,
-                "Astir gets better with your circle",
-                "Invite people whose taste you trust. The more people that join from your circle, the more useful your Astir space becomes.",
-                advance: .next,
-                coachTheme: .social
-            )
+            context(.feed, .feedActivity, "See what your people are discovering", "Explore check-ins from people you follow. Like, comment, or share", theme: .social)
         ],
         .feedSearch: [
             step(
@@ -314,58 +276,13 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .lists: [
-            step(
-                .lists,
-                .listsScope,
-                "Every kind of plan, one tap away",
-                "My Lists keeps your plans, Friends shows lists people share, and Collabs keeps shared planning together.",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .lists,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .lists,
-                .listsOpenPlan,
-                "Turn saved places into a plan",
-                "Keep trips, date nights, neighborhoods, and anything else you want to revisit together.",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .lists,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            )
+            context(.lists, .listsScope, "Every kind of plan, one tap away", "My Lists keeps your plans, Friends shows shared lists, and Collabs keeps shared planning together", theme: .lists)
         ],
         .listDetail: [],
         .listEditor: [],
         .profile: [],
         .placeDetail: [
-            step(
-                .placeDetail,
-                .placeRatings,
-                "Three ratings, three jobs",
-                "Your rating is the average of your check-ins. Astir rating averages your network's ratings. And fit score predicts how well this place matches your taste.",
-                advance: .next,
-                coachTheme: .rating
-            ),
-            step(
-                .placeDetail,
-                .placeActions,
-                "Everything you need to go",
-                "Directions, Call, Website, and Reservation appear here whenever a place supports them.",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .placeDetail,
-                .placeHistory,
-                "Every visit stays useful",
-                "Ever forget if that surf break you saved is left or right breaking? Check-in history captures that experience in memory with dates, ratings, notes, photos, friends, and tags.",
-                advance: .next,
-                nextButtonTitle: "Keep going",
-                coachTheme: .memory
-            )
+            context(.placeDetail, .placeActions, "Everything you need to go", "Directions, Call, Website, and Reservation appear here whenever a place supports them")
         ]
     ]
 
@@ -461,6 +378,34 @@ enum FirstVisitWalkthroughContent {
             )
         ]
     ]
+
+    private static func overview(
+        _ target: WalkthroughTargetID, _ title: String, _ message: String,
+        theme: WalkthroughCoachTheme = .map
+    ) -> WalkthroughStep {
+        step(.map, target, title, message, advance: .next,
+             allowsTargetInteraction: true, allowsBackNavigation: false,
+             coachTheme: theme, spotlightStyle: .clearPage,
+             automaticallyAdvances: true, presentationStyle: .contextual)
+    }
+
+    private static func context(
+        _ surface: WalkthroughSurface, _ target: WalkthroughTargetID,
+        _ title: String, _ message: String, theme: WalkthroughCoachTheme = .map
+    ) -> WalkthroughStep {
+        step(surface, target, title, message, advance: .next,
+             allowsTargetInteraction: true, allowsBackNavigation: false,
+             coachTheme: theme, spotlightStyle: .clearPage,
+             automaticallyAdvances: true, presentationStyle: .contextual)
+    }
+
+    static func presentationDelayMilliseconds(for step: WalkthroughStep) -> Int {
+        if step.presentationStyle == .finale { return finaleAutoAdvanceMilliseconds }
+        if contextualSurfaces.contains(step.surface) { return contextualAutoAdvanceMilliseconds }
+        // Include the filter intro animation in the reading window.
+        return automaticReadingDelayMilliseconds(for: step.target)
+            + (step.target == .mapFeatured ? 1_250 : 0)
+    }
 
     private static func step(
         _ surface: WalkthroughSurface,
@@ -698,7 +643,19 @@ struct FirstVisitWalkthroughStore {
         self.version = version
     }
 
+    /// Enrollment is separate from both the global feature flag and completion.
+    /// Absence is deliberately false: old established accounts are not enrolled
+    /// merely because they have legacy walkthrough completion keys.
+    func hasContextualEnrollment(for userID: String) -> Bool {
+        defaults.bool(forKey: contextualEnrollmentKey(userID: userID))
+    }
+
+    func enrollContextualHints(for userID: String) {
+        defaults.set(true, forKey: contextualEnrollmentKey(userID: userID))
+    }
+
     func progress(for userID: String, surface: WalkthroughSurface) -> Int {
+        if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) { return 0 }
         let key = progressKey(userID: userID, surface: surface)
         if defaults.object(forKey: key) != nil {
             return defaults.integer(forKey: key)
@@ -725,6 +682,9 @@ struct FirstVisitWalkthroughStore {
     }
 
     func isComplete(for userID: String, surface: WalkthroughSurface) -> Bool {
+        if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) {
+            return defaults.bool(forKey: contextualCompletionKey(userID: userID, surface: surface))
+        }
         let key = completionKey(userID: userID, surface: surface)
         if defaults.object(forKey: key) != nil {
             return defaults.bool(forKey: key)
@@ -743,6 +703,10 @@ struct FirstVisitWalkthroughStore {
     }
 
     func markComplete(for userID: String, surface: WalkthroughSurface) {
+        if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) {
+            defaults.set(true, forKey: contextualCompletionKey(userID: userID, surface: surface))
+            return
+        }
         defaults.set(true, forKey: completionKey(userID: userID, surface: surface))
         legacyVersionedKeys(
             for: userID,
@@ -751,7 +715,9 @@ struct FirstVisitWalkthroughStore {
     }
 
     func reset(for userID: String) {
+        defaults.removeObject(forKey: contextualEnrollmentKey(userID: userID))
         for surface in WalkthroughSurface.allCases {
+            defaults.removeObject(forKey: contextualCompletionKey(userID: userID, surface: surface))
             defaults.removeObject(forKey: progressKey(userID: userID, surface: surface))
             defaults.removeObject(forKey: completionKey(userID: userID, surface: surface))
             legacyVersionedKeys(
@@ -842,7 +808,8 @@ struct FirstVisitWalkthroughStore {
     }
 
     func markEntireWalkthroughComplete(for userID: String) {
-        for surface in WalkthroughSurface.allCases {
+        for surface in WalkthroughSurface.allCases
+            where !FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) {
             markComplete(for: userID, surface: surface)
         }
         markImportLessonComplete(for: userID)
@@ -915,11 +882,17 @@ struct FirstVisitWalkthroughStore {
     }
 
     func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
-        WalkthroughSurface.allCases
-            .filter { !FirstVisitWalkthroughContent.suppressedSurfaces.contains($0) }
+        FirstVisitWalkthroughContent.primaryJourneySurfaces
             .allSatisfy { isComplete(for: userID, surface: $0) }
-            && hasCompletedImportLesson(for: userID)
             && hasCompletedDeviceFeaturesLesson(for: userID)
+    }
+
+    private func contextualEnrollmentKey(userID: String) -> String {
+        "wander.contextual.\(userID).enrolled"
+    }
+
+    private func contextualCompletionKey(userID: String, surface: WalkthroughSurface) -> String {
+        "wander.contextual.\(userID).\(surface.rawValue).complete"
     }
 
     private func progressKey(userID: String, surface: WalkthroughSurface) -> String {
@@ -1037,6 +1010,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private var didAttemptCheckpointRestore = false
     private let onCompleted: (String) -> Void
     @Published private(set) var isEnabled: Bool
+    @Published private(set) var isContextualEnabled = false
 
     init(
         userID: String = "local-user",
@@ -1052,6 +1026,23 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         self.onCompleted = onCompleted
     }
 
+    var hasContextualEnrollment: Bool {
+        store.hasContextualEnrollment(for: userID)
+    }
+
+    func setContextualEnabled(_ isEnabled: Bool, enrollCurrentUser: Bool = false) {
+        if isEnabled && enrollCurrentUser {
+            store.enrollContextualHints(for: userID)
+        }
+        isContextualEnabled = isEnabled && hasContextualEnrollment
+        if !isContextualEnabled, !self.isEnabled,
+           let activeSurface,
+           FirstVisitWalkthroughContent.contextualSurfaces.contains(activeSurface) {
+            self.activeSurface = nil
+            currentStepIndex = 0
+        }
+    }
+
     func setEnabled(_ isEnabled: Bool) {
         guard self.isEnabled != isEnabled else { return }
         self.isEnabled = isEnabled
@@ -1060,6 +1051,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             return
         }
 
+        if isContextualEnabled,
+           let activeSurface,
+           FirstVisitWalkthroughContent.contextualSurfaces.contains(activeSurface) {
+            return
+        }
         activeSurface = nil
         currentStepIndex = 0
         requestedSurface = nil
@@ -1088,6 +1084,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             return nil
         }
         return steps[currentStepIndex]
+    }
+
+    var isPresentingLegacyPlaceWalkthrough: Bool {
+        activeSurface == .placeDetail && currentStep?.presentationStyle != .contextual
     }
 
     var isPresentingLaunchLesson: Bool {
@@ -1127,6 +1127,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     func setUserID(_ userID: String) {
         guard self.userID != userID else { return }
         self.userID = userID
+        isContextualEnabled = false
         activeSurface = nil
         currentStepIndex = 0
         requestedSurface = nil
@@ -1147,24 +1148,19 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     func registerLaunch(
-        forceImportLesson: Bool = false,
+        forceImportLesson _: Bool = false,
         forceDeviceFeaturesLesson: Bool = false
     ) {
         guard isEnabled else { return }
 
+        setContextualEnabled(true, enrollCurrentUser: true)
         let launchCount = launchRegistry.launchCount(for: userID, store: store)
-        isImportLessonEligible = launchCount >= 2
-            && !store.hasCompletedImportLesson(for: userID)
+        // N26 is retired. Keep its stable completion marker for older builds,
+        // while leaving the independent device setup lesson eligible.
+        store.markImportLessonComplete(for: userID)
+        isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = launchCount >= 3
             && !store.hasCompletedDeviceFeaturesLesson(for: userID)
-
-        if forceImportLesson {
-            isImportLessonEligible = true
-            activeSurface = nil
-            currentStepIndex = 0
-            isPresentingImportLesson = true
-            persistLaunchLessonCheckpoint(.importLesson)
-        }
 
         if forceDeviceFeaturesLesson {
             isDeviceFeaturesLessonEligible = true
@@ -1203,6 +1199,24 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             notifyCompletionIfNeeded()
             return .expired
         }
+        // A previously open import lesson or forced save demo must never
+        // reopen after the shorter overview ships. Retire only that primary
+        // journey; the independently scheduled device guide remains intact.
+        if checkpoint.presentation == .importLesson
+            || checkpoint.presentation == .awaitingDeviceFeaturesLesson
+            || (checkpoint.presentation == nil && (
+                checkpoint.target == .mapAddAgain
+                || checkpoint.target == .addSearch
+                || checkpoint.target == .addImport
+                || FirstVisitWalkthroughContent.stepsBySurface[.saveFlow, default: []]
+                    .contains(where: { $0.target == checkpoint.target })
+            )) {
+            store.markImportLessonComplete(for: userID)
+            store.markPrimaryJourneyComplete(for: userID)
+            clearTransientJourneyState()
+            return .none
+        }
+
         let elapsed = now.timeIntervalSince(checkpoint.updatedAt)
         guard elapsed >= 0, elapsed < FirstVisitWalkthroughStore.resumeWindow else {
             store.markEntireWalkthroughComplete(for: userID)
@@ -1234,10 +1248,9 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
         switch checkpoint.presentation {
         case .importLesson:
-            activeSurface = nil
-            currentStepIndex = 0
-            isPresentingImportLesson = true
-            return .resumed(.map)
+            store.markImportLessonComplete(for: userID)
+            store.clearCheckpoint(for: userID)
+            return .none
         case .deviceFeaturesLesson:
             activeSurface = nil
             currentStepIndex = 0
@@ -1322,7 +1335,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         _ surface: WalkthroughSurface,
         replacingActiveJourney _: Bool
     ) {
-        guard isEnabled else {
+        // Primary isEnabled is only true for a currently enrolled new user or
+        // an explicit debug replay. This is the first-use enrollment proof.
+        if isEnabled { setContextualEnabled(true, enrollCurrentUser: true) }
+        let isAllowed = FirstVisitWalkthroughContent.contextualSurfaces.contains(surface)
+            ? isContextualEnabled : isEnabled
+        guard isAllowed else {
             activeSurface = nil
             return
         }
@@ -1331,6 +1349,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             return
         }
         guard !isPresentingImportLesson, !isPresentingDeviceFeaturesLesson else { return }
+        if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface),
+           !hasCompletedPrimaryJourney {
+            // Choosing a real app surface is an explicit way out of the tour.
+            store.markPrimaryJourneyComplete(for: userID)
+            requestedSurface = nil
+        }
         guard !store.isComplete(for: userID, surface: surface) else {
             if activeSurface == surface { activeSurface = nil }
             return
@@ -1361,6 +1385,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             })
         else { return }
 
+        setContextualEnabled(true, enrollCurrentUser: true)
         isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
@@ -1381,7 +1406,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     func perform(_ target: WalkthroughTargetID) {
-        guard currentStep?.target == target, currentStep?.advance == .action else { return }
+        guard currentStep?.target == target else { return }
+        if currentStep?.presentationStyle == .contextual {
+            advance()
+            return
+        }
+        guard currentStep?.advance == .action else { return }
         if target == .feedSearchResultsBack {
             completeAction(target, transitioningImmediatelyTo: .feed)
             return
@@ -1464,9 +1494,27 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    func dismissCurrentContext() {
+        guard let surface = activeSurface,
+              FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) else { return }
+        store.markComplete(for: userID, surface: surface)
+        activeSurface = nil
+        currentStepIndex = 0
+        requestedSurface = nil
+    }
+
+    func finishOverviewForUserNavigation() {
+        guard activeSurface == .map || activeSurface == .sendoff else { return }
+        store.markPrimaryJourneyComplete(for: userID)
+        activeSurface = nil
+        currentStepIndex = 0
+        requestedSurface = nil
+    }
+
     func recordUserActivity() {
-        guard isEnabled, currentStep?.advance == .next else { return }
+        guard isEnabled || isContextualEnabled, currentStep?.advance == .next else { return }
         userActivityGeneration &+= 1
+        dismissCurrentContext()
     }
 
     func goBack() {
@@ -1537,6 +1585,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
     func resetCurrentUser() {
         store.reset(for: userID)
+        isContextualEnabled = false
         activeSurface = nil
         currentStepIndex = 0
         launchRegistry.reset(for: userID)
@@ -1569,9 +1618,6 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         if isDeviceFeaturesLessonEligible {
             isPresentingDeviceFeaturesLesson = true
             persistLaunchLessonCheckpoint(.deviceFeaturesLesson)
-        } else if isImportLessonEligible {
-            isPresentingImportLesson = true
-            persistLaunchLessonCheckpoint(.importLesson)
         }
     }
 
@@ -1611,7 +1657,9 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     /// enrollment retirement is owned by AppEntry and may already be complete.
     func retireJourneyForDisabledExperience() {
         store.markEntireWalkthroughComplete(for: userID)
-        clearTransientJourneyState()
+        if activeSurface.map(FirstVisitWalkthroughContent.contextualSurfaces.contains) != true {
+            clearTransientJourneyState()
+        }
         isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = false
         didAttemptCheckpointRestore = true
@@ -1641,7 +1689,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             requestedSurface = nil
             if surface == .sendoff {
                 store.clearCheckpoint(for: userID)
-            } else {
+            } else if FirstVisitWalkthroughContent.primaryJourneySurfaces.contains(surface) {
                 // Resolve and persist the next usable destination now. This
                 // prevents a force-quit between completion and tab routing from
                 // saving a checkpoint for an already-completed surface.
@@ -1656,31 +1704,8 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
     private func destination(after surface: WalkthroughSurface) -> WalkthroughSurface? {
         switch surface {
-        case .map:
-            // The Map chapter ends on "One more shortcut". Its destination is
-            // the already-open Add sheet so the remaining Import lesson can
-            // attach before the finale.
-            .add
-        case .placeDetail:
-            .feed
-        case .sendoff:
-            nil
-        case .add:
-            .sendoff
-        case .saveFlow:
-            .map
-        case .feed:
-            .lists
-        case .listEditor:
-            .lists
-        case .listDetail:
-            .lists
-        case .feedSearch:
-            .feed
-        case .lists:
-            .sendoff
-        case .profile:
-            .sendoff
+        case .map: .sendoff
+        default: nil
         }
     }
 
@@ -1873,13 +1898,15 @@ extension View {
     func firstVisitWalkthroughOverlay(
         _ coordinator: FirstVisitWalkthroughCoordinator,
         surface: WalkthroughSurface,
-        externalTargetFrames: [WalkthroughTargetID: CGRect] = [:]
+        externalTargetFrames: [WalkthroughTargetID: CGRect] = [:],
+        isActive: Bool = true
     ) -> some View {
         modifier(
             FirstVisitWalkthroughModifier(
                 coordinator: coordinator,
                 surface: surface,
-                externalTargetFrames: externalTargetFrames
+                externalTargetFrames: externalTargetFrames,
+                isActive: isActive
             )
         )
     }
@@ -2274,11 +2301,21 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
     @ObservedObject var coordinator: FirstVisitWalkthroughCoordinator
     let surface: WalkthroughSurface
     let externalTargetFrames: [WalkthroughTargetID: CGRect]
+    let isActive: Bool
 
     func body(content: Content) -> some View {
         content
-            .onAppear { coordinator.activate(surface) }
-            .onChange(of: surface) { _, newSurface in coordinator.activate(newSurface) }
+            .onAppear { if isActive { coordinator.activate(surface) } }
+            .onChange(of: surface) { _, newSurface in
+                if isActive { coordinator.activate(newSurface) }
+            }
+            .onChange(of: isActive) { _, isActive in
+                if isActive { coordinator.activate(surface) }
+                else if coordinator.activeSurface == surface { coordinator.dismissCurrentContext() }
+            }
+            .onDisappear {
+                if coordinator.activeSurface == surface { coordinator.dismissCurrentContext() }
+            }
             .walkthroughPresenterScrim(
                 isPresented: coordinator.isRequestingContactInvite
                     && coordinator.activeSurface == surface
@@ -2295,7 +2332,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         ?? anchoredTargetFrames
                     let targetFrame = resolvedWalkthroughFrame(targetFrames)
                     if
-                        coordinator.activeSurface == surface,
+                        isActive, coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
                         let targetFrame
                     {
@@ -2516,7 +2553,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     }
 
     private var isCoachVisible: Bool {
-        step.presentationStyle == .coach
+        (step.presentationStyle == .coach || step.presentationStyle == .contextual)
             && (step.target != .mapFeatured || reduceMotion || isFeaturedCoachVisible)
     }
 
@@ -2574,11 +2611,13 @@ private struct FirstVisitWalkthroughOverlay: View {
                     .allowsHitTesting(false)
                 }
 
-                WalkthroughTouchShield(
-                    containerSize: containerSize,
-                    spotlightFrame: layout.spotlightFrame,
-                    allowsSpotlightInteraction: allowsSpotlightInteraction
-                )
+                if step.presentationStyle != .contextual {
+                    WalkthroughTouchShield(
+                        containerSize: containerSize,
+                        spotlightFrame: layout.spotlightFrame,
+                        allowsSpotlightInteraction: allowsSpotlightInteraction
+                    )
+                }
 
                 ForEach(Array(visibleEmphasisFrames.enumerated()), id: \.offset) { _, frame in
                     WalkthroughEmphasisRing(
@@ -2589,7 +2628,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
                 }
 
-                if step.presentationStyle == .coach {
+                if step.presentationStyle == .coach || step.presentationStyle == .contextual {
                     coachMark
                 }
 
@@ -2660,11 +2699,15 @@ private struct FirstVisitWalkthroughOverlay: View {
             }
         }
         .task(id: "automatic-advance-\(step.id)") {
-            guard step.surface == .profile,
-                  step.automaticallyAdvances
-            else { return }
+            guard step.automaticallyAdvances,
+                  !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
+                  !UIAccessibility.isVoiceOverRunning else { return }
             let delay: Int
-            if reduceMotion {
+            if step.presentationStyle == .contextual {
+                delay = FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step)
+            } else if step.surface != .profile {
+                return
+            } else if reduceMotion {
                 delay = FirstVisitWalkthroughContent.reducedMotionProfileAutoAdvanceDelayMilliseconds
             } else if step.target == .profileShare {
                 // The first chapter can render during the app's launch transition.
@@ -2706,7 +2749,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
+                if onBack != nil || step.advance == .next {
                     WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
                         HStack(spacing: WanderTheme.spacing2) {
                             Spacer(minLength: 0)
@@ -2725,7 +2768,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 .accessibilityIdentifier("walkthrough.back.\(step.id)")
                             }
 
-                            if step.advance == .next && !step.automaticallyAdvances {
+                            if step.advance == .next {
                                 Button(action: onNext) {
                                     Image(systemName: "arrow.right")
                                         .font(.system(size: 14, weight: .black))
@@ -2816,10 +2859,6 @@ private struct WalkthroughFinaleView: View {
 
     var body: some View {
         ZStack {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {}
-
             ZStack {
                 Circle()
                     .fill(WanderTheme.stateSuccess.color.opacity(0.13))
@@ -2907,6 +2946,13 @@ private struct WalkthroughFinaleView: View {
         .frame(width: containerSize.width, height: containerSize.height)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.\(step.id)")
+        .task(id: step.id) {
+            guard !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
+                  !UIAccessibility.isVoiceOverRunning else { return }
+            try? await Task.sleep(for: .milliseconds(FirstVisitWalkthroughContent.finaleAutoAdvanceMilliseconds))
+            guard !Task.isCancelled else { return }
+            onFinish()
+        }
         .onAppear {
             guard !reduceMotion else { return }
             isCelebrating = true
