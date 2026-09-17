@@ -447,9 +447,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 5))
 
         let pin = app.buttons
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "Bar Nido,"))
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Griffith Observatory Trail,"))
             .firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
+
+        // Use the isolated trail marker at the initial camera. Nearby restaurant
+        // markers can be collision-hidden while still exposing accessibility frames.
+        let beforeTap = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        beforeTap.name = "Isolated Griffith trail pin before physical tap"
+        beforeTap.lifetime = .keepAlways
+        add(beforeTap)
 
         // Tap through the map at the rendered pin center. This exercises the
         // gesture bridge instead of dispatching the pin's accessibility action.
@@ -461,7 +468,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 3))
-        XCTAssertTrue(card.label.contains("Bar Nido"))
+        XCTAssertTrue(card.label.contains("Griffith Observatory Trail"), "Selected card: \(card.label)")
 
         let unexpectedRecenterDismissal = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
