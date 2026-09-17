@@ -113,7 +113,7 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertFalse(before.isTransitioning)
         XCTAssertFalse(before.showsFinalLockup)
 
-        let middle = OnboardingTickerFrame.at(elapsed: finalStart + 0.5, content: content)
+        let middle = OnboardingTickerFrame.at(elapsed: finalStart + OnboardingTickerFrame.flipSeconds / 2, content: content)
         XCTAssertEqual(middle.wordIndex, 1)
         XCTAssertNil(middle.nextWordIndex, "The final phrase replaces the whole headline, not an ordinary ticker word.")
         XCTAssertTrue(middle.isTransitioning)
@@ -166,19 +166,19 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertFalse(frame.showsFinalLockup)
     }
 
-    func testSplitFlapUsesFiveContinuousPhysicalFlipsAndSettlesOnExactTarget() {
-        let starts = (0..<5).map { index in
-            OnboardingSplitFlapFrame.at(progress: Double(index) / 5, from: "q", to: "z", column: 0)
+    func testSplitFlapUsesTwoContinuousPhysicalFlipsAndSettlesOnExactTarget() {
+        let starts = (0..<2).map { index in
+            OnboardingSplitFlapFrame.at(progress: Double(index) / 2, from: "q", to: "z", column: 0)
         }
         XCTAssertEqual(starts[0].from, "q")
-        XCTAssertEqual(starts[4].to, "z")
+        XCTAssertEqual(starts[1].to, "z")
         XCTAssertTrue(starts.allSatisfy { $0.from != $0.to })
         XCTAssertTrue(starts.allSatisfy { abs($0.progress) < 0.000001 })
         for index in 1..<starts.count {
             XCTAssertEqual(starts[index - 1].to, starts[index].from, "Each flap begins where the previous physical flip ended.")
-            XCTAssertTrue("abcdefghijklmnopqrstuvwxyz".contains(starts[index].from))
+            XCTAssertTrue("ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(starts[index].from))
             let almostFinished = OnboardingSplitFlapFrame.at(
-                progress: Double(index) / 5 - 0.00001, from: "q", to: "z", column: 0
+                progress: Double(index) / 2 - 0.00001, from: "q", to: "z", column: 0
             )
             XCTAssertEqual(almostFinished.to, starts[index].from)
             XCTAssertGreaterThan(almostFinished.progress, 0.999)
@@ -187,6 +187,28 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertEqual(settled.from, "z")
         XCTAssertEqual(settled.to, "z")
         XCTAssertEqual(settled.progress, 1)
+    }
+
+    func testBoardKeepsThreeUniformUppercaseRowsAndMiddleWord() {
+        let opening = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "loved ones")
+        XCTAssertEqual(opening, ["CONNECT WITH YOUR", "LOVED ONES", ""])
+        let final = OnboardingBoardCopy.finalRows("a local experiment")
+        XCTAssertEqual(final, ["A", "LOCAL", "EXPERIMENT"])
+        let places = OnboardingBoardCopy.benefitRows( .places)
+        let people = OnboardingBoardCopy.benefitRows( .people)
+        XCTAssertEqual(places, ["KEEP TRACK OF", "EVERYWHERE", "YOU’VE BEEN"])
+        XCTAssertEqual(people, ["KEEP UP WITH", "THE PEOPLE", "YOU LOVE"])
+        for rows in [opening, final, places, people] {
+            XCTAssertEqual(rows.count, 3)
+            for row in rows {
+                let cells = OnboardingBoardCopy.centered(row)
+                XCTAssertEqual(cells.count, 17)
+                XCTAssertEqual(String(cells).trimmingCharacters(in: .whitespaces), row)
+                let leading = cells.prefix(while: { $0 == " " }).count
+                let trailing = cells.reversed().prefix(while: { $0 == " " }).count
+                XCTAssertLessThanOrEqual(abs(leading - trailing), 1)
+            }
+        }
     }
 
     func testSplitFlapStaggersColumnsButEveryColumnSettlesAtTheSameDeadline() {

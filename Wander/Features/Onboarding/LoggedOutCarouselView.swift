@@ -1,243 +1,280 @@
+import MapKit
 import SwiftUI
 
 enum OnboardingCarouselTiming {
     static let defaultAutoAdvanceSeconds = 7.0
+    static let slideSeconds = 0.65
 }
 
-/// Native onboarding content. Benefit scenes render the same map and postcard
-/// components as the app instead of raster illustrations of an interface.
+/// A persistent lower board lets benefit copy flip while only the upper app UI
+/// slides. Opening and account transitions move their entire compositions.
 struct LoggedOutCarouselView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.astirBrandMode) private var brandMode
     let analytics: AnalyticsClient
     let getStarted: () -> Void
     let logIn: () -> Void
     let configuration: OnboardingWelcomeConfiguration
-
     @State private var selection: Int
+    @State private var previousSelection: Int?
+    @State private var slideProgress = 1.0
+    @State private var slideDirection = 1.0
+    @State private var slideGeneration = 0
     @State private var autoAdvanceGeneration = 0
     @State private var isPaused: Bool
     @State private var didFinish = false
+    @State private var queuedAdvances = 0
 
-    init(
-        analytics: AnalyticsClient,
-        getStarted: @escaping () -> Void,
-        logIn: @escaping () -> Void,
-        configuration: OnboardingWelcomeConfiguration = .current
-    ) {
-        self.analytics = analytics
-        self.getStarted = getStarted
-        self.logIn = logIn
-        self.configuration = configuration
+    init(analytics: AnalyticsClient, getStarted: @escaping () -> Void,
+         logIn: @escaping () -> Void, configuration: OnboardingWelcomeConfiguration = .current) {
+        self.analytics = analytics; self.getStarted = getStarted
+        self.logIn = logIn; self.configuration = configuration
         _selection = State(initialValue: configuration.startsAt
             .flatMap { configuration.steps.firstIndex(of: $0) } ?? 0)
         _isPaused = State(initialValue: configuration.pausesAutomatically)
     }
-
     private var accessibilityPausesAutoAdvance: Bool {
         #if DEBUG
-        if ProcessInfo.processInfo.environment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] == "1" {
-            return false
-        }
+        if ProcessInfo.processInfo.environment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] == "1" { return false }
         #endif
         return reduceMotion || voiceOverEnabled
     }
-
     private var isPlaying: Bool {
-        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish
+        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish && previousSelection == nil
     }
+    private var step: OnboardingWelcomeStep { configuration.steps[selection] }
+    private var previousStep: OnboardingWelcomeStep? { previousSelection.map { configuration.steps[$0] } }
 
     var body: some View {
         ZStack {
-            WanderTheme.surfaceBone.color.ignoresSafeArea()
-
+            OnboardingBoardColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
                     Spacer()
                     if !accessibilityPausesAutoAdvance {
-                        Button {
-                            isPaused.toggle()
-                        } label: {
+                        Button { isPaused.toggle() } label: {
                             Image(systemName: isPaused ? "play.fill" : "pause.fill")
                                 .font(.system(size: 14, weight: .semibold))
                                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                         }
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(brandMode.secondaryText)
                         .accessibilityLabel(isPaused ? "Play introduction" : "Pause introduction")
                         .accessibilityIdentifier("onboarding.pause")
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
-
-                TabView(selection: $selection) {
-                    ForEach(Array(configuration.steps.enumerated()), id: \.element.id) { index, step in
-                        welcomeScene(step, isPlaying: isPlaying && index == selection)
-                            .tag(index)
+                GeometryReader { geometry in
+                    ZStack {
+                        if step == .opening || previousStep == .opening, let ticker = configuration.ticker {
+                            OnboardingTickerView(content: ticker,
+                                descriptionIsDelayed: configuration.descriptionIsDelayed,
+                                isPlaying: isPlaying && step == .opening)
+                            .offset(x: step == .opening
+                                ? (previousSelection == nil ? 0 : slideDirection * geometry.size.width * (1 - slideProgress))
+                                : -slideDirection * geometry.size.width * slideProgress)
+                            .accessibilityHidden(step != .opening)
+                        }
+                        // Mount the real preview during the opening so its photo
+                        // and map are ready before the first slide reaches them.
+                        OnboardingBenefitSequenceView(
+                                step: step == .opening ? (previousStep ?? .places) : step,
+                                previousStep: previousStep,
+                                progress: slideProgress, direction: slideDirection,
+                                isPlaying: isPlaying && step != .opening
+                            )
+                            .offset(x: step == .opening
+                                ? -slideDirection * geometry.size.width * slideProgress
+                                : (previousStep == .opening ? slideDirection * geometry.size.width * (1 - slideProgress) : 0))
+                            .opacity(step == .opening && previousStep == nil ? 0 : 1)
+                            .accessibilityHidden(step == .opening)
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 30).onEnded { drag in
+                        guard abs(drag.translation.width) > abs(drag.translation.height), abs(drag.translation.width) > 50 else { return }
+                        moveTo(selection + (drag.translation.width < 0 ? 1 : -1), source: "swipe")
+                    })
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
                 .accessibilityLabel("What you can do with Astir")
-
                 HStack(spacing: 7) {
                     ForEach(configuration.steps.indices, id: \.self) { index in
-                        Capsule()
-                            .fill(index == selection ? WanderTheme.textInk.color : WanderTheme.borderStrong.color)
+                        Capsule().fill(index == selection ? brandMode.primaryText : brandMode.secondaryText.opacity(0.4))
                             .frame(width: index == selection ? 24 : 7, height: 7)
                     }
                 }
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: selection)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Carousel page")
-                .accessibilityValue(String(selection + 1))
+                .accessibilityLabel("Carousel page").accessibilityValue(String(selection + 1))
                 .accessibilityIdentifier("onboarding.carouselPage")
                 .padding(.bottom, WanderTheme.spacing4)
-
                 VStack(spacing: WanderTheme.spacing2) {
-                    WanderPrimaryButton(title: "Next", systemImage: "arrow.right") {
-                        advance(source: "manual")
-                    }
-                    .accessibilityIdentifier("onboarding.next")
-
-                    Button("Already have an account? Log in") {
-                        startAuth(mode: .signIn)
-                    }
-                    .font(AstirTypography.control)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .accessibilityIdentifier("onboarding.logIn")
+                    WanderPrimaryButton(title: "Next", systemImage: "arrow.right") { advance(source: "manual") }
+                        .accessibilityIdentifier("onboarding.next")
+                    Button("Already have an account? Log in") { startAuth(mode: .signIn) }
+                        .font(AstirTypography.control).foregroundStyle(brandMode.secondaryText)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        .accessibilityIdentifier("onboarding.logIn")
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing2)
+                .padding(.horizontal, WanderTheme.spacing4).padding(.bottom, WanderTheme.spacing2)
             }
         }
         .onAppear { trackViewed() }
-        .onChange(of: selection) { _, _ in
-            autoAdvanceGeneration += 1
-            trackViewed()
-        }
-        .task(id: AutoAdvanceID(
-            generation: autoAdvanceGeneration,
-            selection: selection,
-            isPlaying: isPlaying
-        )) {
-            guard isPlaying else { return }
-            let seconds = configuration.seconds(for: configuration.steps[selection])
+        .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
+        .task(id: slideGeneration) {
+            guard previousSelection != nil else { return }
+            let generation = slideGeneration
             do {
-                try await Task.sleep(for: .seconds(seconds))
+                try await Task.sleep(for: .milliseconds(16))
+                guard !Task.isCancelled else { return }
+                // Retain the outgoing view until rendering actually finishes.
+                // A wall-clock delay can expire before a busy Map has slid out.
+                withAnimation(
+                    reduceMotion ? nil : .easeInOut(duration: OnboardingCarouselTiming.slideSeconds),
+                    completionCriteria: .removed
+                ) {
+                    slideProgress = 1
+                } completion: {
+                    guard slideGeneration == generation else { return }
+                    previousSelection = nil
+                    if queuedAdvances > 0 {
+                        queuedAdvances -= 1
+                        advance(source: "manual")
+                    }
+                }
+            } catch { }
+        }
+        .task(id: AutoAdvanceID(generation: autoAdvanceGeneration, selection: selection, isPlaying: isPlaying)) {
+            guard isPlaying else { return }
+            do {
+                try await Task.sleep(for: .seconds(configuration.seconds(for: step)))
                 guard !Task.isCancelled, isPlaying else { return }
                 advance(source: "timer")
-            } catch {
-                // Navigation, backgrounding, Pause and accessibility all cancel
-                // this view-owned task. Returning restarts a full reading interval.
-            }
+            } catch { }
         }
     }
-
-    @ViewBuilder
-    private func welcomeScene(_ step: OnboardingWelcomeStep, isPlaying: Bool) -> some View {
-        switch step {
-        case .opening:
-            if let ticker = configuration.ticker {
-                OnboardingTickerView(
-                    content: ticker,
-                    descriptionIsDelayed: configuration.descriptionIsDelayed,
-                    isPlaying: isPlaying
-                )
-            }
-        case .places, .people:
-            OnboardingBenefitScene(step: step, isPlaying: isPlaying)
+    private func moveTo(_ next: Int, source: String) {
+        guard !didFinish, previousSelection == nil, configuration.steps.indices.contains(next), next != selection else { return }
+        var transaction = Transaction(animation: nil); transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            previousSelection = selection; slideDirection = next > selection ? 1 : -1
+            selection = next; slideProgress = 0; slideGeneration += 1
         }
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCarouselAdvanced,
+            properties: ["slide": String(next), "source": source]))
     }
-
     private func advance(source: String) {
         guard !didFinish else { return }
-        if selection + 1 < configuration.steps.count {
-            let next = selection + 1
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.42)) {
-                selection = next
-            }
-            analytics.track(AnalyticsEvent(
-                name: WanderAnalyticsEvents.onboardingCarouselAdvanced,
-                properties: ["slide": String(next), "source": source]
-            ))
-        } else {
-            startAuth(mode: .signUp)
+        if previousSelection != nil {
+            // Preserve fast Next taps while each outgoing slide completes.
+            // The queue is bounded by the remaining pages plus account entry.
+            queuedAdvances = min(queuedAdvances + 1, configuration.steps.count - selection)
+            return
         }
+        if selection + 1 < configuration.steps.count { moveTo(selection + 1, source: source) }
+        else { startAuth(mode: .signUp) }
     }
-
     private func startAuth(mode: NativeAuthMode) {
         guard !didFinish else { return }
         didFinish = true
-        analytics.track(AnalyticsEvent(
-            name: WanderAnalyticsEvents.onboardingAuthStarted,
-            properties: ["mode": mode == .signUp ? "sign_up" : "sign_in"]
-        ))
+        queuedAdvances = 0
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingAuthStarted,
+            properties: ["mode": mode == .signUp ? "sign_up" : "sign_in"]))
         if mode == .signUp { getStarted() } else { logIn() }
     }
-
     private func trackViewed() {
-        analytics.track(AnalyticsEvent(
-            name: WanderAnalyticsEvents.onboardingCarouselViewed,
-            properties: ["slide": String(selection)]
-        ))
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCarouselViewed, properties: ["slide": String(selection)]))
+    }
+}
+private struct AutoAdvanceID: Equatable { let generation: Int; let selection: Int; let isPlaying: Bool }
+
+private struct OnboardingBenefitSequenceView: View {
+    let step: OnboardingWelcomeStep
+    let previousStep: OnboardingWelcomeStep?
+    let progress: Double
+    let direction: Double
+    let isPlaying: Bool
+    var body: some View {
+        GeometryReader { geometry in
+            let width = min(geometry.size.width - 32, 440)
+            let pictureSide = min(width, geometry.size.height * 0.65)
+            VStack(spacing: 18) {
+                Spacer(minLength: 4)
+                ZStack {
+                    // Keep both native views at stable identities and dimensions.
+                    // Recreating the outgoing Map loses its loaded tiles mid-slide.
+                    ForEach([OnboardingWelcomeStep.places, .people]) { scene in
+                        let isCurrent = scene == step
+                        let isOutgoing = scene == previousStep && scene != step
+                        upper(scene)
+                            .frame(width: pictureSide, height: pictureSide)
+                            .clipped()
+                            .offset(x: isCurrent
+                                ? (previousStep != nil && previousStep != .opening && previousStep != step
+                                    ? direction * geometry.size.width * (1 - progress) : 0)
+                                : -direction * geometry.size.width * progress)
+                            .opacity(isCurrent || isOutgoing ? 1 : 0)
+                            .accessibilityHidden(!isCurrent)
+                    }
+                }
+                .frame(width: pictureSide, height: pictureSide).clipped()
+                OnboardingSplitFlapBoard(
+                    fromRows: previousStep == .opening ? ["", "", ""] : OnboardingBoardCopy.benefitRows(previousStep ?? step),
+                    toRows: OnboardingBoardCopy.benefitRows(step), progress: progress
+                )
+                .frame(width: width, height: width * 0.36)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(step == .places ? "Keep track of everywhere you’ve been." : "Keep up with the people you love.")
+                .accessibilityIdentifier("onboarding.benefitCopy")
+                Spacer(minLength: 18)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+    @ViewBuilder private func upper(_ step: OnboardingWelcomeStep) -> some View {
+        if step == .places {
+            OnboardingWelcomeParkPreview().accessibilityIdentifier("onboarding.nativeMap")
+        } else {
+            OnboardingWelcomePostcard().allowsHitTesting(false)
+        }
     }
 }
 
-private struct AutoAdvanceID: Equatable {
-    let generation: Int
-    let selection: Int
-    let isPlaying: Bool
-}
-
-private struct OnboardingBenefitScene: View {
-    let step: OnboardingWelcomeStep
-    let isPlaying: Bool
-
+/// A cropped view of the real selected-place surface, with its production photo
+/// loader and controls. No separate illustrated card or fictional coffee shop.
+private struct OnboardingWelcomeParkPreview: View {
+    @StateObject private var previewBackend = WanderBackend(placePhotoRepository: OnboardingPlacePhotoRepository())
+    @StateObject private var store = WanderStore(fixtures: .empty())
+    private let candidate = FirstVisitParkSuggestionPolicy.hotchkissPark
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: WanderTheme.spacing4) {
-                    Group {
-                        if step == .places {
-                            OnboardingLocationMapPreview(isPlaying: isPlaying)
-                                .frame(height: min(390, max(260, proxy.size.height * 0.67)))
-                                .accessibilityIdentifier("onboarding.nativeMap")
-                        } else {
-                            OnboardingWelcomePostcard()
-                        }
-                    }
-
-                    VStack(spacing: WanderTheme.spacing2) {
-                        Text(step == .places ? "Example places" : "Example activity")
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
-
-                        Text(step == .places
-                             ? "Keep track of everywhere you’ve been."
-                             : "Keep up with the people you love.")
-                            .font(AstirTypography.screenTitle)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .frame(maxWidth: 500)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing3)
-                .frame(maxWidth: .infinity)
+        ZStack {
+            Map(initialPosition: .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 34.00585, longitude: -118.4842),
+                span: MKCoordinateSpan(latitudeDelta: 0.006, longitudeDelta: 0.006)
+            )), interactionModes: []) {
+                Marker(candidate.name, coordinate: CLLocationCoordinate2D(latitude: 34.00585, longitude: -118.4842))
+                    .tint(AstirTheme.signal.color)
             }
-            .scrollIndicators(.hidden)
+            .mapStyle(.standard(elevation: .flat))
+            PlaceProfileMapSurface(place: PlaceSheetPlace(candidate: candidate), saves: [], tasteSaves: [],
+                currentUserID: store.currentUser.id, viewerLocation: nil, action: .add,
+                onOpen: {}, onAction: {}, onAddToList: {}, onReady: {})
+                .environmentObject(store)
+                .environmentObject(previewBackend)
+                .padding(.bottom, 12)
         }
+        .allowsHitTesting(false)
+        .clipShape(RoundedRectangle(cornerRadius: 28))
     }
 }
 
 private struct OnboardingWelcomePostcard: View {
     // The existing public-safe onboarding activity fixture. It is clearly
-    // labelled as an example and cannot invoke signed-in actions or requests.
+    // identified in the review inventory and cannot invoke signed-in actions or requests.
     private let context = ActivityEngagementContext(
         activityID: "00000000-0000-0000-0000-000000000447",
         actor: ProfileShell(
@@ -273,213 +310,138 @@ private struct OnboardingWelcomePostcard: View {
     }
 }
 
-/// The confirmed opening uses physical, individually hinged letter flaps.
-/// The supporting line and surrounding pages retain their separate slide motion.
+enum OnboardingBoardColors {
+    static func background(isDark: Bool) -> Color { isDark ? AstirTheme.ink.color : .white }
+    static func face(isDark: Bool, top: Bool) -> Color {
+        if isDark { return top ? Color(red: 0.14, green: 0.16, blue: 0.145) : Color(red: 0.10, green: 0.12, blue: 0.105) }
+        return top ? .white : Color(red: 0.965, green: 0.965, blue: 0.955)
+    }
+}
+
 struct OnboardingTickerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.astirBrandMode) private var brandMode
     let content: OnboardingTickerContent
     let descriptionIsDelayed: Bool
     let isPlaying: Bool
-
     @State private var startedAt = Date.now
     @State private var elapsedBeforePause = 0.0
-
     private var animates: Bool { isPlaying && !reduceMotion && !voiceOverEnabled }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animates)) { context in
             let elapsed = elapsedBeforePause + (animates ? context.date.timeIntervalSince(startedAt) : 0)
-            // Accessibility can be enabled mid-flip. Resolve to a whole readable
-            // word rather than freezing half of two different glyphs on screen.
             let readableElapsed = (reduceMotion || voiceOverEnabled)
-                ? floor(elapsed / OnboardingTickerFrame.wordSeconds) * OnboardingTickerFrame.wordSeconds
-                : elapsed
+                ? floor(elapsed / OnboardingTickerFrame.wordSeconds) * OnboardingTickerFrame.wordSeconds : elapsed
             let frame = OnboardingTickerFrame.at(elapsed: readableElapsed, content: content)
             let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex] : ""
             let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0] : nil } ?? currentWord
-            let closing = frame.isFinalTransition || frame.showsFinalLockup
-            let descriptionHasArrived = !descriptionIsDelayed
-                || elapsed >= OnboardingTickerFrame.wordSeconds * 1.5
-                || reduceMotion || voiceOverEnabled
-            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    OnboardingSplitFlapLine(
-                        from: frame.showsFinalLockup ? (content.finalLockup ?? content.stableText) : content.stableText,
-                        to: closing ? (content.finalLockup ?? content.stableText) : content.stableText,
-                        progress: frame.isFinalTransition ? frame.transitionProgress : 1,
-                        choices: [content.stableText, content.finalLockup ?? content.stableText],
-                        color: closing ? WanderTheme.terracotta.color : WanderTheme.textInk.color,
-                        showsHousing: false
-                    )
-                    OnboardingSplitFlapLine(
-                        from: frame.showsFinalLockup ? "" : currentWord,
-                        to: closing ? "" : nextWord,
-                        progress: frame.isTransitioning ? frame.transitionProgress : 1,
-                        choices: content.words,
-                        color: WanderTheme.terracotta.color,
-                        showsHousing: true
-                    )
-                    .opacity(frame.showsFinalLockup ? 0 : 1)
-                    .accessibilityHidden(closing)
+            let finalRows = OnboardingBoardCopy.finalRows(content.finalLockup ?? "a local experiment")
+            let fromRows = frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(lead: content.stableText, word: currentWord)
+            let toRows = frame.isFinalTransition || frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(lead: content.stableText, word: nextWord)
+            let descriptionHasArrived = !descriptionIsDelayed || elapsed >= OnboardingTickerFrame.wordSeconds * 1.5 || reduceMotion || voiceOverEnabled
+            GeometryReader { geometry in
+                let width = min(geometry.size.width - 32, 440)
+                VStack(spacing: 0) {
+                    Spacer(minLength: 20)
+                    OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
+                        progress: frame.isTransitioning ? frame.transitionProgress : 1)
+                        .frame(width: width, height: width * 0.36)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(frame.showsFinalLockup ? (content.finalLockup ?? "") : "\(content.stableText) \(content.words.joined(separator: ", "))")
+                        .accessibilityIdentifier("onboarding.ticker")
+                    Spacer(minLength: 30)
+                    if let description = content.description {
+                        Text(description).font(AstirTypography.body)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                            .frame(width: min(width, 360))
+                            .opacity(descriptionHasArrived ? 1 : 0)
+                            .offset(x: descriptionHasArrived ? 0 : geometry.size.width)
+                            .animation(animates ? .easeOut(duration: 0.5) : nil, value: descriptionHasArrived)
+                            .padding(.bottom, 26)
+                            .accessibilityIdentifier("onboarding.openingDescription")
+                    }
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(frame.showsFinalLockup
-                    ? (content.finalLockup ?? "")
-                    : "\(content.stableText) \(content.words.joined(separator: ", "))")
-                .accessibilityIdentifier("onboarding.ticker")
-
-                if let description = content.description {
-                    Text(description)
-                        .font(AstirTypography.body)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .opacity(closing ? 0 : (descriptionHasArrived ? 1 : 0))
-                        .offset(x: descriptionHasArrived ? 0 : 48)
-                        .animation(animates ? .easeOut(duration: 0.45) : nil, value: descriptionHasArrived)
-                        .animation(animates ? .easeOut(duration: 0.2) : nil, value: closing)
-                }
-                Spacer(minLength: WanderTheme.spacing6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing6)
-            .frame(maxWidth: .infinity)
         }
         .onAppear { startedAt = .now }
         .onChange(of: animates) { _, playing in
-            if playing {
-                startedAt = .now
-            } else {
-                elapsedBeforePause += max(0, Date.now.timeIntervalSince(startedAt))
-            }
+            if playing { startedAt = .now }
+            else { elapsedBeforePause += max(0, Date.now.timeIntervalSince(startedAt)) }
         }
     }
 }
 
-/// Column widths stay fixed across all words. Each column has two stationary
-/// half-glyphs and two physical flap faces rotating around the same center hinge.
-private struct OnboardingSplitFlapLine: View {
-    @ScaledMetric(relativeTo: .largeTitle) private var pointSize = 34.0
-    let from: String
-    let to: String
-    let progress: Double
-    let choices: [String]
-    let color: Color
-    let showsHousing: Bool
-
-    private var columnWidths: [CGFloat] {
-        let strings = (choices + [from, to]).map(Array.init)
-        let count = strings.map(\.count).max() ?? 0
-        let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
-        let font = UIFont(descriptor: base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor, size: pointSize)
-        return (0..<count).map { index in
-            let width = strings.map { characters -> CGFloat in
-                guard characters.indices.contains(index) else { return 0 }
-                return (String(characters[index]) as NSString).size(withAttributes: [.font: font]).width
-            }.max() ?? 0
-            return max(pointSize * 0.24, width) + (showsHousing ? 5 : 1)
-        }
-    }
-
+/// Uniform cells, full flap faces, and a constant three-row footprint. The same
+/// board persists across the benefit transition while its letters change.
+struct OnboardingSplitFlapBoard: View, @MainActor Animatable {
+    let fromRows: [String]
+    let toRows: [String]
+    var progress: Double
+    var animatableData: Double { get { progress } set { progress = newValue } }
     var body: some View {
-        let source = Array(from)
-        let destination = Array(to)
-        let widths = columnWidths
         GeometryReader { geometry in
-            let gap = showsHousing ? 2.0 : 0.0
-            let total = widths.reduce(0, +) + gap * Double(max(0, widths.count - 1))
-            let scale = min(1, geometry.size.width / max(1, total))
-            HStack(spacing: gap * scale) {
-                ForEach(widths.indices, id: \.self) { index in
-                    let frame = OnboardingSplitFlapFrame.at(
-                        progress: progress,
-                        from: source.indices.contains(index) ? source[index] : " ",
-                        to: destination.indices.contains(index) ? destination[index] : " ",
-                        column: index
-                    )
-                    OnboardingSplitFlapLetter(
-                        frame: frame,
-                        width: widths[index] * scale,
-                        height: pointSize * 1.38 * scale,
-                        fontSize: pointSize * scale,
-                        color: color,
-                        showsHousing: showsHousing
-                    )
+            let columns = max(OnboardingBoardCopy.columns, (fromRows + toRows).map(\.count).max() ?? 0)
+            let gap = max(1, geometry.size.width * 0.004)
+            let cellWidth = (geometry.size.width - gap * Double(columns - 1)) / Double(columns)
+            let rowHeight = (geometry.size.height - gap * 4) / 3
+            VStack(spacing: gap * 2) {
+                ForEach(0..<3, id: \.self) { row in
+                    let source = OnboardingBoardCopy.centered(fromRows.indices.contains(row) ? fromRows[row] : "", columns: columns)
+                    let target = OnboardingBoardCopy.centered(toRows.indices.contains(row) ? toRows[row] : "", columns: columns)
+                    HStack(spacing: gap) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            OnboardingSplitFlapLetter(
+                                frame: OnboardingSplitFlapFrame.at(progress: progress, from: source[column], to: target[column], column: column),
+                                width: cellWidth, height: rowHeight, fontSize: cellWidth * 1.08
+                            )
+                        }
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(height: pointSize * 1.38)
         .accessibilityHidden(true)
     }
 }
 
 private struct OnboardingSplitFlapLetter: View {
+    @Environment(\.colorScheme) private var colorScheme
     let frame: OnboardingSplitFlapFrame
     let width: CGFloat
     let height: CGFloat
     let fontSize: CGFloat
-    let color: Color
-    let showsHousing: Bool
-
+    private var isDark: Bool { colorScheme == .dark }
     private var isTurning: Bool { frame.from != frame.to && frame.progress > 0 && frame.progress < 1 }
-
     var body: some View {
         ZStack {
-            VStack(spacing: 0) {
-                half(frame.to, top: true)
-                half(frame.from, top: false)
-            }
+            VStack(spacing: 0) { half(frame.to, top: true); half(frame.from, top: false) }
             if frame.progress < 0.5 {
                 half(frame.from, top: true)
-                    .overlay(Color.black.opacity(isTurning ? frame.progress * 0.2 : 0))
-                    .rotation3DEffect(
-                        .degrees(-180 * frame.progress),
-                        axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.55
-                    )
+                    .overlay(Color.black.opacity(isTurning ? frame.progress * 0.24 : 0))
+                    .rotation3DEffect(.degrees(-180 * frame.progress), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.55)
                     .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 half(frame.to, top: false)
-                    .overlay(Color.black.opacity(isTurning ? (1 - frame.progress) * 0.16 : 0))
-                    .rotation3DEffect(
-                        .degrees(180 * (1 - frame.progress)),
-                        axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.55
-                    )
+                    .overlay(Color.black.opacity(isTurning ? (1 - frame.progress) * 0.2 : 0))
+                    .rotation3DEffect(.degrees(180 * (1 - frame.progress)), axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.55)
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
-            if showsHousing || isTurning {
-                Rectangle()
-                    .fill(WanderTheme.textInk.color.opacity(showsHousing ? 0.16 : 0.08))
-                    .frame(height: 0.6)
-            }
+            Rectangle().fill(isDark ? Color.black.opacity(0.55) : Color.black.opacity(0.17)).frame(height: 0.6)
         }
-        .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: showsHousing ? 2 : 0))
-        .overlay {
-            if showsHousing {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(WanderTheme.textInk.color.opacity(0.06), lineWidth: 0.5)
-            }
-        }
+        .frame(width: width, height: height).clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.12), lineWidth: 0.5))
     }
-
     private func half(_ character: Character, top: Bool) -> some View {
-        Text(String(character))
-            .font(.system(size: fontSize, weight: .semibold, design: .serif))
-            .foregroundStyle(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.45)
+        Text(String(character).uppercased())
+            .font(.system(size: fontSize, weight: .bold, design: .monospaced))
+            .foregroundStyle(AstirTheme.signal.color).lineLimit(1).minimumScaleFactor(0.7)
             .frame(width: width, height: height)
             .offset(y: top ? height / 4 : -height / 4)
-            .frame(width: width, height: height / 2)
-            .clipped()
-            .background {
-                WanderTheme.surfaceBone.color
-                if showsHousing {
-                    WanderTheme.textInk.color.opacity(top ? 0.018 : 0.045)
-                }
-            }
+            .frame(width: width, height: height / 2).clipped()
+            .background(OnboardingBoardColors.face(isDark: isDark, top: top))
     }
 }
 

@@ -1987,7 +1987,7 @@ final class OnboardingUITests: XCTestCase {
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        // The split-flap opening takes 12.8 seconds, then both real benefit
+        // The split-flap opening takes 12.0 seconds, then both real benefit
         // pages receive their reading time before the finite flow opens signup.
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"

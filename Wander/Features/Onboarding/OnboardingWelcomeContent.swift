@@ -108,8 +108,8 @@ struct OnboardingWelcomeConfiguration: Equatable {
 /// Each word is held before its letters rotate through physical split flaps.
 /// The later slide to a different scene belongs to the surrounding composition.
 struct OnboardingTickerFrame: Equatable {
-    static let holdSeconds = 1.6
-    static let flipSeconds = 1.0
+    static let holdSeconds = 1.8
+    static let flipSeconds = 0.6
     static let wordSeconds = holdSeconds + flipSeconds
     static let finalHoldSeconds = 2.4
 
@@ -168,10 +168,10 @@ struct OnboardingTickerFrame: Equatable {
     }
 }
 
-/// One physical flap within a five-flip letter change. Intermediate letters are
+/// One physical flap within a two-flip letter change. Intermediate letters are
 /// deterministic so native rendering, scrubbing and tests follow the same path.
 struct OnboardingSplitFlapFrame: Equatable {
-    static let flipCount = 5
+    static let flipCount = 2
     static let columnDelay = 0.012
     static let maximumStaggeredColumn = 12
 
@@ -197,7 +197,7 @@ struct OnboardingSplitFlapFrame: Equatable {
     }
 
     private static func cycle(from: Character, to: Character, column: Int) -> [Character] {
-        let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         let scalarSeed = (String(from) + String(to)).unicodeScalars.reduce(0) {
             ($0 + Int($1.value) % alphabet.count) % alphabet.count
         }
@@ -213,5 +213,25 @@ struct OnboardingSplitFlapFrame: Equatable {
         }
         glyphs.append(to)
         return glyphs
+    }
+}
+
+/// Copy lines share the same fixed grid across opening, finale and benefits.
+enum OnboardingBoardCopy {
+    static let columns = 17
+    static func openingRows(lead: String, word: String) -> [String] {
+        [lead.uppercased(), word.uppercased(), ""]
+    }
+    static func finalRows(_ phrase: String) -> [String] {
+        let words = phrase.uppercased().split(separator: " ").map(String.init)
+        return [words.first ?? "", words.dropFirst().first ?? "", words.dropFirst(2).joined(separator: " ")]
+    }
+    static func benefitRows(_ step: OnboardingWelcomeStep) -> [String] {
+        step == .people ? ["KEEP UP WITH", "THE PEOPLE", "YOU LOVE"] : ["KEEP TRACK OF", "EVERYWHERE", "YOU’VE BEEN"]
+    }
+    static func centered(_ text: String, columns: Int = columns) -> [Character] {
+        let characters = Array(text.uppercased())
+        let spare = max(0, columns - characters.count)
+        return Array(repeating: " ", count: spare / 2) + characters + Array(repeating: " ", count: spare - spare / 2)
     }
 }

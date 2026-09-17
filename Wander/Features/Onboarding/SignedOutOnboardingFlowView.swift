@@ -5,6 +5,7 @@ import SwiftUI
 struct SignedOutOnboardingFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     let analytics: AnalyticsClient
     var configuration: OnboardingWelcomeConfiguration = .current
@@ -14,7 +15,7 @@ struct SignedOutOnboardingFlowView: View {
 
     var body: some View {
         ZStack {
-            WanderTheme.surfaceBone.color.ignoresSafeArea()
+            OnboardingBoardColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
 
             if auth.isPresentingNativeAuth {
                 NativeAuthFlowView(
@@ -25,7 +26,7 @@ struct SignedOutOnboardingFlowView: View {
                 )
                 .id(auth.activeNativeAuthMode)
                 .transition(reduceMotion ? .opacity : .move(edge: .trailing))
-                .zIndex(1)
+                .zIndex(2)
             } else {
                 LoggedOutCarouselView(
                     analytics: analytics,
@@ -34,10 +35,11 @@ struct SignedOutOnboardingFlowView: View {
                     configuration: configuration
                 )
                 .transition(reduceMotion ? .opacity : .move(edge: .leading))
+                .zIndex(1)
             }
         }
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.42),
+            reduceMotion ? nil : .easeInOut(duration: OnboardingCarouselTiming.slideSeconds),
             value: auth.isPresentingNativeAuth
         )
         .task {
