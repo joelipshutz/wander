@@ -1,5 +1,6 @@
 #if DEBUG
 import XCTest
+import UIKit
 @testable import Wander
 
 @MainActor
@@ -210,21 +211,87 @@ final class CommonGroundLiveDataTests: XCTestCase {
         let place = try XCTUnwrap(project(viewer, partner, rows: [mine, theirs], legacyFallback: true).places.first)
         let date = Date(timeIntervalSince1970: 1_800_000_000)
         let draft = CommonGroundInvitationDraft(place: place, note: "Meet by the window?", suggestedDate: date)
-        let share = try XCTUnwrap(draft.shareContent)
+        let token = String(repeating: "a", count: 48)
+        let share = try XCTUnwrap(draft.shareContent(invitationToken: token))
 
-        XCTAssertEqual(share.item, WanderDeepLinkRoute.sharedPlace(placeID: canonicalID).url)
+        XCTAssertEqual(share.item.absoluteString, "https://getrec.me/plans/\(token)")
+        XCTAssertTrue(draft.canCreateInvitation)
         XCTAssertEqual(draft.suggestedDate, date)
         XCTAssertTrue(share.message.contains("Meet by the window?"))
-        XCTAssertTrue(share.message.contains(try XCTUnwrap(draft.whenText)))
-        XCTAssertTrue(share.message.contains("Alex"))
-        XCTAssertTrue(share.message.contains("Sam"))
+        XCTAssertEqual(share.message, "Meet by the window?\n\n\(try XCTUnwrap(draft.whenText))")
+        XCTAssertFalse(share.message.contains("check-ins"))
         XCTAssertFalse(share.message.contains("Ryan"))
         XCTAssertFalse(share.message.contains("Joe"))
 
         mine.place.serverID = nil
         let unsynced = try XCTUnwrap(project(viewer, partner, rows: [mine, theirs], legacyFallback: true).places.first)
-        XCTAssertNil(CommonGroundInvitationDraft(place: unsynced).shareContent)
-        XCTAssertNil(CommonGroundInvitationDraft.preview.shareContent)
+        XCTAssertFalse(CommonGroundInvitationDraft(place: unsynced).canCreateInvitation)
+        XCTAssertFalse(CommonGroundInvitationDraft.preview.canCreateInvitation)
+    }
+
+    func testSingleUnratedCheckInAndPartnerWannaNeverBecomeBothBeen() throws {
+        let viewer = profile("ryan"), partner = profile("rachel")
+        let been = row("viewer-been", owner: viewer, status: .been, name: "Charleston Park")
+        let wanna = row("partner-wanna", owner: partner, status: .wannaGo, name: "Charleston Park")
+        let result = try XCTUnwrap(project(viewer, partner, rows: [been, wanna],
+                                          visits: [visit("visit", parent: been)]).places.first)
+        XCTAssertEqual(result.linkage, .viewerBeenPartnerWanna)
+        XCTAssertEqual(result.narrativeTitle, "You’ve been to Charleston Park\nRachel wants to go")
+        XCTAssertEqual(CommonGroundInvitationDraft(place: result).reasonTitle, "You’ve been and Rachel wants to go")
+        XCTAssertEqual(result.joeVisits, 0)
+        XCTAssertTrue(result.joeWanna)
+    }
+
+    func testPlanCreationPublishesOnlyAuthoredContentAndReturnsAnInvitationLink() async throws {
+        let transport = PlanTransport()
+        let repository = SupabasePlacePlanInvitationRepository(rpc: transport, storage: transport)
+        let draft = try syncedDraft()
+        let share = try await repository.create(draft: draft, previewPNG: Data([137,80,78,71]))
+        XCTAssertEqual(transport.uploadedBuckets, ["place-plan-previews"])
+        XCTAssertTrue(transport.uploadedPaths.first?.hasPrefix("ryan/") == true)
+        XCTAssertEqual(transport.procedure, "create_place_plan_invitation")
+        XCTAssertEqual(transport.params["input_recipient_id"] as? String, "rachel")
+        XCTAssertEqual(transport.params["input_message"] as? String, draft.message)
+        XCTAssertEqual(transport.params["input_title"] as? String, draft.linkTitle)
+        XCTAssertEqual(transport.params["input_connection"] as? String, "Ryan’s been and you wanna go")
+        XCTAssertNil(transport.params["visits"])
+        XCTAssertNil(transport.params["note"])
+        XCTAssertEqual(share.item.path, "/plans/" + String(repeating: "b", count: 48))
+        XCTAssertTrue(transport.deletedPaths.isEmpty)
+    }
+
+    func testFailedPlanCreationCleansUpArtworkAndDoesNotFallBackToAPlaceLink() async throws {
+        let transport = PlanTransport()
+        transport.failsCreation = true
+        let repository = SupabasePlacePlanInvitationRepository(rpc: transport, storage: transport)
+        do {
+            _ = try await repository.create(draft: syncedDraft(), previewPNG: Data([137,80,78,71]))
+            XCTFail("Expected plan creation failure")
+        } catch {
+            XCTAssertEqual(transport.deletedPaths, transport.uploadedPaths)
+            XCTAssertEqual(transport.deletedPaths.count, 1)
+        }
+    }
+
+    private func syncedDraft() throws -> CommonGroundInvitationDraft {
+        let viewer = profile("ryan"), partner = profile("rachel")
+        let been = row("viewer-been", owner: viewer, status: .been)
+        been.place.serverID = "B40C44A6-1D20-4AA5-B97E-A09D1A8E68D9"
+        let wanna = row("partner-wanna", owner: partner, status: .wannaGo)
+        let place = try XCTUnwrap(project(viewer, partner, rows: [been, wanna], legacyFallback: true).places.first)
+        return CommonGroundInvitationDraft(place: place)
+    }
+
+    func testSharedArtworkRendersTheNativePreviewAtRetinaResolutionWithinTheUploadLimit() throws {
+        let png = try CommonGroundInvitationSharing.renderArtwork(draft: .preview, photo: nil, brand: .editorialLight)
+        let image = try XCTUnwrap(UIImage(data: png))
+        XCTAssertEqual(image.size.width, 780)
+        XCTAssertGreaterThan(image.size.height, 400)
+        XCTAssertLessThan(png.count, 2_097_152)
+        let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+        attachment.name = "rec486-rendered-invitation-link-artwork"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func project(
@@ -271,5 +338,30 @@ final class CommonGroundLiveDataTests: XCTestCase {
     private func visit(_ id: String, parent: VisiblePlace, rating: Double? = nil) -> LocalPlaceVisit {
         LocalPlaceVisit(localID: id, userPlaceID: parent.userPlace.id, ratingScore: rating)
     }
+}
+
+@MainActor
+private final class PlanTransport: RemoteProcedureCalling, RemoteStorageCalling {
+    var uploadedBuckets: [String] = []
+    var uploadedPaths: [String] = []
+    var deletedPaths: [String] = []
+    var procedure = ""
+    var params: [String: Any] = [:]
+    var failsCreation = false
+    func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
+        procedure = name
+        self.params = try JSONSerialization.jsonObject(with: JSONEncoder().encode(params)) as? [String: Any] ?? [:]
+        if failsCreation { throw WanderRemoteError.notAuthenticated }
+        return try decoder.decode(Value.self, from: Data("{\"token\":\"\(String(repeating: "b", count: 48))\"}".utf8))
+    }
+    func uploadObject(bucket: String, path: String, data: Data, contentType: String, upsert: Bool) async throws {
+        uploadedBuckets.append(bucket)
+        uploadedPaths.append(path)
+        XCTAssertEqual(contentType, "image/png")
+        XCTAssertFalse(upsert)
+    }
+    func deleteObject(bucket: String, path: String) async throws { deletedPaths.append(path) }
+    func downloadObject(bucket: String, path: String) async throws -> Data { throw WanderRemoteError.notConfigured }
+    func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL { throw WanderRemoteError.notConfigured }
 }
 #endif

@@ -83,11 +83,11 @@ final class CommonGroundMockupUITests: XCTestCase {
         let postcardPlace = app.staticTexts["common-ground.invitation.place"]
         let postcardReason = app.staticTexts["common-ground.invitation.reason-title"]
         XCTAssertEqual(postcardPlace.label, "Not No Bar")
-        XCTAssertEqual(postcardReason.label, "Both Wanna Go")
+        XCTAssertFalse(postcardReason.exists, "The composer keeps evidence on In Common")
         XCTAssertFalse(app.navigationBars["Your invitation"].exists)
         XCTAssertFalse(app.staticTexts["In both of your Wannas"].isHittable)
         XCTAssertFalse(app.staticTexts["From Ryan, with a little help."].isHittable)
-        let expectedReason = postcardReason.label
+        let expectedReason = "Both Wanna Go"
         capture("rec486-flow-03-invitation")
         previewMessages.tap()
 
@@ -143,13 +143,15 @@ final class CommonGroundMockupUITests: XCTestCase {
         let personalNote = "This looks like a good spot for our next catch-up."
         let noteField = identifiedElement("common-ground.invitation.message", in: app)
         XCTAssertTrue(scrollTo(noteField, in: app))
-        // Bring the form above the bottom inset before editing; a just-visible
-        // field can be hittable while the scroll view is still settling.
-        app.swipeUp()
         noteField.tap()
         noteField.typeText(personalNote)
+        let doneEditing = app.buttons["common-ground.invitation.done-editing"]
+        XCTAssertTrue(doneEditing.waitForExistence(timeout: 3))
+        doneEditing.tap()
         XCTAssertTrue(scrollTo(whenButton, in: app))
+        capture("rec486-date-before-calendar-tap")
         whenButton.tap()
+        capture("rec486-date-after-calendar-tap")
 
         XCTAssertTrue(app.navigationBars["Pick a time"].waitForExistence(timeout: 4))
         XCTAssertTrue(identifiedElement("common-ground.invitation.date-picker", in: app).exists)
@@ -199,7 +201,7 @@ final class CommonGroundMockupUITests: XCTestCase {
             ("common-ground.invitation.place", "Narwhal"),
             ("common-ground.invitation.copy", expectedMessage),
             ("common-ground.invitation.when-value", expectedDate ?? ""),
-            ("common-ground.invitation.reason-title", "Shared regulars")
+            ("common-ground.invitation.reason-title", "You’re both regulars at Narwhal")
         ]
         for (identifier, expected) in expectedFields {
             XCTAssertTrue(scrollTo(app.staticTexts[identifier], in: app))
@@ -209,6 +211,22 @@ final class CommonGroundMockupUITests: XCTestCase {
         closeRecipientToMessages(in: app)
         assertLabel(expectedMessage, on: message)
         XCTAssertEqual(invitationLink.value as? String, expectedDate)
+    }
+
+    func testCompactComposerKeepsTheMainControlsAboveTheFold() {
+        let app = launch(page: "invitation")
+        let share = app.buttons["common-ground.invitation.messages"]
+        XCTAssertTrue(share.waitForExistence(timeout: 8))
+        XCTAssertTrue(share.isHittable)
+        XCTAssertTrue(app.buttons["common-ground.invitation.when"].isHittable)
+        XCTAssertTrue(identifiedElement("common-ground.invitation.message", in: app).isHittable)
+        XCTAssertFalse(app.buttons["Preview invitation in Messages"].exists)
+        for copy in ["You bring the company", "Shared regulars", "Keep the time open",
+                     "Choose Messages to send your plan and place link"] {
+            XCTAssertFalse(app.staticTexts[copy].exists)
+            XCTAssertFalse(app.buttons[copy].exists)
+        }
+        capture("rec486-compact-composer")
     }
 
     func testCaptureEveryNativeDesignState() {
@@ -398,11 +416,11 @@ final class CommonGroundMockupUITests: XCTestCase {
 
     private func assertLosAngelesNarratives(in app: XCUIApplication) {
         let narratives = [
-            ("narwhal", "You both love Narwhal"),
+            ("narwhal", "You’re both regulars at Narwhal"),
             ("grove-gardens", "Grove Gardens won you both over"),
             ("not-no-bar", "You both want to go to Not No Bar"),
-            ("mudwater", "Joe loves Mudwater. You’re next?"),
-            ("the-little-room", "You could show Joe The Little Room")
+            ("mudwater", "Joe’s been to Mudwater\nYou wanna go"),
+            ("the-little-room", "You’ve been to The Little Room\nJoe wants to go")
         ]
         for (id, expectedTitle) in narratives {
             let title = app.staticTexts["common-ground.narrative.\(id)"]

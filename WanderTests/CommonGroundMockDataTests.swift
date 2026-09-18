@@ -86,15 +86,15 @@ final class CommonGroundMockDataTests: XCTestCase {
 
     func testCuratedMixExcludesHistoryAndKeepsDistinctEvidenceBasedCandidates() {
         let mix = CommonGroundMockData.mix()
-        XCTAssertEqual(mix.count, 5)
+        XCTAssertEqual(mix.count, 6)
         XCTAssertEqual(Set(mix.map(\.id)).count, mix.count)
         XCTAssertFalse(mix.contains { $0.kind == .history })
-        XCTAssertFalse(mix.contains { ["lantern-kitchen", "terrace"].contains($0.id) })
+        XCTAssertFalse(mix.contains { $0.id == "terrace" })
         XCTAssertTrue(mix.contains { $0.bothLoved && $0.bothRegulars })
         XCTAssertTrue(mix.contains { $0.bothLoved && !$0.bothRegulars })
         XCTAssertTrue(mix.contains { $0.youWanna && $0.joeWanna })
         XCTAssertTrue(mix.contains { $0.kind == .introduce })
-        XCTAssertEqual(Set(mix.map(\.narrativeTitle)).count, 5)
+        XCTAssertEqual(Set(mix.map(\.narrativeTitle)).count, 6)
         XCTAssertEqual(Set(mix.map(\.narrativeSymbol)).count, 5)
         XCTAssertTrue(mix.allSatisfy { $0.narrativeTitle.contains($0.name) })
         XCTAssertEqual(CommonGroundMockData.places.count, 10)
@@ -105,13 +105,13 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertTrue(joesFavorite.youWanna)
         XCTAssertEqual(joesFavorite.youVisits, 0)
         XCTAssertGreaterThanOrEqual(joesFavorite.joeVisits, 3)
-        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Mudwater. You’re next?")
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s been to Mudwater\nYou wanna go")
 
         let yourFavorite = try place("the-little-room")
         XCTAssertTrue(yourFavorite.joeWanna)
         XCTAssertEqual(yourFavorite.joeVisits, 0)
         XCTAssertGreaterThanOrEqual(yourFavorite.youVisits, 3)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You could show Joe The Little Room")
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve been to The Little Room\nJoe wants to go")
 
         for candidate in [try place("narwhal"), joesFavorite, yourFavorite] {
             XCTAssertFalse(candidate.reason.contains("/5"), "Repeat evidence should describe check-ins.")
@@ -140,7 +140,7 @@ final class CommonGroundMockDataTests: XCTestCase {
             youWannaEventIDs: ["wanna-1", "wanna-2"], reason: "In your Wannas"
         )
         XCTAssertEqual(joesFavorite.kind, .introduce)
-        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe loves Repeat. Go back together?")
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s been to Repeat\nYou wanna go")
 
         let yourFavorite = CommonGroundMockPlace(
             id: "repeat", name: "Repeat", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
@@ -149,11 +149,9 @@ final class CommonGroundMockDataTests: XCTestCase {
             joeWannaEventIDs: ["wanna-3"], reason: "In Joe’s Wannas"
         )
         XCTAssertEqual(yourFavorite.kind, .introduce)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You and Joe could go back to Repeat")
-        for candidate in [joesFavorite, yourFavorite] {
-            XCTAssertEqual(CommonGroundInvitationDraft(place: candidate).message,
-                           "We both know Repeat\nLet’s go back together?")
-        }
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve been to Repeat\nJoe wants to go")
+        XCTAssertTrue(CommonGroundInvitationDraft(place: joesFavorite).message.contains("I wanna go"))
+        XCTAssertTrue(CommonGroundInvitationDraft(place: yourFavorite).message.contains("you wanna go"))
     }
 
     func testAvailableCitiesUseTheUnionOfVisitsAndExcludeWannaOnlyCities() {
@@ -171,15 +169,53 @@ final class CommonGroundMockDataTests: XCTestCase {
 
     func testMixUsesTheChosenEligibleCityAndSparseKeepsItsFirstTwoCandidates() {
         XCTAssertEqual(CommonGroundMockData.mix().map(\.id), [
-            "narwhal", "grove-gardens", "not-no-bar", "mudwater", "the-little-room"
+            "narwhal", "grove-gardens", "not-no-bar", "mudwater", "the-little-room", "lantern-kitchen"
         ])
         XCTAssertEqual(CommonGroundMockData.mix(area: "London").map(\.id), ["canal-coffee", "sundial-books"])
-        XCTAssertEqual(CommonGroundMockData.mix(area: " los angeles ").count, 5)
+        XCTAssertEqual(CommonGroundMockData.mix(area: " los angeles ").count, 6)
         XCTAssertTrue(CommonGroundMockData.mix(area: "San Francisco").isEmpty)
         XCTAssertTrue(CommonGroundMockData.mix(area: "Kyoto").isEmpty)
         XCTAssertTrue(CommonGroundMockData.mix(area: "Kyoto", sparse: true).isEmpty)
         XCTAssertEqual(CommonGroundMockData.mix(sparse: true).map(\.id), ["narwhal", "grove-gardens"])
         XCTAssertEqual(CommonGroundMockData.mix(area: "London", sparse: true).map(\.id), ["canal-coffee", "sundial-books"])
+    }
+
+    func testEveryRelationshipUsesActualVisitsAndIndependentWannaEvidence() {
+        let states: [(Int, Int, Bool, Bool, Double?, Double?, CommonGroundMockPlace.Linkage)] = [
+            (13, 3, false, false, 5, 5, .sharedRegulars),
+            (1, 1, false, false, 5, 5, .sharedLove),
+            (1, 0, false, true, nil, nil, .viewerBeenPartnerWanna),
+            (0, 1, true, false, nil, nil, .partnerBeenViewerWanna),
+            (1, 1, false, false, nil, 5, .partnerLoves),
+            (1, 1, false, false, 5, nil, .viewerLoves),
+            (0, 0, true, true, nil, nil, .mutualWanna),
+            (12, 0, true, true, 5, nil, .mutualWanna),
+            (0, 0, true, true, 5, 5, .mutualWanna),
+            (1, 1, false, false, nil, nil, .bothBeen),
+            (1, 0, false, false, nil, nil, .viewerBeen),
+            (0, 1, false, false, nil, nil, .partnerBeen),
+            (0, 0, true, false, nil, nil, .viewerWanna),
+            (0, 0, false, true, nil, nil, .partnerWanna),
+            (0, 0, false, false, 5, 5, .sharedPlace)
+        ]
+        for (mine, theirs, myWanna, theirWanna, myRating, theirRating, expected) in states {
+            let place = CommonGroundMockPlace(
+                id: "state", name: "Charleston Park", category: "Park", area: "City", city: "City",
+                systemImage: "tree", youRating: myRating, joeRating: theirRating,
+                youVisits: mine, joeVisits: theirs, youWanna: myWanna, joeWanna: theirWanna,
+                reason: "Stale fallback must never override actual evidence"
+            )
+            XCTAssertEqual(place.linkage, expected)
+            XCTAssertFalse(place.narrativeTitle.hasSuffix("."))
+            XCTAssertFalse(place.narrativeDetail.contains("Stale fallback"))
+            if mine == 0 || theirs == 0 {
+                XCTAssertFalse(place.narrativeTitle.contains("both been"))
+                XCTAssertFalse(CommonGroundInvitationDraft(place: place).reasonTitle.contains("both been"))
+            }
+            if expected == .viewerBeenPartnerWanna {
+                XCTAssertEqual(place.narrativeTitle, "You’ve been to Charleston Park\nJoe wants to go")
+            }
+        }
     }
 
     private func place(_ id: String) throws -> CommonGroundMockPlace {

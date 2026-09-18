@@ -113,6 +113,10 @@ async function main() {
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
         await client.query(transactionBody(
+          readFileSync(new URL("../supabase/tests/place_plan_invitations.sql", import.meta.url), "utf8"),
+          "rollback",
+        ));
+        await client.query(transactionBody(
           readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"),
           "rollback",
         ));
@@ -2509,6 +2513,8 @@ $user_place_soft_delete$;
 ${migrationPreviewTestSQL}
 
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
+
+${transactionBody(readFileSync(new URL("../supabase/tests/place_plan_invitations.sql", import.meta.url), "utf8"), "rollback")}
 
 reset role;
 rollback;

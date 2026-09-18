@@ -1,60 +1,63 @@
 #if DEBUG
 import SwiftUI
+import UIKit
 
-/// Shared composer for the local rehearsal and the signed-in app’s place-link sharing.
+/// Shared composer and artwork for the local rehearsal and real invitation links.
 struct CommonGroundInvitationMockup: View {
     @Environment(\.astirBrandMode) private var brand
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft: CommonGroundInvitationDraft
     @State private var envelopeOpened: Bool
     @State private var showsMessages = false
-    @State private var showsLivePreview = false
     @State private var showsCalendar = false
+    @State private var shareContent: WanderShareContent?
+    @State private var isPreparingShare = false
+    @State private var shareFailed = false
     @AccessibilityFocusState private var postcardFocused: Bool
     @FocusState private var noteFocused: Bool
     let opensEnvelope: Bool
     let liveSharing: Bool
+    let showsLinkage: Bool
     private let sourcePlace: CommonGroundMockPlace
     private let canShare: (CommonGroundMockPlace) -> Bool
+    private let prepareShare: ((CommonGroundInvitationDraft) async throws -> WanderShareContent)?
 
-    init(draft: CommonGroundInvitationDraft, opensEnvelope: Bool = false, initiallyOpened: Bool = false, liveSharing: Bool = false, canShare: @escaping (CommonGroundMockPlace) -> Bool = { _ in true }) {
+    init(draft: CommonGroundInvitationDraft, opensEnvelope: Bool = false, initiallyOpened: Bool = false, liveSharing: Bool = false, showsLinkage: Bool = false, canShare: @escaping (CommonGroundMockPlace) -> Bool = { _ in true }, prepareShare: ((CommonGroundInvitationDraft) async throws -> WanderShareContent)? = nil) {
         _draft = State(initialValue: draft)
         _envelopeOpened = State(initialValue: initiallyOpened)
         self.opensEnvelope = opensEnvelope
         self.liveSharing = liveSharing
+        self.showsLinkage = showsLinkage
         sourcePlace = draft.place
         self.canShare = canShare
+        self.prepareShare = prepareShare
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 16) {
                 if opensEnvelope {
                     recipient
                 } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("ASTIR’s taking the wheel")
-                            .font(AstirTypography.sheetTitle).accessibilityAddTraits(.isHeader)
-                        Text("You bring the company")
-                            .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
-                    }
+                    Text(showsLinkage ? draft.reasonTitle : "ASTIR’s taking the wheel")
+                        .font(AstirTypography.sheetTitle)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("common-ground.invitation.heading")
                     invitationPreview
-                    invitationContext(includesMessage: false)
                     composerFields
                 }
             }
-            .padding(20).padding(.bottom, 8)
+            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
-            if liveSharing {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Preview", systemImage: "eye") { showsLivePreview = true }
-                        .accessibilityLabel("Preview invitation in Messages")
-                }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { noteFocused = false }
+                    .accessibilityIdentifier("common-ground.invitation.done-editing")
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -66,19 +69,20 @@ struct CommonGroundInvitationMockup: View {
             }
         }
         .sheet(isPresented: $showsMessages) {
-            if liveSharing, let content = draft.shareContent {
+            if liveSharing, let content = shareContent {
                 WanderShareSheet(content: content)
             } else {
                 CommonGroundMessagesMockup(draft: draft, isReply: opensEnvelope)
             }
         }
-        .sheet(isPresented: $showsLivePreview) {
-            CommonGroundMessagesMockup(draft: draft)
+        .alert("Couldn’t create this invitation", isPresented: $shareFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your draft is still here. Please try again in a moment")
         }
         .onChange(of: sourcePlace) { _, place in
             if liveSharing {
                 showsMessages = false
-                showsLivePreview = false
             }
             draft = CommonGroundInvitationDraft(place: place, note: draft.note, suggestedDate: draft.suggestedDate)
         }
@@ -101,7 +105,7 @@ struct CommonGroundInvitationMockup: View {
                     .accessibilityIdentifier("common-ground.invitation.copy")
             }
             Label {
-                Text(draft.reasonTitle)
+                Text(opensEnvelope ? draft.recipientReasonTitle : draft.reasonTitle)
                     .accessibilityIdentifier("common-ground.invitation.reason-title")
             } icon: {
                 Image(systemName: draft.reasonSymbol)
@@ -119,7 +123,7 @@ struct CommonGroundInvitationMockup: View {
     }
 
     private var composerFields: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Make it yours").font(AstirTypography.control)
@@ -127,7 +131,7 @@ struct CommonGroundInvitationMockup: View {
                 }
                 TextField(draft.message, text: $draft.note, axis: .vertical)
                     .focused($noteFocused)
-                    .font(AstirTypography.body).lineLimit(2...5)
+                    .font(AstirTypography.body).lineLimit(2...3)
                     .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                     .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 14))
                     .contentShape(Rectangle())
@@ -159,11 +163,7 @@ struct CommonGroundInvitationMockup: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("When, \(draft.whenText ?? "optional, choose a day and time")")
                 .accessibilityIdentifier("common-ground.invitation.when")
-                if draft.suggestedDate != nil {
-                    Button("Keep the time open") { draft.suggestedDate = nil }
-                        .font(AstirTypography.bodySmall).frame(minHeight: 44)
-                        .accessibilityIdentifier("common-ground.invitation.clear-date")
-                }
+
             }
         }
     }
@@ -215,9 +215,13 @@ struct CommonGroundInvitationMockup: View {
             Button {
                 noteFocused = false
                 guard !liveSharing || canShare(draft.place) else { return }
-                showsMessages = true
+                if liveSharing {
+                    Task { await createInvitation() }
+                } else {
+                    showsMessages = true
+                }
             } label: {
-                Label(liveSharing ? "Share invitation" : opensEnvelope ? "Reply in Messages" : "Preview in Messages", systemImage: liveSharing ? "square.and.arrow.up" : "message.fill")
+                Label(isPreparingShare ? "Creating invitation…" : liveSharing ? "Share invitation" : opensEnvelope ? "Reply in Messages" : "Preview in Messages", systemImage: liveSharing ? "square.and.arrow.up" : "message.fill")
                     .font(AstirTypography.control).frame(maxWidth: .infinity, minHeight: 52)
                     .foregroundStyle(brand.accentForeground)
                     .background(brand.accent, in: RoundedRectangle(cornerRadius: 16))
@@ -225,14 +229,31 @@ struct CommonGroundInvitationMockup: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("common-ground.invitation.messages")
-            .disabled(liveSharing && draft.shareContent == nil)
-            Text(liveSharing
-                 ? (draft.shareContent == nil ? "This place needs to finish syncing before you can share" : "Choose Messages to send your plan and place link")
-                 : "Design preview · nothing is sent")
-                .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
+            .disabled(isPreparingShare || (liveSharing && !draft.canCreateInvitation))
+            if liveSharing && !draft.canCreateInvitation {
+                Text("This place needs to finish syncing before you can share")
+                    .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
+            }
+
         }
-        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 4)
         .background(brand.background)
+    }
+
+    @MainActor
+    private func createInvitation() async {
+        guard !isPreparingShare, let prepareShare, canShare(draft.place) else { return }
+        let sharedDraft = draft
+        isPreparingShare = true
+        defer { isPreparingShare = false }
+        do {
+            let content = try await prepareShare(sharedDraft)
+            guard canShare(sharedDraft.place), draft == sharedDraft else { return }
+            shareContent = content
+            showsMessages = true
+        } catch {
+            shareFailed = true
+        }
     }
 }
 
@@ -243,13 +264,30 @@ struct CGInvitationLinkPreview: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let draft: CommonGroundInvitationDraft
     var showsViewButton: Bool
+    var sharePhoto: UIImage? = nil
+    var rendersShareArtwork = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                CommonGroundPlaceArtwork(place: draft.place)
+                Group {
+                    if let sharePhoto {
+                        Image(uiImage: sharePhoto).resizable().scaledToFill()
+                    } else if rendersShareArtwork {
+                        brand.raisedBackground.overlay {
+                            Image(systemName: draft.place.systemImage)
+                                .font(.system(size: 42, weight: .ultraLight))
+                                .foregroundStyle(brand.accentText)
+                        }
+                    } else if let reference = draft.place.photoReference {
+                        CommonGroundLivePlaceArtwork(reference: reference, systemImage: draft.place.systemImage, providerOnly: true)
+                    } else {
+                        CommonGroundPlaceArtwork(place: draft.place)
+                    }
+                }
                     .frame(maxWidth: .infinity)
-                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 188 : 224)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 144 : 176)
+                    .clipped()
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.12), .black.opacity(0.76)],
                     startPoint: .top,
@@ -269,12 +307,11 @@ struct CGInvitationLinkPreview: View {
             }
 
             HStack(alignment: .center, spacing: 12) {
-                Text("ASTIR")
-                    .font(.system(size: 11, weight: .bold, design: .serif))
-                    .tracking(1.2)
-                    .foregroundStyle(brand.accentForeground)
-                    .frame(width: 54, height: 54)
-                    .background(brand.accent, in: RoundedRectangle(cornerRadius: 13))
+                Image("InvitationAppIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 46, height: 46)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
                     .accessibilityLabel("ASTIR")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(draft.linkTitle)
@@ -293,6 +330,8 @@ struct CGInvitationLinkPreview: View {
                 if showsViewButton {
                     Text("View")
                         .font(.system(.subheadline, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(brand.accentForeground)
                         .padding(.horizontal, 19)
                         .frame(minHeight: 44)
@@ -356,7 +395,7 @@ private struct CGInvitationDatePicker: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brand
     @State var date: Date
-    let confirm: (Date) -> Void
+    let confirm: (Date?) -> Void
 
     var body: some View {
         NavigationStack {
@@ -375,7 +414,12 @@ private struct CGInvitationDatePicker: View {
                 }.padding(20)
             }
             .navigationTitle("Pick a time").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("No date yet") { confirm(nil); dismiss() }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 Button {
                     confirm(date)

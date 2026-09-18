@@ -308,6 +308,17 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Shared map"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["where you agree"].exists)
         capture("rec-335-in-common-shared-map-release")
+
+        let sharedPlace = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "in-common.map-place.")).firstMatch
+        reveal(sharedPlace, in: app)
+        XCTAssertTrue(sharedPlace.isHittable)
+        sharedPlace.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 5))
+        let linkage = app.staticTexts["common-ground.invitation.heading"]
+        XCTAssertTrue(linkage.exists)
+        XCTAssertNotEqual(linkage.label, "ASTIR’s taking the wheel")
+        XCTAssertTrue(app.buttons["Share invitation"].exists)
+        capture("rec486-shared-map-invitation")
     }
 
     func testLiveInCommonOpensRealPlaceAndPersonalizedComposer() {

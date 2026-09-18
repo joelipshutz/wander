@@ -109,6 +109,7 @@ struct CommonGroundLivePlaceArtwork: View {
 
     let reference: CommonGroundPlacePhotoReference
     let systemImage: String
+    var providerOnly = false
 
     private struct LoadRequest: Equatable {
         let reference: CommonGroundPlacePhotoReference
@@ -156,6 +157,7 @@ struct CommonGroundLivePlaceArtwork: View {
                 resolved = try await backend.placePhoto(for: load.reference.request)
             }
             guard !Task.isCancelled, load == loadRequest else { return }
+            guard !providerOnly || resolved.isGooglePlacesPhoto else { return }
             resolvedReference = load.reference
             photo = resolved
         } catch {
@@ -170,6 +172,7 @@ struct CommonGroundLivePlaceArtwork: View {
     private func handleImageFailure(_ failedPhoto: PlacePhoto) {
         guard resolvedReference == reference, photo?.cacheKey == failedPhoto.cacheKey else { return }
         photo = nil
+        guard !providerOnly else { return }
         if failedPhoto.isGooglePlacesPhoto, userFallbackReference != reference {
             userFallbackReference = reference
         }

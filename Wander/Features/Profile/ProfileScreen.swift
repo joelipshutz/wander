@@ -2406,7 +2406,12 @@ private struct InCommonReleaseMapScreen: View {
                             ProfilePlaceRow(visiblePlace: visiblePlace)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("in-common.map-place.\(visiblePlace.id)")
+                        #if DEBUG
+                        .accessibilityHint("Compose an invitation for this shared place")
+                        #else
                         .accessibilityHint("Shows saved place details")
+                        #endif
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -2421,6 +2426,7 @@ private struct InCommonReleaseMapScreen: View {
 }
 
 private struct SavedPlacesListScreen: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
@@ -2439,6 +2445,7 @@ private struct SavedPlacesListScreen: View {
     @State private var showsInCommonMap = false
     #if DEBUG
     @State private var commonGroundInvitation: CommonGroundMockPlace?
+    @State private var commonGroundInvitationShowsLinkage = false
     #endif
 
     init(mode: SavedPlacesListMode, profileID: String) {
@@ -2512,7 +2519,7 @@ private struct SavedPlacesListScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isInCommonRoot, !allModePlaces.isEmpty {
+            if isInCommonRoot, !allModePlaces.isEmpty, !hasCommonGroundInvitation {
                 Button {
                     showsInCommonMap = true
                 } label: {
@@ -2539,9 +2546,14 @@ private struct SavedPlacesListScreen: View {
             InCommonReleaseMapScreen(
                 places: allModePlaces,
                 currentUserID: store.currentUser.id,
-                onSelect: { selectedPlace = $0 }
+                onSelect: openSharedMapPlace
             )
         }
+        #if DEBUG
+        .navigationDestination(item: $commonGroundInvitation) { selected in
+            commonGroundInvitationDestination(selected)
+        }
+        #endif
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
         }
@@ -2664,27 +2676,51 @@ private struct SavedPlacesListScreen: View {
                 selectedPlace = (store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID))
                     .first { $0.id == place.sourcePlaceID }
             },
-            invite: { commonGroundInvitation = $0 }
-        )
-        .navigationDestination(item: $commonGroundInvitation) { selected in
-            if selected.viewer.id == store.currentUser.id,
-               let current = snapshot.places.first(where: { $0.id == selected.id }) {
-                CommonGroundInvitationMockup(
-                    draft: CommonGroundInvitationDraft(place: current),
-                    liveSharing: true,
-                    canShare: { draftPlace in
-                        store.currentUser.id == draftPlace.viewer.id
-                            && CommonGroundLiveData.places(store: store, profileID: profileID).contains(draftPlace)
-                    }
-                )
-            } else {
-                ContentUnavailableView("This plan is no longer available", systemImage: "lock",
-                                       description: Text("Head back to In Common for your current shared places"))
-                    .toolbar(.visible, for: .navigationBar)
+            invite: {
+                commonGroundInvitationShowsLinkage = false
+                commonGroundInvitation = $0
             }
+        )
+    }
+
+    @ViewBuilder
+    private func commonGroundInvitationDestination(_ selected: CommonGroundMockPlace) -> some View {
+        if selected.viewer.id == store.currentUser.id,
+           let current = CommonGroundLiveData.places(store: store, profileID: profileID)
+               .first(where: { $0.id == selected.id }) {
+            CommonGroundInvitationMockup(
+                draft: CommonGroundInvitationDraft(place: current),
+                liveSharing: true,
+                showsLinkage: commonGroundInvitationShowsLinkage,
+                canShare: { draftPlace in
+                    store.currentUser.id == draftPlace.viewer.id
+                        && CommonGroundLiveData.places(store: store, profileID: profileID).contains(draftPlace)
+                },
+                prepareShare: { draft in
+                    try await CommonGroundInvitationSharing.prepare(draft: draft, backend: backend, brand: brandMode)
+                }
+            )
+        } else {
+            ContentUnavailableView("This plan is no longer available", systemImage: "lock",
+                                   description: Text("Head back to In Common for your current shared places"))
+                .toolbar(.visible, for: .navigationBar)
         }
     }
     #endif
+
+    private func openSharedMapPlace(_ selected: VisiblePlace) {
+        #if DEBUG
+        let rows = store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID)
+        let matchingIDs = Set(rows.filter { VisiblePlaceGrouping.matches($0, selected) }.map(\.id))
+        if let place = CommonGroundLiveData.places(store: store, profileID: profileID)
+            .first(where: { $0.sourcePlaceID.map(matchingIDs.contains) ?? false }) {
+            commonGroundInvitationShowsLinkage = true
+            commonGroundInvitation = place
+        }
+        #else
+        selectedPlace = selected
+        #endif
+    }
 
     private var hasCommonGroundInvitation: Bool {
         #if DEBUG
@@ -2783,7 +2819,9 @@ private struct SavedPlacesListScreen: View {
 
     private var inlineNavigationHeader: some View {
         ZStack {
-            Text(navigationTitle)
+            (Text("In ") + Text("Common").italic())
+                .accessibilityLabel("In Common")
+                .accessibilityIdentifier("common-ground.collection-title")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .lineLimit(1)
@@ -2797,6 +2835,18 @@ private struct SavedPlacesListScreen: View {
         .frame(minHeight: WanderTheme.tapMinimum)
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing1)
+        .background {
+            Group {
+                if reduceTransparency { brandMode.background }
+                else { ProfileMotionBackdropBlur(isDark: brandMode.prefersDarkInterface) }
+            }
+                .ignoresSafeArea(edges: .top)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [brandMode.background.opacity(0.06), .clear],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 12).offset(y: 12)
+                }
+        }
     }
 
     private func matchesCollection(_ visiblePlace: VisiblePlace) -> Bool {

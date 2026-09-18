@@ -310,16 +310,16 @@ struct CommonGroundMixMockup: View {
             LazyVStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 16) {
-                        HStack(spacing: -10) {
-                            CommonGroundPersonAvatar(person: viewer, size: 52)
-                            CommonGroundPersonAvatar(person: partner, size: 52)
-                        }
                         Text("\(viewer.shortName) + \(partner.shortName)")
                             .font(AstirTypography.label)
                             .foregroundStyle(brand.primaryText)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                             .layoutPriority(1)
                         Spacer(minLength: 0)
+                        HStack(spacing: -10) {
+                            CommonGroundPersonAvatar(person: viewer, size: 52)
+                            CommonGroundPersonAvatar(person: partner, size: 52)
+                        }
                     }
                     HStack(alignment: .center) {
                         areaPicker
@@ -429,6 +429,29 @@ private struct CommonGroundPlaceStory: View {
             footer
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(place.linkage == .sharedRegulars ? 16 : 0)
+        .background {
+            if place.linkage == .sharedRegulars {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(brand.raisedBackground)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(LinearGradient(
+                                stops: [
+                                    .init(color: brand.accent.opacity(0.04), location: 0),
+                                    .init(color: .white.opacity(0.25), location: 0.34),
+                                    .init(color: .white.opacity(0.04), location: 0.52),
+                                    .init(color: brand.accent.opacity(0.08), location: 1)
+                                ], startPoint: .topLeading, endPoint: .bottomTrailing
+                            ))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(.white.opacity(0.2), lineWidth: 0.75)
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     private var headline: some View {
@@ -439,12 +462,7 @@ private struct CommonGroundPlaceStory: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("common-ground.narrative.\(place.id)")
-            if place.bothRegulars && place.bothLoved {
-                Image(systemName: "flame.fill")
-                    .font(.system(.title2, weight: .semibold))
-                    .foregroundStyle(brand.accentText)
-                    .accessibilityHidden(true)
-            }
+
         }
     }
 
@@ -487,7 +505,7 @@ private struct CommonGroundPlaceStory: View {
                         .padding(.leading, 8).accessibilityHidden(true)
                 }
             }
-            Text("A shared soft spot.")
+            Text("A shared soft spot")
                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
         }
         .padding(.vertical, 6)

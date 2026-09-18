@@ -54,12 +54,38 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
     let photoReference: CommonGroundPlacePhotoReference?
     let sourcePlaceID: String?
 
-    var kind: CommonGroundMockKind {
-        if bothLoved { return .returnTogether }
+    enum Linkage: String, Hashable, Sendable {
+        case sharedRegulars, sharedLove, mutualWanna
+        case viewerBeenPartnerWanna, partnerBeenViewerWanna
+        case partnerLoves, viewerLoves, bothBeen
+        case viewerBeen, partnerBeen, viewerWanna, partnerWanna, sharedPlace
+    }
+
+    /// One evidence decision drives every surface. A Wanna never counts as a
+    /// visit, and a check-in never erases a separate repeat Wanna.
+    var linkage: Linkage {
+        if bothLoved && bothRegulars { return .sharedRegulars }
+        if bothLoved { return .sharedLove }
         if youWanna && joeWanna { return .mutualWanna }
-        if youWanna && joeVisits >= 3 && (joeRating ?? 0) >= 4.5 { return .introduce }
-        if joeWanna && youVisits >= 3 && (youRating ?? 0) >= 4.5 { return .introduce }
-        return .history
+        if youVisits > 0 && joeWanna { return .viewerBeenPartnerWanna }
+        if joeVisits > 0 && youWanna { return .partnerBeenViewerWanna }
+        if partnerLoves { return .partnerLoves }
+        if viewerLoves { return .viewerLoves }
+        if youVisits > 0 && joeVisits > 0 { return .bothBeen }
+        if youVisits > 0 { return .viewerBeen }
+        if joeVisits > 0 { return .partnerBeen }
+        if youWanna { return .viewerWanna }
+        if joeWanna { return .partnerWanna }
+        return .sharedPlace
+    }
+
+    var kind: CommonGroundMockKind {
+        switch linkage {
+        case .sharedRegulars, .sharedLove: .returnTogether
+        case .mutualWanna: .mutualWanna
+        case .viewerBeenPartnerWanna, .partnerBeenViewerWanna, .partnerLoves, .viewerLoves: .introduce
+        default: .history
+        }
     }
 
     var youVisits: Int { youEvidence.visitCount }
@@ -143,55 +169,65 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         }
     }
 
-    var bothLoved: Bool {
-        guard let youRating, let joeRating else { return false }
-        return youRating >= 4.5 && joeRating >= 4.5
-    }
-
+    var viewerLoves: Bool { youVisits > 0 && (youRating ?? 0) >= 4.5 }
+    var partnerLoves: Bool { joeVisits > 0 && (joeRating ?? 0) >= 4.5 }
+    var bothLoved: Bool { viewerLoves && partnerLoves }
     var bothRegulars: Bool { youVisits >= 3 && joeVisits >= 3 }
 
     var narrativeTitle: String {
-        switch narrative {
-        case .sharedRegulars: "You both love \(name)"
-        case .sharedRatings: "\(name) won you both over"
-        case .mutualWanna:
-            "You both want to go to \(name)"
-        case .joeIntroduces:
-            youVisits > 0 ? "\(partner.shortName) loves \(name). Go back together?" : "\(partner.shortName) loves \(name). You’re next?"
-        case .youIntroduce:
-            joeVisits > 0 ? "You and \(partner.shortName) could go back to \(name)" : "You could show \(partner.shortName) \(name)"
-        case .history: "You’ve both been to \(name)"
+        switch linkage {
+        case .sharedRegulars: "You’re both regulars at \(name)"
+        case .sharedLove: "\(name) won you both over"
+        case .mutualWanna: "You both want to go to \(name)"
+        case .viewerBeenPartnerWanna: "You’ve been to \(name)\n\(partner.shortName) wants to go"
+        case .partnerBeenViewerWanna: "\(partner.shortName)’s been to \(name)\nYou wanna go"
+        case .partnerLoves: "\(partner.shortName) loves \(name)"
+        case .viewerLoves: "You love \(name)\nShow \(partner.shortName)"
+        case .bothBeen: "You’ve both been to \(name)"
+        case .viewerBeen: "You’ve been to \(name)\nBring \(partner.shortName) along"
+        case .partnerBeen: "\(partner.shortName)’s been to \(name)\nGo together?"
+        case .viewerWanna: "You want to go to \(name)\nBring \(partner.shortName) along"
+        case .partnerWanna: "\(partner.shortName) wants to go to \(name)"
+        case .sharedPlace: "Make a plan at \(name)"
         }
     }
 
     var narrativeDetail: String {
-        reason.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-    }
-
-    var narrativeSymbol: String {
-        switch narrative {
-        case .sharedRegulars: "flame.fill"
-        case .sharedRatings: "heart.fill"
-        case .mutualWanna: "bookmark"
-        case .joeIntroduces: "arrow.up.right"
-        case .youIntroduce: "arrow.up.left"
-        case .history: "mappin.and.ellipse"
+        switch linkage {
+        case .sharedRegulars, .bothBeen:
+            "You: \(visitsText(youVisits)) · \(partner.shortName): \(visitsText(joeVisits))"
+        case .sharedLove:
+            "You: \(PlaceRating.averageDisplay(youRating!))/5 · \(partner.shortName): \(PlaceRating.averageDisplay(joeRating!))/5"
+        case .mutualWanna: "In both of your Wannas"
+        case .viewerBeenPartnerWanna:
+            "You: \(visitsText(youVisits)) · In \(partner.shortName)’s Wannas"
+        case .partnerBeenViewerWanna:
+            "\(partner.shortName): \(visitsText(joeVisits)) · In your Wannas"
+        case .partnerLoves: "\(partner.shortName) rated it \(PlaceRating.averageDisplay(joeRating!))/5"
+        case .viewerLoves: "You rated it \(PlaceRating.averageDisplay(youRating!))/5"
+        case .viewerBeen: "You: \(visitsText(youVisits))"
+        case .partnerBeen: "\(partner.shortName): \(visitsText(joeVisits))"
+        case .viewerWanna: "In your Wannas"
+        case .partnerWanna: "In \(partner.shortName)’s Wannas"
+        case .sharedPlace: "A place on both your maps"
         }
     }
 
-    private enum Narrative {
-        case sharedRegulars, sharedRatings, mutualWanna, joeIntroduces, youIntroduce, history
+    var narrativeSymbol: String {
+        switch linkage {
+        case .sharedRegulars: "arrow.counterclockwise"
+        case .sharedLove, .partnerLoves, .viewerLoves: "heart.fill"
+        case .mutualWanna, .viewerWanna, .partnerWanna: "bookmark"
+        case .partnerBeenViewerWanna: "arrow.up.right"
+        case .viewerBeenPartnerWanna: "arrow.up.left"
+        default: "mappin.and.ellipse"
+        }
     }
 
-    private var narrative: Narrative {
-        guard kind != .history else { return .history }
-        if bothLoved && bothRegulars { return .sharedRegulars }
-        if bothLoved { return .sharedRatings }
-        if youWanna && joeWanna { return .mutualWanna }
-        if youWanna && joeVisits >= 3 && (joeRating ?? 0) >= 4.5 { return .joeIntroduces }
-        if joeWanna && youVisits >= 3 && (youRating ?? 0) >= 4.5 { return .youIntroduce }
-        return .history
+    private func visitsText(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "check-in" : "check-ins")"
     }
+
 }
 
 /// Fictional, deterministic design fixtures. Visit counts describe each person's

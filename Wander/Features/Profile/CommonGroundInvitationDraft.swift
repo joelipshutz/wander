@@ -11,78 +11,60 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
     var message: String {
         let personalNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard personalNote.isEmpty else { return personalNote }
-        switch reason {
-        case .sharedRegulars:
-            let suggestion = place.category == "Coffee" ? "Coffee together?" : "Go together?"
-            return "We’re both \(place.name) people\n\(suggestion)"
-        case .sharedLove:
-            return "We both loved \(place.name)\nRound two?"
-        case .mutualWanna:
-            return place.totalVisits > 0
-                ? "We both wanna go to \(place.name)\nLet’s make a plan?"
-                : "We’ve both had \(place.name) saved\nLet’s finally go?"
-        case .joesRegular:
-            return place.youVisits > 0
-                ? "We both know \(place.name)\nLet’s go back together?"
-                : "You keep going back to \(place.name)\nTake me next time?"
-        case .ryansRegular:
-            return place.joeVisits > 0
-                ? "We both know \(place.name)\nLet’s go back together?"
-                : "I keep going back to \(place.name)\nLet me show you why"
-        case .history:
-            return "Want to go to \(place.name)?"
+        switch place.linkage {
+        case .sharedRegulars: return "We’re both regulars at \(place.name)\nLet’s go together?"
+        case .sharedLove: return "We both loved \(place.name)\nRound two?"
+        case .mutualWanna: return "We both wanna go to \(place.name)\nLet’s make a plan?"
+        case .partnerBeenViewerWanna: return "You’ve been to \(place.name) and I wanna go\nTake me next time?"
+        case .viewerBeenPartnerWanna: return "I’ve been to \(place.name) and you wanna go\nLet’s make a plan?"
+        case .partnerLoves: return "You love \(place.name)\nTake me next time?"
+        case .viewerLoves: return "I love \(place.name)\nLet me show you why"
+        case .bothBeen: return "We’ve both been to \(place.name)\nGo back together?"
+        default: return "Want to go to \(place.name)?"
         }
     }
 
     var reasonTitle: String {
-        switch reason {
-        case .sharedRegulars: "Shared regulars"
-        case .sharedLove: "Shared love"
+        switch place.linkage {
+        case .sharedRegulars: "You’re both regulars at \(place.name)"
+        case .sharedLove: "You both love this place"
         case .mutualWanna: "Both Wanna Go"
-        case .joesRegular: "\(place.partner.shortName)’s regular spot"
-        case .ryansRegular: "\(place.viewer.shortName)’s regular spot"
-        case .history: "Shared place"
+        case .viewerBeenPartnerWanna: "You’ve been and \(place.partner.shortName) wants to go"
+        case .partnerBeenViewerWanna: "\(place.partner.shortName)’s been and you wanna go"
+        case .partnerLoves: "\(place.partner.shortName) loves this place"
+        case .viewerLoves: "You love this place, show \(place.partner.shortName)"
+        case .bothBeen: "You’ve both been here"
+        case .viewerBeen: "You’ve been here"
+        case .partnerBeen: "\(place.partner.shortName)’s been here"
+        case .viewerWanna: "You wanna go"
+        case .partnerWanna: "\(place.partner.shortName) wants to go"
+        case .sharedPlace: "A place for you two"
         }
     }
 
-    var reasonDetail: String {
-        switch reason {
-        case .sharedRegulars, .history:
-            "\(visitEvidence(name: place.viewer.shortName, count: place.youVisits)) · \(visitEvidence(name: place.partner.shortName, count: place.joeVisits))"
-        case .sharedLove:
-            "\(ratingEvidence(name: place.viewer.shortName, rating: place.youRating)) · \(ratingEvidence(name: place.partner.shortName, rating: place.joeRating))"
-        case .mutualWanna:
-            "In both of your Wannas"
-        case .joesRegular:
-            "\(visitEvidence(name: place.partner.shortName, count: place.joeVisits)) · In \(place.viewer.shortName)’s Wannas"
-        case .ryansRegular:
-            "\(visitEvidence(name: place.viewer.shortName, count: place.youVisits)) · In \(place.partner.shortName)’s Wannas"
+    var recipientReasonTitle: String {
+        switch place.linkage {
+        case .viewerBeenPartnerWanna: "\(place.viewer.shortName)’s been and you wanna go"
+        case .partnerBeenViewerWanna: "You’ve been and \(place.viewer.shortName) wants to go"
+        case .partnerLoves: "You love this place, show \(place.viewer.shortName)"
+        case .viewerLoves: "\(place.viewer.shortName) loves this place"
+        case .viewerBeen: "\(place.viewer.shortName)’s been here"
+        case .partnerBeen: "You’ve been here"
+        case .viewerWanna: "\(place.viewer.shortName) wants to go"
+        case .partnerWanna: "You wanna go"
+        default: reasonTitle
         }
     }
 
-    var postcardReasonDetail: String? {
-        if case .mutualWanna = reason { return nil }
-        return reasonDetail
-    }
-
-    var reasonSymbol: String {
-        switch reason {
-        case .sharedRegulars: "flame.fill"
-        case .sharedLove: "heart.fill"
-        case .mutualWanna: "sparkles"
-        case .joesRegular: "arrow.up.right"
-        case .ryansRegular: "arrow.up.left"
-        case .history: "mappin.and.ellipse"
-        }
-    }
+    var reasonDetail: String { place.narrativeDetail }
+    var postcardReasonDetail: String? { nil }
+    var reasonSymbol: String { place.narrativeSymbol }
 
     var whenText: String? {
         suggestedDate?.formatted(date: .abbreviated, time: .shortened)
     }
 
-    /// One title/subtitle contract drives the in-app rehearsal and the rich
-    /// Messages card. The production invite route can publish these same values
-    /// as its Open Graph title and description when that route is introduced.
+    /// The composer, shared artwork, and hosted invitation use this title/date.
     var linkTitle: String {
         "Let’s go to \(place.name) together"
     }
@@ -95,26 +77,21 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         locationText
     }
 
-    var shareContent: WanderShareContent? {
-        WanderShareContent.place(
-            serverID: place.photoReference?.request.placeID,
-            name: linkTitle,
-            message: shareText
-        )
+    var canCreateInvitation: Bool {
+        place.photoReference?.placeID.flatMap(UUID.init(uuidString:)) != nil
     }
 
-    /// The proposed message and date travel with the existing place link.
-    var shareText: String {
-        var paragraphs = [
-            message,
-            [place.name, locationText].filter { !$0.isEmpty }.joined(separator: " · "),
-            "\(reasonTitle): \(reasonDetail)"
-        ]
-        if let whenText {
-            paragraphs.append("When: \(whenText)")
-        }
-        return paragraphs.joined(separator: "\n\n")
+    func shareContent(invitationToken: String) -> WanderShareContent? {
+        guard invitationToken.count == 48,
+              invitationToken.allSatisfy({ "0123456789abcdef".contains($0) }),
+              let url = URL(string: "https://getrec.me/plans/\(invitationToken)")
+        else { return nil }
+        return WanderShareContent.place(item: url, name: linkTitle, message: shareText)
     }
+
+    /// Composer copy is separate from the link's title, artwork, and date.
+    /// Never paste private visit/rating evidence into the outgoing message.
+    var shareText: String { [message, whenText].compactMap { $0 }.joined(separator: "\n\n") }
 
     private var locationText: String {
         let parts = place.area.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -133,31 +110,5 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         ))!
     )
 
-    private enum Reason {
-        case sharedRegulars, sharedLove, mutualWanna, joesRegular, ryansRegular, history
-    }
-
-    private var reason: Reason {
-        guard place.kind != .history else { return .history }
-        if place.bothLoved && place.bothRegulars { return .sharedRegulars }
-        if place.bothLoved { return .sharedLove }
-        if place.youWanna && place.joeWanna { return .mutualWanna }
-        if place.youWanna && place.joeVisits >= 3 && (place.joeRating ?? 0) >= 4.5 {
-            return .joesRegular
-        }
-        if place.joeWanna && place.youVisits >= 3 && (place.youRating ?? 0) >= 4.5 {
-            return .ryansRegular
-        }
-        return .history
-    }
-
-    private func visitEvidence(name: String, count: Int) -> String {
-        "\(name): \(count) \(count == 1 ? "check-in" : "check-ins")"
-    }
-
-    private func ratingEvidence(name: String, rating: Double?) -> String {
-        guard let rating else { return "\(name): not rated" }
-        return "\(name): \(PlaceRating.averageDisplay(rating))/5"
-    }
 }
 #endif
