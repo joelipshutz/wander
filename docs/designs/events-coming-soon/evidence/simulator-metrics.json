@@ -1,0 +1,106 @@
+{
+  "device": "iPhone 17 Pro simulator",
+  "runtime": "iOS 26.3.1",
+  "iterations": 5,
+  "scope": "Profile \u2192 Events cycle; XCTest includes input synthesis and idle waits, not frame presentation latency",
+  "metrics": [
+    {
+      "name": "Clock Monotonic Time",
+      "unit": "s",
+      "samples": [
+        3.1642343680000002,
+        3.4712879190000003,
+        3.6753271250000004,
+        3.1003476350000003,
+        3.6516140370000003
+      ],
+      "mean": 3.4125622168000005,
+      "minimum": 3.1003476350000003,
+      "maximum": 3.6753271250000004
+    },
+    {
+      "name": "CPU Time (wander)",
+      "unit": "s",
+      "samples": [
+        0.817826139,
+        0.7637113050000001,
+        0.848085615,
+        0.793091167,
+        0.771644477
+      ],
+      "mean": 0.7988717406,
+      "minimum": 0.7637113050000001,
+      "maximum": 0.848085615
+    },
+    {
+      "name": "Memory Peak Physical (wander)",
+      "unit": "kB",
+      "samples": [
+        108383.256,
+        111119.408,
+        108842.032,
+        109267.992,
+        109153.304
+      ],
+      "mean": 109353.1984,
+      "minimum": 108383.256,
+      "maximum": 111119.408
+    },
+    {
+      "name": "Memory Physical (wander)",
+      "unit": "kB",
+      "samples": [
+        573.44,
+        3686.424,
+        -2818.072,
+        -65.536,
+        -32.768
+      ],
+      "mean": 268.69759999999997,
+      "minimum": -2818.072,
+      "maximum": 3686.424
+    },
+    {
+      "name": "CPU Cycles (wander)",
+      "unit": "kC",
+      "samples": [
+        2670392.641,
+        2642560.054,
+        2848566.894,
+        2765112.946,
+        2525013.415
+      ],
+      "mean": 2690329.19,
+      "minimum": 2525013.415,
+      "maximum": 2848566.894
+    },
+    {
+      "name": "CPU Instructions Retired (wander)",
+      "unit": "kI",
+      "samples": [
+        5127672.47,
+        5008824.708,
+        5820314.528,
+        5053192.309,
+        5072296.338
+      ],
+      "mean": 5216460.0706,
+      "minimum": 5008824.708,
+      "maximum": 5820314.528
+    },
+    {
+      "name": "Absolute Memory Physical (wander)",
+      "unit": "kB",
+      "samples": [
+        105040.92,
+        108727.344,
+        105909.272,
+        105843.736,
+        105810.968
+      ],
+      "mean": 106266.448,
+      "minimum": 105040.92,
+      "maximum": 108727.344
+    }
+  ]
+}
