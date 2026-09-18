@@ -3319,7 +3319,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("@Environment(\\.colorScheme) private var systemColorScheme"))
         XCTAssertTrue(root.contains("systemColorScheme == .dark ? .editorial : .editorialLight"))
         XCTAssertTrue(root.contains(".toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)"))
-        XCTAssertTrue(root.contains(".toolbarBackground(astirBrandMode.background, for: .tabBar)"))
+        XCTAssertFalse(root.contains(".toolbarBackground(astirBrandMode.background, for: .tabBar)"))
         XCTAssertTrue(root.contains(".tint(astirBrandMode.accent)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(selectedTab == .events"))
         XCTAssertFalse(root.contains("selectedTab == .events ? .editorial"))

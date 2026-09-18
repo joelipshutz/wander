@@ -540,7 +540,6 @@ struct WanderRootView: View {
                     .tabItem { tabItemLabel(for: .profile) }
                     .tag(WanderTab.profile)
             }
-            .toolbarBackground(astirBrandMode.background, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
             .overlay {
@@ -3220,8 +3219,8 @@ enum WanderTabBarWalkthroughTargetGeometry {
 }
 
 /// Keep navigation in the user's appearance independently of black Events art.
-/// Give Liquid Glass a stable surface to sample without changing the artwork
-/// geometry or replacing the system controls.
+/// Keep one translucent material beneath the native controls on every tab.
+/// Never paint an opaque capsule over the content beneath Liquid Glass.
 private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
     let colorScheme: ColorScheme
     let selection: WanderTab
@@ -3240,7 +3239,7 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
         controller.scheduleAppearanceAfterSelection()
     }
 
-    final class PlateView: UIView {}
+    final class PlateView: UIVisualEffectView {}
 
     final class Controller: UIViewController {
         var colorScheme: ColorScheme = .light
@@ -3287,7 +3286,6 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
             }
             let mode: AstirBrandMode = colorScheme == .dark ? .editorial : .editorialLight
             let traits = UITraitCollection(userInterfaceStyle: style)
-            let background = UIColor(cgColor: UIColor(mode.background).resolvedColor(with: traits).cgColor)
             let ink = UIColor(cgColor: UIColor(mode.primaryText).resolvedColor(with: traits).cgColor)
             let accent = UIColor(cgColor: UIColor(mode.accent).resolvedColor(with: traits).cgColor)
             func matches(_ appearance: UITabBarAppearance?) -> Bool {
@@ -3326,7 +3324,11 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
             }
             plate.frame = container.convert(plateFrame, from: bar)
             plate.layer.cornerRadius = plateFrame.height / 2
-            plate.backgroundColor = background
+            plate.clipsToBounds = true
+            if plate.overrideUserInterfaceStyle != style {
+                plate.overrideUserInterfaceStyle = style
+                plate.effect = UIBlurEffect(style: style == .dark ? .systemThinMaterialDark : .systemThinMaterialLight)
+            }
             plate.isHidden = bar.isHidden
         }
     }
