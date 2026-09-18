@@ -17,8 +17,6 @@ enum OnboardingFlapFinish: String, CaseIterable {
 
     var cornerRadius: CGFloat { self == .sculpted ? 3.2 : (self == .graphic ? 0.8 : 1.4) }
     var depth: CGFloat { self == .sculpted ? 2.4 : (self == .graphic ? 0.4 : 1.4) }
-    var glyphInset: CGFloat { self == .graphic ? 2 : (self == .sculpted ? 3 : 4) }
-    var fontScale: CGFloat { self == .graphic ? 0.9 : (self == .sculpted ? 0.85 : 0.83) }
 }
 
 /// Rasterize the branded faces only when size or appearance changes. Each flip
@@ -156,21 +154,22 @@ final class OnboardingFlapSurfaceView: UIView {
                                       colors: colors.map(\.cgColor) as CFArray, locations: [0, 1])!
             cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: rect.height), options: [])
 
-            // Avenir Next is already the Astir type family. Its condensed heavy
-            // cut gives the board fuller, taller caps without changing the grid.
-            let font = UIFont(name: "AvenirNextCondensed-Heavy", size: rect.height * finish.fontScale)
-                ?? UIFont.systemFont(ofSize: rect.height * finish.fontScale, weight: .heavy)
+            // Keep the earlier monospaced letterforms at their natural aspect
+            // ratio. Fit with one font size, never a horizontal-only transform.
+            // All three finishes share typography; only the physical face varies.
+            let reference = UIFont.monospacedSystemFont(ofSize: 100, weight: .bold)
+            let advance = ("W" as NSString).size(withAttributes: [.font: reference]).width
+            let availableWidth = rect.width - max(2, rect.width * 0.12)
+            let fontSize = 100 * min(availableWidth / advance, rect.height * 0.68 / reference.capHeight)
+            let font = reference.withSize(max(1, fontSize))
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor(AstirTheme.signal.color)]
             let text = String(character) as NSString
             let width = text.size(withAttributes: attributes).width
-            let widest = ("W" as NSString).size(withAttributes: attributes).width
-            let horizontalScale = min(1, (rect.width - finish.glyphInset) / widest)
             let textHeight = font.lineHeight
             // Center the actual capital height, not the font's descender space.
             let y = (rect.height - font.capHeight) / 2 - (font.ascender - font.capHeight)
             cg.saveGState()
             cg.translateBy(x: rect.midX, y: 0)
-            cg.scaleBy(x: horizontalScale, y: 1)
             if finish != .graphic {
                 cg.setShadow(offset: CGSize(width: 0, height: finish == .sculpted ? 1 : 0.55), blur: 0,
                              color: UIColor.black.withAlphaComponent(isDark ? 0.40 : 0.13).cgColor)
