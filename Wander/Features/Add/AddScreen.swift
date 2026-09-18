@@ -250,6 +250,7 @@ struct AddScreen: View {
 
     private var isAddWalkthroughActive: Bool {
         walkthroughs.activeSurface == .add
+            && walkthroughs.currentStep?.presentationStyle != .contextual
     }
 
     private var isWalkthroughAddFlowActive: Bool {
@@ -355,7 +356,7 @@ struct AddScreen: View {
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
                 if activeSurface == .saveFlow {
                     restoreActiveSaveFlowIfNeeded()
-                } else if activeSurface == .add {
+                } else if activeSurface == .add && isAddWalkthroughActive {
                     settleWalkthroughSheet()
                 }
             }
@@ -1174,7 +1175,7 @@ struct AddScreen: View {
         if let draft = PlaceSaveDraft.addFlow(
             ownerUserID: store.currentUser.id,
             context: context,
-            walkthroughContentVersion: walkthroughs.activeSurface == .add
+            walkthroughContentVersion: isAddWalkthroughActive
                 ? FirstVisitWalkthroughContent.version
                 : nil
         ) {

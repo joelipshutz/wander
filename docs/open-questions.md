@@ -1,8 +1,30 @@
 # Open Questions
 
-Last updated: 2026-09-15
+Last updated: 2026-09-17
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Onboarding copy and explorations (REC-529)
+
+Joe confirmed the exact opening on September 17: **“Connect with your”** with
+**community / people / places / loved ones**, then the **whole lockup** uses hinged letter flips to become
+**“a local experiment”**. Those words and the whole-lockup replacement are no
+longer open questions. The production default includes this native opening before
+the Places and People benefits; “A life full of” remains rejected prototype filler.
+
+Supporting description wording and immediate-versus-delayed timing remain for
+review. The delayed native baseline is “Keep track of everywhere you’ve been.
+Keep up with the people you love.” Debug configuration can show alternatives.
+Mechanical split-flap letters and separate slides are implemented and recorded.
+Flap cadence, supporting-copy persistence through the final phrase, and the
+opening footer/Log in reveal point remain creative review choices. Validation
+and its broader UI limits are recorded in `docs/reviews/rec-529-native-onboarding.md`.
+
+Contact-to-member matching is not implemented by the current invite provider, so
+the permission purpose must not promise matching. Plans/Events, curated starter
+lists, voluntary Feed scroll exploration, stone/material icon choices, and
+replacement finale quotes remain separate decisions. The native review uses the
+existing Bourdain finale with a six-second timeout and immediate Skip.
 
 ## Astir Events product and implementation gates (REC-467)
 

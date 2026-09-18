@@ -58,16 +58,16 @@ struct OnboardingFlowView: View {
                     step: .contacts,
                     systemImage: "person.2.fill",
                     accent: WanderTheme.pinSocial.color,
-                    title: "Invite your people",
-                    message: "Choose someone to invite from your contacts. Your address book stays on this device and is not uploaded.",
-                    bullets: ["You choose each person", "Invites open in Messages for you to send"],
+                    title: "Connect with your people",
+                    message: "Use your contacts to connect with people you know.",
+                    bullets: [],
                     primaryTitle: "Continue",
                     analytics: analytics,
                     request: { await contactsPermission.requestAccess() },
                     continueAction: { advance(from: .contacts) }
                 )
             case .friends:
-                OnboardingFriendSuggestionsView(backend: backend, analytics: analytics) {
+                OnboardingFriendSuggestionsView(backend: backend, userID: session.userID, analytics: analytics) {
                     advance(from: .friends)
                 }
             case .notifications:
@@ -139,7 +139,8 @@ struct OnboardingFlowView: View {
     }
 }
 
-private struct OnboardingIdentityView: View {
+struct OnboardingIdentityView: View {
+    @Environment(\.astirBrandMode) private var brandMode
     private enum Availability: Equatable {
         case idle
         case checking
@@ -160,6 +161,7 @@ private struct OnboardingIdentityView: View {
     @State private var photoCropSelection: ProfilePhotoCropSelection?
     @State private var previewImage: UIImage?
     @State private var jpegData: Data?
+    @State private var existingAvatarURL: String?
     @State private var availability: Availability = .idle
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -167,7 +169,7 @@ private struct OnboardingIdentityView: View {
 
     private enum Field { case name, handle }
 
-    init(session: AuthSession, analytics: AnalyticsClient, continueAction: @escaping () -> Void) {
+    init(session: AuthSession, analytics: AnalyticsClient, initialPhoto: UIImage? = nil, continueAction: @escaping () -> Void) {
         self.session = session
         self.analytics = analytics
         self.continueAction = continueAction
@@ -179,6 +181,8 @@ private struct OnboardingIdentityView: View {
         ).normalizedHandle
         _name = State(initialValue: initialName)
         _handle = State(initialValue: initialHandle)
+        _previewImage = State(initialValue: initialPhoto)
+        _jpegData = State(initialValue: initialPhoto?.jpegData(compressionQuality: 0.9))
     }
 
     private var draft: ProfileIdentityDraft {
@@ -191,6 +195,7 @@ private struct OnboardingIdentityView: View {
 
     private var canSubmit: Bool {
         draft.isValid
+            && (session.isAppleSignIn == true || jpegData?.isEmpty == false || existingAvatarURL != nil)
             && availability != .checking
             && availability != .unavailable
             && !isSaving
@@ -200,6 +205,7 @@ private struct OnboardingIdentityView: View {
         Binding(
             get: { handle },
             set: { value in
+                guard value != handle else { return }
                 handle = value
                 hasEditedHandle = true
                 availability = .idle
@@ -209,8 +215,6 @@ private struct OnboardingIdentityView: View {
     }
 
     var body: some View {
-        let avatarImage = previewImage.map { Image(uiImage: $0) }
-
         OnboardingStepScaffold(step: .identity) {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
@@ -221,46 +225,45 @@ private struct OnboardingIdentityView: View {
                             message: "This is how friends find you on Astir."
                         )
                     }
-                    HStack(spacing: WanderTheme.spacing4) {
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            ZStack(alignment: .bottomTrailing) {
-                                Group {
-                                    if let avatarImage {
-                                        avatarImage
-                                            .resizable()
-                                            .scaledToFill()
-                                    } else {
-                                        Circle()
-                                            .fill(WanderTheme.terracottaTint.color)
-                                            .overlay(
-                                                Image(systemName: "person.crop.circle.fill")
-                                                    .font(.system(size: 52))
-                                                    .foregroundStyle(WanderTheme.terracotta.color)
-                                            )
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                        Text("YOUR PROFILE")
+                            .font(AstirTypography.metadata)
+                            .tracking(1.4)
+                            .foregroundStyle(brandMode.accentText)
+                        ProfileIdentityHeader(name: draft.normalizedDisplayName.isEmpty ? "Your name" : draft.normalizedDisplayName) {
+                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                VStack(spacing: WanderTheme.spacing2) {
+                                    ZStack(alignment: .bottomTrailing) {
+                                        profilePhoto
+                                            .frame(width: 104, height: 104)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(brandMode.background)
+                                            .frame(width: 30, height: 30)
+                                            .background(brandMode.primaryText, in: Circle())
+                                            .overlay(Circle().stroke(brandMode.background, lineWidth: 3))
                                     }
+                                    Text(previewImage == nil && existingAvatarURL == nil ? "Add a photo" : "Change photo")
+                                        .font(AstirTypography.caption)
+                                        .foregroundStyle(brandMode.primaryText)
                                 }
-                                .frame(width: 104, height: 104)
-                                .clipShape(Circle())
-
-                                Image(systemName: "plus")
-                                    .font(.system(size: 14, weight: .black))
-                                    .foregroundStyle(AstirTheme.ink.color)
-                                    .frame(width: 34, height: 34)
-                                    .background(WanderTheme.terracotta.color)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 3))
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(previewImage == nil && existingAvatarURL == nil ? "Add a required profile photo" : "Change profile photo")
+                            .accessibilityIdentifier("onboarding.identity.photo")
+                        } details: {
+                            Text("@\(draft.normalizedHandle.isEmpty ? "your_username" : draft.normalizedHandle)")
+                                .font(AstirTypography.control)
+                                .foregroundStyle(brandMode.secondaryText)
+                                .lineLimit(2)
+                                .accessibilityIdentifier("onboarding.identity.previewHandle")
                         }
-                        .accessibilityLabel("Add an optional profile photo")
-
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Add a photo")
-                                .font(AstirTypography.cardTitle)
-                            Text("Optional — you can always do this later.")
-                                .font(AstirTypography.bodySmall)
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                        }
+                        Spacer(minLength: 0)
                     }
+                    .padding(.top, WanderTheme.spacing4)
+                    .frame(minHeight: 240, alignment: .top)
 
                     VStack(spacing: WanderTheme.spacing3) {
                         if session.isAppleSignIn != true {
@@ -319,7 +322,9 @@ private struct OnboardingIdentityView: View {
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing6)
+                .disabled(isSaving)
             }
+            .scrollDismissesKeyboard(.interactively)
         } footer: {
             WanderPrimaryButton(
                 title: isSaving ? "Creating your profile…" : "Continue",
@@ -332,6 +337,12 @@ private struct OnboardingIdentityView: View {
             .accessibilityIdentifier("onboarding.identity.continue")
         }
         .task(id: draft.normalizedHandle) { await checkAvailability() }
+        .task {
+            guard let profile = try? await backend.currentProfile(), !Task.isCancelled,
+                  let url = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty
+            else { return }
+            existingAvatarURL = url
+        }
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task { await loadPhoto(item) }
@@ -344,8 +355,23 @@ private struct OnboardingIdentityView: View {
                     jpegData = data
                     previewImage = image
                     photoCropSelection = nil
+                    errorMessage = nil
                 }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var profilePhoto: some View {
+        if let previewImage {
+            Image(uiImage: previewImage).resizable().scaledToFill()
+        } else if let existingAvatarURL {
+            WanderAvatar(initials: String(draft.normalizedDisplayName.prefix(2)).uppercased(), avatarURL: existingAvatarURL, size: 104)
+        } else {
+            Circle().fill(brandMode.border.opacity(0.4))
+                .overlay(Image(systemName: "person.crop.circle")
+                    .font(.system(size: 50, weight: .ultraLight))
+                    .foregroundStyle(brandMode.secondaryText))
         }
     }
 
@@ -372,12 +398,16 @@ private struct OnboardingIdentityView: View {
             return
         }
         availability = .checking
+        let candidate = draft.normalizedHandle
         do {
             try await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
-            availability = try await backend.isProfileHandleAvailable(draft.normalizedHandle) ? .available : .unavailable
+            let isAvailable = try await backend.isProfileHandleAvailable(candidate)
+            guard !Task.isCancelled, candidate == draft.normalizedHandle else { return }
+            availability = isAvailable ? .available : .unavailable
         } catch is CancellationError {
         } catch {
+            guard !Task.isCancelled, candidate == draft.normalizedHandle else { return }
             availability = .idle
         }
     }
@@ -389,20 +419,24 @@ private struct OnboardingIdentityView: View {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            _ = try await backend.updateCurrentProfile(
-                ProfileDetailsUpdate(
-                    displayName: draft.normalizedDisplayName,
-                    handle: draft.normalizedHandle
-                )
+            try await OnboardingIdentitySubmission.save(
+                draft: draft,
+                photoData: jpegData,
+                existingAvatarURL: existingAvatarURL,
+                updateIdentity: { update in _ = try await backend.updateCurrentProfile(update) },
+                uploadPhoto: { data in _ = try await backend.uploadProfileAvatar(jpegData: data, userID: session.userID) }
             )
             analytics.track(AnalyticsEvent(
                 name: WanderAnalyticsEvents.onboardingIdentitySubmitted,
                 properties: ["photo_selected": jpegData == nil ? "false" : "true"]
             ))
-            if let jpegData {
-                _ = try? await backend.uploadProfileAvatar(jpegData: jpegData, userID: session.userID)
-            }
             continueAction()
+        } catch let error as OnboardingIdentityPhotoError {
+            errorMessage = error.message
+            analytics.track(AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingIdentityFailed,
+                properties: ["reason": "photo_save_failed"]
+            ))
         } catch {
             let mapped = ProfileIdentitySubmissionError.map(error)
             availability = mapped == .handleTaken ? .unavailable : availability
@@ -604,190 +638,6 @@ private struct OnboardingPermissionView: View {
                 }
             }
         }
-    }
-}
-
-private struct OnboardingFriendSuggestionsView: View {
-    let analytics: AnalyticsClient
-    let continueAction: () -> Void
-    @StateObject private var model: OnboardingFriendSuggestionsModel
-
-    init(
-        backend: WanderBackend,
-        analytics: AnalyticsClient,
-        continueAction: @escaping () -> Void
-    ) {
-        self.analytics = analytics
-        self.continueAction = continueAction
-        _model = StateObject(wrappedValue: OnboardingFriendSuggestionsModel(backend: backend))
-    }
-
-    var body: some View {
-        OnboardingStepScaffold(step: .friends) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                OnboardingHeadline(
-                    eyebrow: "YOUR TRUSTED MAP",
-                    title: "Astir is better with people",
-                    message: "Start with a few people whose taste you’d like to see. You’re always in control of who you follow."
-                )
-                .padding(.horizontal, WanderTheme.spacing4)
-
-                Group {
-                    switch model.loadingState {
-                    case .idle, .loading:
-                        Spacer()
-                        ProgressView("Finding good people to follow…")
-                            .font(AstirTypography.bodySmall)
-                            .frame(maxWidth: .infinity)
-                        Spacer()
-                    case .failed:
-                        OnboardingEmptySuggestions(
-                            title: "Suggestions are taking a minute",
-                            message: "You can skip this and find people from Discover anytime."
-                        )
-                    case .loaded:
-                        if model.recommendations.isEmpty {
-                            OnboardingEmptySuggestions(
-                                title: "Your people will show up here",
-                                message: "Skip for now — we’ll keep finding trusted people as Astir grows."
-                            )
-                        } else {
-                            ScrollView {
-                                LazyVStack(spacing: WanderTheme.spacing2) {
-                                    ForEach(model.recommendations, id: \.profile.id) { recommendation in
-                                        Button { model.toggle(recommendation.profile.id) } label: {
-                                            OnboardingFriendRow(
-                                                recommendation: recommendation,
-                                                isSelected: model.selectedIDs.contains(recommendation.profile.id)
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.horizontal, WanderTheme.spacing4)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.top, WanderTheme.spacing2)
-        } footer: {
-            VStack(spacing: WanderTheme.spacing1) {
-                let count = model.selectedIDs.count
-                WanderPrimaryButton(
-                    title: count == 0 ? "Continue" : "Follow \(count) \(count == 1 ? "person" : "people")",
-                    isDisabled: model.isFollowing
-                ) {
-                    Task {
-                        let followed = await model.followSelected()
-                        analytics.track(AnalyticsEvent(
-                            name: WanderAnalyticsEvents.onboardingFriendSuggestionsCompleted,
-                            properties: ["selected_count": String(count), "followed_count": String(followed)]
-                        ))
-                        if followed > 0 {
-                            analytics.track(
-                                AnalyticsEvent(
-                                    name: WanderAnalyticsEvents.followCreated,
-                                    properties: [
-                                        "source": "onboarding_suggestions",
-                                        "outcome": "succeeded",
-                                        "followed_count": String(followed)
-                                    ]
-                                )
-                            )
-                            analytics.track(
-                                .engagement(
-                                    need: .connect,
-                                    action: .followCreated,
-                                    surface: "onboarding_suggestions",
-                                    properties: ["followed_count": String(followed)]
-                                )
-                            )
-                        }
-                        continueAction()
-                    }
-                }
-                Button("Skip") {
-                    analytics.track(AnalyticsEvent(
-                        name: WanderAnalyticsEvents.onboardingFriendSuggestionsCompleted,
-                        properties: ["selected_count": "0", "followed_count": "0", "source": "skipped"]
-                    ))
-                    continueAction()
-                }
-                    .font(AstirTypography.control)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-            }
-        }
-        .task {
-            await model.load()
-        }
-    }
-}
-
-private struct OnboardingFriendRow: View {
-    let recommendation: DiscoverPeopleRecommendation
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            WanderAvatar(
-                initials: String(recommendation.profile.displayName.prefix(2)).uppercased(),
-                avatarURL: recommendation.profile.avatarURL,
-                size: 50,
-                color: WanderTheme.avatarSofia.color
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(recommendation.profile.displayName)
-                    .font(AstirTypography.cardTitle)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                Text("@\(recommendation.profile.handle) · \(reason)")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 27, weight: .bold))
-                .foregroundStyle(isSelected ? WanderTheme.stateSuccess.color : WanderTheme.borderStrong.color)
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(isSelected ? WanderTheme.stateSuccess.color.opacity(0.45) : WanderTheme.borderHairline.color)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private var reason: String {
-        switch recommendation.reason {
-        case .followsYou: "follows you"
-        case .sharedFollows(let count): "\(count) mutual connections"
-        case .suggested: "suggested for you"
-        }
-    }
-}
-
-private struct OnboardingEmptySuggestions: View {
-    let title: String
-    let message: String
-
-    var body: some View {
-        VStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "person.2.wave.2")
-                .font(.system(size: 44))
-                .foregroundStyle(WanderTheme.pinSocial.color)
-            Text(title).font(AstirTypography.sectionTitle)
-            Text(message)
-                .font(AstirTypography.bodySmall)
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .multilineTextAlignment(.center)
-        }
-        .padding(WanderTheme.spacing6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
