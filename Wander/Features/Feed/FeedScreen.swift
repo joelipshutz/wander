@@ -27,8 +27,22 @@ struct FeedScreen: View {
     @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    private let onPlaceProfilePresentation: (WanderDeepLinkPresentationToken) -> Void
+    private let onPlaceProfileWillDismiss: (WanderDeepLinkPresentationToken) -> Void
+    private let onPlaceProfileDidDismiss: () -> Void
 
-    init(onAdd: @escaping () -> Void = {}) {
+    init(
+        presentationResetRequest: WanderPresentationResetRequest? = nil,
+        onPlaceProfilePresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onPlaceProfileWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onPlaceProfileDidDismiss: @escaping () -> Void = {},
+        onAdd: @escaping () -> Void = {}
+    ) {
+        self.presentationResetRequest = presentationResetRequest
+        self.onPlaceProfilePresentation = onPlaceProfilePresentation
+        self.onPlaceProfileWillDismiss = onPlaceProfileWillDismiss
+        self.onPlaceProfileDidDismiss = onPlaceProfileDidDismiss
         self.onAdd = onAdd
         let initialSurface = FeedSurface.resolvedInitialSurface()
         _selectedSurface = State(initialValue: initialSurface)
@@ -133,8 +147,16 @@ struct FeedScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
-                selectedPlaceDestination
+            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss) {
+                WanderRootPresentationLifecycle(
+                    surface: .feedPlaceProfile,
+                    onPresent: onPlaceProfilePresentation,
+                    onDismiss: onPlaceProfileWillDismiss
+                ) {
+                    NavigationStack {
+                        selectedPlaceDestination
+                    }
+                }
             }
             .navigationDestination(item: commentsRouteBinding) { route in
                 ActivityCommentsRouteScreen(
@@ -166,6 +188,7 @@ struct FeedScreen: View {
             }
             .blocksProductUpsells(
                 while: selectedProfile != nil
+                    || selectedPlace != nil
                     || placeSaveFlow != nil
                     || savedMessage != nil
             )
@@ -205,6 +228,10 @@ struct FeedScreen: View {
                 if !isShowing {
                     restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
+            }
+            .onChange(of: presentationResetRequest?.id) { _, requestID in
+                guard requestID != nil else { return }
+                selectedPlace = nil
             }
         }
     }
