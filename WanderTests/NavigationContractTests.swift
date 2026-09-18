@@ -158,11 +158,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
-    func testPrimaryTabsUsePaperListsIconAndSystemSelectionFeedback() throws {
+    func testPrimaryTabsUseCustomEventsAndListsIconsAndSystemSelectionFeedback() throws {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .events, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
-        XCTAssertEqual(WanderTab.events.systemImage, "sparkles")
         XCTAssertEqual(WanderTab.lists.systemImage, PlaceListSymbol.systemImage)
         XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
 
@@ -175,6 +174,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 5)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
         XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
+        XCTAssertTrue(root.contains("Image(uiImage: EventsTabSymbol.tabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -1168,6 +1168,40 @@ final class NavigationContractTests: XCTestCase {
             source.activityViewController(controller, subjectForActivityType: nil),
             "Maya Chen's Santa Monica map"
         )
+    }
+
+    @MainActor
+    func testProfileSharePreviewProvidesReusableLocalBitmapData() throws {
+        let image = WanderSharePreviewArtwork.profile
+        XCTAssertTrue(image === WanderSharePreviewArtwork.profile)
+        XCTAssertNotNil(image.cgImage)
+        let data = try XCTUnwrap(image.pngData())
+        XCTAssertNotNil(UIImage(data: data))
+        XCTAssertEqual(image.size, CGSize(width: 96, height: 96))
+    }
+
+    @MainActor
+    func testProfileMapImageAttachmentPreparationPreservesPixelsAndHonorsCancellation() async throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 9), format: format).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 12, height: 9))
+        }
+        let prepared = await WanderShareAttachmentStore.preparePNG(image)
+        let fileURL = try XCTUnwrap(prepared)
+        let decoded = try XCTUnwrap(UIImage(contentsOfFile: fileURL.path))
+        XCTAssertEqual(decoded.size, image.size)
+        XCTAssertEqual(decoded.pngData(), image.pngData())
+        await WanderShareAttachmentStore.removePreparedPNG(at: fileURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+
+        let cancelled = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await WanderShareAttachmentStore.preparePNG(image)
+        }
+        let cancelledResult = await cancelled.value
+        XCTAssertNil(cancelledResult)
     }
 
     @MainActor
@@ -3088,10 +3122,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(mapSection.contains("ProfileMapSnapshotView("))
-        XCTAssertTrue(mapSection.contains("shareImageFileURL = nil"))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL?.wrappedValue = nil"))
         XCTAssertTrue(mapSection.contains("renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)"))
-        XCTAssertTrue(mapSection.contains("let pngData = image.pngData()"))
-        XCTAssertTrue(mapSection.contains("shareImageFileURL = imageFileURL"))
+        XCTAssertFalse(mapSection.contains("image.pngData()"))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL.wrappedValue = imageFileURL"))
         XCTAssertFalse(mapSection.contains("\n            Map("))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))

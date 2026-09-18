@@ -2272,16 +2272,19 @@ struct MapScreen: View {
                         compactCardPhase == .entering || compactCardPhase == .presented
                     )
                     .accessibilityHidden(compactCardPhase == .hidden)
-
+            }
+            .background(astirBrandMode.background)
+            .allowsHitTesting(hasRevealedInitialMap)
+            .accessibilityHidden(!hasRevealedInitialMap)
+            .overlay {
                 if !hasRevealedInitialMap {
-                    OnboardingLaunchView(message: "Loading your map…")
+                    OnboardingLaunchView()
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
-                        .zIndex(100)
                 }
             }
-            .background(astirBrandMode.background)
+            .toolbar(hasRevealedInitialMap ? .visible : .hidden, for: .tabBar)
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
