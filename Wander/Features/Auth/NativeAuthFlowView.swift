@@ -9,6 +9,8 @@ struct NativeAuthFlowView: View {
 
     let isDismissable: Bool
     let mode: NativeAuthMode
+    var onClose: (() -> Void)? = nil
+    var onLogIn: (() -> Void)? = nil
 
     @State private var emailAddress = ""
     @State private var verificationCode = ""
@@ -65,7 +67,7 @@ struct NativeAuthFlowView: View {
                 if isDismissable {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
-                            dismiss()
+                            if let onClose { onClose() } else { dismiss() }
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .bold))
@@ -76,6 +78,8 @@ struct NativeAuthFlowView: View {
                         }
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .accessibilityLabel("Close")
+                        .accessibilityIdentifier("auth.close")
+                        .disabled(auth.isPerformingNativeAuth)
                     }
                 }
             }
@@ -180,17 +184,30 @@ struct NativeAuthFlowView: View {
             .foregroundStyle(WanderTheme.textMuted.color)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
+
+            if mode == .signUp, let onLogIn {
+                Button(action: onLogIn) {
+                    Text("Already have an account? Log in")
+                        .font(AstirTypography.control)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(auth.isPerformingNativeAuth)
+                .accessibilityIdentifier("auth.logIn")
+            }
         }
     }
 
     private var authHeader: some View {
         VStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 40, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .frame(width: 72, height: 72)
-                .background(WanderTheme.terracottaTint.color)
-                .clipShape(Circle())
+            AstirLaunchLockup(animationsEnabled: false)
+                .frame(width: 172)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(AstirLaunchArtwork.background)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(title)
