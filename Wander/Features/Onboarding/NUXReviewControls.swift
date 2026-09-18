@@ -10,7 +10,7 @@ struct NUXReviewControls: View {
 
     var body: some View {
         Menu {
-            Section("Playback · applies on replay") {
+            Menu("Playback · applies on replay") {
                 Toggle("Advance manually", isOn: $manual)
                 Picker("Coach motion", selection: $motion) {
                     Text("Pop and settle").tag("pop")
@@ -22,7 +22,7 @@ struct NUXReviewControls: View {
                     Text("6 seconds").tag(6)
                 }
             }
-            Section("Map tour") {
+            Menu("Map tour") {
                 scene("M01 · Featured / replay", .mapFeatured)
                 scene("M02 · Friends", .mapFriends)
                 scene("M03 · More", .mapMoreFilters)
@@ -31,7 +31,7 @@ struct NUXReviewControls: View {
                 scene("M06 · Pin legend", .mapPinLegend)
                 scene("N25 · Map ending", .mapSendoff)
             }
-            Section("First voluntary visits") {
+            Menu("First voluntary visits") {
                 scene("C01 · Nearby Places", .addNearby)
                 scene("C02 · Feed", .feedActivity)
                 scene("C03 · Lists", .listsScope)

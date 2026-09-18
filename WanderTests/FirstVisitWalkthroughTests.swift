@@ -36,6 +36,21 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(store.hasCompletedDeviceFeaturesLesson(for: "ryan"))
     }
 
+    func testLateCoachCallbackCannotSkipTheNextMapBeat() throws {
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "reviewer", store: FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        )
+        coordinator.activate(.map)
+        let featuredID = try XCTUnwrap(coordinator.currentStep?.id)
+        coordinator.advancePassiveStep(ifCurrentStepID: featuredID)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        coordinator.advancePassiveStep(ifCurrentStepID: featuredID)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        let friendsID = try XCTUnwrap(coordinator.currentStep?.id)
+        coordinator.advancePassiveStep(ifCurrentStepID: friendsID)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapMoreFilters)
+    }
+
     func testOpeningPlusExitsOverviewAndShowsOnlyVoluntaryNearbyHint() throws {
         let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)

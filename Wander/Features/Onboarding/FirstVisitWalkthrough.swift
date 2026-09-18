@@ -1516,6 +1516,13 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    /// A disappearing coach or its timer may still deliver a callback while
+    /// the next coach is entering. That callback belongs only to its own beat.
+    func advancePassiveStep(ifCurrentStepID stepID: String) {
+        guard currentStep?.id == stepID else { return }
+        advancePassiveStep()
+    }
+
     func dismissCurrentContext() {
         guard let surface = activeSurface,
               FirstVisitWalkthroughContent.contextualSurfaces.contains(surface) else { return }
@@ -2386,7 +2393,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
                                     ? { coordinator.goBack() }
                                     : nil,
-                                onNext: coordinator.advancePassiveStep
+                                onNext: { coordinator.advancePassiveStep(ifCurrentStepID: step.id) }
                             )
                             .id("\(step.id)-\(coordinator.reviewPlaybackGeneration)")
                             .transition(reduceMotion ? .identity : NUXCoachMotion.selected.transition)

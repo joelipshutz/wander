@@ -52,6 +52,7 @@ struct NUXGuidanceOverlay: View {
                             .frame(width: target.width + 8, height: target.height + 8)
                             .scaleEffect(entered ? 1 : 1.12)
                             .position(x: target.midX, y: target.midY)
+                            .accessibilityHidden(true)
                     }
                     coach
                 }
@@ -76,8 +77,6 @@ struct NUXGuidanceOverlay: View {
                       y: step.surface == .add ? max(32, safeTop + 24) : step.surface == .placeDetail ? max(126, safeTop + 70) : max(82, safeTop + 26))
         }
         .frame(width: size.width, height: size.height)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("walkthrough.\(step.id)")
         .task {
             withAnimation(reduceMotion || handwritten ? nil : .spring(duration: 0.42, bounce: 0.18)) {
                 entered = true
@@ -110,6 +109,8 @@ struct NUXGuidanceOverlay: View {
         .background(brand.raisedBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(brand.border.opacity(0.7), lineWidth: 0.7))
         .shadow(color: .black.opacity(0.09), radius: 18, y: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("walkthrough.\(step.id)")
         .scaleEffect(reduceMotion || entered || NUXCoachMotion.selected == .slide ? 1 : 0.94)
         .offset(x: min(max(target.midX - width / 2, 20), size.width - width - 20),
                 y: top + (reduceMotion || entered ? 0 : 16))
@@ -142,8 +143,10 @@ struct NUXGuidanceOverlay: View {
                 .stroke(ink, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
                 .frame(width: target.width + 14, height: target.height + 12)
                 .position(x: target.midX, y: target.midY)
+                .accessibilityHidden(true)
             NUXHandDrawnArrow(start: start, end: end, bend: nearby ? -10 : side * 22)
                 .stroke(ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .accessibilityHidden(true)
             Text(text)
                 .font(.custom("Noteworthy-Bold", size: nearby ? 18 : 20, relativeTo: .title3))
                 .multilineTextAlignment(.center)
@@ -152,10 +155,10 @@ struct NUXGuidanceOverlay: View {
                 .frame(width: width)
                 .rotationEffect(.degrees(side * -3))
                 .position(x: x, y: y)
+                .accessibilityLabel(text.replacingOccurrences(of: "\n", with: " "))
+                .accessibilityIdentifier("walkthrough.\(step.id)\(nearby || side < 0 ? "" : ".wanna")")
         }
         .shadow(color: brand.background.opacity(0.95), radius: 2)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text.replacingOccurrences(of: "\n", with: " "))
     }
 
 }
@@ -253,7 +256,7 @@ struct NUXConnectionFinale: View {
         .frame(width: size.width, height: size.height)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.\(step.id)")
-        .task(id: scenePhase) {
+        .task(id: "\(scenePhase)-\(reduceMotion)") {
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5)) { visible = true }
             guard scenePhase == .active, !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
                   !UIAccessibility.isVoiceOverRunning, !reduceMotion else { return }

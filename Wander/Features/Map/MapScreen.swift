@@ -2814,6 +2814,7 @@ struct MapScreen: View {
         guard mapFilterState.more != selection else { return }
         let previousSource = mapFilterState.source
         mapFilterState.setMoreSelection(selection)
+        walkthroughs.finishOverviewForUserNavigation()
         if mapFilterState.source != previousSource {
             handleFeaturedCameraChange(currentSearchRegion)
         }
@@ -9874,6 +9875,8 @@ private struct MapMoreFiltersPopover: View {
                     .font(AstirTypography.caption)
                     .foregroundStyle(appearance.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                    .id("nux.more.bottom")
+                    .accessibilityIdentifier("map.more.explanation")
             }
             .padding(WanderTheme.spacing4)
         }

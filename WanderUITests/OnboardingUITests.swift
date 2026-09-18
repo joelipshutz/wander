@@ -752,6 +752,43 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
     }
 
+    func testMorePanelScrollReachesExplanationAndNextClosesIt() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapMoreFilters"]
+        app.launch()
+        let popover = app.descendants(matching: .any)["map.moreFilters.popover"]
+        XCTAssertTrue(popover.waitForExistence(timeout: 18))
+        let explanation = app.staticTexts["map.more.explanation"]
+        // XCTest waits for animation idleness after launch and can miss the
+        // short automatic scroll entirely. Hold the beat to exercise the real
+        // panel and Next deterministically; recordings cover automatic timing.
+        for _ in 0..<3 where !explanation.isHittable { popover.swipeUp() }
+        XCTAssertTrue(explanation.isHittable)
+        captureNUX("M03-scrolled")
+        app.buttons["walkthrough.next.map.mapMoreFilters"].tap()
+        XCTAssertTrue(app.buttons["walkthrough.next.map.mapSearch"].waitForExistence(timeout: 8))
+        XCTAssertFalse(popover.exists)
+        XCTAssertEqual(app.keyboards.count, 0)
+    }
+
+    func testMoreFilterInteractionExitsDemoAndKeepsTheChoice() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapMoreFilters"]
+        app.launch()
+        let coach = app.buttons["walkthrough.next.map.mapMoreFilters"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 18))
+        let category = app.buttons["Coffee, Tea, & Sweets"]
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        category.tap()
+        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
+        let more = app.buttons["map.filter.more"]
+        XCTAssertTrue((more.value as? String)?.contains("1 selected filter") == true)
+        more.tap()
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        XCTAssertTrue(category.isSelected, "The native category choice must survive leaving the demonstration.")
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
+    }
+
     func testPlusRemainsVoluntaryAndDoesNotStartForcedSave() {
         let app = XCUIApplication()
         app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapAdd"]
@@ -776,6 +813,10 @@ final class OnboardingUITests: XCTestCase {
         let coach = app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
         XCTAssertTrue(coach.waitForExistence(timeout: 18))
         captureNUX("C02")
+        let recent = app.staticTexts["Recent"]
+        let switcher = app.descendants(matching: .any)["feed.surfaceSwitch"]
+        XCTAssertGreaterThanOrEqual(recent.frame.minY, switcher.frame.maxY,
+                                    "The reveal must return above the first card, clear of the floating header.")
         app.buttons["walkthrough.next.feed.feedActivity"].tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Feed"].isSelected)
@@ -825,6 +866,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
         checkIn.tap()
         XCTAssertTrue(next.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5),
+                      "The annotation must allow the real Check In editor to open.")
     }
 
     private var nativeOverviewArguments: [String] {

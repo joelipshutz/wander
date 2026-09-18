@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -305,6 +306,7 @@ struct FeedScreen: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
+                .id("nux.feed.top")
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
             .astirScrollTracking(
@@ -320,8 +322,9 @@ struct FeedScreen: View {
                 didInterruptNUXReveal = true
                 walkthroughs.isRevealingFeed = false
             })
-            .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(page?.activity.count ?? 0)-\(walkthroughs.reviewPlaybackGeneration)") {
-                guard walkthroughs.currentStep?.target == .feedActivity,
+            .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(page?.activity.count ?? 0)-\(walkthroughs.reviewPlaybackGeneration)-\(scenePhase)-\(reduceMotion)") {
+                guard scenePhase == .active,
+                      walkthroughs.currentStep?.target == .feedActivity,
                       NUXFeedRevealPolicy.isEnabled,
                       playedNUXRevealGeneration != walkthroughs.reviewPlaybackGeneration,
                       !reduceMotion, !UIAccessibility.isVoiceOverRunning,
@@ -341,7 +344,9 @@ struct FeedScreen: View {
                     try? await Task.sleep(for: .seconds(duration + 0.04))
                 }
                 guard !Task.isCancelled, !didInterruptNUXReveal else { return }
-                withAnimation(.easeInOut(duration: 0.7)) { proxy.scrollTo(ids[0], anchor: .top) }
+                // Return to the full content inset, not the first card beneath
+                // the floating header, so the settled Feed stays readable.
+                withAnimation(.easeInOut(duration: 0.7)) { proxy.scrollTo("nux.feed.top", anchor: .top) }
                 try? await Task.sleep(for: .milliseconds(800))
             }
             .onDisappear { walkthroughs.isRevealingFeed = false }
