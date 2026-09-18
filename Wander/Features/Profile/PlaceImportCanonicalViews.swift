@@ -57,6 +57,8 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var pendingLists: [String: Set<String>] = [:]
     @State private var pendingRemovals: [String: PlaceImportSavedSelectionRemoval] = [:]
     @State private var didReconcileExisting = false
+    @State private var privateDetailsWarningCount = 0
+    @State private var showsSavedDetailsWarning = false
 
     var body: some View {
         ScrollView {
@@ -142,6 +144,30 @@ struct PlaceImportCanonicalReviewScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if privateDetailsWarningCount > 0 {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Check-ins saved")
+                            .font(AstirTypography.control)
+                        Spacer(minLength: WanderTheme.spacing2)
+                        Button("Dismiss") { privateDetailsWarningCount = 0 }
+                            .font(AstirTypography.control)
+                            .frame(minHeight: WanderTheme.tapMinimum)
+                    }
+                    Text(privateDetailsWarningCount == 1
+                         ? "One check-in’s private answers couldn’t be stored on this device. The check-in was saved."
+                         : "Private answers for \(privateDetailsWarningCount) check-ins couldn’t be stored on this device. The check-ins were saved.")
+                        .font(AstirTypography.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(brandMode.primaryText)
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(brandMode.recessedBackground)
+                .accessibilityIdentifier("import.privateDetailsWarning")
+            }
+        }
         .sheet(item: $rescueItem) { item in
             PlaceImportRescueScreen(
                 item: item,
@@ -183,6 +209,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(commitErrorMessage)
+        }
+        .alert("Check-ins saved", isPresented: $showsSavedDetailsWarning) {
+            Button("Done") { (finishPlaceImport ?? onDone)() }
+        } message: {
+            Text("Your check-ins were saved, but some private answers couldn’t be stored on this device.")
         }
         .task {
             importStore.resumePendingImports()
@@ -755,7 +786,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             let didSave = await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
             isCommitting = false
             commitTask = nil
-            if didSave { (finishPlaceImport ?? onDone)() }
+            if didSave {
+                if privateDetailsWarningCount > 0 {
+                    showsSavedDetailsWarning = true
+                } else { (finishPlaceImport ?? onDone)() }
+            }
         }
     }
 
@@ -788,6 +823,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                                 return false
                             }
                             guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
+                            if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                             selection = replacement
                             saveID = result.userPlaceID
                             // Persist the new identity before a later list/removal
@@ -798,13 +834,17 @@ struct PlaceImportCanonicalReviewScreen: View {
                                 savedSelection: replacement, unfinishedRemoval: pendingRemovals[entry.id])
                             store.flushPersistence()
                             importStore.recordReceipt(batchID: batch.id, entries: entries, destinationListID: destination?.id)
+                            // The replacement already owns these details. A
+                            // retry must not replay its original add submission.
+                            stagedDetailSubmissions.removeValue(forKey: entry.id)
                         } else if let submission = stagedDetailSubmissions[entry.id] {
                             // Same-action edits retain the exact receipt identity.
                             guard submission.status == selection.status,
-                                  await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) != nil else {
+                                  let result = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) else {
                                 showsCommitError = true
                                 return false
                             }
+                            if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                         }
                         if let removal = pendingRemovals[entry.id] {
                             guard store.removeImportedSelection(removal, entry: entry, item: item) else {
@@ -871,6 +911,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                         }
                         guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
                         result = stagedResult
+                        if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                     } else {
                         result = store.saveImportedCandidate(
                             candidate,

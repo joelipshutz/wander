@@ -334,6 +334,53 @@ final class PlaceImportHistoryRetentionTests: XCTestCase {
 
 @MainActor
 final class PlaceImportSavedSelectionTests: XCTestCase {
+    func testReplacementCheckInPersistsPrivateAnswersAndRemovalClearsThem() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: UUID().uuidString, displayName: "Test", handle: "test")))
+        let preferences = CheckInQuestionPreferenceStore()
+        defer { try? preferences.removeAccount(ownerUserID: store.currentUser.id) }
+        var configuration = CheckInQuestionConfiguration(orderedQuestionIDs: [])
+        let question = try configuration.addCustomQuestion(prompt: "Plants?")
+        try preferences.saveConfiguration(configuration, ownerUserID: store.currentUser.id, subtypeKey: "cafe")
+        let candidate = placeImportCandidate(name: "Import cafe")
+        let saved = store.saveImportedCandidate(candidate, status: .wannaGo, visibility: .selfOnly, note: nil, sourceType: .manual)
+        let entry = receipt(candidate, userPlaceID: saved.userPlaceID, status: .wannaGo)
+        let context = MapPlaceSaveContext.importCandidate(candidate, sourceType: .manual, status: .been, defaultVisibility: .selfOnly)
+        let submission = MapPlaceSaveSubmission(context: context, candidate: candidate, status: .been,
+            visibility: .selfOnly, ratingScore: nil, note: nil, attributes: [], photoAttachments: [],
+            inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+            customQuestionAnswers: [question.id: "yes"], customQuestionOwnerID: store.currentUser.id)
+
+        let created = await store.createImportedSelection(entry: entry, item: item(candidate), status: .been, submission: submission)
+        let (result, selection) = try XCTUnwrap(created)
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first { $0.id == selection.visitID })
+        let parent = try XCTUnwrap(store.userPlaces.first { $0.id == result.userPlaceID })
+        XCTAssertNil(result.localDetailsWarning)
+        XCTAssertEqual(try preferences.loadPrivateAnswers(ownerUserID: store.currentUser.id,
+            userPlaceID: parent.localID, visitID: visit.serverID ?? visit.localID), [question.id: "yes"])
+        XCTAssertFalse(visit.attributeAnswersJSON.contains(question.id))
+        let updated = receipt(candidate, userPlaceID: result.userPlaceID, status: .been, selection: selection)
+        XCTAssertTrue(store.removeImportedSelection(.init(itemID: "item", status: .been, visitID: visit.id),
+            entry: updated, item: item(candidate)))
+        XCTAssertTrue(try preferences.loadPrivateAnswers(ownerUserID: store.currentUser.id,
+            userPlaceID: parent.localID, visitID: visit.serverID ?? visit.localID).isEmpty)
+    }
+
+    func testReplacementRejectsUnloadedPrivateAnswersBeforeCreatingVisit() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let candidate = placeImportCandidate(name: "Import cafe")
+        let saved = store.saveImportedCandidate(candidate, status: .wannaGo, visibility: .selfOnly, note: "Keep", sourceType: .manual)
+        let entry = receipt(candidate, userPlaceID: saved.userPlaceID, status: .wannaGo)
+        let context = MapPlaceSaveContext.importCandidate(candidate, sourceType: .manual, status: .been, defaultVisibility: .selfOnly)
+        let submission = MapPlaceSaveSubmission(context: context, candidate: candidate, status: .been,
+            visibility: .selfOnly, ratingScore: nil, note: nil, attributes: [], photoAttachments: [],
+            inviteeUserIDs: [], reconcilesSharedVisitInvitees: false, customQuestionAnswersLoaded: false)
+        let created = await store.createImportedSelection(entry: entry, item: item(candidate), status: .been, submission: submission)
+        XCTAssertNil(created)
+        XCTAssertTrue(store.visits(for: saved.userPlaceID).isEmpty)
+        XCTAssertEqual(store.importVisiblePlace(for: entry, item: item(candidate))?.userPlace.note, "Keep")
+    }
+
     func testConfirmedCheckInRemovalOnlyDeletesItsCapturedVisitAndMetadata() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let candidate = placeImportCandidate(name: "Import cafe")

@@ -59,7 +59,8 @@ extension WanderStore {
         entry: PlaceImportReceiptEntry, item: PlaceImportItem, status: PlaceStatus,
         submission: MapPlaceSaveSubmission? = nil
     ) async -> (SaveResult, PlaceImportSavedSelection)? {
-        guard let candidate = importCandidate(for: entry, item: item),
+        guard submission.map({ validatesPrivateCheckInDraft($0, store: self) }) ?? true,
+              let candidate = importCandidate(for: entry, item: item),
               CommunityContentPolicy.allows(submission?.note),
               (submission?.attributes ?? []).allSatisfy({
                   (try? CommunityContentPolicy.validateJSONText($0.valueJSON)) != nil
@@ -68,7 +69,7 @@ extension WanderStore {
         let restored = entry.userPlaceID.map { restoreImportPlaceContainer(userPlaceID: $0) } ?? false
         let visible = importVisiblePlace(for: entry, item: item)
         let visibility = submission?.visibility ?? effectiveDefaultVisibility
-        let result: SaveResult
+        var result: SaveResult
         var visit: LocalPlaceVisit?
         if status == .wannaGo {
             let operationID = (submission?.wannaOperationID ?? UUID()).uuidString.lowercased()
@@ -118,6 +119,7 @@ extension WanderStore {
         if let submission {
             await queueSharedVisitInvitees(for: submission, sourceVisit: visit, store: self, backend: nil)
             await persistVisitPhotoAttachments(submission.photoAttachments, to: visit, store: self, backend: nil)
+            result = persistPrivateCheckInAnswers(result: result, submission: submission, visit: visit, store: self)
         }
         return (result, selection)
     }

@@ -899,6 +899,11 @@ struct PlaceVisitResult: Equatable, Sendable {
     let ratingScore: Double?
     let tags: [String]
     let backfilledFromUserPlace: Bool
+    /// Nil means this response did not include answers; an empty array is an
+    /// authoritative answer set and must remain distinguishable from nil.
+    var attributeAnswersJSON: String? = nil
+    var createdAt: Date? = nil
+    var updatedAt: Date? = nil
 }
 
 struct HistoricalWantSnapshotDraft: Equatable {
@@ -1258,6 +1263,7 @@ struct PlacePhoto: Decodable, Equatable {
 }
 
 struct SaveResult: Equatable {
+    var localDetailsWarning: String? = nil
     let userPlaceID: String
     let syncState: SyncState
     let placeID: String?
@@ -1738,7 +1744,12 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable, Sendable {
     }
 
     var attributeDrafts: [PlaceAttributeDraft] {
-        attributeAnswers.map { answer in
+        attributeAnswers.filter { answer in
+            // A cached invitation is someone else's observation. The recipient
+            // can supply their own answers after accepting the place context.
+            !PlaceCheckInQuestionCatalog.isDetailQuestion(answer.questionKey)
+                && !answer.questionKey.hasPrefix(CheckInCustomQuestion.idPrefix)
+        }.map { answer in
             let data = (try? JSONEncoder().encode(answer.value)) ?? Data("null".utf8)
             return PlaceAttributeDraft(
                 questionKey: answer.questionKey,
