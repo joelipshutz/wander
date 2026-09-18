@@ -3,6 +3,37 @@ import SwiftUI
 import SwiftData
 #if DEBUG
 import UIKit
+
+/// Opt-in identity for Joe's on-device profile acceptance build only.
+/// Normal Debug builds and every Release build remain unmarked.
+struct PlaceProfileTestBuildBadge: View {
+    static let buildNumber = "174532"
+    var usesFloatingActions: Bool? = nil
+
+    var body: some View {
+        if Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String == Self.buildNumber {
+            VStack(spacing: 2) {
+                Text("REC-532 PROFILE TEST")
+                    .font(.system(size: 13, weight: .heavy, design: .monospaced))
+                Text(detail)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+            }
+            .foregroundStyle(Color.red)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.white, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.red, lineWidth: 2))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("rec532.test-build-marker")
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var detail: String {
+        guard let usesFloatingActions else { return "BUILD \(Self.buildNumber)" }
+        return "\(Self.buildNumber) • FLOATING \(usesFloatingActions ? "ON" : "OFF")"
+    }
+}
 #endif
 
 enum SimulatorTestSessionPolicy {
@@ -234,6 +265,12 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+            #if DEBUG
+            .overlay(alignment: .top) {
+                PlaceProfileTestBuildBadge()
+                    .padding(.top, 8)
+            }
+            #endif
     }
 
     #if DEBUG

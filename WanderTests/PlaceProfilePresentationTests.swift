@@ -396,49 +396,84 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testFloatingActionsUseSelectedPrimaryAndNeutralSecondaryGlass() {
-        let checkIn = PlaceProfileSaveAction(
-            kind: .checkIn,
-            title: "Check in",
-            isSelected: false,
-            destinationStatus: .been
-        )
-        let selectedWanna = PlaceProfileSaveAction(
-            kind: .wanna,
-            title: "Wanna",
-            isSelected: true,
-            destinationStatus: .wannaGo
-        )
-        let editHistory = PlaceProfileSaveAction(
-            kind: .editHistory,
-            title: "Edit / history",
-            isSelected: false,
-            destinationStatus: nil
-        )
+    func testFloatingActionsKeepOpaqueBlackAndWhiteForEverySavedStateAndAppearance() {
+        for kind in [PlaceProfileSaveActionKind.checkIn, .wanna, .editHistory] {
+            for selected in [false, true] {
+                let action = PlaceProfileSaveAction(
+                    kind: kind, title: "Action", isSelected: selected, destinationStatus: nil
+                )
+                for style in [UIUserInterfaceStyle.light, .dark] {
+                    let traits = UITraitCollection(userInterfaceStyle: style)
+                    let fill = UIColor(PlaceProfileFloatingActions.backgroundColor(for: action))
+                        .resolvedColor(with: traits)
+                    let foreground = UIColor(PlaceProfileFloatingActions.foregroundColor(for: action))
+                        .resolvedColor(with: traits)
+                    for (color, expected) in [(fill, kind == .checkIn ? 0.0 : 1.0),
+                                               (foreground, kind == .checkIn ? 1.0 : 0.0)] {
+                        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+                        XCTAssertTrue(color.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+                        XCTAssertEqual(red, CGFloat(expected), accuracy: 0.001)
+                        XCTAssertEqual(green, CGFloat(expected), accuracy: 0.001)
+                        XCTAssertEqual(blue, CGFloat(expected), accuracy: 0.001)
+                        XCTAssertEqual(alpha, 1, accuracy: 0.001)
+                    }
+                }
+            }
+        }
+    }
 
-        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .deepBlackAction)
-        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: selectedWanna), .neutral)
-        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: editHistory), .neutral)
-        XCTAssertEqual(
-            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option2),
-            .blackAction
-        )
-        XCTAssertEqual(
-            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option3),
-            .blackAction
-        )
-        XCTAssertEqual(
-            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option4),
-            .blackAction
-        )
-        XCTAssertEqual(
-            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option5),
-            .deepBlackAction
-        )
-        XCTAssertEqual(
-            PlaceProfileFloatingActions.glassTone(for: selectedWanna, variant: .option4),
-            .lightAction
-        )
+    @MainActor
+    func testRenderedFloatingActionsStayBlackAndWhiteAcrossThemesAndLayouts() throws {
+        for width: CGFloat in [375, 402] {
+            for scheme in [ColorScheme.light, .dark] {
+                for style in [PlaceProfileVisualStyle.standard, .astir] {
+                    for selected in [false, true] {
+                        for variant in PlaceProfileFloatingActionVariant.allCases {
+                            let actions = [
+                                PlaceProfileSaveAction(kind: .checkIn, title: "Check in", isSelected: false, destinationStatus: .been),
+                                PlaceProfileSaveAction(kind: .wanna, title: "Wanna", isSelected: selected, destinationStatus: .wannaGo)
+                            ]
+                            let renderer = ImageRenderer(content:
+                                PlaceProfileFloatingActions(actions: actions, variant: variant) { _ in }
+                                    .frame(width: width)
+                                    .background(Color(red: 1, green: 0, blue: 1))
+                                    .environment(\.colorScheme, scheme)
+                                    .environment(\.astirBrandMode, scheme == .dark ? .editorial : .editorialLight)
+                                    .environment(\.placeProfileVisualStyle, style)
+                            )
+                            renderer.scale = 1
+                            let image = try XCTUnwrap(renderer.uiImage)
+                            let cgImage = try XCTUnwrap(image.cgImage)
+                            var pixels = [UInt8](repeating: 0, count: cgImage.width * cgImage.height * 4)
+                            try pixels.withUnsafeMutableBytes { buffer in
+                                let context = try XCTUnwrap(CGContext(
+                                    data: buffer.baseAddress, width: cgImage.width, height: cgImage.height,
+                                    bitsPerComponent: 8, bytesPerRow: cgImage.width * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                                ))
+                                context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+                            }
+                            var black = 0, white = 0
+                            for offset in stride(from: 0, to: pixels.count, by: 4) {
+                                guard pixels[offset + 3] == 255 else { continue }
+                                if pixels[offset] == 0 && pixels[offset + 1] == 0 && pixels[offset + 2] == 0 { black += 1 }
+                                if pixels[offset] == 255 && pixels[offset + 1] == 255 && pixels[offset + 2] == 255 { white += 1 }
+                            }
+                            let label = "\(width)-\(scheme)-\(style)-selected\(selected)-variant\(variant.rawValue)"
+                            XCTAssertGreaterThan(black, 1_000, label)
+                            XCTAssertGreaterThan(white, 1_000, label)
+                            if variant == .productionDefault && style == .astir && !selected {
+                                let attachment = XCTAttachment(image: image)
+                                attachment.name = "fixed-buttons-\(label)"
+                                attachment.lifetime = .keepAlways
+                                add(attachment)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @MainActor

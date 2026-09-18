@@ -208,6 +208,12 @@ struct PlaceProfileFullScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
+        #if DEBUG
+        .overlay(alignment: .top) {
+            PlaceProfileTestBuildBadge(usesFloatingActions: resolvedSaveActionSnapshot.usesFloatingActions)
+                .padding(.top, 56)
+        }
+        #endif
         .onAppear {
             // Every entry point captures the same rollout decision once.
             // Resolve it for the first render too, avoiding an inline-CTA flash.
@@ -2345,7 +2351,6 @@ struct PlaceProfileFloatingActions: View {
     let onAction: (PlaceProfileSaveAction) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.placeProfileVisualStyle) private var visualStyle
-    @Environment(\.astirBrandMode) private var astirBrandMode
 
     init(
         actions: [PlaceProfileSaveAction],
@@ -2412,9 +2417,7 @@ struct PlaceProfileFloatingActions: View {
                         )
                         .modifier(
                             PlaceProfileFloatingActionSurface(
-                                isAstir: visualStyle == .astir,
-                                isSelected: action.isSelected,
-                                tone: Self.glassTone(for: action, variant: variant)
+                                action: action
                             )
                         )
                 } else {
@@ -2422,9 +2425,7 @@ struct PlaceProfileFloatingActions: View {
                         .contentShape(Rectangle())
                         .modifier(
                             PlaceProfileFloatingActionSurface(
-                                isAstir: visualStyle == .astir,
-                                isSelected: action.isSelected,
-                                tone: Self.glassTone(for: action, variant: variant)
+                                action: action
                             )
                         )
                 }
@@ -2463,11 +2464,7 @@ struct PlaceProfileFloatingActions: View {
                 maxWidth: compactActionWidth,
                 minHeight: Self.compactActionHeight
             )
-            .foregroundStyle(
-                visualStyle == .astir
-                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
-                    : Self.glassTone(for: action, variant: variant).foregroundStyle
-            )
+            .foregroundStyle(Self.foregroundColor(for: action))
         } else {
             HStack(spacing: WanderTheme.spacing1) {
                 Image(systemName: systemImage(for: action))
@@ -2487,11 +2484,7 @@ struct PlaceProfileFloatingActions: View {
             )
             .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
             .padding(.horizontal, WanderTheme.spacing2)
-            .foregroundStyle(
-                visualStyle == .astir
-                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
-                    : Self.glassTone(for: action, variant: variant).foregroundStyle
-            )
+            .foregroundStyle(Self.foregroundColor(for: action))
         }
     }
 
@@ -2525,21 +2518,14 @@ struct PlaceProfileFloatingActions: View {
         isAccessibilitySize && actionCount > 1
     }
 
-    static func glassTone(
-        for action: PlaceProfileSaveAction,
-        variant: PlaceProfileFloatingActionVariant = .productionDefault
-    ) -> WanderGlassTone {
-        guard action.kind == .checkIn else {
-            return variant == .option4 ? .lightAction : .neutral
-        }
-        switch variant {
-        case .option1:
-            return .accent
-        case .option5:
-            return .deepBlackAction
-        case .option2, .option3, .option4:
-            return .blackAction
-        }
+    // Action identity, not appearance, saved state, or a layout experiment,
+    // owns these colors. Opaque fills keep map/photo content from changing them.
+    static func backgroundColor(for action: PlaceProfileSaveAction) -> Color {
+        action.kind == .checkIn ? .black : .white
+    }
+
+    static func foregroundColor(for action: PlaceProfileSaveAction) -> Color {
+        action.kind == .checkIn ? .white : .black
     }
 
     private func systemImage(for action: PlaceProfileSaveAction) -> String {
@@ -2569,23 +2555,32 @@ private struct PlaceProfileActionClusterSurface: ViewModifier {
 }
 
 private struct PlaceProfileFloatingActionSurface: ViewModifier {
-    @Environment(\.astirBrandMode) private var brandMode
-    let isAstir: Bool
-    let isSelected: Bool
-    let tone: WanderGlassTone
+    let action: PlaceProfileSaveAction
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if isAstir {
-            content.astirOutlinedSurface(selected: isSelected)
-        } else {
-            content.wanderGlassRoundedRectangle(
-                tone: tone,
-                cornerRadius: PlaceProfileFloatingActions.compactCornerRadius,
-                interactive: false,
-                showsBorder: true
+        content
+            .background(
+                PlaceProfileFloatingActions.backgroundColor(for: action),
+                in: RoundedRectangle(
+                    cornerRadius: PlaceProfileFloatingActions.compactCornerRadius,
+                    style: .continuous
+                )
             )
-        }
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: PlaceProfileFloatingActions.compactCornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    PlaceProfileFloatingActions.foregroundColor(for: action).opacity(0.22),
+                    lineWidth: 1
+                )
+            }
+            .shadow(
+                color: .black.opacity(0.18),
+                radius: 8,
+                y: 3
+            )
     }
 }
 

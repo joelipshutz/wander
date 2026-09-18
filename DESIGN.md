@@ -60,6 +60,11 @@ across production surfaces by this provisional grammar:
   they float directly over variable map imagery.
 - The only live Astir modes are the adaptive editorial Dark and Light schemes;
   launch arguments must not select a separate palette.
+- Place-profile floating actions are an explicit exception: Check in has an
+  opaque black fill with white text/icons; Wanna has an opaque white fill with
+  black text/icons. These colors stay fixed across appearance modes, entry
+  points, layout variants, and saved states. Selection uses the checkmark and
+  accessibility selected trait, not an inverted or tinted fill (REC-532).
 - Feed and Lists floating headers hide on sustained downward scrolling and
   return on upward scrolling; Reduce Motion must remain respected.
 
