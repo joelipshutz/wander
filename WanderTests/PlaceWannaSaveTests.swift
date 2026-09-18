@@ -9,6 +9,94 @@ final class PlaceWannaSaveTests: XCTestCase {
                        sourceProviderPlaceID: "repeat-wanna-cafe", confidence: 1)
     }
 
+    func testRemovedWannaPersistsRetriesAndRejectsStaleReads() async throws {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 })
+        let store = WanderStore(fixtures: .seed(), persistence: persistence)
+        let result = store.saveCandidate(candidate, status: .been, visibility: .selfOnly, note: "Keep visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        _ = await store.saveNewWanna(candidate, visibility: .selfOnly, note: "Remove only this", plannedDate: nil, attributes: [], backend: backend)
+        let wanna = try XCTUnwrap(store.wannaSaves(for: parent).first)
+        let visitIDs = store.visits(for: parent.id).map(\.id)
+        XCTAssertTrue(store.removeImportedWanna(userPlaceID: parent.id, wannaID: wanna.id))
+        repository.shouldFail = true
+        let failed = await store.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(failed, 0)
+        store.flushPersistence()
+        let restored = WanderStore(fixtures: .seed(), persistence: persistence)
+        XCTAssertNotNil(restored.placeWannaSaves.first { $0.id == wanna.id }?.deletedAt)
+        repository.shouldFail = false
+        for visit in restored.visits(for: parent.id) { visit.syncStateRaw = SyncState.synced.rawValue }
+        let synced = await restored.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(synced, 1)
+        XCTAssertEqual(repository.deletedIDs, [wanna.id])
+        repository.onRead = { [wanna] }
+        await restored.refreshWannaSaves(userPlaceIDs: [parent.serverID!], backend: backend)
+        XCTAssertNotNil(restored.placeWannaSaves.first { $0.id == wanna.id }?.deletedAt)
+        XCTAssertEqual(restored.visits(for: parent.id).map(\.id), visitIDs)
+    }
+
+    func testDeletionDuringWannaCreateDeliversDeletionAfterCreateAck() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let result = store.saveCandidate(candidate, status: .been, visibility: .selfOnly, note: "Keep", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let id = UUID().uuidString.lowercased()
+        for visit in store.visits(for: parent.id) { visit.syncStateRaw = SyncState.synced.rawValue }
+        repository.onSave = {
+            XCTAssertTrue(store.removeImportedWanna(userPlaceID: parent.id, wannaID: id))
+        }
+        _ = await store.saveNewWanna(candidate, operationID: id, visibility: .selfOnly, note: "Remove", plannedDate: nil, attributes: [], backend: backend)
+        XCTAssertEqual(repository.deletedIDs, [id])
+        XCTAssertTrue(store.wannaSaves(for: parent).isEmpty)
+        XCTAssertEqual(store.visits(for: parent.id).count, 1)
+    }
+
+    func testUnsyncedParentDoesNotAcknowledgeUndeliveredWannaDeletion() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let result = store.saveCandidate(candidate, status: .wannaGo, visibility: .selfOnly, note: "Remove", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        XCTAssertTrue(store.removeImportedWanna(userPlaceID: parent.id, wannaID: nil))
+        let repository = RepeatWannaTestRepository()
+        repository.shouldFail = false
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let first = await store.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(first, 0)
+        XCTAssertFalse(try XCTUnwrap(store.placeWannaSaves.first).isSynced)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let second = await store.syncPendingWannaSaves(backend: backend)
+        XCTAssertEqual(second, 1)
+        XCTAssertEqual(repository.deletedIDs.count, 1)
+    }
+
+    func testLastVisitDeletionWaitsForReplacementWannaToSync() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let result = store.saveCandidate(candidate, status: .been, visibility: .selfOnly, note: "Old visit", sourceType: .manual)
+        let parent = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace)
+        parent.serverID = "22222222-2222-4222-8222-222222222222"
+        let visit = try XCTUnwrap(store.visits(for: parent.id).first)
+        visit.serverID = UUID().uuidString.lowercased()
+        _ = await store.saveNewWanna(candidate, visibility: .selfOnly, note: "New Wanna", plannedDate: nil, attributes: [], backend: nil)
+        XCTAssertTrue(store.deleteImportedVisit(visitID: visit.id))
+        let repository = RepeatWannaTestRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let blocked = await store.retryPendingVisitDeletes(backend: backend)
+        XCTAssertEqual(blocked, 0)
+        XCTAssertTrue(repository.deletedVisitIDs.isEmpty)
+        repository.shouldFail = false
+        _ = await store.syncPendingWannaSaves(backend: backend)
+        let deleted = await store.retryPendingVisitDeletes(backend: backend)
+        XCTAssertEqual(deleted, 1)
+        XCTAssertEqual(repository.deletedVisitIDs, [visit.serverID!])
+    }
+
     func testWannaCheckInAndRepeatedWannasPreserveCheckInSummaryAndCounters() async throws {
         let store = WanderStore(fixtures: .seed())
         _ = await store.saveNewWanna(candidate, visibility: .followers, note: "First Wanna",
@@ -400,7 +488,7 @@ final class PlaceWannaSaveTests: XCTestCase {
 }
 
 @MainActor
-private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRepository {
+private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRepository, CheckInRepository {
     var shouldFail = true
     var attempts: [String] = []
     var parentWriteCount = 0
@@ -415,6 +503,19 @@ private final class RepeatWannaTestRepository: UserPlaceRepository, WannaSaveRep
     func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave {
         if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
         return wanna
+    }
+    var deletedVisitIDs: [String] = []
+    func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
+        throw WanderRemoteError.invalidResponse("Unexpected check-in write")
+    }
+    func deleteCheckIn(visitID: String) async throws -> CheckInDeleteResult {
+        deletedVisitIDs.append(visitID)
+        return CheckInDeleteResult(visitID: visitID, userPlaceID: nil, transition: .wannaGo)
+    }
+    var deletedIDs: [String] = []
+    func deleteWanna(_ wanna: PlaceWannaSave) async throws {
+        if shouldFail { throw WanderRemoteError.invalidResponse("test failure") }
+        deletedIDs.append(wanna.id)
     }
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
         await onRead?() ?? []

@@ -432,7 +432,10 @@
         "Cycling park",
         "Skate park",
         "Off-roading area",
-        "Adventure sports"
+        "Adventure sports",
+        "Surf",
+        "Surf break",
+        "Kayak/canoe rental"
       ]
     },
     {
@@ -522,7 +525,9 @@
         "Community center",
         "Internet cafe",
         "Dance hall",
-        "Barbecue area"
+        "Barbecue area",
+        "Stadium",
+        "Arena"
       ]
     },
     {
@@ -601,7 +606,8 @@
         "Auto parts",
         "Thrift store",
         "Discount supermarket",
-        "Cosmetics"
+        "Cosmetics",
+        "Surf shop"
       ]
     },
     {
@@ -649,12 +655,21 @@
         "physical therapy",
         "dermatologist",
         "pediatrician",
-        "podiatrist"
+        "podiatrist",
+        "pilates",
+        "pilates studio",
+        "crossfit",
+        "crossfit gym",
+        "functional fitness",
+        "functional fitness studio"
       ],
       "subcategories": [
         "Gym",
         "Fitness center",
         "Yoga studio",
+        "Pilates studio",
+        "CrossFit gym",
+        "Functional fitness studio",
         "Wellness studio",
         "Wellness center",
         "Sports club",
@@ -697,7 +712,12 @@
         "Podiatrist",
         "Veterinary care",
         "Mental health/therapy",
-        "Retreat"
+        "Retreat",
+        "Beach tennis",
+        "Beach volleyball",
+        "Padel court",
+        "Climbing gym",
+        "Surf school"
       ]
     },
     {

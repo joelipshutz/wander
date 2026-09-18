@@ -26,11 +26,18 @@ enum PlaceImportHistoryPresentation {
     }
 
     static func needsReview(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
-        // Attention tracks whether the report was opened, not whether it has
-        // actionable places. Failed scans and empty/saved reports count too.
+        // Completion notices track the first opening independently of unresolved work.
         batch.reviewOpenedAt == nil
             && batch.state != .cancelled
             && !isMatching(batch: batch, items: items)
+    }
+
+    static func contributesToBadge(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Bool {
+        guard batch.state != .cancelled else { return false }
+        if isMatching(batch: batch, items: items) { return true }
+        let coverage = PlaceImportReportCoverage(batch: batch, items: items)
+        if coverage.matchedCount > 0 { return coverage.pendingMatchedCount > 0 }
+        return needsReview(batch: batch, items: items)
     }
 
     static func statusLabel(
@@ -39,10 +46,18 @@ enum PlaceImportHistoryPresentation {
     ) -> String {
         if batch.state == .cancelled { return "Cancelled" }
         if isMatching(batch: batch, items: items) { return "Matching…" }
-        if items.contains(where: { [.failed, .needsHelp].contains($0.state) }) {
+        let coverage = PlaceImportReportCoverage(batch: batch, items: items)
+        // Completion means every returned place has been saved, already exists,
+        // or was explicitly dismissed; simply opening the report is not enough.
+        if coverage.matchedCount > 0, coverage.pendingMatchedCount == 0 {
+            return "Done"
+        }
+        if coverage.matchedCount > coverage.totalCount / 2 {
+            return "Partially imported"
+        }
+        if coverage.hasRecovery || coverage.matchedCount < coverage.totalCount {
             return "Retry"
         }
-        if batch.reviewOpenedAt != nil { return "Done" }
         return "Ready to review"
     }
 
@@ -71,7 +86,7 @@ enum PlaceImportHistoryPresentation {
     }
 
     static func savedEntries(batch: PlaceImportBatch) -> [PlaceImportReceiptEntry] {
-        batch.receipt?.entries.filter { $0.outcome != .needsReview } ?? []
+        batch.receipt?.entries.filter { [.added, .existing].contains($0.outcome) } ?? []
     }
 
     static func placeCount(batch: PlaceImportBatch, items: [PlaceImportItem]) -> Int {
@@ -79,6 +94,43 @@ enum PlaceImportHistoryPresentation {
             savedEntries(batch: batch).count + remainingPlaces(items: items).count)
     }
 
+}
+
+/// Coverage counts known source places once, not candidate alternatives or
+/// source-level retry markers. Receipts retain matches across older snapshots.
+struct PlaceImportReportCoverage {
+    enum Footer: Equatable { case none, failed, partial }
+    let totalCount: Int
+    let matchedCount: Int
+    let pendingMatchedCount: Int
+    let hasRecovery: Bool
+    let footer: Footer
+
+    init(batch: PlaceImportBatch, items: [PlaceImportItem]) {
+        let scoped = items.filter { $0.batchID == batch.id }
+        let places = scoped.filter { !$0.isSourceRetry }
+        let sourceMarkers = Set(scoped.filter(\.isSourceRetry).map(\.id))
+        let receipts = (batch.receipt?.entries ?? []).filter { !sourceMarkers.contains($0.itemID) }
+        let knownIDs = Set(places.map(\.id)).union(receipts.map(\.itemID))
+        let matchedIDs = Set(places.filter {
+            !$0.candidates.isEmpty || $0.state == .saved || $0.duplicateUserPlaceID != nil
+        }.map(\.id)).union(receipts.filter { [.added, .existing].contains($0.outcome) }.map(\.itemID))
+        totalCount = knownIDs.count
+        matchedCount = matchedIDs.count
+        pendingMatchedCount = places.filter {
+            matchedIDs.contains($0.id) && ![.saved, .duplicate, .dismissed].contains($0.state)
+        }.count
+        hasRecovery = scoped.contains {
+            [.needsHelp, .failed].contains($0.state) && ($0.isSourceRetry || $0.candidates.isEmpty)
+        } || (batch.receipt?.sourceRetryCount ?? 0) > 0
+        if batch.state == .cancelled || scoped.contains(where: { [.queued, .resolving].contains($0.state) }) {
+            footer = .none
+        } else if matchedCount == 0 {
+            footer = hasRecovery || totalCount > 0 ? .failed : .none
+        } else {
+            footer = Double(matchedCount) / Double(max(1, totalCount)) < 0.5 ? .partial : .none
+        }
+    }
 }
 
 enum PlaceImportItemState: String, Codable, Equatable {
@@ -380,6 +432,26 @@ struct PlaceImportSaveSyncNotice: Equatable, Identifiable {
     }
 }
 
+/// An explicit snapshot distinguishes a deliberately cleared action from an
+/// older receipt that still needs its selections inferred from the local save.
+struct PlaceImportSavedSelection: Codable, Equatable {
+    var status: PlaceStatus?
+    var visitID: String? = nil
+    var wannaID: String? = nil
+    var wannaIsOriginal: Bool? = nil
+    var listIDs: Set<String>
+    var candidateID: String? = nil
+}
+
+struct PlaceImportSavedSelectionRemoval: Codable, Equatable {
+    let itemID: String
+    var status: PlaceStatus?
+    var visitID: String?
+    var wannaID: String?
+    var wannaIsOriginal: Bool? = nil
+    var listIDs: Set<String> = []
+}
+
 struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
     let id: String
     let itemID: String
@@ -388,6 +460,8 @@ struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
     let statusRaw: String?
     let outcome: PlaceImportReceiptOutcome
     let userPlaceID: String?
+    let savedSelection: PlaceImportSavedSelection?
+    let unfinishedRemoval: PlaceImportSavedSelectionRemoval?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -396,7 +470,9 @@ struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
         displayArea: String?,
         status: PlaceStatus?,
         outcome: PlaceImportReceiptOutcome,
-        userPlaceID: String?
+        userPlaceID: String?,
+        savedSelection: PlaceImportSavedSelection? = nil,
+        unfinishedRemoval: PlaceImportSavedSelectionRemoval? = nil
     ) {
         self.id = id
         self.itemID = itemID
@@ -405,6 +481,8 @@ struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
         statusRaw = status?.rawValue
         self.outcome = outcome
         self.userPlaceID = userPlaceID
+        self.savedSelection = savedSelection
+        self.unfinishedRemoval = unfinishedRemoval
     }
 
     var status: PlaceStatus? {

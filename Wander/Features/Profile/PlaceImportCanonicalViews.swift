@@ -1,47 +1,23 @@
 import SwiftUI
 import UIKit
 
+private struct FinishPlaceImportKey: EnvironmentKey {
+    static var defaultValue: (() -> Void)? { nil }
+}
+
 private struct RestartPlaceImportKey: EnvironmentKey {
     static let defaultValue: @MainActor @Sendable () -> Void = {}
 }
 
 extension EnvironmentValues {
+    var finishPlaceImport: (() -> Void)? {
+        get { self[FinishPlaceImportKey.self] }
+        set { self[FinishPlaceImportKey.self] = newValue }
+    }
+
     var restartPlaceImport: @MainActor @Sendable () -> Void {
         get { self[RestartPlaceImportKey.self] }
         set { self[RestartPlaceImportKey.self] = newValue }
-    }
-}
-
-/// Coverage counts source places, never candidate alternatives or scan markers.
-/// Retain saved/receipt-only successes so saving cannot turn a good report into
-/// a failure. The denominator is the known place inventory, not a guessed total.
-struct PlaceImportReportCoverage {
-    enum Footer: Equatable { case none, failed, partial }
-    let totalCount: Int
-    let matchedCount: Int
-    let footer: Footer
-
-    init(batch: PlaceImportBatch, items: [PlaceImportItem]) {
-        let scoped = items.filter { $0.batchID == batch.id }
-        let places = scoped.filter { !$0.isSourceRetry }
-        let sourceMarkers = Set(scoped.filter(\.isSourceRetry).map(\.id))
-        let receipts = (batch.receipt?.entries ?? []).filter { !sourceMarkers.contains($0.itemID) }
-        let knownIDs = Set(places.map(\.id)).union(receipts.map(\.itemID))
-        let matchedIDs = Set(places.filter {
-            !$0.candidates.isEmpty || $0.state == .saved || $0.duplicateUserPlaceID != nil
-        }.map(\.id)).union(receipts.filter { [.added, .existing].contains($0.outcome) }.map(\.itemID))
-        totalCount = knownIDs.count
-        matchedCount = matchedIDs.count
-        let hasRecovery = scoped.contains {
-            [.needsHelp, .failed].contains($0.state) && ($0.isSourceRetry || $0.candidates.isEmpty)
-        } || (batch.receipt?.sourceRetryCount ?? 0) > 0
-        if batch.state == .cancelled || scoped.contains(where: { [.queued, .resolving].contains($0.state) }) {
-            footer = .none
-        } else if matchedCount == 0 {
-            footer = hasRecovery || totalCount > 0 ? .failed : .none
-        } else {
-            footer = Double(matchedCount) / Double(max(1, totalCount)) < 0.5 ? .partial : .none
-        }
     }
 }
 
@@ -51,7 +27,7 @@ private struct ImportListSelectionRequest: Identifiable {
     let targets: [MapPlaceListTarget]
 }
 
-/// One import report keeps saved places above actionable matches. Status actions
+/// One import report keeps actionable matches above saved places. Status actions
 /// stay staged until Save; list membership is independent of Wanna / Check In.
 struct PlaceImportCanonicalReviewScreen: View {
     @ObservedObject var importStore: PlaceImportStore
@@ -65,6 +41,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.restartPlaceImport) private var restartPlaceImport
+    @Environment(\.finishPlaceImport) private var finishPlaceImport
     @State private var expandedMatchItemIDs: Set<String> = []
     @State private var expandedDetailItemIDs: Set<String> = []
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
@@ -72,28 +49,22 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var isCommitting = false
     @State private var commitTask: Task<Void, Never>?
     @State private var showsCommitError = false
+    @State private var commitErrorMessage = "A place’s details could not be saved. Review its details and try again. Any places already saved are safe."
     @State private var didExpandInitialDetails = false
     @State private var rescueItem: PlaceImportItem?
     @State private var listRequest: ImportListSelectionRequest?
     @State private var pendingStatuses: [String: PlaceStatus] = [:]
     @State private var pendingLists: [String: Set<String>] = [:]
+    @State private var pendingRemovals: [String: PlaceImportSavedSelectionRemoval] = [:]
     @State private var didReconcileExisting = false
+    @State private var privateDetailsWarningCount = 0
+    @State private var showsSavedDetailsWarning = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 ForEach(scopedBatches) { batch in
                     ImportSourceHeader(importStore: importStore, batch: batch, items: importStore.items(for: batch.id))
-                    PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,
-                        pendingStatuses: pendingStatuses,
-                        onStageStatus: { itemID, status in pendingStatuses[itemID] = status },
-                        onStageDetails: { itemID, submission in
-                            stagedDetailSubmissions[itemID] = submission
-                            pendingStatuses[itemID] = submission.status
-                        },
-                        onChooseLists: { itemID in
-                            chooseLists(items: scopedItems.filter { $0.id == itemID })
-                        })
                 }
                 if processingCount > 0 {
                     processingContent
@@ -120,6 +91,43 @@ struct PlaceImportCanonicalReviewScreen: View {
                             }
                         }
                     }
+                }
+                ForEach(scopedBatches) { batch in
+                    PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,
+                        pendingStatuses: pendingStatuses, pendingLists: pendingLists,
+                        pendingRemovals: pendingRemovals,
+                        onStageStatus: { entryID, status in
+                            pendingStatuses[entryID] = status
+                        },
+                        onClearStagedStatus: { entryID in
+                            pendingStatuses.removeValue(forKey: entryID)
+                            stagedDetailSubmissions.removeValue(forKey: entryID)
+                            for id in Array(pendingRemovals.keys) where id == entryID {
+                                pendingRemovals[id]?.status = nil
+                                pendingRemovals[id]?.visitID = nil
+                                pendingRemovals[id]?.wannaID = nil
+                                if pendingRemovals[id]?.listIDs.isEmpty == true { pendingRemovals.removeValue(forKey: id) }
+                            }
+                        },
+                        onStageRemoval: { entryID, removal in
+                            if removal.status == nil && removal.listIDs.isEmpty {
+                                pendingRemovals.removeValue(forKey: entryID)
+                            } else { pendingRemovals[entryID] = removal }
+                            if removal.status != nil {
+                                pendingStatuses.removeValue(forKey: entryID)
+                                stagedDetailSubmissions.removeValue(forKey: entryID)
+                            }
+                            if !removal.listIDs.isEmpty { pendingLists.removeValue(forKey: entryID) }
+                        },
+                        onStageDetails: { entryID, submission in
+                            stagedDetailSubmissions[entryID] = submission
+                            pendingStatuses[entryID] = submission.status
+                        },
+                        onChooseLists: { entryID in
+                            chooseSavedLists(entryID: entryID)
+                        })
+                }
+                if processingCount == 0 {
                     ForEach(scopedBatches) { batch in
                         recoveryFooter(batch)
                     }
@@ -136,6 +144,30 @@ struct PlaceImportCanonicalReviewScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if privateDetailsWarningCount > 0 {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Check-ins saved")
+                            .font(AstirTypography.control)
+                        Spacer(minLength: WanderTheme.spacing2)
+                        Button("Dismiss") { privateDetailsWarningCount = 0 }
+                            .font(AstirTypography.control)
+                            .frame(minHeight: WanderTheme.tapMinimum)
+                    }
+                    Text(privateDetailsWarningCount == 1
+                         ? "One check-in’s private answers couldn’t be stored on this device. The check-in was saved."
+                         : "Private answers for \(privateDetailsWarningCount) check-ins couldn’t be stored on this device. The check-ins were saved.")
+                        .font(AstirTypography.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(brandMode.primaryText)
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(brandMode.recessedBackground)
+                .accessibilityIdentifier("import.privateDetailsWarning")
+            }
+        }
         .sheet(item: $rescueItem) { item in
             PlaceImportRescueScreen(
                 item: item,
@@ -176,9 +208,22 @@ struct PlaceImportCanonicalReviewScreen: View {
         .alert("Couldn’t add places", isPresented: $showsCommitError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("A place’s details could not be saved. Review its details and try again. Any places already saved are safe.")
+            Text(commitErrorMessage)
         }
-        .task { importStore.resumePendingImports() }
+        .alert("Check-ins saved", isPresented: $showsSavedDetailsWarning) {
+            Button("Done") { (finishPlaceImport ?? onDone)() }
+        } message: {
+            Text("Your check-ins were saved, but some private answers couldn’t be stored on this device.")
+        }
+        .task {
+            importStore.resumePendingImports()
+            for entry in scopedBatches.flatMap({ $0.receipt?.entries ?? [] }) {
+                if let removal = entry.unfinishedRemoval {
+                    pendingRemovals[entry.id] = removal
+                    if entry.status != removal.status { pendingStatuses[entry.id] = entry.status }
+                }
+            }
+        }
         .task(id: selectionPreparationSignature) {
             if processingCount == 0 {
                 importStore.markReviewOpened(batchIDs: batchIDs)
@@ -260,7 +305,10 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private var pendingItemIDs: Set<String> {
-        Set(pendingStatuses.keys).union(pendingLists.filter { !$0.value.isEmpty }.keys)
+        let itemByEntry = Dictionary(uniqueKeysWithValues: scopedBatches.flatMap { $0.receipt?.entries ?? [] }
+            .map { ($0.id, $0.itemID) })
+        let actionIDs = Set(pendingStatuses.keys).union(pendingLists.filter { !$0.value.isEmpty }.keys)
+        return Set(actionIDs.map { itemByEntry[$0] ?? $0 }).union(pendingRemovals.values.map(\.itemID))
     }
 
     private func masterStatusControl(_ status: PlaceStatus, label: String) -> some View {
@@ -356,27 +404,11 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private func resolvedPlaceCard(_ item: PlaceImportItem) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing3) {
-                CanonicalImportThumbnail(item: item, size: 58)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.displayName)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(2)
-                    if let area = item.displayArea {
-                        Text(area)
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.secondaryText)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            }
+        ImportPlaceCard(name: item.displayName, area: item.displayArea) {
+            CanonicalImportThumbnail(item: item, size: 58)
+        } actions: {
             cardActions(item)
-
+        } details: {
             if detailDrafts[item.id] != nil {
                 inlineDetails(item)
                     .frame(height: expandedDetailItemIDs.contains(item.id) ? nil : 0, alignment: .top)
@@ -385,13 +417,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     .accessibilityHidden(!expandedDetailItemIDs.contains(item.id))
             }
         }
-        .padding(WanderTheme.spacing3)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
+        .accessibilityIdentifier("import.ready-card.\(item.id)")
     }
 
     private func possibleMatchesCard(_ item: PlaceImportItem) -> some View {
@@ -594,6 +620,16 @@ struct PlaceImportCanonicalReviewScreen: View {
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 
+    private func chooseSavedLists(entryID: String) {
+        guard let entry = scopedBatches.flatMap({ $0.receipt?.entries ?? [] }).first(where: { $0.id == entryID }),
+              let item = scopedItems.first(where: { $0.id == entry.itemID }) else { return }
+        let target: MapPlaceListTarget
+        if let visible = store.importVisiblePlace(for: entry, item: item) { target = .visiblePlace(visible) }
+        else if let candidate = store.importCandidate(for: entry, item: item) { target = .candidate(candidate) }
+        else { return }
+        listRequest = ImportListSelectionRequest(itemIDs: [entryID], targets: [target])
+    }
+
     private func chooseLists(items: [PlaceImportItem]) {
         let targets = items.flatMap { item in
             (item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates)
@@ -744,47 +780,108 @@ struct PlaceImportCanonicalReviewScreen: View {
             return
         }
 
+        commitErrorMessage = "A place’s details could not be saved. Review its details and try again. Any places already saved are safe."
         isCommitting = true
         commitTask = Task { @MainActor in
-            await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
+            let didSave = await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
             isCommitting = false
             commitTask = nil
+            if didSave {
+                if privateDetailsWarningCount > 0 {
+                    showsSavedDetailsWarning = true
+                } else { (finishPlaceImport ?? onDone)() }
+            }
         }
     }
 
     @MainActor
-    private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>) async {
-        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+    private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>) async -> Bool {
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
         var receipts: [PlaceImportReceiptEntry] = []
         var completedItems: [String: String] = [:]
         var completedReceipts: [(String, [PlaceImportReceiptEntry], String?)] = []
         for batch in scopedBatches {
-            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
             let destination = destinationList(for: batch, itemCount: batchItems.count)
             var entries = batch.receipt?.entries ?? []
 
             for item in batchItems where itemIDs.contains(item.id) && item.state != .dismissed {
                 if item.state == .saved {
-                    if let submission = stagedDetailSubmissions[item.id] {
-                        guard await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) != nil else {
-                            showsCommitError = true
-                            return
+                    for index in entries.indices where entries[index].itemID == item.id
+                        && [.added, .existing].contains(entries[index].outcome) {
+                        guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
+                        let entry = entries[index]
+                        var selection = store.importSelection(for: entry, item: item)
+                        var saveID = store.importVisiblePlace(for: entry, item: item)?.userPlace.id
+                        let status = pendingStatuses[entry.id]
+                        if let status, status != selection.status {
+                            guard let (result, replacement) = await store.createImportedSelection(
+                                entry: entry, item: item, status: status,
+                                submission: stagedDetailSubmissions[entry.id]) else {
+                                showsCommitError = true
+                                return false
+                            }
+                            guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
+                            if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
+                            selection = replacement
+                            saveID = result.userPlaceID
+                            // Persist the new identity before a later list/removal
+                            // can fail. Reopening resumes the captured removal.
+                            entries[index] = PlaceImportReceiptEntry(id: entry.id, itemID: entry.itemID,
+                                displayName: entry.displayName, displayArea: entry.displayArea,
+                                status: status, outcome: entry.outcome, userPlaceID: result.userPlaceID,
+                                savedSelection: replacement, unfinishedRemoval: pendingRemovals[entry.id])
+                            store.flushPersistence()
+                            importStore.recordReceipt(batchID: batch.id, entries: entries, destinationListID: destination?.id)
+                            // The replacement already owns these details. A
+                            // retry must not replay its original add submission.
+                            stagedDetailSubmissions.removeValue(forKey: entry.id)
+                        } else if let submission = stagedDetailSubmissions[entry.id] {
+                            // Same-action edits retain the exact receipt identity.
+                            guard submission.status == selection.status,
+                                  let result = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) else {
+                                showsCommitError = true
+                                return false
+                            }
+                            if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                         }
-                    }
-                    for entry in entries where entry.itemID == item.id {
-                        if let id = entry.userPlaceID, let status = pendingStatuses[item.id] {
-                            _ = store.changeImportedSaveStatus(userPlaceID: id, to: status, visitedAt: .now)
+                        if let removal = pendingRemovals[entry.id] {
+                            guard store.removeImportedSelection(removal, entry: entry, item: item) else {
+                                showsCommitError = true
+                                return false
+                            }
+                            if removal.status != nil && status == nil {
+                                selection.status = nil; selection.visitID = nil; selection.wannaID = nil
+                            }
+                            selection.listIDs.subtract(removal.listIDs)
+                            saveID = store.importVisiblePlace(for: entry, item: item)?.userPlace.id
                         }
-                    }
-                    for entry in entries where entry.itemID == item.id {
-                        if let id = entry.userPlaceID {
-                            guard await addPendingLists(itemID: item.id, userPlaceID: id) else { showsCommitError = true; return }
+                        if !(pendingLists[entry.id] ?? []).isEmpty {
+                            if saveID == nil, let candidate = store.importCandidate(for: entry, item: item) {
+                                saveID = store.saveImportedCandidate(candidate, status: .wannaGo, visibility: .selfOnly,
+                                    note: nil, sourceType: item.source.canonicalAddSourceType).userPlaceID
+                            }
+                            guard let saveID, await addPendingLists(itemID: entry.id, userPlaceID: saveID, expectedUserID: expectedUserID) else {
+                                showsCommitError = true
+                                return false
+                            }
+                            selection.listIDs.formUnion(pendingLists[entry.id] ?? [])
                         }
+                        entries[index] = PlaceImportReceiptEntry(
+                            id: entry.id, itemID: entry.itemID, displayName: entry.displayName,
+                            displayArea: entry.displayArea, status: selection.status,
+                            outcome: entry.outcome, userPlaceID: saveID ?? entry.userPlaceID,
+                            savedSelection: selection
+                        )
+                        // Checkpoint each completed card so retrying another card
+                        // cannot create its replacement action a second time.
+                        store.flushPersistence()
+                        importStore.recordReceipt(batchID: batch.id, entries: entries, destinationListID: destination?.id)
                     }
                     continue
                 }
-                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
                 let selected = item.selectedCandidates.isEmpty ? Array(item.candidates.prefix(1)) : item.selectedCandidates
                 guard !selected.isEmpty else {
                     continue
@@ -794,7 +891,7 @@ struct PlaceImportCanonicalReviewScreen: View {
 
                 var lastUserPlaceID: String?
                 for candidate in selected {
-                    guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                    guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
                     let existing = store.existingImportSave(matching: candidate)
                     let status = pendingStatuses[item.id] ?? existing?.status ?? .wannaGo
                     let result: SaveResult
@@ -810,10 +907,11 @@ struct PlaceImportCanonicalReviewScreen: View {
                             backend: nil
                         ) else {
                             showsCommitError = true
-                            return
+                            return false
                         }
-                        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+                        guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
                         result = stagedResult
+                        if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                     } else {
                         result = store.saveImportedCandidate(
                             candidate,
@@ -828,7 +926,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     if let destination {
                         _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
                     }
-                    guard await addPendingLists(itemID: item.id, userPlaceID: result.userPlaceID) else { showsCommitError = true; return }
+                    guard await addPendingLists(itemID: item.id, userPlaceID: result.userPlaceID, expectedUserID: expectedUserID) else { showsCommitError = true; return false }
                     lastUserPlaceID = result.userPlaceID
                     entries.append(
                         PlaceImportReceiptEntry(
@@ -837,7 +935,15 @@ struct PlaceImportCanonicalReviewScreen: View {
                             displayArea: candidateArea(candidate),
                             status: status,
                             outcome: existing == nil ? .added : .existing,
-                            userPlaceID: result.userPlaceID
+                            userPlaceID: result.userPlaceID,
+                            savedSelection: PlaceImportSavedSelection(
+                                status: status,
+                                visitID: status == .been ? store.visits(for: result.userPlaceID).first?.id : nil,
+                                wannaID: status == .wannaGo ? UUID().uuidString.lowercased() : nil,
+                                wannaIsOriginal: status == .wannaGo ? true : nil,
+                                listIDs: (pendingLists[item.id] ?? []).union(destination.map { [$0.id] } ?? []),
+                                candidateID: candidate.id
+                            )
                         )
                     )
                 }
@@ -846,25 +952,27 @@ struct PlaceImportCanonicalReviewScreen: View {
                 }
             }
 
-            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             completedReceipts.append((batch.id, entries, destination?.id))
             receipts.append(contentsOf: entries)
         }
-        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
         importStore.performBatchedMutations {
             for (id, saveID) in completedItems { importStore.markSaved(itemID: id, userPlaceID: saveID) }
             for (id, entries, destinationID) in completedReceipts {
                 importStore.recordReceipt(batchID: id, entries: entries, destinationListID: destinationID)
             }
         }
-        pendingStatuses = pendingStatuses.filter { !itemIDs.contains($0.key) }
-        pendingLists = pendingLists.filter { !itemIDs.contains($0.key) }
-        stagedDetailSubmissions = stagedDetailSubmissions.filter { !itemIDs.contains($0.key) }
-        detailDrafts = detailDrafts.filter { !itemIDs.contains($0.key) }
+        let completedActionIDs = itemIDs.union(receipts.filter { itemIDs.contains($0.itemID) }.map(\.id))
+        pendingRemovals = pendingRemovals.filter { !itemIDs.contains($0.value.itemID) }
+        pendingStatuses = pendingStatuses.filter { !completedActionIDs.contains($0.key) }
+        pendingLists = pendingLists.filter { !completedActionIDs.contains($0.key) }
+        stagedDetailSubmissions = stagedDetailSubmissions.filter { !completedActionIDs.contains($0.key) }
+        detailDrafts = detailDrafts.filter { !completedActionIDs.contains($0.key) }
         store.flushPersistence()
-        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
 
-        guard case .signedIn = auth.state, !receipts.isEmpty else { return }
+        guard case .signedIn = auth.state, !receipts.isEmpty else { return true }
         Task { @MainActor in
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             _ = await store.syncUnsyncedOwnPlaces(backend: backend)
@@ -873,10 +981,12 @@ struct PlaceImportCanonicalReviewScreen: View {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             _ = await store.retryPendingSharedVisitInvites(backend: backend)
         }
+        return true
     }
 
-    private func addPendingLists(itemID: String, userPlaceID: String) async -> Bool {
+    private func addPendingLists(itemID: String, userPlaceID: String, expectedUserID: String) async -> Bool {
         for id in pendingLists[itemID] ?? [] {
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             guard let list = store.visiblePlaceLists.first(where: { $0.id == id }),
                   let visible = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID || $0.userPlace.localID == userPlaceID }) else { return false }
             let result = await MapPlaceListTarget.visiblePlace(visible).add(to: list, store: store, backend: nil, analyticsSurface: "import")
@@ -1035,6 +1145,65 @@ struct ImportMatchingProgressBar: View {
     }
 }
 
+/// The same geometry and surface for a returned place before and after Save.
+/// Only saved entries add navigation; their controls remain in the same row.
+private struct ImportPlaceCard<Thumbnail: View, Actions: View, Details: View>: View {
+    let name: String
+    let area: String?
+    var isSaved = false
+    var openIdentifier: String = ""
+    var onOpen: (() -> Void)? = nil
+    @ViewBuilder var thumbnail: () -> Thumbnail
+    @ViewBuilder var actions: () -> Actions
+    @ViewBuilder var details: () -> Details
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing3) {
+                thumbnail()
+                if let onOpen {
+                    Button(action: onOpen) { title }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier(openIdentifier)
+                } else {
+                    title
+                }
+            }
+            actions()
+            details()
+        }
+        .padding(WanderTheme.spacing3)
+        .background(brandMode.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .strokeBorder(
+                    isSaved ? WanderTheme.stateSuccess.color.opacity(0.95) : brandMode.border,
+                    lineWidth: isSaved ? 2.5 : 1
+                )
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(name)
+                .font(AstirTypography.cardTitle)
+                .foregroundStyle(brandMode.primaryText)
+                .lineLimit(2)
+            if let area {
+                Text(area)
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
 private struct CanonicalImportThumbnail: View {
     let item: PlaceImportItem
     let size: CGFloat
@@ -1091,9 +1260,6 @@ struct PlaceImportHistoryScreen: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                        Text("The badge counts imports still matching or not yet opened.")
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.secondaryText)
                         LazyVGrid(columns: columns, spacing: WanderTheme.spacing4) {
                             ForEach(historyBatches) { batch in
                                 if isSelecting {
@@ -1184,7 +1350,7 @@ struct PlaceImportHistoryDestination: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        PlaceImportReportScreen(importStore: importStore, batchID: batchID)
+        PlaceImportReportScreen(importStore: importStore, batchID: batchID, onDone: { dismiss() })
     }
 }
 
@@ -1280,7 +1446,7 @@ private struct PlaceImportHistoryArtwork: View {
                 if let image = phase.image {
                     image
                         .resizable()
-                        .scaledToFill()
+                        .scaledToFit()
                 } else {
                     fallbackArtwork
                 }
@@ -1295,7 +1461,7 @@ private struct PlaceImportHistoryArtwork: View {
         if batch.source == .googleMaps {
             Image("OnboardingMapDiary")
                 .resizable()
-                .scaledToFill()
+                .scaledToFit()
         } else {
             VStack(spacing: WanderTheme.spacing2) {
                 CanonicalImportSourceMark(source: batch.source, color: batch.source == .tiktok ? .white.opacity(0.8) : brandMode.primaryText.opacity(0.8), size: 38)
@@ -1446,12 +1612,27 @@ private struct CanonicalImportSourceMark: View {
     }
 }
 
+private struct ImportSelectionRemovalConfirmation {
+    let entryID: String
+    let title: String
+    let message: String
+    let buttonTitle: String
+    let removal: PlaceImportSavedSelectionRemoval
+    var offersListPicker = false
+    var replacementStatus: PlaceStatus? = nil
+}
+
 struct PlaceImportReportScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchID: String
     var savedOnly = false
+    var onDone: () -> Void = {}
     var pendingStatuses: [String: PlaceStatus] = [:]
+    var pendingLists: [String: Set<String>] = [:]
+    var pendingRemovals: [String: PlaceImportSavedSelectionRemoval] = [:]
     var onStageStatus: ((String, PlaceStatus) -> Void)?
+    var onClearStagedStatus: ((String) -> Void)?
+    var onStageRemoval: ((String, PlaceImportSavedSelectionRemoval) -> Void)?
     var onStageDetails: ((String, MapPlaceSaveSubmission) -> Void)?
     var onChooseLists: ((String) -> Void)?
 
@@ -1464,18 +1645,26 @@ struct PlaceImportReportScreen: View {
 
     @State private var savedListTarget: MapPlaceListTarget?
     @State private var selectedSavedEntryID: String?
+    @State private var removalConfirmation: ImportSelectionRemovalConfirmation?
+    @State private var showsRemovalConfirmation = false
 
     var body: some View {
         Group {
             if savedOnly {
                 if !savedEntries.isEmpty {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("Saved (\(savedEntries.count))").font(AstirTypography.sectionTitle)
-                        ForEach(savedEntries) { entry in reportRow(entry) }
+                        Text("Saved (\(savedEntries.count))")
+                            .font(AstirTypography.sectionTitle)
+                            .foregroundStyle(brandMode.primaryText)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("import.saved-section")
+                        VStack(spacing: WanderTheme.spacing3) {
+                            ForEach(savedEntries) { entry in reportRow(entry) }
+                        }
                     }
                 }
             } else {
-                PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})
+                PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: onDone)
             }
         }
         .navigationDestination(isPresented: Binding(
@@ -1495,6 +1684,22 @@ struct PlaceImportReportScreen: View {
         }
         .sheet(item: $savedListTarget) { target in
             MapPlaceListPickerSheet(target: target, analyticsSurface: "import") { _ in }
+        }
+        .alert(removalConfirmation?.title ?? "Remove selection?",
+               isPresented: $showsRemovalConfirmation, presenting: removalConfirmation) { confirmation in
+            Button(confirmation.buttonTitle, role: .destructive) {
+                expandedDetailEntryIDs.remove(confirmation.entryID)
+                onStageRemoval?(confirmation.entryID, confirmation.removal)
+                if let status = confirmation.replacementStatus {
+                    onStageStatus?(confirmation.entryID, status)
+                }
+            }
+            if confirmation.offersListPicker {
+                Button("Choose more lists") { onChooseLists?(confirmation.entryID) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { confirmation in
+            Text(confirmation.message)
         }
     }
 
@@ -1519,92 +1724,112 @@ struct PlaceImportReportScreen: View {
 
     private func reportRow(_ entry: PlaceImportReceiptEntry) -> some View {
         let visible = visiblePlace(for: entry)
-        return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Button {
-                if visible != nil { selectedSavedEntryID = entry.id }
-            } label: {
-                HStack(spacing: WanderTheme.spacing3) {
-                    reportThumbnail(entry)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(visible?.place.canonicalName ?? entry.displayName)
-                            .font(AstirTypography.cardTitle)
-                            .foregroundStyle(brandMode.primaryText)
-                            .lineLimit(2)
-                        Text(entry.displayArea ?? "Saved place")
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.secondaryText)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+        return ImportPlaceCard(
+            name: visible?.place.canonicalName ?? entry.displayName,
+            area: entry.displayArea,
+            isSaved: !hasPendingChanges(entry),
+            openIdentifier: "import.saved.\(entry.itemID)",
+            onOpen: visible == nil ? nil : { selectedSavedEntryID = entry.id }
+        ) {
+            reportThumbnail(entry)
+        } actions: {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    reportDetailsButton(entry, isAvailable: visible != nil && effectiveStatus(entry) != nil && entry.unfinishedRemoval == nil)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                    reportStatusControls(entry, visible: visible)
                 }
-                .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    reportDetailsButton(entry, isAvailable: visible != nil && effectiveStatus(entry) != nil && entry.unfinishedRemoval == nil)
+                    reportStatusControls(entry, visible: visible)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+        } details: {
+            if let visible, expandedDetailEntryIDs.contains(entry.id) {
+                inlineHistoricalDetails(entry: entry, visible: visible)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .accessibilityIdentifier("import.saved-card.\(entry.itemID)")
+        .accessibilityValue(hasPendingChanges(entry) ? "Unsaved changes" : "Saved")
+    }
+
+    private func hasPendingChanges(_ entry: PlaceImportReceiptEntry) -> Bool {
+        entry.unfinishedRemoval != nil || pendingStatuses[entry.id] != nil || !(pendingLists[entry.id] ?? []).isEmpty
+            || pendingRemovals[entry.id] != nil
+    }
+
+    private func reportDetailsButton(_ entry: PlaceImportReceiptEntry, isAvailable: Bool) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
+                if expandedDetailEntryIDs.contains(entry.id) {
+                    expandedDetailEntryIDs.remove(entry.id)
+                } else {
+                    expandedDetailEntryIDs.insert(entry.id)
+                }
+            }
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Text("Add details")
+                Image(systemName: "chevron.down")
+                    .rotationEffect(.degrees(expandedDetailEntryIDs.contains(entry.id) ? 180 : 0))
+            }
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.accentText)
+            .frame(minHeight: WanderTheme.tapMinimum)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isAvailable)
+        .accessibilityIdentifier("import.saved-details.\(entry.itemID)")
+    }
+
+    private func savedSelection(_ entry: PlaceImportReceiptEntry) -> PlaceImportSavedSelection {
+        store.importSelection(for: entry, item: items.first { $0.id == entry.itemID })
+    }
+
+    private func reportStatusControls(_ entry: PlaceImportReceiptEntry, visible: VisiblePlace?) -> some View {
+        let selection = savedSelection(entry)
+        let lists = store.importLists(for: selection)
+        let removed = pendingRemovals[entry.id]?.listIDs ?? []
+        let isInList = !(pendingLists[entry.id] ?? []).isEmpty || (!lists.isEmpty && removed.isEmpty)
+        return HStack(spacing: WanderTheme.spacing2) {
+            reportStatusButton(.wannaGo, entry: entry, visible: visible)
+            reportStatusButton(.been, entry: entry, visible: visible)
+            Button {
+                if !removed.isEmpty {
+                    var removal = pendingRemovals[entry.id]!
+                    removal.listIDs = []
+                    onStageRemoval?(entry.id, removal)
+                } else if !lists.isEmpty {
+                    var removal = pendingRemovals[entry.id] ?? .init(itemID: entry.itemID)
+                    removal.listIDs = selection.listIDs
+                    removalConfirmation = ImportSelectionRemovalConfirmation(
+                        entryID: entry.id, title: "Remove from lists?",
+                        message: "Saving will remove this place from \(lists.map(\.name).joined(separator: ", ")) and discard its details in those lists. Your Wanna and Check In selections will stay as they are.",
+                        buttonTitle: "Remove from lists", removal: removal, offersListPicker: true)
+                    showsRemovalConfirmation = true
+                } else { onChooseLists?(entry.id) }
+            } label: {
+                Image(systemName: "list.bullet")
+                    .frame(width: 44, height: 44)
+                    .modifier(ImportListButtonOutline(isSelected: isInList))
             }
             .buttonStyle(.plain)
-            .disabled(visible == nil)
-            .accessibilityIdentifier("import.saved.\(entry.itemID)")
-            if let visible {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        reportStatusButton(.wannaGo, visible: visible, itemID: entry.itemID)
-                        reportStatusButton(.been, visible: visible, itemID: entry.itemID)
-                        Button { onChooseLists?(entry.itemID) } label: {
-                            Image(systemName: "list.bullet").frame(width: 44, height: 44)
-                                .modifier(ImportListButtonOutline(isSelected: store.visiblePlaceLists.contains { store.hasPlace(visible, in: $0) }))
-                        }.buttonStyle(.plain).accessibilityLabel("Add to list")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-
-            if let visible {
-                HStack(spacing: WanderTheme.spacing3) {
-                    if let listName = destinationListName {
-                        Label(listName, systemImage: PlaceListSymbol.systemImage)
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.secondaryText)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    Button {
-                        withAnimation(.snappy(duration: 0.24, extraBounce: 0)) {
-                            if expandedDetailEntryIDs.contains(entry.id) {
-                                expandedDetailEntryIDs.remove(entry.id)
-                            } else {
-                                expandedDetailEntryIDs.insert(entry.id)
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Text("Add details")
-                            Image(systemName: "chevron.down")
-                                .rotationEffect(.degrees(expandedDetailEntryIDs.contains(entry.id) ? 180 : 0))
-                        }
-                        .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.accentText)
-                        .frame(minHeight: WanderTheme.tapMinimum)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if expandedDetailEntryIDs.contains(entry.id) {
-                    inlineHistoricalDetails(entry: entry, visible: visible)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
+            .accessibilityLabel("Add to list")
+            .accessibilityAddTraits(isInList ? .isSelected : [])
+            .accessibilityValue(isInList ? "Selected" : "Not selected")
+            .accessibilityIdentifier("import.saved-list.\(entry.itemID)")
         }
-        .padding(WanderTheme.spacing3)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
+        .frame(width: 148)
+        .disabled(entry.unfinishedRemoval != nil || (visible == nil && store.importCandidate(for: entry, item: items.first { $0.id == entry.itemID }) == nil))
     }
 
     @ViewBuilder
     private func reportThumbnail(_ entry: PlaceImportReceiptEntry) -> some View {
         if let item = items.first(where: { $0.id == entry.itemID }) {
-            PlaceImportPhotoThumb(item: photoItem(item, for: entry), loadsRemotePhoto: true, size: 54)
+            PlaceImportPhotoThumb(item: photoItem(item, for: entry), loadsRemotePhoto: true, size: 58)
         } else {
             RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                 .fill(batch?.source.canonicalTint ?? brandMode.recessedBackground)
@@ -1613,7 +1838,7 @@ struct PlaceImportReportScreen: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(brandMode.secondaryText.opacity(0.55))
                 }
-                .frame(width: 54, height: 54)
+                .frame(width: 58, height: 58)
         }
     }
 
@@ -1628,10 +1853,55 @@ struct PlaceImportReportScreen: View {
         return result
     }
 
-    private func reportStatusButton(_ status: PlaceStatus, visible: VisiblePlace, itemID: String) -> some View {
-        let selected = (pendingStatuses[itemID] ?? visible.userPlace.status) == status
+    private func reportStatusButton(_ status: PlaceStatus, entry: PlaceImportReceiptEntry, visible: VisiblePlace?) -> some View {
+        let itemID = entry.itemID
+        let selection = savedSelection(entry)
+        let selected = (pendingStatuses[entry.id] ?? (pendingRemovals[entry.id]?.status == nil ? selection.status : nil)) == status
         return Button {
-            onStageStatus?(itemID, status)
+            if selected {
+                if let pending = pendingStatuses[entry.id], pending != selection.status {
+                    onClearStagedStatus?(entry.id)
+                } else {
+                    var removal = pendingRemovals[entry.id] ?? .init(itemID: itemID)
+                    removal.status = status
+                    removal.visitID = selection.visitID
+                    removal.wannaID = selection.wannaID
+                removal.wannaIsOriginal = selection.wannaIsOriginal
+                    let visit = visible.flatMap { place in
+                        store.visits(for: place.userPlace.id).first {
+                            [$0.id, $0.localID, $0.serverID].contains(selection.visitID)
+                        }
+                    }
+                    let visitDate = visit.map { " from " + $0.visitedAt.formatted(date: .abbreviated, time: .omitted) } ?? ""
+                    removalConfirmation = ImportSelectionRemovalConfirmation(
+                        entryID: entry.id, title: status == .been ? "Remove Check In?" : "Remove Wanna?",
+                        message: status == .been
+                            ? "Saving will delete this check-in\(visitDate) and its notes, ratings, photos and other details. Other check-ins at this place will remain."
+                            : "Saving will remove this Wanna and its notes, planned date and other saved details. Your list selections will remain.",
+                        buttonTitle: status == .been ? "Remove Check In" : "Remove Wanna", removal: removal)
+                    showsRemovalConfirmation = true
+                }
+            } else if pendingRemovals[entry.id]?.status == status {
+                var removal = pendingRemovals[entry.id]!
+                removal.status = nil
+                removal.visitID = nil
+                removal.wannaID = nil
+                onClearStagedStatus?(entry.id)
+                onStageRemoval?(entry.id, removal)
+            } else if let previous = selection.status, pendingRemovals[entry.id]?.status == nil {
+                var removal = pendingRemovals[entry.id] ?? .init(itemID: itemID)
+                removal.status = previous
+                removal.visitID = selection.visitID
+                removal.wannaID = selection.wannaID
+                removal.wannaIsOriginal = selection.wannaIsOriginal
+                let oldName = previous == .been ? "Check In" : "Wanna"
+                let newName = status == .been ? "Check In" : "Wanna"
+                removalConfirmation = ImportSelectionRemovalConfirmation(
+                    entryID: entry.id, title: "Change to \(newName)?",
+                    message: "Saving will remove this tile’s \(oldName) and its notes, dates, photos and other details, and create a new \(newName). Other visits and your list selections will remain.",
+                    buttonTitle: "Change to \(newName)", removal: removal, replacementStatus: status)
+                showsRemovalConfirmation = true
+            } else { onStageStatus?(entry.id, status) }
         } label: {
             Image(systemName: status == .been ? "checkmark" : "bookmark.fill")
                 .font(.system(size: 16, weight: .black))
@@ -1648,26 +1918,44 @@ struct PlaceImportReportScreen: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityRemoveTraits(selected ? [] : .isSelected)
         .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityIdentifier("import.saved-\(status == .been ? "checkin" : "wanna").\(itemID)")
     }
 
-    private func detailContext(for visible: VisiblePlace) -> MapPlaceSaveContext {
-        if visible.userPlace.status == .been,
-           let visit = store.visits(for: visible.userPlace.id).first {
-            return .editVisit(visit, visiblePlace: visible)
-        } else {
-            return .editWant(
-                visible,
-                attributes: store.attributes(for: visible.userPlace.id)
-            )
+    private func effectiveStatus(_ entry: PlaceImportReceiptEntry) -> PlaceStatus? {
+        pendingStatuses[entry.id] ?? (pendingRemovals[entry.id]?.status == nil ? savedSelection(entry).status : nil)
+    }
+
+    private func detailContext(for entry: PlaceImportReceiptEntry, visible: VisiblePlace) -> MapPlaceSaveContext {
+        let selection = savedSelection(entry)
+        let status = effectiveStatus(entry) ?? .wannaGo
+        if status != selection.status || pendingRemovals[entry.id]?.status != nil,
+           let item = items.first(where: { $0.id == entry.itemID }),
+           let candidate = store.importCandidate(for: entry, item: item) {
+            return .importCandidate(candidate, sourceType: item.source.canonicalAddSourceType,
+                status: status, defaultVisibility: store.effectiveDefaultVisibility, ratingScore: nil, note: "")
         }
+        if status == .been, let visit = store.visits(for: visible.userPlace.id).first(where: {
+            [$0.id, $0.localID, $0.serverID].contains(selection.visitID)
+        }) { return .editVisit(visit, visiblePlace: visible) }
+        if let wanna = store.wannaSaves(for: visible.userPlace).first(where: {
+            selection.wannaID == nil ? $0.isHistoricalOriginal == true : $0.id == selection.wannaID
+        }) { return .editWanna(wanna, visiblePlace: visible) }
+        if visible.userPlace.status == .been && (selection.wannaIsOriginal == true || selection.wannaID == nil) {
+            let parent = visible.userPlace
+            return .editWanna(PlaceWannaSave(id: UUID().uuidString.lowercased(), ownerID: store.currentUser.id,
+                userPlaceID: parent.id, occurredAt: parent.historicalWantedAt ?? parent.savedAt,
+                note: parent.historicalWantNote, visibility: parent.visibility, plannedDate: nil,
+                attributeAnswersJSON: parent.historicalWantAttributeAnswersJSON ?? "[]", isHistoricalOriginal: true), visiblePlace: visible)
+        }
+        return .editWant(visible, attributes: store.attributes(for: visible.userPlace.id))
     }
 
     private func inlineHistoricalDetails(
         entry: PlaceImportReceiptEntry,
         visible: VisiblePlace
     ) -> some View {
-        let context = detailContext(for: visible)
-        let detailID = "history-details:\(entry.id):\(visible.userPlace.status.rawValue)"
+        let context = detailContext(for: entry, visible: visible)
+        let detailID = "history-details:\(entry.id):\(effectiveStatus(entry)?.rawValue ?? "none")"
         return MapPlaceSaveEditor(
             context: context,
             onSave: { submission in
@@ -1681,11 +1969,7 @@ struct PlaceImportReportScreen: View {
                 }
                 return result
             },
-            onRemove: { context in
-                let removed = await removeHistoricalSave(context)
-                if removed { beginBackgroundSyncIfPossible() }
-                return removed
-            },
+            onRemove: { _ in false },
             onClose: {
                 _ = expandedDetailEntryIDs.remove(entry.id)
             },
@@ -1697,7 +1981,7 @@ struct PlaceImportReportScreen: View {
             presentation: .inlineStaging,
             onSubmissionChange: { submission in
                 guard !initializedDetailContexts.insert(detailID).inserted else { return }
-                onStageDetails?(entry.itemID, submission)
+                onStageDetails?(entry.id, submission)
             }
         )
         .id(detailID)
@@ -1705,17 +1989,6 @@ struct PlaceImportReportScreen: View {
         .padding(.top, WanderTheme.spacing1)
     }
 
-    @MainActor
-    private func removeHistoricalSave(_ context: MapPlaceSaveContext) async -> Bool {
-        switch context.mode {
-        case .editVisit(_, let visit):
-            return await store.deleteVisit(visitID: visit.id, backend: nil)
-        case .editWant(let visible):
-            return store.removeSave(userPlaceID: visible.userPlace.id) != nil
-        case .add, .addVisit, .sharedVisit:
-            return false
-        }
-    }
 
     private func beginBackgroundSyncIfPossible() {
         guard case .signedIn = auth.state else { return }
@@ -1738,28 +2011,13 @@ struct PlaceImportReportScreen: View {
     }
 
     private func visiblePlace(for entry: PlaceImportReceiptEntry) -> VisiblePlace? {
-        if let id = entry.userPlaceID,
-           let visible = store.currentUserVisiblePlaces.first(where: {
-               $0.userPlace.id == id || $0.userPlace.localID == id
-           }) { return visible }
-        // Sync can replace a local save identity; the original candidate keeps
-        // its provider identity and can locate the current own save safely.
-        guard let item = items.first(where: { $0.id == entry.itemID }),
-              let candidate = item.selectedCandidates.first(where: { $0.name == entry.displayName }),
-              let saved = store.existingImportSave(matching: candidate)
-        else { return nil }
-        return store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }
+        store.importVisiblePlace(for: entry, item: items.first { $0.id == entry.itemID })
     }
 
     private func saveSummary(_ visible: VisiblePlace) -> PlaceSaveSummary {
         PlaceSaveSummary(visiblePlace: visible,
             attributes: store.attributes(for: visible.userPlace.id),
             viewerFollowsOwner: store.viewerFollows(visible.owner.id))
-    }
-
-    private var destinationListName: String? {
-        guard let listID = batch?.receipt?.destinationListID else { return nil }
-        return store.visiblePlaceLists.first(where: { $0.id == listID })?.name
     }
 
     private func reportStatusColor(_ status: PlaceStatus) -> Color {

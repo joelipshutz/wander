@@ -1020,10 +1020,31 @@ private struct TrustedPlaceSearchDocument {
             .attribute,
             weight: 14,
             values: place.attributes.flatMap { attribute in
-                PlaceAttributeValuePresentation.strings(from: attribute.valueJSON)
+                PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey)
+                    ? []
+                    : PlaceAttributeValuePresentation.strings(from: attribute.valueJSON)
             } + place.userPlace.historicalWantTags,
             to: &values
         )
+        if place.userPlace.status == .been {
+            for attribute in place.attributes {
+                let terms = PlaceProfileAttributePresentation.searchTerms(from: attribute)
+                let tokens = terms.flatMap(TrustedPlaceSearchText.tokens(in:))
+                guard !tokens.isEmpty,
+                      let displayValue = PlaceProfileAttributePresentation.displayValues(from: attribute).first
+                else { continue }
+
+                values.append(
+                    FieldValue(
+                        field: .attribute,
+                        displayValue: displayValue,
+                        normalizedTokens: tokens,
+                        normalizedPhrase: tokens.joined(separator: " "),
+                        weight: 14
+                    )
+                )
+            }
+        }
         Self.append(
             .status,
             weight: 8,

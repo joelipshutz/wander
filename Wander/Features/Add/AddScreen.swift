@@ -199,6 +199,7 @@ struct AddScreen: View {
     @State private var isRunningWalkthroughSearch = false
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
+    @State private var needsSignInAfterSave = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -443,12 +444,14 @@ struct AddScreen: View {
             }
             .navigationDestination(isPresented: $showsImportReview) {
                 importCompletionDestination
+                .environment(\.finishPlaceImport, onClose)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
                 PlaceImportHistoryScreen(importStore: importStore)
+                    .environment(\.finishPlaceImport, onClose)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -1324,9 +1327,18 @@ struct AddScreen: View {
         sourceContextID: UUID
     ) {
         guard addSaveFlow?.id == sourceContextID else { return }
+        let shouldPresentSignIn = needsSignInAfterSave
+        needsSignInAfterSave = false
+        resetAfterSave()
         placeSaveDraftStore.clear()
         addSaveFlow = nil
         onClose()
+        if shouldPresentSignIn {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                auth.presentGate(for: .syncPlace)
+            }
+        }
     }
 
     private func addCandidateContext(
@@ -1501,15 +1513,11 @@ struct AddScreen: View {
         if let reservationID = submission.context.calendarReservationID {
             _ = try? await backend.completeCalendarReservation(id: reservationID)
         }
-        let needsSignIn = !auth.isSignedIn
+        needsSignInAfterSave = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        resetAfterSave()
-        if needsSignIn {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
-                auth.presentGate(for: .syncPlace)
-            }
-        }
+        // The editor acknowledges a successful save before completing. Keep it
+        // mounted so a private-details warning can be dismissed without retrying
+        // the already committed check-in or competing with a sign-in sheet.
         return result
     }
 

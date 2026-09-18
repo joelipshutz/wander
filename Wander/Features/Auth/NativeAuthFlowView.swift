@@ -64,7 +64,7 @@ struct NativeAuthFlowView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
             .toolbar {
-                if isDismissable {
+                if isDismissable && mode != .signUp {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             if let onClose { onClose() } else { dismiss() }

@@ -2281,7 +2281,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
         let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
             .last?.components(separatedBy: "private func sourceLinkCard").first)
-        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})"))
+        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: onDone)"))
         let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
             .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
         XCTAssertFalse(history.contains("markReviewOpened"))
@@ -2351,7 +2351,7 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
         )
 
-        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
+        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID, onDone: { dismiss() })"))
         XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
         XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,"))
         XCTAssertFalse(views.contains("Review and add places"))
@@ -2433,7 +2433,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(cardSource.contains(".font(.system(size:"))
     }
 
-    func testCanonicalSaveDetailsKeepOptionalNoteAboveCollapsedSecondaryQuestions() throws {
+    func testCanonicalSaveDetailsKeepNotesAndQuestionsAboveCollapsedTags() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -2442,19 +2442,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(mapScreen.components(separatedBy: "private var optionalDetailsDisclosure: some View").count, 2)
         XCTAssertEqual(mapScreen.components(separatedBy: "private var saveFooter: some View").count, 2)
         XCTAssertEqual(mapScreen.components(separatedBy: "private var removeSaveSection: some View").count, 2)
-        let detailsContent = try XCTUnwrap(
-            mapScreen
-                .components(separatedBy: "private var detailsContent: some View")
-                .last?
-                .components(separatedBy: "private var noteSection: some View")
-                .first
+        let detailsContent = try sourceSection(
+            mapScreen,
+            after: "private var detailsContent: some View",
+            before: "private var visitParticipationSections: some View"
         )
-        let optionalDetails = try XCTUnwrap(
-            mapScreen
-                .components(separatedBy: "private var optionalDetailsDisclosure: some View")
-                .last?
-                .components(separatedBy: "private var removeSaveSection: some View")
-                .first
+        let participation = try sourceSection(
+            mapScreen,
+            after: "private var visitParticipationSections: some View",
+            before: "private var saveFooter: some View"
+        )
+        let optionalDetails = try sourceSection(
+            mapScreen,
+            after: "private var optionalDetailsDisclosure: some View",
+            before: "private var optionalDetailsSummary: String"
+        )
+        let optionalSummary = try sourceSection(
+            mapScreen,
+            after: "private var optionalDetailsSummary: String",
+            before: "private var removeSaveSection: some View"
         )
 
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
@@ -2462,18 +2468,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(detailsContent.contains("if selectedStatus == .been"))
         XCTAssertTrue(detailsContent.contains("MapCheckInDateSection("))
         XCTAssertTrue(detailsContent.contains("ratingSection"))
-        XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
-        XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
+        XCTAssertTrue(detailsContent.contains("visitParticipationSections"))
+        XCTAssertTrue(participation.contains("sharedVisitInviteSection"))
+        XCTAssertTrue(participation.contains("MapSaveVisitPhotoSection("))
+        XCTAssertTrue(participation.contains("context.allowsPhotoAttachments"))
+        XCTAssertTrue(participation.contains("canInviteFriends || walkthroughs.activeSurface == .saveFlow"))
         XCTAssertTrue(detailsContent.contains("noteSection"))
         XCTAssertTrue(detailsContent.contains("optionalDetailsDisclosure"))
         XCTAssertFalse(detailsContent.contains("questionAndLabelSections"))
-        XCTAssertFalse(detailsContent.contains("visibilitySection"))
+        XCTAssertTrue(detailsContent.contains("visibilitySection"))
 
         XCTAssertFalse(optionalDetails.contains("saveAsSection"))
         XCTAssertFalse(optionalDetails.contains("noteSection"))
         XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
-        XCTAssertTrue(optionalDetails.contains("visibilitySection"))
-        XCTAssertTrue(optionalDetails.contains("fit, tags & privacy"))
+        XCTAssertFalse(optionalDetails.contains("visibilitySection"))
+        XCTAssertFalse(optionalDetails.contains("checkInQuestionsSection"))
+        XCTAssertFalse(optionalDetails.contains("plannedDateSection"))
+        XCTAssertTrue(optionalDetails.contains("if isShowingOptionalDetails"))
+        XCTAssertTrue(optionalSummary.contains("\"tags\""))
+        XCTAssertFalse(optionalSummary.contains("fit, tags & privacy"))
         XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
         XCTAssertFalse(optionalDetails.contains("WanderTheme.sunTint.color"))
@@ -2503,7 +2516,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(statusChoice.contains(".frame(height: 1.5)"))
         XCTAssertFalse(statusChoice.contains(".wanderGlassCapsule("))
         XCTAssertFalse(mapScreen.contains("private struct MapSaveChoicePill: View"))
-        XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus)"))
+        XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus, ownerUserID: editorOwnerID)"))
+        XCTAssertTrue(mapScreen.contains("modeDrafts.draft(for: status, ownerUserID: editorOwnerID)"))
         XCTAssertTrue(mapScreen.contains("sourceContext.preselectingStatus(status)"))
         XCTAssertTrue(mapScreen.contains("restoreModeDraft(cachedDraft)"))
         XCTAssertTrue(mapScreen.contains("MapPlaceSaveSubmissionPolicy.checkInValues("))
@@ -2521,7 +2535,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("minWidth: WanderTheme.tapMinimum"))
         XCTAssertTrue(mapScreen.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(mapScreen.contains(".frame(width: 32, height: 32)"))
-        XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = true"))
+        XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = false"))
         XCTAssertFalse(mapScreen.contains("didSelectStatus"))
         XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"))
         XCTAssertTrue(mapScreen.contains("action.displayTitle("))
@@ -2539,9 +2553,12 @@ final class NavigationContractTests: XCTestCase {
             "ratingSection",
             "noteSection",
             "MapCheckInDateSection(",
+            "plannedDateSection",
             "placeTypeSection",
+            "checkInQuestionsSection",
             "visitParticipationSections",
-            "optionalDetailsDisclosure"
+            "optionalDetailsDisclosure",
+            "visibilitySection"
         ]
         let offsets = try orderedMarkers.map { marker in
             let range = try XCTUnwrap(detailsContent.range(of: marker), "Missing \(marker)")
@@ -2549,30 +2566,38 @@ final class NavigationContractTests: XCTestCase {
         }
         XCTAssertEqual(offsets, offsets.sorted())
 
-        let attachedEssentialMarkers = [
-            "ratingSection",
-            "noteSection",
-            "MapCheckInDateSection(",
-            "optionalDetailsDisclosure"
-        ]
-        let attachedEssentialOffsets = try attachedEssentialMarkers.map { marker in
-            let range = try XCTUnwrap(detailsContent.range(of: marker), "Missing \(marker)")
-            return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
-        }
-        XCTAssertEqual(attachedEssentialOffsets, attachedEssentialOffsets.sorted())
+        let dateFields = try sourceSection(detailsContent, after: "noteSection", before: "placeTypeSection")
+        XCTAssertTrue(dateFields.contains("if selectedStatus == .been"))
+        XCTAssertTrue(dateFields.contains("} else {"))
+        XCTAssertTrue(dateFields.contains("MapCheckInDateSection("))
+        XCTAssertTrue(dateFields.contains("plannedDateSection"), "Wanna dates stay visible above the categories.")
+        let checkInFields = try sourceSection(detailsContent, after: "placeTypeSection", before: "optionalDetailsDisclosure")
+        XCTAssertTrue(checkInFields.contains("if selectedStatus == .been"))
+        XCTAssertTrue(checkInFields.contains("checkInQuestionsSection"))
+        XCTAssertTrue(checkInFields.contains("visitParticipationSections"))
+        XCTAssertFalse(checkInFields.contains("else"), "Wanna must not show Check-in questions, friends, or photos.")
         XCTAssertFalse(optionalDetails.contains("presentation == .attached"))
         XCTAssertFalse(optionalDetails.contains("placeTypeSection"))
         XCTAssertFalse(optionalDetails.contains("visitParticipationSections"))
 
-        let optionalMarkers = [
-            "questionAndLabelSections",
-            "visibilitySection"
-        ]
-        let optionalOffsets = try optionalMarkers.map { marker in
-            let range = try XCTUnwrap(optionalDetails.range(of: marker), "Missing \(marker)")
-            return optionalDetails.distance(from: optionalDetails.startIndex, to: range.lowerBound)
-        }
-        XCTAssertEqual(optionalOffsets, optionalOffsets.sorted())
+        let questionPanel = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/CheckInQuestionPanel.swift")
+        )
+        let questionHeader = try sourceSection(questionPanel, after: "private var header: some View", before: "private var currentConfiguration:")
+        XCTAssertTrue(questionHeader.contains("Text(\"useful details\")"))
+        XCTAssertTrue(questionHeader.contains(".font(AstirTypography.label)"))
+        XCTAssertTrue(questionHeader.contains("customizeButton"))
+        XCTAssertTrue(questionHeader.contains("HStack(alignment: .firstTextBaseline"))
+        XCTAssertTrue(questionHeader.contains("dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(questionHeader.contains("minHeight: WanderTheme.tapMinimum"))
+        XCTAssertFalse(questionHeader.contains("AstirTypography.sectionTitle"))
+        XCTAssertFalse(questionPanel.contains("A few useful details"))
+        XCTAssertFalse(questionPanel.contains("Optional. Answer only what you know."))
+        let questionRow = try sourceSection(questionPanel, after: "private struct CheckInQuestionAnswerRow: View", before: "struct CheckInQuestionCustomizationSheet: View")
+        XCTAssertFalse(questionRow.contains("Divider("), "Question rows use spacing rather than repeated dividing lines.")
+        XCTAssertTrue(questionRow.contains("minHeight: WanderTheme.tapMinimum"))
+        XCTAssertTrue(questionRow.contains(".accessibilityAddTraits(selected ? .isSelected : [])"))
+        XCTAssertTrue(questionRow.contains("Button(\"Clear answer\""))
 
         let sharedVisitComponents = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/SharedVisits/SharedVisitComponents.swift")
@@ -4111,7 +4136,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
         XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(isPlaceProfilePresented ? .isModal : [])"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(isPlaceProfileAccessibilityModal ? .isModal : [])"))
+        XCTAssertTrue(mapScreen.contains("isAccessibilityModal: isPlaceProfileAccessibilityModal"))
+        let profileModality = try XCTUnwrap(
+            mapScreen.components(separatedBy: "private var isPlaceProfileAccessibilityModal: Bool {").last?
+                .components(separatedBy: "private func presentWalkthroughPlaceMemory()").first
+        )
+        XCTAssertTrue(profileModality.contains("isPlaceProfilePresented && attachedMapSaveFlow == nil"))
+        XCTAssertTrue(profileModality.contains("mapSaveFlow == nil && mapActivityEditFlow == nil"))
+        XCTAssertTrue(profileModality.contains("mapPlaceListTarget == nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
         XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
@@ -4130,8 +4163,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("let content: Content"))
         XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
         XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: !reduceMotion)"))
+        XCTAssertTrue(placeProfile.contains("controller.setAccessibilityModal(isAccessibilityModal)"))
         XCTAssertTrue(placeProfile.contains("controller.updateRootView(content)"))
-        XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
+        XCTAssertTrue(placeProfile.contains("UIHostingController<PlaceProfileHostedContent<Content>>"))
+        XCTAssertFalse(placeProfile.contains("hostingController.rootView ="), "Native presentations must retain a stable hosting root.")
         XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
         XCTAssertTrue(placeProfile.contains("hostingController.view.transform = targetTransform(isPresented: isPresented)"))
         XCTAssertTrue(placeProfile.contains("hostingController.view.layer.shouldRasterize = isEnabled"))
@@ -4231,6 +4266,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(controller.view.accessibilityElementsHidden)
         XCTAssertNil(hostedView.superview)
         XCTAssertEqual(completedStates, [true, false])
+    }
+
+    @MainActor
+    func testPlaceProfileRelinquishesAccessibilityModalityWithoutDismissing() throws {
+        var completedStates: [Bool] = []
+        let controller = PlaceProfileSlidingHostingController(
+            rootView: Text("Profile"),
+            isPresented: true,
+            onTransitionCompleted: { completedStates.append($0) }
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        controller.view.layoutIfNeeded()
+        let hostedView = try XCTUnwrap(controller.view.subviews.first)
+
+        XCTAssertTrue(controller.view.accessibilityViewIsModal)
+        controller.setAccessibilityModal(false)
+
+        XCTAssertFalse(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(controller.isPresented)
+        XCTAssertFalse(controller.view.accessibilityElementsHidden)
+        XCTAssertFalse(hostedView.accessibilityElementsHidden)
+        XCTAssertFalse(hostedView.isHidden)
+        XCTAssertEqual(hostedView.transform, .identity)
+        XCTAssertTrue(hostedView.superview === controller.view)
+        XCTAssertTrue(completedStates.isEmpty)
+
+        controller.setAccessibilityModal(true)
+        XCTAssertTrue(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(completedStates.isEmpty)
+
+        controller.setPresented(false, animated: false)
+        XCTAssertFalse(controller.view.accessibilityViewIsModal)
+        XCTAssertTrue(controller.view.accessibilityElementsHidden)
+        XCTAssertEqual(completedStates, [false])
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
@@ -4789,7 +4859,7 @@ final class NavigationContractTests: XCTestCase {
             "Wander/Features/Profile/ProfileImportViews.swift": 2,
             "Wander/Features/Profile/ProfileScreen.swift": 1,
             "Wander/Features/Map/PlaceProfileMapSurface.swift": 1,
-            "Wander/Features/Map/MapScreen.swift": 3
+            "Wander/Features/Map/MapScreen.swift": 4
         ]
 
         for (path, expectedCallCount) in directSheetEntryPointCallCounts {
@@ -4843,8 +4913,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.disabled)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.scrolls)"))
-        XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
-        XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))
+        XCTAssertTrue(placeProfile.contains("onClose: closeSave"))
+        XCTAssertTrue(placeProfile.contains("guard effectiveSaveContext.wrappedValue?.id == context.id else { return }"))
         XCTAssertFalse(placeProfile.contains("compactDetent"))
         XCTAssertFalse(placeProfile.contains("presentationBackgroundInteraction"))
 

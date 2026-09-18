@@ -124,6 +124,7 @@ struct ProfileSettingsHome: View {
         List {
             accountSection
             mapSection
+            checkInQuestionsSection
             notificationsSection
             privacySection
             importsSection
@@ -256,6 +257,20 @@ struct ProfileSettingsHome: View {
             .accessibilityIdentifier("settings.map.darkMode")
         } header: {
             Text("Map")
+        }
+        .listRowBackground(brandMode.raisedBackground)
+    }
+
+    private var checkInQuestionsSection: some View {
+        Section("Check-ins") {
+            NavigationLink {
+                CheckInQuestionSettingsScreen(ownerUserID: store.currentUser.id)
+                    .id(store.currentUser.id)
+            } label: {
+                Label("Check-in questions", systemImage: "checklist")
+                    .frame(minHeight: WanderTheme.tapMinimum)
+            }
+            .accessibilityIdentifier("settings.checkInQuestions")
         }
         .listRowBackground(brandMode.raisedBackground)
     }
@@ -601,6 +616,7 @@ struct ProfileSettingsHome: View {
     @MainActor
     private func deleteAccount() async {
         guard !isDeleting else { return }
+        let questionOwnerID = store.currentUser.id
         let deletingUserID: String? = if case .signedIn(let session) = auth.state {
             session.userID
         } else {
@@ -618,6 +634,7 @@ struct ProfileSettingsHome: View {
                 )
             }
             try await auth.deleteAccount()
+            try CheckInQuestionPreferenceStore().removeAccount(ownerUserID: questionOwnerID)
             if let deletingUserID {
                 OnboardingCompletionStore().clear(for: deletingUserID)
             }
