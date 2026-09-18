@@ -87,6 +87,8 @@ struct AppEntryView: View {
             switch coordinator.state {
             case .launching:
                 OnboardingLaunchView()
+                    .environment(\.onboardingVisualTreatment, OnboardingWelcomeConfiguration.current.visualTreatment)
+                    .environment(\.onboardingFilmMotion, true)
             case .signedOut:
                 SignedOutOnboardingFlowView(analytics: analytics)
             case .onboarding(let session, let step):

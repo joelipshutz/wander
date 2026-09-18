@@ -50,21 +50,10 @@ struct SignedOutOnboardingFlowView: View {
                 .zIndex(1)
             }
         }
-        .overlay {
-            if treatment.isFilm {
-                ZStack {
-                    OnboardingFilmTexture(isPlaying: filmIsPlaying && !auth.isPresentingNativeAuth, reduceMotion: reduceMotion)
-                        .blendMode(.screen)
-                        .opacity(0.48)
-                    OnboardingFilmArtifacts()
-                }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
-        }
         .environment(\.onboardingVisualTreatment, treatment)
-        .environment(\.onboardingFilmMotion, filmIsPlaying && !auth.isPresentingNativeAuth)
+        // The account hero keeps its own decorative motion after the carousel
+        // ends. Form controls and their background never enter the ink layer.
+        .environment(\.onboardingFilmMotion, auth.isPresentingNativeAuth || filmIsPlaying)
         .environment(\.astirBrandMode, treatment.isFilm ? .editorial : brandMode)
         .preferredColorScheme(treatment.isFilm ? .dark : nil)
         .onPreferenceChange(OnboardingMotionPreferenceKey.self) { filmIsPlaying = $0 }

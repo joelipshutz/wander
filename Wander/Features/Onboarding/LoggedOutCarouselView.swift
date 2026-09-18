@@ -129,6 +129,24 @@ struct LoggedOutCarouselView: View {
                 .padding(.horizontal, WanderTheme.spacing4).padding(.bottom, WanderTheme.spacing2)
             }
         }
+        // Move the film with the outgoing carousel. The incoming account form
+        // has its own background beneath its controls, so this cannot tint it.
+        .overlay {
+            if treatment.isFilm {
+                ZStack {
+                    OnboardingFilmTexture(
+                        isPlaying: scenePhase == .active && (motionIsPlaying || didFinish),
+                        reduceMotion: reduceMotion
+                    )
+                    .blendMode(.screen)
+                    .opacity(0.48)
+                    OnboardingFilmArtifacts()
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
         .preference(key: OnboardingMotionPreferenceKey.self, value: motionIsPlaying)
         .onAppear { trackViewed() }
         .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
@@ -481,6 +499,9 @@ private struct OnboardingSlidingText: View, @MainActor Animatable {
 }
 
 struct OnboardingLaunchView: View {
+    @Environment(\.onboardingVisualTreatment) private var treatment
+    @Environment(\.onboardingFilmMotion) private var filmMotion
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let message: String?
 
     init(message: String? = nil) {
@@ -489,7 +510,16 @@ struct OnboardingLaunchView: View {
 
     var body: some View {
         ZStack {
-            AstirLaunchArtwork.background.ignoresSafeArea()
+            (treatment.isFilm ? OnboardingVisualTreatment.background : AstirLaunchArtwork.background)
+                .ignoresSafeArea()
+            if treatment.isFilm {
+                OnboardingFilmTexture(isPlaying: filmMotion, reduceMotion: reduceMotion)
+                    .blendMode(.screen)
+                    .opacity(0.48)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             GeometryReader { proxy in
                 // Center the artwork alone. Loading copy must not change its frame.
                 AstirLaunchLockup(animationsEnabled: false)

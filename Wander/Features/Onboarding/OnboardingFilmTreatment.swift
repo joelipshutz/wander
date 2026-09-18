@@ -10,8 +10,8 @@ enum OnboardingVisualTreatment: String, Equatable, CaseIterable {
 
     var isFilm: Bool { self != .approved }
     var matchesFilmType: Bool { self == .filmType }
-    static let background = Color(red: 12 / 255, green: 16 / 255, blue: 16 / 255)
-    static let signal = Color(red: 215 / 255, green: 117 / 255, blue: 84 / 255)
+    static let background = AstirTheme.ink.color
+    static let signal = AstirTheme.signal.color
 
     static func resolved(environment: [String: String]) -> Self {
         #if DEBUG
@@ -121,9 +121,10 @@ private struct OnboardingFilmPlayback<Content: View>: View {
 /// resolves its SwiftUI drawing once, then shifts rows of that native symbol.
 private struct OnboardingFilmInk: ViewModifier {
     @Environment(\.onboardingVisualTreatment) private var treatment
+    var isEnabled = true
 
     @ViewBuilder func body(content: Content) -> some View {
-        if treatment.isFilm {
+        if treatment.isFilm && isEnabled {
             content.opacity(0.001)
                 .overlay {
                     OnboardingFilmPlayback { frame in
@@ -148,9 +149,9 @@ private struct OnboardingFilmSignal<Ink: View>: View {
             let center = CGPoint(x: size.width / 2, y: size.height / 2 + frame.verticalSlip)
             context.opacity = frame.density
             context.drawLayer { signal in
-                // The reference leaves a warm, delayed smear beyond the glyph.
+                // Preserve the delayed registration smear in Astir's Signal hue.
                 var bleed = signal
-                bleed.addFilter(.colorMultiply(Color(red: 0.72, green: 0.19, blue: 0.10)))
+                bleed.addFilter(.colorMultiply(AstirTheme.signal.color))
                 bleed.addFilter(.blur(radius: frame.tracking ? 2.4 : 1.3))
                 bleed.opacity = 0.38
                 bleed.draw(symbol, at: CGPoint(x: center.x - 2.2, y: center.y + 0.15))
@@ -262,7 +263,9 @@ struct OnboardingFilmArtifacts: View {
 }
 
 extension View {
-    func onboardingFilmInk() -> some View { modifier(OnboardingFilmInk()) }
+    func onboardingFilmInk(isEnabled: Bool = true) -> some View {
+        modifier(OnboardingFilmInk(isEnabled: isEnabled))
+    }
     func onboardingFilmSurface() -> some View { modifier(OnboardingFilmSurface()) }
 }
 
