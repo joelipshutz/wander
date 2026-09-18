@@ -140,6 +140,17 @@ async function main() {
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
         await client.query("reset role");
+        await client.query("savepoint place_plan_smoke");
+        try {
+          await client.query(transactionBody(
+            readFileSync(new URL("../supabase/tests/place_plan_invitations.sql", import.meta.url), "utf8"),
+            "rollback",
+          ));
+        } finally {
+          await client.query("rollback to savepoint place_plan_smoke");
+          await client.query("release savepoint place_plan_smoke");
+        }
+        await client.query("reset role");
         await client.query("savepoint repeat_wanna_smoke");
         try {
           await client.query(transactionBody(
@@ -2590,6 +2601,12 @@ savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;
 release savepoint repeat_wanna_smoke;
+
+reset role;
+savepoint place_plan_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/place_plan_invitations.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint place_plan_smoke;
+release savepoint place_plan_smoke;
 
 reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}

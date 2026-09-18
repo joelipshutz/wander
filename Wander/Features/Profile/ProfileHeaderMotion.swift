@@ -352,7 +352,7 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
 /// Keep the blur layer opaque as a compositor while reducing the material's
 /// intensity. Lowering the view alpha would reveal a second, sharp copy of
 /// scrolling text under the name and clock.
-private struct ProfileMotionBackdropBlur: UIViewRepresentable {
+struct ProfileMotionBackdropBlur: UIViewRepresentable {
     let isDark: Bool
 
     func makeUIView(context: Context) -> BackdropView {

@@ -3727,6 +3727,28 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
+    @MainActor
+    func testLiveAndEmptyListsDoNotInitializeTheScenarioCatalog() throws {
+        for scenario in [ListsScreenScenario.live, .empty] {
+            let screen = ListsScreen(scenario: scenario)
+            let fixture = try XCTUnwrap(Mirror(reflecting: screen).children.first {
+                $0.label == "scenarioList"
+            })
+            let value = Mirror(reflecting: fixture.value)
+            XCTAssertEqual(value.displayStyle, .optional)
+            XCTAssertTrue(value.children.isEmpty, "\(scenario) must not construct demo places during app launch")
+        }
+    }
+
+    @MainActor
+    func testExplicitListDetailScenarioRetainsItsFixture() throws {
+        let screen = ListsScreen(scenario: .detail)
+        let fixture = try XCTUnwrap(Mirror(reflecting: screen).children.first {
+            $0.label == "scenarioList"
+        })
+        XCTAssertEqual(Mirror(reflecting: fixture.value).children.count, 1)
+    }
+
     func testVisitFriendMockupsHaveDeterministicLaunchPages() {
         XCTAssertEqual(
             PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitFriendsEditor"]),
@@ -5201,14 +5223,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(backButton.contains(".buttonStyle(.plain)"))
         XCTAssertFalse(backButton.contains(".wanderGlassCapsule"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
-        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
+        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"bell\")"))
+        XCTAssertTrue(invitationButton.contains(".accessibilityLabel(\"Notifications\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
-        XCTAssertTrue(invitationButton.contains("Circle()"))
+        XCTAssertTrue(invitationButton.contains("Capsule()"))
         XCTAssertTrue(invitationButton.contains("Color(uiColor: .systemRed)"))
         XCTAssertTrue(invitationButton.contains(".zIndex(1)"))
         XCTAssertFalse(invitationButton.contains(".stroke("))
         XCTAssertTrue(invitationButton.contains("profile.checkInInvitations"))
-        XCTAssertFalse(invitationButton.contains("Text("))
+        XCTAssertTrue(invitationButton.contains("Text(pendingInvitationCount.formatted())"))
         XCTAssertTrue(screen.contains("sharedVisitInvitationsAction: { showsVisitInvitations = true }"))
         XCTAssertTrue(screen.contains(".navigationDestination(isPresented: $showsVisitInvitations)"))
         XCTAssertTrue(recentActivity.contains("ProfileActivityFilterControl("))
@@ -5231,21 +5254,21 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testProfileInvitationBadgeStateTracksPendingInvitationCount() {
+    func testProfileInvitationBadgeStateDescribesNewNotificationCount() {
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: 0).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 0).accessibilityValue,
-            "No pending invitations"
+            "No new notifications"
         )
 
         XCTAssertTrue(ProfileInvitationBadgeState(pendingInvitationCount: 1).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 1).accessibilityValue,
-            "1 pending"
+            "1 new notification"
         )
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 4).accessibilityValue,
-            "4 pending"
+            "4 new notifications"
         )
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: -1).isVisible)
     }

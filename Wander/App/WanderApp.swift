@@ -140,6 +140,8 @@ struct WanderApp: App {
             ? WanderBackend(
                 profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
                 notificationRepository: SimulatorNotificationRepository(),
+                placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
+                    ? SimulatorPlacePlanInvitationRepository() : nil,
                 eventsInterestRepository: SimulatorEventsInterestRepository()
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
@@ -188,6 +190,8 @@ struct WanderApp: App {
                 SignedOutOnboardingPreview()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
+            } else if let commonGroundMockupPage = CommonGroundMockPage.resolved() {
+                CommonGroundDesignMockupRoot(page: commonGroundMockupPage)
             } else if let inCommonMockupPage = InCommonDesignMockupPage.resolved() {
                 InCommonDesignMockupRoot(page: inCommonMockupPage)
             } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {

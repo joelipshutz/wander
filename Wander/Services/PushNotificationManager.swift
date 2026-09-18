@@ -993,6 +993,7 @@ final class PushNotificationManager: ObservableObject {
             "list_place_added",
             "mutual_follow",
             "place_saved_from_your_map",
+            "place_plan_invitation",
             "save_streak_reminder",
             "shared_visit",
             "wanna_go_reminder"

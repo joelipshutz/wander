@@ -489,6 +489,20 @@ struct ProfileOwnerHome: View {
                 }
             }
         }
+        // Liquid Glass composites above ordinary siblings inside its container.
+        // Draw the count outside that container so the bell cannot obscure it.
+        .overlayPreferenceValue(ProfileNotificationBellAnchorKey.self) { anchor in
+            GeometryReader { geometry in
+                if let anchor, mode.isOwner {
+                    let bounds = geometry[anchor]
+                    ProfileNotificationCountBadge(pendingInvitationCount: sharedVisitInvitationCount)
+                        .frame(width: bounds.width, height: bounds.height, alignment: .topTrailing)
+                        .offset(x: bounds.minX + 4, y: bounds.minY - 3)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .walkthroughTarget(mode.isOwner ? .profileShare : nil)
     }
 
@@ -741,7 +755,11 @@ struct ProfileInvitationBadgeState: Equatable {
     }
 
     var accessibilityValue: String {
-        isVisible ? "\(pendingInvitationCount) pending" : "No pending invitations"
+        switch pendingInvitationCount {
+        case 0: "No new notifications"
+        case 1: "1 new notification"
+        default: "\(pendingInvitationCount) new notifications"
+        }
     }
 }
 
@@ -754,25 +772,43 @@ private struct ProfileInvitationButton: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Button(action: action) {
-                ProfileHeaderActionLabel(systemImage: "envelope")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Check-in invitations")
-            .accessibilityValue(badgeState.accessibilityValue)
-            .accessibilityHint("Opens check-in invitations")
-            .accessibilityIdentifier("profile.checkInInvitations")
+        Button(action: action) {
+            ProfileHeaderActionLabel(systemImage: "bell")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Notifications")
+        .accessibilityValue(badgeState.accessibilityValue)
+        .accessibilityHint("Opens plans and check-in invitations")
+        .accessibilityIdentifier("profile.checkInInvitations")
+        .anchorPreference(key: ProfileNotificationBellAnchorKey.self, value: .bounds) { $0 }
+    }
+}
 
-            if badgeState.isVisible {
-                Circle()
-                    .fill(Color(uiColor: .systemRed))
-                    .frame(width: 10, height: 10)
-                    .offset(x: 2, y: -2)
-                    .zIndex(1)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+private struct ProfileNotificationBellAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+private struct ProfileNotificationCountBadge: View {
+    let pendingInvitationCount: Int
+
+    private var badgeState: ProfileInvitationBadgeState {
+        ProfileInvitationBadgeState(pendingInvitationCount: pendingInvitationCount)
+    }
+
+    var body: some View {
+        if badgeState.isVisible {
+            Text(pendingInvitationCount.formatted())
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .frame(minWidth: 20, minHeight: 20)
+                .background(Color(uiColor: .systemRed), in: Capsule())
+                .zIndex(1)
         }
     }
 }

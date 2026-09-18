@@ -8,6 +8,7 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case initialPresentation
     case profileSettings
     case sharedProfile
+    case placePlanInvitation
     case feedPlaceProfile
     case feedProfile
     case feedSave
@@ -331,6 +332,7 @@ struct WanderRootView: View {
     @State private var handledDeepLinkLaunchRequestID: UUID?
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
+    @State private var sharedPlan: PlacePlanInvitationRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
     @State private var signedInMaintenanceUserID: String?
@@ -843,6 +845,15 @@ struct WanderRootView: View {
                         .environmentObject(pushNotifications)
                         .environmentObject(importStore)
                 }
+            }
+        }
+        .fullScreenCover(item: $sharedPlan) { route in
+            WanderRootPresentationLifecycle(
+                surface: .placePlanInvitation,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationDismissalImmediately
+            ) {
+                PlacePlanInvitationScreen(token: route.token, repository: backend.placePlanInvitationRepository)
             }
         }
         .fullScreenCover(item: $sharedProfile) { route in
@@ -2031,7 +2042,7 @@ struct WanderRootView: View {
             awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
         )
         #if DEBUG
-        WanderDebugLog.remote.debug("deep link handoff began route=\(String(describing: route), privacy: .public) awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
+        WanderDebugLog.remote.debug("deep link handoff began awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
         #endif
         presentationResetRequest = resetRequest
         resetRootPresentationsForDeepLink()
@@ -2102,6 +2113,7 @@ struct WanderRootView: View {
             isPresentingAuth: auth.activeGate != nil || auth.isPresentingNativeAuth,
             isPresentingDeepLink: initialPresentation != nil
                 || sharedProfile != nil
+                || sharedPlan != nil
                 || !deepLinkPresentations.presentedTokens.isEmpty,
             isPresentingSaveFlow: store.isSaveFlowPresented,
             isPresentingWalkthrough: walkthroughs.hasActivePresentation,
@@ -2363,7 +2375,7 @@ struct WanderRootView: View {
     }
 
     private func presentLaunchLessonIfAppropriate() {
-        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
+        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil, sharedPlan == nil else { return }
         walkthroughs.presentLaunchLessonIfEligible()
     }
 
@@ -2606,6 +2618,7 @@ struct WanderRootView: View {
         isPresentingAdd = false
         initialPresentation = nil
         sharedProfile = nil
+        sharedPlan = nil
         auth.activeGate = nil
         auth.isPresentingNativeAuth = false
     }
@@ -2685,6 +2698,8 @@ struct WanderRootView: View {
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))
+        case .placePlanInvitation(let token):
+            sharedPlan = PlacePlanInvitationRoute(token: token)
         case .listInvite(let token):
             selectedTab = .lists
             pushNotifications.route(to: .listInvite(token: token))
