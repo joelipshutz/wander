@@ -1,7 +1,49 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 final class ThemeTokenTests: XCTestCase {
+    @MainActor
+    func testEventsMarkMatchesListsInkHeightAndVerticalCenter() throws {
+        let events = EventsTabSymbol.tabImage
+        let lists = PlaceListSymbol.paperTabImage
+        XCTAssertEqual(events.renderingMode, .alwaysTemplate)
+        XCTAssertTrue(events === EventsTabSymbol.tabImage, "Tab switches reuse the rendered image.")
+        XCTAssertEqual(events.size.height, lists.size.height)
+        let eventsInk = try inkBounds(events)
+        let listsInk = try inkBounds(lists)
+        let pixel = 1 / events.scale
+        XCTAssertEqual(eventsInk.height, listsInk.height, accuracy: pixel)
+        XCTAssertEqual(eventsInk.midY, listsInk.midY, accuracy: pixel)
+        XCTAssertEqual(eventsInk.midX, events.size.width / 2, accuracy: pixel)
+        XCTAssertGreaterThan(eventsInk.width / eventsInk.height, 1.4, "Preserve the complete wide lighting rig.")
+        XCTAssertGreaterThan(eventsInk.minY, 0)
+        XCTAssertLessThan(eventsInk.maxY, events.size.height)
+    }
+
+    private func inkBounds(_ image: UIImage) throws -> CGRect {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width, height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        try pixels.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        var bounds = CGRect.null
+        for y in 0..<height {
+            for x in 0..<width where pixels[(y * width + x) * 4 + 3] > 127 {
+                bounds = bounds.union(CGRect(x: x, y: y, width: 1, height: 1))
+            }
+        }
+        XCTAssertFalse(bounds.isNull)
+        return bounds.applying(CGAffineTransform(scaleX: 1 / image.scale, y: 1 / image.scale))
+    }
+
     func testColorTokensMatchAstirEditorialLightValues() {
         let expected: [String: String] = [
             "color.canvas.warm": "#F2E9DB",
