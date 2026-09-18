@@ -141,7 +141,8 @@ struct WanderApp: App {
                 profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
                 notificationRepository: SimulatorNotificationRepository(),
                 placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
-                    ? SimulatorPlacePlanInvitationRepository() : nil
+                    ? SimulatorPlacePlanInvitationRepository() : nil,
+                eventsInterestRepository: SimulatorEventsInterestRepository()
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
         #else

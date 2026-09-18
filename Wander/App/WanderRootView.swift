@@ -10,6 +10,12 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case sharedProfile
     case placePlanInvitation
     case feedPlaceProfile
+    case feedProfile
+    case feedSave
+    case activityPhoto
+    case activityShare
+    case activityReport
+    case activitySave
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -286,6 +292,17 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
     }
 }
 
+// Keep tab construction out of the root's presentation/observer builder stack.
+// A computed `some View` property is still evaluated eagerly by its caller;
+// this View boundary lets SwiftUI evaluate the large tab subtree separately.
+private struct WanderRootTabContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -357,6 +374,9 @@ struct WanderRootView: View {
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var activityNavigation = ActivityNavigationCoordinator()
+    #if DEBUG
+    @State private var seededNotificationFixture = false
+    #endif
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -508,17 +528,21 @@ struct WanderRootView: View {
 
                 FeedScreen(
                     presentationResetRequest: presentationResetRequest,
-                    onPlaceProfilePresentation: handleDeepLinkPresentation,
-                    onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
-                    onPlaceProfileDidDismiss: {
-                        handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
+                    onPresentation: handleDeepLinkPresentation,
+                    onWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onDidDismiss: { surface in
+                        handleDeepLinkPresentationDismissal(of: surface)
                     },
                     onAdd: presentAddSheet
                 )
                     .tabItem { tabItemLabel(for: .discover) }
                     .tag(WanderTab.discover)
 
-                EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
+                EventsComingSoonScreen(
+                    isSelected: selectedTab == .events && !isPresentingAdd,
+                    userID: auth.state.session?.userID,
+                    repository: backend.eventsInterestRepository
+                )
                     .tabItem { tabItemLabel(for: .events) }
                     .tag(WanderTab.events)
 
@@ -542,16 +566,15 @@ struct WanderRootView: View {
                     .tabItem { tabItemLabel(for: .profile) }
                     .tag(WanderTab.profile)
             }
-            .toolbarBackground(astirBrandMode.background, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
-            .overlay {
-                WanderNativeTabAppearance(colorScheme: systemColorScheme, selection: selectedTab)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
         }
         .tint(astirBrandMode.accent)
+        .background {
+            WanderNativeTabAppearance(selection: selectedTab)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -724,7 +747,9 @@ struct WanderRootView: View {
     }
 
     private var presentedRoot: some View {
-        tabRoot
+        WanderRootTabContent {
+            tabRoot
+        }
         .sheet(isPresented: $isPresentingImportHub) {
             NavigationStack {
                 PlaceImportHubScreen(
@@ -885,6 +910,24 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            // A tapped notification must not wait for permission, calendar or
+            // background-maintenance network work on a cold authenticated launch.
+            applyAuthStateIfNeeded(auth.state)
+            #if DEBUG
+            if fixtureMode != .empty, !seededNotificationFixture,
+               ProcessInfo.processInfo.arguments.contains("-WanderNotificationPostUITest") {
+                seededNotificationFixture = true
+                await store.refreshFeedSurface(backend: nil, force: true)
+                WanderAppDelegate.setAuthenticatedSessionActive(userID: store.currentUser.id)
+                _ = WanderAppDelegate.receiveAuthenticatedNotificationUserInfo([
+                    "recme": [
+                        "notification_type": "activity_commented",
+                        "data": ["activity_id": "fixture-feed-maya-been-bar-nido"]
+                    ]
+                ])
+            }
+            #endif
+            drainPendingNotificationResponses()
             if let userID = auth.state.session?.userID {
                 importStore.bind(to: userID)
             }
@@ -1898,11 +1941,14 @@ struct WanderRootView: View {
             return
         }
         if case .activityComments(let activityID) = request.destination {
-            isPresentingAdd = false
-            initialPresentation = nil
-            selectedTab = .discover
-            activityNavigation.openComments(activityID: activityID)
             pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedActivity(activityID: activityID))
+            return
+        }
+
+        if case .checkInComments(let userPlaceID, let visitID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .checkInActivity(userPlaceID: userPlaceID, visitID: visitID))
             return
         }
 
@@ -1950,7 +1996,7 @@ struct WanderRootView: View {
         case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit, .calendarReservation: .map
-        case .activityComments: .discover
+        case .activityComments, .checkInComments: .discover
         case .discover: .discover
         }
     }
@@ -2578,6 +2624,7 @@ struct WanderRootView: View {
     }
 
     private func activateDeepLink(_ route: WanderDeepLinkRoute) {
+        activityNavigation.reset()
         switch route {
         case .quickCapture:
             selectedTab = .map
@@ -2645,6 +2692,9 @@ struct WanderRootView: View {
         case .sharedActivity(let activityID):
             selectedTab = .discover
             activityNavigation.openComments(activityID: activityID)
+        case .checkInActivity(let userPlaceID, let visitID):
+            selectedTab = .discover
+            activityNavigation.openCheckIn(userPlaceID: userPlaceID, visitID: visitID)
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))
@@ -3234,75 +3284,89 @@ enum WanderTabBarWalkthroughTargetGeometry {
     }
 }
 
-/// Keep navigation in the user's appearance independently of black Events art.
-/// Give Liquid Glass a stable surface to sample without changing the artwork
-/// geometry or replacing the system controls.
-private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
-    let colorScheme: ColorScheme
+/// A single root-owned coordinator configures the native bar across all tabs.
+/// A stable material behind the native bar prevents Liquid Glass from switching
+/// contrast modes when the selected content changes from paper to black film.
+private struct WanderNativeTabAppearance: UIViewRepresentable {
     let selection: WanderTab
 
-    func makeUIViewController(context: Context) -> Controller {
-        let controller = Controller()
-        controller.colorScheme = colorScheme
-        controller.selection = selection
-        return controller
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WanderTabFrameAnchorView {
+        let anchor = WanderTabFrameAnchorView()
+        anchor.isUserInteractionEnabled = false
+        anchor.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: WanderTabFrameAnchorView, _: UITraitCollection) in
+            view.onGeometryChange?(view)
+        }
+        anchor.onGeometryChange = { [weak coordinator = context.coordinator] anchor in
+            coordinator?.apply(from: anchor)
+        }
+        return anchor
     }
 
-    func updateUIViewController(_ controller: Controller, context: Context) {
-        controller.colorScheme = colorScheme
-        controller.selection = selection
-        controller.applyAppearance()
-        controller.scheduleAppearanceAfterSelection()
+    func updateUIView(_ anchor: WanderTabFrameAnchorView, context: Context) {
+        context.coordinator.apply(from: anchor)
+        context.coordinator.afterSelection(from: anchor)
     }
 
-    final class PlateView: UIView {}
+    static func dismantleUIView(_ anchor: WanderTabFrameAnchorView, coordinator: Coordinator) {
+        anchor.onGeometryChange = nil
+        coordinator.detach()
+    }
 
-    final class Controller: UIViewController {
-        var colorScheme: ColorScheme = .light
-        var selection: WanderTab = .map
+    @MainActor final class Coordinator {
+        private weak var bar: UITabBar?
+        private let material = UIVisualEffectView()
         private var selectionUpdate: Task<Void, Never>?
+        private var observations: [NSKeyValueObservation] = []
 
-        func scheduleAppearanceAfterSelection() {
+        init() {
+            material.isUserInteractionEnabled = false
+            material.accessibilityElementsHidden = true
+            material.clipsToBounds = true
+        }
+
+        func afterSelection(from anchor: UIView) {
             selectionUpdate?.cancel()
-            selectionUpdate = Task { @MainActor [weak self] in
+            selectionUpdate = Task { @MainActor [weak self, weak anchor] in
                 await Task.yield()
-                guard !Task.isCancelled else { return }
-                self?.applyAppearance()
+                guard !Task.isCancelled, let anchor else { return }
+                self?.apply(from: anchor)
             }
         }
 
-        override func loadView() {
-            view = UIView()
-            view.isUserInteractionEnabled = false
+        func detach() {
+            selectionUpdate?.cancel()
+            material.removeFromSuperview()
+            observations.removeAll()
+            bar = nil
         }
 
-        override func didMove(toParent parent: UIViewController?) {
-            super.didMove(toParent: parent)
-            applyAppearance()
-        }
-
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            applyAppearance()
-        }
-
-        override func viewDidLayoutSubviews() {
-            super.viewDidLayoutSubviews()
-            applyAppearance()
-        }
-
-        func applyAppearance() {
-            guard let tabs = tabBarController,
-                  tabs.selectedIndex == WanderTab.primaryTabs.firstIndex(of: selection) else { return }
-            let bar = tabs.tabBar
+        func apply(from anchor: UIView) {
+            guard let window = anchor.window,
+                  let bar = WanderNativeTabFrameReader.Coordinator.findTabBar(in: window) else { return }
+            if self.bar !== bar {
+                self.bar = bar
+                observations = [
+                    bar.observe(\.isHidden, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.alpha, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.center, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.bounds, options: [.new]) { [weak self] _, _ in self?.syncGeometry() }
+                ]
+            }
+            if let parent = bar.superview, material.superview !== parent {
+                material.removeFromSuperview()
+                parent.insertSubview(material, belowSubview: bar)
+            }
             bar.accessibilityIdentifier = "main.tabBar"
-            let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
-            if bar.overrideUserInterfaceStyle != style {
-                bar.overrideUserInterfaceStyle = style
+            let style: UIUserInterfaceStyle = window.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+            if bar.overrideUserInterfaceStyle != style { bar.overrideUserInterfaceStyle = style }
+            if material.overrideUserInterfaceStyle != style || material.effect == nil {
+                material.overrideUserInterfaceStyle = style
+                material.effect = UIBlurEffect(style: style == .dark ? .systemThinMaterialDark : .systemThinMaterialLight)
             }
-            let mode: AstirBrandMode = colorScheme == .dark ? .editorial : .editorialLight
+            let mode: AstirBrandMode = style == .dark ? .editorial : .editorialLight
             let traits = UITraitCollection(userInterfaceStyle: style)
-            let background = UIColor(cgColor: UIColor(mode.background).resolvedColor(with: traits).cgColor)
             let ink = UIColor(cgColor: UIColor(mode.primaryText).resolvedColor(with: traits).cgColor)
             let accent = UIColor(cgColor: UIColor(mode.accent).resolvedColor(with: traits).cgColor)
             func matches(_ appearance: UITabBarAppearance?) -> Bool {
@@ -3310,6 +3374,7 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
                 appearance?.stackedLayoutAppearance.selected.iconColor?.isEqual(accent) == true
             }
             let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
             for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
                 item.normal.iconColor = ink
                 item.normal.titleTextAttributes[.foregroundColor] = ink
@@ -3324,25 +3389,23 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
             }
             bar.unselectedItemTintColor = ink
             bar.tintColor = accent
+            syncGeometry()
+        }
+
+        private func syncGeometry() {
+            guard let bar, let parent = bar.superview else { material.isHidden = true; return }
             guard #available(iOS 26.0, *),
                   let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
-                  let first = controls.first else { return }
-            let controlFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
+                  let first = controls.first else { material.isHidden = true; return }
+            let controlsFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
                 $0.union(bar.convert($1.bounds, from: $1))
             }
-            let plateFrame = controlFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
-            guard !plateFrame.isEmpty else { return }
-            let container = view!
-            let plate = container.subviews.compactMap { $0 as? PlateView }.first ?? PlateView()
-            if plate.superview == nil {
-                plate.isUserInteractionEnabled = false
-                plate.accessibilityElementsHidden = true
-                container.addSubview(plate)
-            }
-            plate.frame = container.convert(plateFrame, from: bar)
-            plate.layer.cornerRadius = plateFrame.height / 2
-            plate.backgroundColor = background
-            plate.isHidden = bar.isHidden
+            let frame = controlsFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
+            guard !frame.isEmpty else { material.isHidden = true; return }
+            material.frame = parent.convert(frame, from: bar)
+            material.layer.cornerRadius = frame.height / 2
+            material.isHidden = bar.isHidden
+            material.alpha = bar.alpha
         }
     }
 }
@@ -3482,7 +3545,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
             }
         }
 
-        private static func findTabBar(in root: UIView) -> UITabBar? {
+        fileprivate static func findTabBar(in root: UIView) -> UITabBar? {
             if let tabBar = root as? UITabBar, !tabBar.isHidden, tabBar.alpha > 0 {
                 return tabBar
             }

@@ -2,6 +2,7 @@ import {
   allowedPlaceCategories,
   inferPlaceCategory,
 } from "./place-taxonomy.ts";
+import sharedTaxonomy from "../../../shared/place-taxonomy.json" with { type: "json" };
 
 Deno.test("place taxonomy includes the app category framework", () => {
   const expected = [
@@ -22,8 +23,70 @@ Deno.test("place taxonomy includes the app category framework", () => {
     "place",
   ];
 
-  if (JSON.stringify(allowedPlaceCategories) !== JSON.stringify(expected)) {
+  if (JSON.stringify(allowedPlaceCategories) !== JSON.stringify(expected) ||
+    JSON.stringify(allowedPlaceCategories) !== JSON.stringify(sharedTaxonomy.categories.map((category) => category.id))) {
     throw new Error("allowedPlaceCategories drifted from shared/place-taxonomy.json");
+  }
+});
+
+Deno.test("specific fitness and coastal types beat broad beach and school aliases", () => {
+  const cases: Array<[string, string]> = [
+    ["Pilates studio", "wellness_fitness"],
+    ["pilates", "wellness_fitness"],
+    ["CrossFit gym", "wellness_fitness"],
+    ["crossfit", "wellness_fitness"],
+    ["Functional fitness studio", "wellness_fitness"],
+    ["functional_fitness", "wellness_fitness"],
+    ["Beach tennis", "wellness_fitness"],
+    ["beach_tennis_court", "wellness_fitness"],
+    ["Beach volleyball", "wellness_fitness"],
+    ["beach_volleyball_court", "wellness_fitness"],
+    ["Padel court", "wellness_fitness"],
+    ["Climbing gym", "wellness_fitness"],
+    ["rock_climbing_gym", "wellness_fitness"],
+    ["Stadium", "things_to_do"],
+    ["MKPOICategoryStadium", "things_to_do"],
+    ["Arena", "things_to_do"],
+    ["Surf", "outdoors_nature"],
+    ["MKPOICategorySurfing", "outdoors_nature"],
+    ["Surf break", "outdoors_nature"],
+    ["Surf school", "wellness_fitness"],
+    ["surf_school", "wellness_fitness"],
+    ["Surf shop", "shopping"],
+    ["Kayak/canoe rental", "outdoors_nature"],
+    ["kayak_rental", "outdoors_nature"],
+    ["canoe_rental", "outdoors_nature"],
+    ["MKPOICategoryVolleyball", "wellness_fitness"],
+    ["volleyball_court", "wellness_fitness"],
+    ["Beach", "outdoors_nature"],
+    ["School", "work_education"],
+    ["surf_conditions", "place"],
+    ["constructor", "place"],
+  ];
+  for (const [input, expected] of cases) {
+    if (inferPlaceCategory(input) !== expected) {
+      throw new Error(`${input} should resolve to ${expected}`);
+    }
+  }
+});
+
+Deno.test("shared taxonomy includes every added selectable fitness and coastal type", () => {
+  const expected: Record<string, string[]> = {
+    wellness_fitness: ["Pilates studio", "CrossFit gym", "Functional fitness studio", "Beach tennis", "Beach volleyball", "Padel court", "Climbing gym", "Surf school"],
+    outdoors_nature: ["Surf", "Surf break", "Kayak/canoe rental"],
+    things_to_do: ["Stadium", "Arena"],
+    shopping: ["Surf shop"],
+  };
+  for (const [categoryID, subtypes] of Object.entries(expected)) {
+    const category = sharedTaxonomy.categories.find((entry) => entry.id === categoryID);
+    for (const subtype of subtypes) {
+      if (category?.subcategories.filter((value) => value === subtype).length !== 1) {
+        throw new Error(`${categoryID} is missing unique subtype ${subtype}`);
+      }
+      if (inferPlaceCategory(subtype) !== categoryID) {
+        throw new Error(`${subtype} diverges from its shared category ${categoryID}`);
+      }
+    }
   }
 });
 

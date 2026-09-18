@@ -392,6 +392,7 @@ final class LocalPlaceVisit {
     var note: String?
     var ratingScore: Double?
     var attributeAnswersJSON: String
+    var attributeAnswersAreComplete: Bool? = nil
     var tagsJSON: String
     var backfilledFromUserPlace: Bool
     var syncStateRaw: String
@@ -418,7 +419,8 @@ final class LocalPlaceVisit {
         lastSyncError: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        attributeAnswersAreComplete: Bool = true
     ) {
         self.localID = localID
         self.serverID = serverID
@@ -427,6 +429,7 @@ final class LocalPlaceVisit {
         self.note = note
         self.ratingScore = PlaceRating.normalized(ratingScore)
         self.attributeAnswersJSON = attributeAnswersJSON
+        self.attributeAnswersAreComplete = attributeAnswersAreComplete
         self.tagsJSON = Self.encoded(tags)
         self.backfilledFromUserPlace = backfilledFromUserPlace
         self.syncStateRaw = syncState.rawValue

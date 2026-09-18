@@ -1800,7 +1800,11 @@ final class WanderStore: ObservableObject {
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
-        else { return existing }
+        else {
+            activityEngagementErrorByID[activityID] = existing == nil
+                ? "This activity is no longer available." : nil
+            return existing
+        }
 
         do {
             let activity = try await retryActivityRead {
@@ -1808,7 +1812,8 @@ final class WanderStore: ObservableObject {
                 return try await repository.activity(id: activityID)
             }
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
-            guard activity.id == activityID, canDisplayActivity(activity) else {
+            guard activity.id == activityID, canDisplayActivity(activity),
+                  activity.activityEngagementContext != nil else {
                 discardCachedActivity(activityID)
                 activityEngagementErrorByID[activityID] = "This activity is no longer available."
                 return nil
@@ -1833,6 +1838,42 @@ final class WanderStore: ObservableObject {
             // read. Transient failures can be retried through the same route.
             discardCachedActivity(activityID)
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return nil
+        }
+    }
+
+    /// Resolve the immutable visit before opening its post. This never fetches
+    /// the whole Feed or guesses from the newest activity at the same place.
+    @MainActor
+    func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
+        let requestUserID = currentUser.id
+        let errorID = target.visitID
+        guard let repository = backend?.activityEngagementRepository else {
+            activityEngagementErrorByID[errorID] = "This activity is no longer available."
+            return nil
+        }
+        do {
+            let matches = try await retryActivityRead {
+                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
+            }
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard let match = matches.first(where: {
+                $0.userPlaceID.caseInsensitiveCompare(target.userPlaceID) == .orderedSame
+                    && $0.visitID?.caseInsensitiveCompare(target.visitID) == .orderedSame
+                    && [.placeBeen, .placeSaved].contains($0.kind)
+            }) else {
+                activityEngagementErrorByID[errorID] = "This activity is no longer available."
+                return nil
+            }
+            let resolved = await activity(id: match.activityID, backend: backend)
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = resolved == nil
+                ? activityEngagementErrorByID[match.activityID] : nil
+            return resolved
+        } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = remoteErrorMessage(error)
             return nil
         }
     }
@@ -4349,9 +4390,11 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionPlacePayload(_ visiblePlace: VisiblePlace) -> ListSuggestionPlacePayload {
-        let attributesText = attributes(for: visiblePlace.userPlace.id)
-            .map(\.valueJSON)
-            .joined(separator: " ")
+        let attributesText = visiblePlace.attributes.flatMap { attribute in
+            PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey)
+                ? PlaceProfileAttributePresentation.searchTerms(from: attribute)
+                : [attribute.valueJSON]
+        }.joined(separator: " ")
         return ListSuggestionPlacePayload(
             visiblePlaceID: visiblePlace.id,
             placeID: visiblePlace.place.id,
@@ -4377,7 +4420,21 @@ final class WanderStore: ObservableObject {
         #endif
         let localProjection = localVisiblePlaces(filters: filters)
         let remoteProjection = remoteVisiblePlaces(filters: filters)
-        let projected = mergeVisiblePlaces(localProjection.places + remoteProjection)
+        let visitsByUserPlaceID = Dictionary(grouping: placeVisits, by: \.userPlaceID)
+        let projected = mergeVisiblePlaces(localProjection.places + remoteProjection).map { visiblePlace in
+            var projected = visiblePlace
+            let ids = Set([visiblePlace.userPlace.localID, visiblePlace.userPlace.id])
+            projected.attributes = PlaceCheckInObservationProjection.attributes(
+                base: visiblePlace.attributes,
+                visits: ids.flatMap { visitsByUserPlaceID[$0] ?? [] },
+                userPlaceID: visiblePlace.userPlace.id,
+                status: visiblePlace.userPlace.status,
+                hasLoadedVisitHistory: ids.contains {
+                    loadedRemotePlaceActivityIDs.contains($0.lowercased())
+                }
+            )
+            return projected
+        }
         if filters == PlaceFilters() {
             var lookup = localProjection.listLookup
             for (offset, visiblePlace) in remoteProjection.enumerated() {
@@ -4853,6 +4910,7 @@ final class WanderStore: ObservableObject {
             existingVisit.note = draft.note
             existingVisit.ratingScore = PlaceRating.normalized(draft.ratingScore)
             existingVisit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: draft.attributes)
+            existingVisit.attributeAnswersAreComplete = true
             existingVisit.setDerivedTags(VisitAttributeAnswers.tags(from: draft.attributes))
             existingVisit.backfilledFromUserPlace = result.backfilledFromUserPlace
             existingVisit.syncStateRaw = SyncState.synced.rawValue
@@ -5376,7 +5434,8 @@ final class WanderStore: ObservableObject {
         note: String? = nil,
         ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft] = [],
-        visibility: PlaceVisibility? = nil
+        visibility: PlaceVisibility? = nil,
+        preservesPriorWanna: Bool = true
     ) -> LocalPlaceVisit? {
         let userPlace: LocalUserPlace
         if let localUserPlace = currentUserPlace(matching: userPlaceID) {
@@ -5407,7 +5466,7 @@ final class WanderStore: ObservableObject {
             updatedAt: now
         )
 
-        if userPlace.status == .wannaGo {
+        if userPlace.status == .wannaGo && preservesPriorWanna {
             preserveHistoricalWant(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
         }
         userPlace.plannedDate = nil
@@ -5450,6 +5509,21 @@ final class WanderStore: ObservableObject {
         return visit
     }
 
+    func canEditVisitAnswers(visitID: String) -> Bool {
+        guard let visit = currentUserVisit(matching: visitID) else { return false }
+        return hasEditableVisitAnswers(visit)
+    }
+
+    private func hasEditableVisitAnswers(_ visit: LocalPlaceVisit) -> Bool {
+        if let complete = visit.attributeAnswersAreComplete { return complete }
+        // Older local drafts already assigned a UUID before their first sync.
+        // Only their known local provenance permits an empty legacy answer set.
+        let isUnsentLocalDraft = visit.localID.hasPrefix("local_visit_")
+            && visit.serverUpdatedAt == nil
+            && [.localOnly, .pendingCreate, .failed].contains(visit.syncState)
+        return visit.serverID == nil || isUnsentLocalDraft || visit.attributeAnswersJSON != "[]"
+    }
+
     @discardableResult
     func updateVisit(
         visitID: String,
@@ -5462,7 +5536,18 @@ final class WanderStore: ObservableObject {
         replacesNote: Bool = false,
         replacesRating: Bool = false
     ) -> LocalPlaceVisit? {
-        guard let visit = currentUserVisit(matching: visitID) else { return nil }
+        guard let visit = currentUserVisit(matching: visitID),
+              hasEditableVisitAnswers(visit) else { return nil }
+
+        // Calendar hydration can restore an owned visit before its parent has
+        // entered local storage. Editing needs that parent for sync, privacy
+        // changes, and the visit's account-scoped private-answer association.
+        if currentUserPlace(matching: visit.userPlaceID) == nil {
+            guard let remoteParent = remoteCurrentUserVisiblePlace(matching: visit.userPlaceID) else {
+                return nil
+            }
+            _ = materializeRemoteCurrentUserPlace(remoteParent)
+        }
 
         let now = Date.now
         if let visitedAt {
@@ -5480,6 +5565,7 @@ final class WanderStore: ObservableObject {
         }
         if let attributes {
             visit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+            visit.attributeAnswersAreComplete = true
             visit.setDerivedTags(VisitAttributeAnswers.tags(from: attributes))
             if let userPlace = currentUserPlace(matching: visit.userPlaceID) {
                 updatePlaceClassificationAttributes(
@@ -5532,11 +5618,25 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func deleteVisit(visitID: String) -> Bool {
+    func deleteVisit(
+        visitID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> Bool {
         guard let visit = currentUserVisit(matching: visitID) else { return false }
         let remoteOwnerPlace = remoteCurrentUserVisiblePlace(
             matching: visit.userPlaceID
         )
+        do {
+            try privateQuestionPreferences.removeAnswers(
+                ownerUserID: currentUser.id,
+                userPlaceID: currentUserPlace(matching: visit.userPlaceID)?.localID
+                    ?? remoteOwnerPlace?.userPlace.localID ?? visit.userPlaceID,
+                visitID: visit.serverID ?? visit.localID
+            )
+        } catch {
+            lastRemoteError = "This check-in couldn’t be deleted because its private answers couldn’t be removed from this device."
+            return false
+        }
 
         let now = Date.now
         let visitIDs = matchingVisitIDs(visit.id)
@@ -6459,7 +6559,7 @@ final class WanderStore: ObservableObject {
         guard userPlace.deletedAt == nil else { return [] }
         let ids = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
         return placeWannaSaves.filter {
-            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID
+            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID && $0.deletedAt == nil
                 && visibilityPolicy.canSeePlace(
                     viewerID: currentUser.id, ownerID: $0.ownerID, visibility: $0.visibility,
                     relationship: relationship(to: $0.ownerID),
@@ -6488,6 +6588,9 @@ final class WanderStore: ObservableObject {
                                        attributes: attributes, backend: backend)
         }
         if let pending = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            guard pending.deletedAt == nil else {
+                return SaveResult(userPlaceID: existing.userPlace.id, syncState: .failed)
+            }
             let synced = pending.isSynced ? true : await syncWannaSave(id: pending.id, backend: backend)
             return SaveResult(userPlaceID: existing.userPlace.id,
                               syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed))
@@ -6516,7 +6619,8 @@ final class WanderStore: ObservableObject {
 
     func updateWanna(_ target: PlaceWannaSave, visibility: PlaceVisibility, note: String?,
                      plannedDate: Date?, attributes: [PlaceAttributeDraft]) -> SaveResult? {
-        guard target.ownerID == currentUser.id,
+        guard target.ownerID == currentUser.id, target.deletedAt == nil,
+              !placeWannaSaves.contains(where: { $0.id == target.id && $0.deletedAt != nil }),
               let parent = currentUserVisiblePlaces.first(where: {
                   [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(target.userPlaceID)
               })?.userPlace, parent.deletedAt == nil,
@@ -6548,6 +6652,112 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: parent.id, syncState: .pendingUpdate)
     }
 
+    func restoreImportPlaceContainer(userPlaceID: String) -> Bool {
+        guard let parent = userPlaces.first(where: {
+            $0.userID == currentUser.id && [$0.id, $0.localID, $0.serverID].contains(userPlaceID)
+        }), parent.deletedAt != nil else { return false }
+        parent.deletedAt = nil
+        parent.statusRaw = PlaceStatus.wannaGo.rawValue
+        parent.note = nil
+        parent.plannedDate = nil
+        parent.historicalWantNote = nil
+        parent.historicalWantAttributeAnswersJSON = nil
+        parent.historicalWantTagsJSON = nil
+        parent.historicalWantedAt = nil
+        parent.updatedAt = .now
+        parent.localUpdatedAt = .now
+        parent.syncStateRaw = parent.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        persist()
+        return true
+    }
+
+    /// Removes one Wanna action, retaining its parent whenever visits, repeat
+    /// Wannas or list memberships still depend on that place container.
+    @discardableResult
+    func removeImportedWanna(userPlaceID: String, wannaID: String?, isOriginal: Bool? = nil) -> Bool {
+        let parent: LocalUserPlace
+        if let local = userPlaces.first(where: {
+            $0.userID == currentUser.id && [$0.id, $0.localID, $0.serverID].contains(userPlaceID)
+        }) { parent = local }
+        else if let remote = remoteCurrentUserVisiblePlace(matching: userPlaceID) {
+            parent = materializeRemoteCurrentUserPlace(remote)
+        } else { return false }
+        let parentIDs = matchingUserPlaceIDs(parent.id)
+        let index = placeWannaSaves.firstIndex { wanna in
+            wanna.ownerID == currentUser.id && parentIDs.contains(wanna.userPlaceID)
+                && (wannaID.map { wanna.id == $0 } ?? (wanna.isHistoricalOriginal == true))
+        }
+        if let index, placeWannaSaves[index].deletedAt != nil { return true }
+        if wannaID != nil && index == nil && isOriginal != true { return false }
+        let now = Date.now
+        let removedOwnsSummary = index.map { placeWannaSaves[$0].occurredAt == parent.savedAt } ?? false
+        var tombstone = index.map { placeWannaSaves[$0] } ?? PlaceWannaSave(
+            id: wannaID ?? UUID().uuidString.lowercased(), ownerID: currentUser.id,
+            userPlaceID: parent.id, occurredAt: parent.historicalWantedAt ?? parent.savedAt,
+            visibility: parent.visibility, attributeAnswersJSON: "[]", isHistoricalOriginal: true)
+        tombstone.note = nil
+        tombstone.plannedDate = nil
+        tombstone.attributeAnswersJSON = "[]"
+        tombstone.deletedAt = now
+        tombstone.isSynced = false
+        if let index { placeWannaSaves[index] = tombstone } else { placeWannaSaves.append(tombstone) }
+        if tombstone.isHistoricalOriginal == true {
+            parent.historicalWantNote = nil
+            parent.historicalWantAttributeAnswersJSON = nil
+            parent.historicalWantTagsJSON = nil
+            parent.historicalWantedAt = nil
+            if parent.status == .wannaGo {
+                parent.note = nil
+                parent.plannedDate = nil
+                parent.ratingSignal = nil
+                parent.ratingScore = nil
+                replaceAttributes(for: parent.id, with: [], syncState: .pendingUpdate)
+                parent.updatedAt = now
+                parent.localUpdatedAt = now
+                parent.syncStateRaw = parent.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+            }
+        }
+        let hasLists = placeListItems.contains { item in
+            item.deletedAt == nil && (parentIDs.contains(item.ownerUserPlaceID ?? "")
+                || parentIDs.contains(item.sourceUserPlaceID ?? ""))
+        }
+        let hasOtherWannas = placeWannaSaves.contains {
+            parentIDs.contains($0.userPlaceID) && $0.deletedAt == nil && $0.ownerID == currentUser.id
+        }
+        if parent.status == .wannaGo && (tombstone.isHistoricalOriginal == true || removedOwnsSummary) {
+            parent.note = nil
+            parent.plannedDate = nil
+            replaceAttributes(for: parent.id, with: [], syncState: .pendingUpdate)
+            if hasOtherWannas { _ = restoreHistoricalWantAfterLastVisit(parent, at: now) }
+        }
+        if visits(for: parent.id).isEmpty && !hasLists && !hasOtherWannas
+            && (tombstone.isHistoricalOriginal == true || removedOwnsSummary
+                || (parent.status == .been && !parent.hasHistoricalWant)) {
+            deleteUserPlaceAfterLastVisit(parent, at: now)
+            // The narrow Wanna RPC decides whether the remote parent can go.
+            // Never enqueue the broad delete-user-place operation here.
+            parent.syncStateRaw = SyncState.tombstoned.rawValue
+        }
+        objectWillChange.send()
+        persist()
+        return true
+    }
+
+    /// Import undo must deliver only its captured visit deletion. A parent
+    /// tombstone is local projection state, never permission to erase other visits.
+    func deleteImportedVisit(visitID: String) -> Bool {
+        guard let visit = currentUserVisit(matching: visitID) else { return false }
+        let parentID = visit.userPlaceID
+        guard deleteVisit(visitID: visitID) else { return false }
+        if let parent = userPlaces.first(where: {
+            [$0.id, $0.localID, $0.serverID].contains(parentID)
+        }), parent.deletedAt != nil {
+            parent.syncStateRaw = SyncState.tombstoned.rawValue
+            persist()
+        }
+        return true
+    }
+
     func editableLegacyVisit(for userPlaceID: String) -> LocalPlaceVisit? {
         guard let visible = currentUserVisiblePlaces.first(where: {
             [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(userPlaceID)
@@ -6572,6 +6782,7 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func syncPendingWannaSaves(backend: WanderBackend?) async -> Int {
         let pending = placeWannaSaves.filter { !$0.isSynced && $0.ownerID == currentUser.id }
+            .sorted { ($0.deletedAt == nil ? 0 : 1) < ($1.deletedAt == nil ? 0 : 1) }
         var count = 0
         for wanna in pending {
             if await syncWannaSave(id: wanna.id, backend: backend) { count += 1 }
@@ -6588,9 +6799,28 @@ final class WanderStore: ObservableObject {
         // persisted revision before finishing, and never replace it with an old ack.
         while let snapshot = placeWannaSaves.first(where: { $0.id == id }),
               snapshot.ownerID == ownerID, currentUser.id == ownerID, !snapshot.isSynced {
-            guard let parent = currentUserVisiblePlaces.first(where: {
-                [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(snapshot.userPlaceID)
-            })?.userPlace, parent.deletedAt == nil else { return false }
+            let parent: LocalUserPlace
+            if let local = userPlaces.first(where: {
+                $0.userID == ownerID && [$0.id, $0.localID, $0.serverID].contains(snapshot.userPlaceID)
+            }) { parent = local }
+            else if let remote = remoteCurrentUserVisiblePlace(matching: snapshot.userPlaceID) {
+                parent = materializeRemoteCurrentUserPlace(remote)
+            } else { return false }
+            guard parent.deletedAt == nil || snapshot.deletedAt != nil else { return false }
+            let parentIDs = matchingUserPlaceIDs(parent.id)
+            let hasUnsentReplacementWanna = placeWannaSaves.contains {
+                $0.id != snapshot.id && parentIDs.contains($0.userPlaceID)
+                    && $0.ownerID == ownerID && $0.deletedAt == nil && !$0.isSynced
+            }
+            if snapshot.deletedAt != nil && (hasUnsentReplacementWanna
+                || visits(for: parent.id).contains(where: { $0.syncState != .synced })) {
+                // A Wanna-to-Check-In replacement must reach the server before
+                // deleting the Wanna that currently keeps its parent alive.
+                return false
+            }
+            // A parent create may already be in flight. Keep the deletion in
+            // the durable outbox until its remote identity is known.
+            if parent.serverID == nil && snapshot.deletedAt != nil { return false }
             if parent.serverID == nil {
                 _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .failedRetry)
             }
@@ -6599,8 +6829,12 @@ final class WanderStore: ObservableObject {
             var delivered = snapshot
             delivered.userPlaceID = parentID
             do {
-                if delivered.isHistoricalOriginal != true { try await repository.saveWanna(delivered) }
-                if delivered.editedAt != nil { delivered = try await repository.updateWanna(delivered) }
+                if delivered.deletedAt != nil {
+                    try await repository.deleteWanna(delivered)
+                } else {
+                    if delivered.isHistoricalOriginal != true { try await repository.saveWanna(delivered) }
+                    if delivered.editedAt != nil { delivered = try await repository.updateWanna(delivered) }
+                }
                 guard currentUser.id == ownerID,
                       let index = placeWannaSaves.firstIndex(where: { $0.id == id }) else { return false }
                 guard placeWannaSaves[index] == snapshot else { continue }
@@ -6626,10 +6860,10 @@ final class WanderStore: ObservableObject {
             let rows = try await repository.wannaSaves(userPlaceIDs: ids)
             guard currentUser.id == viewerID else { return }
             // Keep pending edits and revisions changed while this read was in flight.
-            placeWannaSaves.removeAll { $0.isSynced && before[$0.id] == $0 }
+            placeWannaSaves.removeAll { $0.isSynced && $0.deletedAt == nil && before[$0.id] == $0 }
             let protectedIDs = Set(placeWannaSaves.map(\.id))
             let pendingHistoricalParents = Set(placeWannaSaves.filter {
-                $0.isHistoricalOriginal == true && !$0.isSynced
+                $0.isHistoricalOriginal == true && (!$0.isSynced || $0.deletedAt != nil)
             }.map(\.userPlaceID))
             placeWannaSaves.append(contentsOf: rows.filter {
                 !protectedIDs.contains($0.id)
@@ -6890,8 +7124,11 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removeSave(userPlaceID: String) -> RemoveSaveResult? {
-        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+    func removeSave(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences) else {
             return nil
         }
 
@@ -6899,8 +7136,12 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removeSave(userPlaceID: String, backend: WanderBackend?) async -> RemoveSaveResult? {
-        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+    func removeSave(
+        userPlaceID: String,
+        backend: WanderBackend?,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) async -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences) else {
             return nil
         }
 
@@ -7041,8 +7282,15 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("failed retry candidates count=\(retryableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
+        // Deliver replacement Wannas before deleting their former check-in;
+        // the server can then retain the parent and restore the new action.
+        var wannaCount = await syncPendingWannaSaves(backend: backend)
         _ = await syncPendingVisits(backend: backend)
-        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        if placeWannaSaves.contains(where: { $0.ownerID == currentUser.id && $0.deletedAt != nil && !$0.isSynced }) {
+            let removedWannas = await syncPendingWannaSaves(backend: backend)
+            wannaCount += removedWannas
+            if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
+        }
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -7067,8 +7315,15 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
+        // Deliver replacement Wannas before deleting their former check-in;
+        // the server can then retain the parent and restore the new action.
+        var wannaCount = await syncPendingWannaSaves(backend: backend)
         _ = await syncPendingVisits(backend: backend)
-        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        if placeWannaSaves.contains(where: { $0.ownerID == currentUser.id && $0.deletedAt != nil && !$0.isSynced }) {
+            let removedWannas = await syncPendingWannaSaves(backend: backend)
+            wannaCount += removedWannas
+            if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
+        }
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -7188,6 +7443,11 @@ final class WanderStore: ObservableObject {
             return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
         }
 
+        guard hasEditableVisitAnswers(visit) else {
+            lastRemoteError = "Load this check-in's saved details before editing. Connect and try again."
+            return false
+        }
+
         if visit.serverID == nil {
             markPlaceVisit(localOrServerID: visit.id, serverID: UUID().uuidString.lowercased(), syncState: .pendingCreate)
         } else {
@@ -7219,7 +7479,7 @@ final class WanderStore: ObservableObject {
                 syncState: .synced,
                 result: result.visitResult
             )
-            lastRemoteError = nil
+            lastRemoteError = visit.lastSyncError
             return true
         } catch {
             let message = remoteErrorMessage(error)
@@ -7230,6 +7490,11 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func hasPendingWanna(for userPlaceID: String) -> Bool {
+        let ids = matchingUserPlaceIDs(userPlaceID)
+        return placeWannaSaves.contains { ids.contains($0.userPlaceID) && !$0.isSynced && $0.ownerID == currentUser.id }
+    }
+
     @discardableResult
     func retryPendingVisitDeletes(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
@@ -7238,6 +7503,7 @@ final class WanderStore: ObservableObject {
                 $0.deletedAt != nil
                     && $0.serverID != nil
                     && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+                    && !hasPendingWanna(for: $0.userPlaceID)
             }
             .map(\.id)
 
@@ -7376,11 +7642,15 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func deleteVisit(visitID: String, backend: WanderBackend?) async -> Bool {
+    func deleteVisit(
+        visitID: String,
+        backend: WanderBackend?,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) async -> Bool {
         let existingVisit = placeVisits.first { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }
         let remoteVisitID = existingVisit?.serverID
         let requiresRemoteDelete = existingVisit?.serverUpdatedAt != nil || existingVisit?.syncState != .pendingCreate
-        let didDeleteLocally = deleteVisit(visitID: visitID)
+        let didDeleteLocally = deleteVisit(visitID: visitID, privateQuestionPreferences: privateQuestionPreferences)
         guard didDeleteLocally else { return false }
         guard requiresRemoteDelete, let backend, let remoteVisitID else {
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
@@ -8638,9 +8908,13 @@ final class WanderStore: ObservableObject {
                     visitedAt: result.visitedAt,
                     note: result.note,
                     ratingScore: result.ratingScore,
+                    attributeAnswersJSON: result.attributeAnswersJSON ?? "[]",
                     tags: result.tags,
                     backfilledFromUserPlace: result.backfilledFromUserPlace,
-                    syncState: .synced
+                    syncState: .synced,
+                    createdAt: result.createdAt ?? result.visitedAt,
+                    updatedAt: result.updatedAt ?? result.visitedAt,
+                    attributeAnswersAreComplete: result.attributeAnswersJSON != nil
                 )
             )
         }
@@ -8653,18 +8927,24 @@ final class WanderStore: ObservableObject {
         to visit: LocalPlaceVisit
     ) {
         let now = Date.now
+        let privateMigrationWarning = migratePrivateQuestionAnswers(for: visit, to: result.visitID)
         visit.serverID = result.visitID
         visit.userPlaceID = result.userPlaceID
         visit.visitedAt = result.visitedAt
         visit.note = result.note
         visit.ratingScore = PlaceRating.normalized(result.ratingScore)
+        if let answers = result.attributeAnswersJSON {
+            visit.attributeAnswersJSON = answers
+            visit.attributeAnswersAreComplete = true
+        }
+        if let createdAt = result.createdAt { visit.createdAt = createdAt }
         visit.setDerivedTags(result.tags)
         visit.backfilledFromUserPlace = result.backfilledFromUserPlace
         visit.syncStateRaw = SyncState.synced.rawValue
         visit.localUpdatedAt = now
         visit.serverUpdatedAt = now
-        visit.lastSyncError = nil
-        visit.updatedAt = now
+        visit.lastSyncError = privateMigrationWarning
+        visit.updatedAt = result.updatedAt ?? now
         visit.deletedAt = nil
     }
 
@@ -8831,9 +9111,13 @@ final class WanderStore: ObservableObject {
                         visitedAt: result.visitedAt,
                         note: result.note,
                         ratingScore: result.ratingScore,
+                        attributeAnswersJSON: result.attributeAnswersJSON ?? "[]",
                         tags: result.tags,
                         backfilledFromUserPlace: result.backfilledFromUserPlace,
-                        syncState: .synced
+                        syncState: .synced,
+                        createdAt: result.createdAt ?? result.visitedAt,
+                        updatedAt: result.updatedAt ?? result.visitedAt,
+                        attributeAnswersAreComplete: result.attributeAnswersJSON != nil
                     )
                 )
             }
@@ -9448,7 +9732,19 @@ final class WanderStore: ObservableObject {
             actionLinksJSON: place.actionLinksJSON
         )
 
-        let attributeDrafts = attributes(for: userPlace.id).map { attribute in
+        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+        let effectiveAttributes = userPlace.status == .been
+            ? PlaceCheckInObservationProjection.attributes(
+                base: attributes(for: userPlace.id),
+                visits: placeVisits.filter { userPlaceIDs.contains($0.userPlaceID) },
+                userPlaceID: userPlace.id,
+                status: userPlace.status,
+                hasLoadedVisitHistory: userPlaceIDs.contains {
+                    loadedRemotePlaceActivityIDs.contains($0.lowercased())
+                }
+            )
+            : attributes(for: userPlace.id)
+        let attributeDrafts = effectiveAttributes.map { attribute in
             PlaceAttributeDraft(
                 questionKey: attribute.questionKey,
                 valueType: attribute.valueType,
@@ -9708,6 +10004,7 @@ final class WanderStore: ObservableObject {
             existing.note = userPlace.note
             existing.ratingScore = userPlace.ratingScore
             existing.attributeAnswersJSON = attributeAnswersJSON
+            existing.attributeAnswersAreComplete = true
             existing.setDerivedTags(tags)
             existing.deletedAt = nil
             existing.updatedAt = now
@@ -9819,8 +10116,16 @@ final class WanderStore: ObservableObject {
     }
 
     private func restoreHistoricalWantAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) -> Bool {
-        let original = wannaSaves(for: userPlace).first { $0.isHistoricalOriginal == true }
-        guard let wantedAt = original?.occurredAt ?? userPlace.historicalWantedAt else { return false }
+        let wannas = wannaSaves(for: userPlace)
+        let original = wannas.first { $0.isHistoricalOriginal == true }
+            ?? (userPlace.historicalWantedAt == nil ? wannas.first : nil)
+        let parentIDs = matchingUserPlaceIDs(userPlace.id)
+        let hasLists = placeListItems.contains {
+            $0.deletedAt == nil && (parentIDs.contains($0.ownerUserPlaceID ?? "")
+                || parentIDs.contains($0.sourceUserPlaceID ?? ""))
+        }
+        guard let wantedAt = original?.occurredAt ?? userPlace.historicalWantedAt
+            ?? (hasLists ? userPlace.savedAt : nil) else { return false }
 
         let drafts = VisitAttributeAnswers.drafts(
             fromAttributeAnswersJSON: original?.attributeAnswersJSON ?? userPlace.historicalWantAttributeAnswersJSON ?? "[]"
@@ -9897,7 +10202,7 @@ final class WanderStore: ObservableObject {
         }
         for visit in placeVisits where previousIDs.contains(visit.userPlaceID) {
             visit.userPlaceID = canonicalUserPlaceID
-            if visit.backfilledFromUserPlace {
+            if visit.backfilledFromUserPlace && visit.deletedAt == nil {
                 visit.syncStateRaw = syncState.rawValue
                 visit.lastSyncError = error
                 visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
@@ -9905,6 +10210,29 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+    }
+
+    @discardableResult
+    func migratePrivateQuestionAnswers(
+        for visit: LocalPlaceVisit,
+        to stableVisitID: String,
+        preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+    ) -> String? {
+        guard currentUserVisit(matching: visit.id) != nil else { return nil }
+        let priorIDs = [visit.serverID, visit.localID].compactMap { $0 }
+        do {
+            for priorID in priorIDs where priorID != stableVisitID {
+                try preferences.migrateAnswers(ownerUserID: currentUser.id, fromVisitID: priorID, toVisitID: stableVisitID)
+            }
+            return nil
+        } catch {
+            // Preserve the original record and retain the accepted server ID
+            // so retrying cannot create a duplicate remote check-in. A later
+            // reconciliation retries promotion from the still-known local ID.
+            let warning = "Your private answers couldn’t be linked to this check-in on this device. The original private answers are still stored."
+            lastRemoteError = warning
+            return warning
+        }
     }
 
     private func markPlaceVisit(
@@ -9919,6 +10247,9 @@ final class WanderStore: ObservableObject {
         }
 
         let previousIDs = matchingVisitIDs(localOrServerID)
+        let privateMigrationWarning = (result?.visitID ?? serverID ?? visit.serverID).flatMap {
+            migratePrivateQuestionAnswers(for: visit, to: $0)
+        }
         if let serverID {
             visit.serverID = serverID
         }
@@ -9928,14 +10259,19 @@ final class WanderStore: ObservableObject {
             visit.visitedAt = result.visitedAt
             visit.note = result.note
             visit.ratingScore = result.ratingScore
+            if let answers = result.attributeAnswersJSON {
+                visit.attributeAnswersJSON = answers
+                visit.attributeAnswersAreComplete = true
+            }
+            if let createdAt = result.createdAt { visit.createdAt = createdAt }
             visit.setDerivedTags(result.tags)
             visit.backfilledFromUserPlace = result.backfilledFromUserPlace
         }
         visit.syncStateRaw = syncState.rawValue
-        visit.lastSyncError = error
+        visit.lastSyncError = error ?? privateMigrationWarning
         visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
         visit.localUpdatedAt = .now
-        visit.updatedAt = .now
+        visit.updatedAt = result?.updatedAt ?? .now
 
         let canonicalVisitID = visit.serverID ?? visit.id
         for photo in visitPhotos where previousIDs.contains(photo.visitID) {
@@ -10047,6 +10383,7 @@ final class WanderStore: ObservableObject {
                 return false
             }
             markPlaceVisit(localOrServerID: visit.id, serverID: result.visitID, syncState: .synced, result: result)
+            lastRemoteError = visit.lastSyncError
             return true
         } catch {
             let message = remoteErrorMessage(error)
@@ -10071,13 +10408,16 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func removeSaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+    private func removeSaveLocally(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore
+    ) -> LocalRemoveSaveChange? {
         guard let userPlace = userPlaces.first(where: { userPlace in
             userPlace.userID == currentUser.id
                 && userPlace.deletedAt == nil
                 && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
         }) else {
-            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID)
+            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID, privateQuestionPreferences: privateQuestionPreferences)
         }
 
         let targetPlace = places.first { place in
@@ -10101,6 +10441,21 @@ final class WanderStore: ObservableObject {
                     || candidate.serverID.map { previousUserPlaceIDs.contains($0) } == true)
         }
         guard !userPlacesToRemove.isEmpty else {
+            return nil
+        }
+
+        do {
+            for visit in placeVisits where previousUserPlaceIDs.contains(visit.userPlaceID) {
+                try privateQuestionPreferences.removeAnswers(
+                    ownerUserID: currentUser.id, userPlaceID: visit.userPlaceID,
+                    visitID: visit.serverID ?? visit.localID
+                )
+            }
+            for alias in previousUserPlaceIDs {
+                try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
+            }
+        } catch {
+            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
             return nil
         }
 
@@ -10158,7 +10513,10 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    private func removeRemoteOnlySaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+    private func removeRemoteOnlySaveLocally(
+        userPlaceID: String,
+        privateQuestionPreferences: CheckInQuestionPreferenceStore
+    ) -> LocalRemoveSaveChange? {
         guard let targetVisiblePlace = remoteVisiblePlaceCache.first(where: { visiblePlace in
             visiblePlace.owner.id == currentUser.id
                 && (visiblePlace.userPlace.id == userPlaceID
@@ -10173,6 +10531,24 @@ final class WanderStore: ObservableObject {
                 && VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
         }
         guard !matchingVisiblePlaces.isEmpty else {
+            return nil
+        }
+
+        let privateParentAliases = matchingVisiblePlaces.reduce(into: Set<String>()) { aliases, visible in
+            aliases.formUnion(Self.referenceIDs(for: visible.userPlace))
+        }
+        do {
+            for visit in placeVisits where privateParentAliases.contains(visit.userPlaceID) {
+                try privateQuestionPreferences.removeAnswers(
+                    ownerUserID: currentUser.id, userPlaceID: visit.userPlaceID,
+                    visitID: visit.serverID ?? visit.localID
+                )
+            }
+            for alias in privateParentAliases {
+                try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
+            }
+        } catch {
+            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
             return nil
         }
 
@@ -11557,9 +11933,13 @@ final class WanderStore: ObservableObject {
 
     private func matchesTags(_ tags: Set<String>, visiblePlace: VisiblePlace) -> Bool {
         guard !tags.isEmpty else { return true }
-        let attributeText = attributes(for: visiblePlace.userPlace.id)
-            .map(\.valueJSON)
-            .joined(separator: " ")
+        let attributeText = visiblePlace.attributes.flatMap { attribute in
+            if PlaceCheckInQuestionCatalog.isDetailQuestion(attribute.questionKey) {
+                return visiblePlace.userPlace.status == .been
+                    ? PlaceProfileAttributePresentation.searchTerms(from: attribute) : []
+            }
+            return [attribute.valueJSON]
+        }.joined(separator: " ")
         let haystack = [
             visiblePlace.userPlace.note,
             attributeText

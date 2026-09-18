@@ -863,6 +863,7 @@ final class ActivityEngagementTests: XCTestCase {
             id: exactActivityID,
             kind: .placeBeen,
             actor: actor,
+            place: privacyActivity(ownerID: actor.id, visibility: .followers).place,
             occurredAt: Date(timeIntervalSince1970: 100)
         )
         let refreshedActivity = FeedActivity(
@@ -924,6 +925,7 @@ final class ActivityEngagementTests: XCTestCase {
                 bio: nil,
                 relationship: .follower
             ),
+            place: privacyActivity(ownerID: "user_friend", visibility: .followers).place,
             occurredAt: .now
         )
         let repository = ActivityEngagementRepositoryStub(
@@ -954,10 +956,12 @@ final class ActivityEngagementTests: XCTestCase {
             bio: nil,
             relationship: .follower
         )
+        let place = privacyActivity(ownerID: actor.id, visibility: .followers).place
         let cachedActivity = FeedActivity(
             id: activityID,
             kind: .placeBeen,
             actor: actor,
+            place: place,
             occurredAt: .now,
             note: "A cached note",
             media: []
@@ -966,6 +970,7 @@ final class ActivityEngagementTests: XCTestCase {
             id: activityID,
             kind: .placeBeen,
             actor: actor,
+            place: place,
             occurredAt: cachedActivity.occurredAt,
             note: cachedActivity.note,
             media: [
@@ -1104,6 +1109,111 @@ final class ActivityEngagementTests: XCTestCase {
         )
         XCTAssertEqual(resolved?.id, activity.id)
         XCTAssertEqual(repository.summariesRequestCount, 0)
+    }
+
+    func testCheckInNotificationResolvesExactVisitWithoutFetchingFeedOrExtraSummaries() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let parent = UUID().uuidString.lowercased(), visit = UUID().uuidString.lowercased()
+        let target = ActivityCheckInTarget(userPlaceID: parent.uppercased(), visitID: visit.uppercased())
+        let matches = [
+            PlaceActivityEngagementMatch(activityID: UUID().uuidString, userPlaceID: parent,
+                visitID: UUID().uuidString, kind: .placeBeen, occurredAt: .now,
+                engagement: .empty(activityID: "unrelated")),
+            PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: parent,
+                visitID: visit, kind: .placeBeen, occurredAt: .distantPast,
+                engagement: .empty(activityID: activity.id))
+        ]
+        let repository = ActivityEngagementRepositoryStub(placeMatches: matches, activityResult: activity)
+        let result = await store.activity(checkIn: target, backend: WanderBackend(activityEngagementRepository: repository))
+        XCTAssertEqual(result?.id, activity.id)
+        XCTAssertEqual(repository.placeRequests.count, 1)
+        XCTAssertEqual(repository.activityRequestCount, 1)
+        XCTAssertEqual(repository.summariesRequestCount, 0)
+        let navigation = ActivityNavigationCoordinator()
+        navigation.openCheckIn(userPlaceID: parent, visitID: visit)
+        let requestID = try XCTUnwrap(navigation.commentsRoute?.id)
+        navigation.resolve(requestID: requestID, activity: result)
+        XCTAssertEqual(navigation.commentsRoute?.activityID, activity.id)
+        XCTAssertEqual(navigation.commentsRoute?.context?.activityID, activity.id)
+    }
+
+    func testMissingCheckInNeverSubstitutesNewestVisitAndSurfacesError() async {
+        let store = WanderStore(fixtures: .empty())
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let repository = ActivityEngagementRepositoryStub(placeMatches: [
+            PlaceActivityEngagementMatch(activityID: UUID().uuidString, userPlaceID: parent,
+                visitID: UUID().uuidString, kind: .placeBeen, occurredAt: .now,
+                engagement: .empty(activityID: "other"))
+        ])
+        let result = await store.activity(checkIn: .init(userPlaceID: parent, visitID: visit),
+            backend: WanderBackend(activityEngagementRepository: repository))
+        XCTAssertNil(result)
+        XCTAssertEqual(repository.activityRequestCount, 0)
+        XCTAssertNotNil(store.activityEngagementError(for: visit))
+    }
+
+    func testCheckInLookupCannotFinishAfterAccountChangeOrCancellation() async {
+        for changesAccount in [false, true] {
+            let store = WanderStore(fixtures: .empty())
+            let parent = UUID().uuidString, visit = UUID().uuidString
+            let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+            let repository = ActivityEngagementRepositoryStub(placeMatches: [
+                PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: parent,
+                    visitID: visit, kind: .placeBeen, occurredAt: .now,
+                    engagement: .empty(activityID: activity.id))
+            ], activityResult: activity)
+            repository.suspendPlaceRequests = true
+            let task = Task { @MainActor in
+                let result = await store.activity(checkIn: .init(userPlaceID: parent, visitID: visit),
+                    backend: WanderBackend(activityEngagementRepository: repository))
+                return result?.id
+            }
+            for _ in 0..<100 where repository.placeRequests.isEmpty { await Task.yield() }
+            XCTAssertEqual(repository.placeRequests.count, 1)
+            if changesAccount {
+                store.apply(authState: .signedOut)
+                store.apply(authState: .signedIn(AuthSession(userID: "another", displayName: "Another", handle: "another")))
+            } else { task.cancel() }
+            repository.suspendPlaceRequests = false
+            let result = await task.value
+            XCTAssertNil(result)
+            XCTAssertEqual(repository.activityRequestCount, 0)
+            XCTAssertNil(store.activityEngagementError(for: visit))
+        }
+    }
+
+    func testCheckInLookupAndDetailErrorsStayVisibleAndRetryable() async {
+        let store = WanderStore(fixtures: .empty())
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(placeMatches: [
+            PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: parent,
+                visitID: visit, kind: .placeBeen, occurredAt: .now,
+                engagement: .empty(activityID: activity.id))
+        ], activityResponses: [.failure(ActivityEngagementTestError.expected), .success(activity)])
+        repository.placeFailuresRemaining = 1
+        let target = ActivityCheckInTarget(userPlaceID: parent, visitID: visit)
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let lookupFailure = await store.activity(checkIn: target, backend: backend)
+        XCTAssertNil(lookupFailure)
+        XCTAssertNotNil(store.activityEngagementError(for: visit))
+        let detailFailure = await store.activity(checkIn: target, backend: backend)
+        XCTAssertNil(detailFailure)
+        XCTAssertNotNil(store.activityEngagementError(for: visit))
+        let recovered = await store.activity(checkIn: target, backend: backend)
+        XCTAssertEqual(recovered?.id, activity.id)
+        XCTAssertNil(store.activityEngagementError(for: visit))
+    }
+
+    func testActivityWithoutReadablePostContentFailsInsteadOfSpinning() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = FeedActivity(id: UUID().uuidString, kind: .placeBeen,
+            actor: privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly).actor, occurredAt: .now)
+        let result = await store.activity(id: activity.id,
+            backend: WanderBackend(activityEngagementRepository: ActivityEngagementRepositoryStub(activityResult: activity)))
+        XCTAssertNil(result)
+        XCTAssertNotNil(store.activityEngagementError(for: activity.id))
     }
 
     func testNotificationActivityRecoversInterruptedConnectionWithoutReopening() async {
@@ -1334,7 +1444,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
             placeFailuresRemaining -= 1
             throw ActivityEngagementTestError.expected
         }
-        return placeMatches.filter { userPlaceIDs.contains($0.userPlaceID) }
+        return placeMatches.filter { match in userPlaceIDs.contains { $0.caseInsensitiveCompare(match.userPlaceID) == .orderedSame } }
     }
 
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary {
