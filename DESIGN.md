@@ -629,7 +629,7 @@ setup is complete.
 Rules:
 
 - Launch and foreground activation show a blocking session-check state when a Clerk refresh is required. Returning from Mail or an identity provider preserves a pending native account attempt.
-- Signed-out sessions keep authenticated tabs and cached profile metadata hidden. Closing native account entry returns to the welcome flow.
+- Signed-out sessions keep authenticated tabs and cached profile metadata hidden. Sign-up has no close button; closing Log in returns to the welcome flow.
 - Session revocation, account deletion, logout, or an account switch removes the authenticated surface immediately and clears account-scoped presentation, widget, analytics, and person metadata.
 - A cached device profile is never proof of authentication and must not be inherited by a different account.
 - If session verification fails, show a retryable unavailable state instead of entering the app with cached identity state.
@@ -641,7 +641,7 @@ Rules:
 Flow:
 
 1. Signal opening, then a native Hotchkiss Park preview and an example activity postcard, with Places and People benefit copy.
-2. Native sign-up or log-in backed by Clerk, entered with the same horizontal slide motion; closing it restarts the welcome flow.
+2. Native sign-up or log-in backed by Clerk, entered with the same horizontal slide motion; sign-up has no close button, while closing Log in restarts the welcome flow.
 3. Required name and username; profile photo is optional.
 4. Location primer and native request, with one neutral Continue action before the system alert.
 5. Contacts primer and native request, with one neutral Continue action before the system alert.
