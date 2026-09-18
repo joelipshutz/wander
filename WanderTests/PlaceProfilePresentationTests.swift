@@ -156,7 +156,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
     }
 
-    func testAttachedEditorRoutesExistingWannaEditAndCheckInConversion() throws {
+    func testAttachedEditorRoutesFreshWannaAndUnchangedCheckInConversion() throws {
         let currentUser = profile(id: "user_current_edit_wanna", handle: "current")
         let currentWanna = summary(
             owner: currentUser,
@@ -184,14 +184,14 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 baseContext: base
             )
         )
-        guard case .editWant(let visiblePlace) = attached.mode else {
-            return XCTFail("The selected existing Wanna action must use the edit-Wanna path")
+        guard case .add = attached.mode else {
+            return XCTFail("The Wanna action must open a new save")
         }
-        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertNil(attached.existingCurrentUserSave)
         XCTAssertEqual(attached.initialStatus, .wannaGo)
-        XCTAssertEqual(attached.initialNote, "Bring a picnic blanket.")
+        XCTAssertEqual(attached.initialNote, "")
         XCTAssertTrue(attached.startsOnDetails)
-        XCTAssertTrue(attached.showsRemoveControl)
+        XCTAssertFalse(attached.showsRemoveControl)
 
         let draft = try XCTUnwrap(
             PlaceSaveDraft.restorableFlow(
@@ -199,8 +199,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 context: attached
             )
         )
-        XCTAssertEqual(draft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
-        XCTAssertEqual(draft.form.note, "Bring a picnic blanket.")
+        XCTAssertNil(draft.baselineUserPlaceLocalID)
+        XCTAssertEqual(draft.form.note, "")
         XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
         XCTAssertEqual(draft.form.step, .details)
 
@@ -310,7 +310,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
 
         XCTAssertEqual(refreshed.route, .floatingActions)
-        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Edit / history"])
+        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in", "Wanna"])
         XCTAssertEqual(flagOffSnapshot.route, .legacy)
         XCTAssertEqual(snapshot.route, .floatingActions)
         let legacy = PlaceProfileSaveActionSnapshot(
@@ -669,7 +669,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.editWant.systemImage, "pencil")
         XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
-        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
+        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.editWant.displayTitle, "Edit Wanna")
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: false),
@@ -677,7 +677,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: true),
-            "Check in again"
+            "Check in"
         )
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
@@ -714,7 +714,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 PlaceProfileSaveAction(
                     kind: .wanna,
                     title: "Wanna",
-                    isSelected: true,
+                    isSelected: false,
                     destinationStatus: .wannaGo
                 )
             ]
@@ -724,15 +724,15 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check in again",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 ),
                 PlaceProfileSaveAction(
-                    kind: .editHistory,
-                    title: "Edit / history",
+                    kind: .wanna,
+                    title: "Wanna",
                     isSelected: false,
-                    destinationStatus: nil
+                    destinationStatus: .wannaGo
                 )
             ]
         )
@@ -1533,6 +1533,162 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(presentation.commonTags.map(\.title), ["quiet"])
         XCTAssertTrue(fit.reasons.contains { $0.contains("coffee, tea, & sweets") })
         XCTAssertTrue(fit.reasons.contains { $0.contains("quiet") })
+    }
+
+    func testFullHistoryIncludesSocialCheckInWhenEntrySeedContainsOnlyOwnWanna() {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let original = place(id: "original", category: "restaurant")
+        let duplicate = place(id: "duplicate", category: "restaurant")
+        duplicate.canonicalName = original.canonicalName
+        duplicate.sourceProviderPlaceID = original.id
+        duplicate.address = "Different provider formatting"
+        let wanna = summary(owner: viewer, place: duplicate, status: .wannaGo, ratingScore: nil, tags: [])
+        let checkIn = summary(owner: friend, place: original, status: .been, ratingScore: 4, tags: [])
+        let candidate = PlaceSheetPlace(visiblePlace: wanna.visiblePlace).saveCandidate
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: candidate, seeds: [wanna.visiblePlace],
+            available: [wanna.visiblePlace, checkIn.visiblePlace, checkIn.visiblePlace],
+            currentUserID: viewer.id, viewerFollows: { $0 == friend.id }
+        )
+        XCTAssertEqual(Set(history.map(\.id)), Set([wanna.id, checkIn.id]))
+        XCTAssertEqual(history.first?.id, wanna.id)
+        XCTAssertNil(PlaceProfilePresenter.ownRating(from: history, currentUserID: viewer.id))
+        XCTAssertEqual(PlaceProfilePresenter.overallRating(from: history, currentUserID: viewer.id)?.score, 4)
+    }
+
+    func testAuthoritativeEmptyHistoryDoesNotReinsertStaleEntrySeed() {
+        let owner = profile(id: "friend", handle: "friend")
+        let saved = summary(owner: owner, place: place(id: "cafe", category: "coffee"), ratingScore: 4, tags: [])
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: saved.visiblePlace).saveCandidate,
+            seeds: [saved.visiblePlace], available: [], currentUserID: "viewer", viewerFollows: { _ in true }
+        )
+        XCTAssertTrue(history.isEmpty)
+        saved.visiblePlace.userPlace.deletedAt = .now
+        XCTAssertTrue(PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: saved.visiblePlace).saveCandidate,
+            seeds: [saved.visiblePlace], available: [saved.visiblePlace], currentUserID: "viewer", viewerFollows: { _ in true }
+        ).isEmpty)
+    }
+
+    func testHistoryAndMapAgreeAcrossDuplicatePlacesAndViewerPermissions() throws {
+        let first = profile(id: "first", handle: "first")
+        let second = profile(id: "second", handle: "second")
+        let third = profile(id: "third", handle: "third")
+        let original = place(id: "original", category: "restaurant")
+        original.canonicalName = "Fixture Sushi"
+        original.address = "100 Main Street"
+        original.sourceProviderPlaceID = "provider-original"
+        let duplicate = place(id: "duplicate", category: "restaurant")
+        duplicate.canonicalName = original.canonicalName
+        duplicate.address = nil
+        duplicate.locality = nil
+        duplicate.sourceProviderPlaceID = "provider-duplicate"
+        let firstWanna = summary(owner: first, place: duplicate, status: .wannaGo, ratingScore: nil, tags: [])
+        let secondWanna = summary(owner: second, place: original, status: .wannaGo, ratingScore: nil, tags: [])
+        let thirdCheckIn = summary(owner: third, place: original, status: .been, ratingScore: 4, tags: [])
+
+        // The first viewer follows only the second. The second follows both.
+        // The repository enforces permissions before either projection runs.
+        for (viewer, authorized) in [
+            (first, [firstWanna, secondWanna]),
+            (second, [firstWanna, secondWanna, thirdCheckIn])
+        ] {
+            for seed in authorized {
+                for snapshot in [authorized, authorized.reversed().map { $0 }] {
+                    let available = snapshot.map(\.visiblePlace)
+                    let history = PlaceProfileHistoryPolicy.summaries(
+                        candidate: PlaceSheetPlace(visiblePlace: seed.visiblePlace).saveCandidate,
+                        seeds: [seed.visiblePlace], available: available,
+                        currentUserID: viewer.id, viewerFollows: { $0 != viewer.id }
+                    )
+                    XCTAssertEqual(Set(history.map(\.id)), Set(authorized.map(\.id)))
+                    let groups = VisiblePlaceGrouping.groups(from: available, currentUserID: viewer.id)
+                    XCTAssertEqual(groups.count, 1)
+                    XCTAssertEqual(Set(groups.flatMap(\.places).map(\.id)), Set(history.map(\.id)))
+                    let outlines = try XCTUnwrap(MapPinOutlineBuilder.outlineCatalog(
+                        for: available, currentUserID: viewer.id
+                    )[seed.id])
+                    XCTAssertEqual(outlines.first { $0.ownership == .currentUser }?.status, .wannaGo)
+                    XCTAssertEqual(outlines.first { $0.ownership == .social }?.status,
+                                   viewer.id == first.id ? .wannaGo : .been)
+                    let wannas = history.filter { $0.visiblePlace.userPlace.status == .wannaGo }
+                    for wanna in wannas {
+                        let entry = PlaceActivityEntry(summary: wanna, visit: nil, kind: .currentWant, currentUserID: viewer.id)
+                        XCTAssertTrue(PlaceActivityFilter.all.includes(entry))
+                        XCTAssertFalse(PlaceActivityFilter.myVisits.includes(entry))
+                    }
+                }
+            }
+        }
+    }
+
+    func testAnonymousFeaturedCheckInCannotMakeFriendsWannaRingPartlySolid() throws {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let venue = place(id: "fixture_sushi", category: "restaurant")
+        let own = summary(owner: viewer, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        let social = summary(owner: friend, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        let aggregate = summary(owner: community, place: venue, status: .been, ratingScore: 4, tags: [])
+        let places = [own, social, aggregate].map(\.visiblePlace)
+        let groups = VisiblePlaceGrouping.groups(from: places, currentUserID: viewer.id)
+        let group = try XCTUnwrap(groups.first)
+        let catalog = MapPinRenderCatalog(groups: groups, currentUserPlaces: [own.visiblePlace], currentUserID: viewer.id)
+        let expected = [
+            MapPinOutline(ownership: .currentUser, status: .wannaGo),
+            MapPinOutline(ownership: .social, status: .wannaGo)
+        ]
+        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], expected)
+        XCTAssertEqual(MapPinOutlineBuilder.outlineCatalog(for: places, currentUserID: viewer.id)[own.id], expected)
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: own.visiblePlace).saveCandidate,
+            seeds: places, available: places, currentUserID: viewer.id, viewerFollows: { $0 == friend.id }
+        )
+        XCTAssertEqual(Set(history.map(\.id)), Set([own.id, social.id]))
+    }
+
+    func testAnonymousFeaturedOnlyPlaceHasNoPersonalOrSocialRing() throws {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let aggregate = summary(owner: community, place: place(id: "featured_only", category: "restaurant"),
+                                status: .been, ratingScore: 4, tags: [])
+        let groups = VisiblePlaceGrouping.groups(from: [aggregate.visiblePlace], currentUserID: "viewer")
+        XCTAssertEqual(groups.count, 1, "The Featured place remains on the map.")
+        let group = try XCTUnwrap(groups.first)
+        let catalog = MapPinRenderCatalog(groups: groups, currentUserPlaces: [], currentUserID: "viewer")
+        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], [])
+    }
+
+    func testMyCheckInsExcludesCurrentAndHistoricalWannasForEveryOwner() {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let friend = profile(id: "friend", handle: "friend")
+        let venue = place(id: "venue", category: "restaurant")
+        for owner in [viewer, friend] {
+            let saved = summary(owner: owner, place: venue, ratingScore: 4, tags: [])
+            for kind in [PlaceActivityEntryKind.currentWant, .historicalWant, .visit, .legacyBeenSummary] {
+                let entry = PlaceActivityEntry(summary: saved, visit: nil, kind: kind, currentUserID: viewer.id)
+                XCTAssertTrue(PlaceActivityFilter.all.includes(entry))
+                XCTAssertEqual(PlaceActivityFilter.myVisits.includes(entry), owner.id == viewer.id && (kind == .visit || kind == .legacyBeenSummary))
+            }
+        }
+    }
+
+    @MainActor
+    func testOwnWannaRingStaysDottedAlongsideFriendsCheckInAtEveryScale() throws {
+        let outlines = MapPinOutlineBuilder.outlines(for: [
+            MapPinSaveState(ownership: .currentUser, status: .wannaGo),
+            MapPinSaveState(ownership: .social, status: .been)
+        ])
+        let own = try XCTUnwrap(outlines.first { $0.ownership == .currentUser })
+        let social = try XCTUnwrap(outlines.first { $0.ownership == .social })
+        XCTAssertFalse(own.dashPattern.isEmpty)
+        XCTAssertTrue(social.dashPattern.isEmpty)
+        for scale in [MapPinSelectionMotionStyle.inactiveScale, MapPinSelectionMotionStyle.selectedScale] {
+            let dash = own.scaledDashPattern(scale: scale)
+            // Round caps consume one line width of the nominal gap.
+            XCTAssertGreaterThan(dash[1] - MapPinVisualMetrics.outlineWidth * scale, 1)
+        }
     }
 
     private func profile(id: String, handle: String) -> LocalProfile {

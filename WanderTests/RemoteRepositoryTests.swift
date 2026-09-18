@@ -3,6 +3,49 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testRepeatWannaUsesOwnerRPCAndDecodesHistorySnapshots() async throws {
+        let rpc = RecordingRPC()
+        let response = """
+        {"id":"11111111-1111-4111-8111-111111111111", "owner_id":"owner",
+         "user_place_id":"22222222-2222-4222-8222-222222222222",
+         "occurred_at":"2026-09-14T12:00:00Z", "note":"Go again", "visibility":"followers",
+         "planned_date":"2026-09-20", "attribute_answers_json":"[]"}
+        """
+        rpc.responses["save_own_place_wanna"] = Data(response.utf8)
+        rpc.responses["visible_place_wannas"] = Data("[\(response)]".utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let wanna = PlaceWannaSave(id: "11111111-1111-4111-8111-111111111111", ownerID: "owner",
+                                  userPlaceID: "22222222-2222-4222-8222-222222222222",
+                                  occurredAt: Date(timeIntervalSince1970: 1_789_387_200),
+                                  note: "Go again", visibility: .followers, plannedDate: WannaGoDate.date(fromStorageString: "2026-09-20"),
+                                  attributeAnswersJSON: "[]")
+        try await repository.saveWanna(wanna)
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_own_place_wanna"])
+        let body = try XCTUnwrap(rpc.rawBodies.first)
+        XCTAssertEqual(body["input_user_place_id"] as? String, wanna.userPlaceID)
+        let payload = try XCTUnwrap(body["input_wanna"] as? [String: Any])
+        XCTAssertEqual(payload["id"] as? String, wanna.id)
+        XCTAssertEqual(payload["planned_date"] as? String, "2026-09-20")
+        XCTAssertNil(payload["owner_id"], "The authenticated claim determines ownership")
+        XCTAssertNil(payload["status"], "A Wanna event never requests a parent state change")
+        XCTAssertNotNil(payload["attribute_answers"] as? [Any])
+        let rows = try await repository.wannaSaves(userPlaceIDs: [wanna.userPlaceID])
+        XCTAssertEqual(rows.map(\.id), [wanna.id])
+        XCTAssertEqual(rows.first?.note, "Go again")
+        XCTAssertEqual(rows.first?.isSynced, true)
+        XCTAssertEqual(rows.first?.plannedDate.map { WannaGoDate.storageString(from: $0) }, "2026-09-20")
+        rpc.responses["update_own_place_wanna"] = Data(response.utf8)
+        var edited = wanna
+        edited.editedAt = Date(timeIntervalSince1970: 1_789_387_200.123)
+        _ = try await repository.updateWanna(edited)
+        let firstEdit = try XCTUnwrap(rpc.rawBodies.last?["input_wanna"] as? [String: Any])
+        edited.editedAt = try XCTUnwrap(edited.editedAt).addingTimeInterval(0.001)
+        _ = try await repository.updateWanna(edited)
+        let nextEdit = try XCTUnwrap(rpc.rawBodies.last?["input_wanna"] as? [String: Any])
+        XCTAssertNotEqual(firstEdit["edited_at"] as? String, nextEdit["edited_at"] as? String,
+                          "Millisecond edit revisions must survive the wire encoder")
+    }
+
     func testListSnapshotUploadUsesPrivateStorageThenOwnerRPC() async throws {
         let rpc = RecordingRPC()
         rpc.responses["set_place_list_snapshot_cover"] = Data("null".utf8)
@@ -1222,6 +1265,78 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
         XCTAssertNil(rpc.rawBodies[0]["input_before"])
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
+        XCTAssertEqual(rpc.rawBodies[0]["input_include_featured"] as? Bool, false)
+    }
+
+    func testFeedRPCsUseShortFirstPaintDeadlines() {
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "followed_feed"), 1.5)
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "activity_media"), 1)
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "discover_profile_recommendations"), 1.5)
+        XCTAssertGreaterThan(WanderSupabaseClient.rpcTimeout(for: "profile_detail"), 1.5)
+    }
+
+    func testFeedRetriesOneTransientTransportFailure() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(
+            #"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8
+        )
+        rpc.errors = [URLError(.timedOut)]
+
+        _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "followed_feed"])
+    }
+
+    func testFeedFallsBackOnlyWhenActivityOnlyRPCIsNotDeployed() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+        rpc.errors = [WanderRemoteError.invalidResponse("RPC followed_feed failed with 404: {\"code\":\"PGRST202\"}")]
+        let repository = SupabaseFeedRepository(rpc: rpc)
+        _ = try await repository.followedFeed(before: "cursor", limit: 25)
+        XCTAssertEqual(rpc.calls.count, 2)
+        XCTAssertEqual(rpc.rawBodies[0]["input_include_featured"] as? Bool, false)
+        XCTAssertNil(rpc.rawBodies[1]["input_include_featured"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_before"] as? String, "cursor")
+        XCTAssertEqual(rpc.rawBodies[1]["input_limit"] as? Int, 25)
+    }
+
+    func testFeedPropagatesFailureOfTheLegacyFallbackWithoutRetryingAgain() async {
+        let rpc = RecordingRPC()
+        rpc.errors = [
+            WanderRemoteError.invalidResponse("RPC followed_feed failed: PGRST202"),
+            WanderRemoteError.notAuthenticated,
+        ]
+        do {
+            _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+            XCTFail("Expected the legacy failure")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+        XCTAssertEqual(rpc.calls.count, 2)
+    }
+
+    func testFeedDoesNotRetryNetworkAuthOrOrdinaryServerFailure() async {
+        for error in [WanderRemoteError.notAuthenticated, .invalidResponse("timeout"),
+                      .invalidResponse("RPC followed_feed failed with 500"),
+                      .invalidResponse("PGRST202 some_other_function")] {
+            let rpc = RecordingRPC()
+            rpc.errors = [error]
+            do {
+                _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+                XCTFail("Expected failure")
+            } catch {
+                XCTAssertEqual(rpc.calls.count, 1)
+            }
+        }
+    }
+
+    func testFeaturedCanStillBeRequestedUsingTheOriginalContract() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+        _ = try await SupabaseFeedRepository(rpc: rpc, includesFeaturedPlaces: true)
+            .followedFeed(before: nil, limit: 100)
+        XCTAssertNil(rpc.rawBodies[0]["input_include_featured"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 50)
     }
 
     func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
@@ -1326,7 +1441,8 @@ final class RemoteRepositoryTests: XCTestCase {
             let elapsed = start.duration(to: .now).components
             firstContentMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
             XCTAssertEqual(content.activity.map(\.id), [activityID])
-            XCTAssertTrue(content.activity[0].media.isEmpty)
+            XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
+            XCTAssertNil(content.activity[0].media[0].urlString)
             XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
             XCTAssertTrue(storage.signedURLs.isEmpty)
         }
@@ -1347,6 +1463,43 @@ final class RemoteRepositoryTests: XCTestCase {
             storage.signedURLs,
             [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
         )
+    }
+
+    func testFeedKeepsNeutralArtworkWhenMediaLookupFails() async throws {
+        let rpc = RecordingRPC()
+        let activityID = "40000000-0000-0000-0000-000000000386"
+        rpc.responses["followed_feed"] = Data("""
+        {
+          "activity": [{
+            "id": "\(activityID)",
+            "event_type": "place_been",
+            "occurred_at": "2026-08-30T20:00:00Z",
+            "actor": {
+              "id": "user_ryan",
+              "handle": "ryan",
+              "display_name": "Ryan",
+              "avatar_url": null,
+              "relationship": "follower"
+            },
+            "place": null,
+            "list": null,
+            "note": "Dudley Market",
+            "rating": null,
+            "media": []
+          }],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-08-30T20:01:00Z"
+        }
+        """.utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25) { content in
+            XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
+        }
+
+        XCTAssertEqual(page.activity[0].media.map(\.id), ["pending:\(activityID)"])
+        XCTAssertNil(page.activity[0].media[0].urlString)
     }
 
     func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
@@ -5138,6 +5291,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
 
     var responses: [String: Data] = [:]
     var delays: [String: Duration] = [:]
+    var errors: [Error] = []
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
 
@@ -5150,6 +5304,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         rawBodies.append(body)
         calls.append(Call(name: name, body: anyHashableBody(body)))
         if let delay = delays[name] { try await Task.sleep(for: delay) }
+        if !errors.isEmpty { throw errors.removeFirst() }
 
         if Value.self == EmptyRPCResponse.self {
             return EmptyRPCResponse() as! Value

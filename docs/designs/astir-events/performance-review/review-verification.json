@@ -1,0 +1,34 @@
+{
+  "review": "performance",
+  "date": "2026-09-15",
+  "status": "source_review_only",
+  "baseline": "f8d258e869503a28d70518a050dff36a344134c6",
+  "findings": [
+    "PF1",
+    "PF2",
+    "PF3",
+    "PF4",
+    "PF5"
+  ],
+  "dimensions": [
+    "query growth and N+1",
+    "memory",
+    "caching",
+    "slow and complex paths"
+  ],
+  "linked_existing_source_locations_checked": 41,
+  "source_locations_valid": true,
+  "local_review_links_valid": true,
+  "application_benchmarks_run": false,
+  "application_files_changed": false,
+  "flowchart_sha256": "b8431da1c92cfac28a7b1ec5ac74c3cff5946f5654994cd6251c0efa905a3993",
+  "checkpoint": "D19A approved; conditional engineering handoff complete",
+  "artifacts": {
+    "README.md": "096bb43284a88608208e6fc6b01ab7cf12564a222db01c2f38146ddebc8c6405",
+    "backend-door.md": "923e3da08c84d9ec6ac6b8b86403b6f96d1f5de0fb09894006ed0ace4024972a",
+    "entry-clip.md": "1764fc997989cffa51786a3ced790bce950319081abd3eacb452f02be53b7686",
+    "measurement-plan.md": "cd9ad4725fe52c04759838ac32caa79a8804615c9414eab0cd2143e115d08a25",
+    "native-media-map.md": "e467cc36811d495a627c688ee77b947a79e037940f5bc4cf863d11501d07c7d5"
+  },
+  "portability_note": "Source links converted to immutable GitHub baseline; original source hashes are in publication-manifest.json."
+}

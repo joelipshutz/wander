@@ -2103,52 +2103,59 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    var hasDuplicateReconciliationCandidates: Bool {
+        items.contains { [.ready, .ambiguous, .duplicate].contains($0.state) }
+    }
+
     func reconcileDuplicates(with existingPlaces: [PlaceImportExistingPlace]) {
+        guard hasDuplicateReconciliationCandidates else { return }
+        let existingIndex = PlaceImportExistingPlaceIndex(places: existingPlaces)
+        var reconciledItems = items
         var changedBatchIDs = Set<String>()
-        for index in items.indices where [.ready, .ambiguous, .duplicate].contains(items[index].state) {
+        for index in reconciledItems.indices where [.ready, .ambiguous, .duplicate].contains(reconciledItems[index].state) {
             // A multi-match row is independently selectable. One existing
             // candidate must not collapse or disable its unsaved siblings;
             // commit resolves duplicate status for each concrete candidate.
-            if items[index].candidates.count > 1 {
-                if items[index].state == .duplicate || items[index].duplicateUserPlaceID != nil {
-                    items[index].duplicateUserPlaceID = nil
-                    items[index].state = items[index].selectedCandidates.isEmpty ? .ambiguous : .ready
-                    items[index].updatedAt = .now
-                    changedBatchIDs.insert(items[index].batchID)
+            if reconciledItems[index].candidates.count > 1 {
+                if reconciledItems[index].state == .duplicate || reconciledItems[index].duplicateUserPlaceID != nil {
+                    reconciledItems[index].duplicateUserPlaceID = nil
+                    reconciledItems[index].state = reconciledItems[index].selectedCandidates.isEmpty ? .ambiguous : .ready
+                    reconciledItems[index].updatedAt = .now
+                    changedBatchIDs.insert(reconciledItems[index].batchID)
                 }
                 continue
             }
-            let match = items[index].candidates.lazy.compactMap { candidate in
-                existingPlaces.first(where: { self.existingPlaceMatches($0, candidate: candidate) })
+            let match = reconciledItems[index].candidates.lazy.compactMap { candidate in
+                existingIndex.firstMatch(for: candidate)
                     .map { (candidate, $0) }
             }.first
 
             if let (candidate, existing) = match {
-                if items[index].state != .duplicate || items[index].duplicateUserPlaceID != existing.userPlaceID {
-                    items[index].state = .duplicate
-                    items[index].selectedCandidateID = candidate.id
-                    items[index].selectedCandidateIDsRaw = [candidate.id]
-                    items[index].duplicateUserPlaceID = existing.userPlaceID
-                    items[index].helpMessage = nil
-                    items[index].updatedAt = .now
-                    changedBatchIDs.insert(items[index].batchID)
+                if reconciledItems[index].state != .duplicate || reconciledItems[index].duplicateUserPlaceID != existing.userPlaceID {
+                    reconciledItems[index].state = .duplicate
+                    reconciledItems[index].selectedCandidateID = candidate.id
+                    reconciledItems[index].selectedCandidateIDsRaw = [candidate.id]
+                    reconciledItems[index].duplicateUserPlaceID = existing.userPlaceID
+                    reconciledItems[index].helpMessage = nil
+                    reconciledItems[index].updatedAt = .now
+                    changedBatchIDs.insert(reconciledItems[index].batchID)
                 }
-            } else if items[index].state == .duplicate {
-                items[index].duplicateUserPlaceID = nil
-                items[index].state = items[index].selectedCandidateID == nil && items[index].candidates.count > 1
+            } else if reconciledItems[index].state == .duplicate {
+                reconciledItems[index].duplicateUserPlaceID = nil
+                reconciledItems[index].state = reconciledItems[index].selectedCandidateID == nil && reconciledItems[index].candidates.count > 1
                     ? .ambiguous
                     : .ready
-                items[index].updatedAt = .now
-                changedBatchIDs.insert(items[index].batchID)
+                reconciledItems[index].updatedAt = .now
+                changedBatchIDs.insert(reconciledItems[index].batchID)
             }
         }
 
+        guard !changedBatchIDs.isEmpty else { return }
+        items = reconciledItems
         for batchID in changedBatchIDs {
             synchronizeBatch(batchID, persist: false)
         }
-        if !changedBatchIDs.isEmpty {
-            persist()
-        }
+        persist()
     }
 
     func waitForProcessing(batchID: String) async {
@@ -2846,5 +2853,50 @@ final class PlaceImportStore: ObservableObject {
               upgradeableStates.contains(item.state)
         else { return false }
         return true
+    }
+}
+
+/// Index one immutable reconciliation input. Normalization is linear in the
+/// number of places and candidates, not repeated for every candidate/place pair.
+struct PlaceImportExistingPlaceIndex {
+    private struct ProviderKey: Hashable {
+        let provider: String?
+        let id: String
+    }
+    private let places: [PlaceImportExistingPlace]
+    private var byName: [String: [Int]] = [:]
+    private var byProvider: [ProviderKey: Int] = [:]
+    private let normalize: (String) -> String
+
+    init(places: [PlaceImportExistingPlace], normalize: @escaping (String) -> String = {
+        $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }) {
+        self.places = places
+        self.normalize = normalize
+        for (index, place) in places.enumerated() {
+            byName[normalize(place.name), default: []].append(index)
+            if let id = place.sourceProviderPlaceID {
+                let key = ProviderKey(provider: place.sourceProvider, id: id)
+                if byProvider[key] == nil { byProvider[key] = index }
+            }
+        }
+    }
+
+    func firstMatch(for candidate: PlaceCandidate) -> PlaceImportExistingPlace? {
+        let providerIndex = candidate.sourceProviderPlaceID.flatMap {
+            byProvider[ProviderKey(provider: candidate.sourceProvider, id: $0)]
+        }
+        let nameIndex = byName[normalize(candidate.name)]?.first { index in
+            let existing = places[index]
+            guard let lat = existing.latitude, let lon = existing.longitude,
+                  let candidateLat = candidate.latitude, let candidateLon = candidate.longitude
+            else { return true }
+            return abs(lat - candidateLat) < 0.001 && abs(lon - candidateLon) < 0.001
+        }
+        // Keep the original input-order precedence, including a name match
+        // that precedes a later exact provider match.
+        guard let first = [providerIndex, nameIndex].compactMap({ $0 }).min() else { return nil }
+        return places[first]
     }
 }

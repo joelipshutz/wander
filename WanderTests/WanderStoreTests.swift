@@ -1,6 +1,8 @@
 import CoreLocation
+import Combine
 import XCTest
 import UIKit
+import SwiftUI
 @testable import Wander
 
 private enum TestError: Error {
@@ -9,6 +11,237 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testForegroundUnchangedInboxDoesNotInvalidatePresentations() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSharedVisitRepository()
+        repository.inboxInvitations = [makeSharedVisitInvitation()]
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        let revision = store.presentationRevision
+        let firstSaves = saves
+        for _ in 0..<3 { _ = await store.refreshSharedVisitInbox(backend: backend) }
+        XCTAssertEqual(saves, firstSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        repository.inboxInvitations = []
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertEqual(saves, firstSaves + 1)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+    }
+
+    func testForegroundUnchangedProfileDoesNotInvalidateButPrivacyChangeDoes() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Local", handle: "local")))
+        let remote = LocalProfile(localID: "remote", serverID: "user_live", handle: "live", displayName: "Live", syncState: .synced)
+        let backend = WanderBackend(profileRepository: FakeProfileRepository(currentProfile: remote))
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
+        let revision = store.presentationRevision
+        let firstSaves = saves
+        let timestamp = store.currentUser.updatedAt
+        var publications = 0
+        let subscription = store.objectWillChange.sink { publications += 1 }
+        defer { subscription.cancel() }
+        for _ in 0..<3 { _ = await store.refreshRemoteCurrentProfile(backend: backend) }
+        XCTAssertEqual(saves, firstSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        XCTAssertEqual(store.currentUser.updatedAt, timestamp)
+        XCTAssertEqual(publications, 0)
+        remote.isPrivateProfile = true
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
+        XCTAssertTrue(store.isPrivateProfile)
+        XCTAssertGreaterThan(saves, firstSaves)
+    }
+
+    func testForegroundConcurrentListRefreshFetchesAndAppliesOnce() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSurfaceSnapshotRepository()
+        repository.suspendLists = true
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let first = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        while repository.listRequestCount == 0 { await Task.yield() }
+        let second = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        repository.suspendLists = false
+        await first.value
+        await second.value
+        XCTAssertEqual(repository.listRequestCount, 1)
+        XCTAssertEqual(saves, 1)
+    }
+
+    func testForegroundListRefreshDiscardsPreviousAccountCompletion() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        store.apply(authState: .signedIn(AuthSession(userID: "first", displayName: "First", handle: "first")))
+        let repository = FakeSurfaceSnapshotRepository()
+        repository.suspendLists = true
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let refresh = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        while repository.listRequestCount == 0 { await Task.yield() }
+        store.apply(authState: .signedIn(AuthSession(userID: "second", displayName: "Second", handle: "second")))
+        let revision = store.presentationRevision
+        let accountSaves = saves
+        repository.suspendLists = false
+        await refresh.value
+        XCTAssertEqual(saves, accountSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testForegroundUnchangedListSnapshotSkipsApplyButLocalEditsInvalidateIt() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSurfaceSnapshotRepository()
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        await store.refreshRemotePlaceLists(backend: backend)
+        let revision = store.presentationRevision
+        let initialSaves = saves
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(repository.listRequestCount, 2, "Do not substitute a stale cache for a server read")
+        XCTAssertEqual(saves, initialSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        _ = store.createPlaceList(name: "Pending local list", description: "", visibility: .followers)
+        let afterEdit = saves
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(saves, afterEdit + 1)
+        XCTAssertTrue(store.placeLists.contains { $0.name == "Pending local list" })
+    }
+
+    func testForegroundProfileRequestsCoalesceAndDiscardAccountSwitch() async {
+        let store = WanderStore(fixtures: .empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "first", displayName: "First", handle: "first")))
+        let remote = LocalProfile(localID: "remote", serverID: "first", handle: "remote", displayName: "Remote", syncState: .synced)
+        let repository = FakeProfileRepository(currentProfile: remote, suspendCurrentProfile: true)
+        let backend = WanderBackend(profileRepository: repository)
+        let first = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        while repository.currentProfileRequestCount == 0 { await Task.yield() }
+        let second = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        store.apply(authState: .signedIn(AuthSession(userID: "second", displayName: "Second", handle: "second")))
+        let revision = store.presentationRevision
+        repository.resumeCurrentProfile()
+        let firstResult = await first.value
+        let secondResult = await second.value
+        XCTAssertFalse(firstResult)
+        XCTAssertFalse(secondResult)
+        XCTAssertEqual(repository.currentProfileRequestCount, 1)
+        XCTAssertEqual(store.currentUser.displayName, "Second")
+        XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testForegroundRootRemovalCancelsSharedRefreshApplication() async throws {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let session = AuthSession(userID: "root_owner", displayName: "Local", handle: "local")
+        store.apply(authState: .signedIn(session))
+        let remote = LocalProfile(localID: "remote", serverID: "root_owner", handle: "remote", displayName: "Remote", syncState: .synced)
+        let profiles = FakeProfileRepository(currentProfile: remote, suspendCurrentProfile: true)
+        let lists = FakeSurfaceSnapshotRepository()
+        lists.suspendLists = true
+        let backend = WanderBackend(profileRepository: profiles, surfaceSnapshotRepository: lists)
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedIn(session)))
+        let disappeared = expectation(description: "The mounted account root disappeared")
+        let root = WanderRootView(
+            initialTab: .lists, isSessionValidated: false,
+            storeFactory: { store },
+            importStoreFactory: { PlaceImportStore(persistence: EphemeralPlaceImportPersistence(), resolver: DevicePlaceImportResolver()) }
+        )
+        .environmentObject(auth)
+        .environmentObject(backend)
+        .environmentObject(PushNotificationManager())
+        .environmentObject(ProductUpsellCoordinator())
+        .environmentObject(CalendarReservationManager())
+        .onDisappear { disappeared.fulfill() }
+        let host = UIHostingController(rootView: AnyView(root))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        await Task.yield()
+        let profileRefresh = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        let listRefresh = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        for _ in 0..<200 where profiles.currentProfileRequestCount == 0 || lists.listRequestCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(profiles.currentProfileRequestCount, 1)
+        XCTAssertEqual(lists.listRequestCount, 1)
+
+        // SwiftUI replaces the whole account root on an identity change. The
+        // old store's user ID need not change before its suspended reads finish.
+        host.rootView = AnyView(EmptyView())
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        await fulfillment(of: [disappeared], timeout: 3)
+        let revisionAfterRemoval = store.presentationRevision
+        let savesAfterRemoval = saves
+        profiles.resumeCurrentProfile()
+        lists.suspendLists = false
+        let didRefreshProfile = await profileRefresh.value
+        await listRefresh.value
+        XCTAssertFalse(didRefreshProfile)
+        XCTAssertEqual(store.currentUser.displayName, "Local")
+        XCTAssertEqual(store.presentationRevision, revisionAfterRemoval)
+        XCTAssertEqual(saves, savesAfterRemoval, "An obsolete account root must not overwrite the shared persistence snapshot")
+    }
+
+    func testForegroundSaveAcknowledgementDoesNotPersistPartialRows() async throws {
+        var snapshots: [WanderStoreSnapshot] = []
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { snapshots.append($0) }))
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Fixture", handle: "fixture")))
+        let saved = store.saveCandidate(PlaceCandidate(id: "fixture", name: "Fixture Cafe", category: "coffee",
+            latitude: 34, longitude: -118, confidence: 1), status: .been, visibility: .followers,
+            note: nil, sourceType: .manual, ratingScore: 4)
+        let repository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: "remote_save", syncState: .synced, placeID: "remote_place"))
+        snapshots.removeAll()
+        let count = await store.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: repository))
+        XCTAssertEqual(count, 1)
+        let acknowledged = snapshots.filter { $0.places.contains { $0.serverID == "remote_place" } }
+        XCTAssertFalse(acknowledged.isEmpty)
+        for snapshot in acknowledged {
+            let row = try XCTUnwrap(snapshot.userPlaces.first { $0.localID == saved.userPlaceID })
+            XCTAssertEqual(row.syncStateRaw, SyncState.synced.rawValue)
+            XCTAssertEqual(row.serverID, "remote_save")
+            XCTAssertEqual(row.placeID, "remote_place")
+        }
+        XCTAssertEqual(repository.savedCheckInDrafts.count, 1)
+    }
+
+    func testForegroundListSnapshotStillAppliesChangedContentAndRevocation() async {
+        let store = WanderStore(fixtures: .empty())
+        let repository = FakeSurfaceSnapshotRepository()
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        var list = LocalPlaceList(localID: "remote_list", serverID: listID, ownerUserID: store.currentUser.id,
+                                  name: "Original", description: "", visibility: .followers, syncState: .synced)
+        func snapshot() -> PlaceListsRemoteSnapshot {
+            PlaceListsRemoteSnapshot(summaries: [RemotePlaceListSummary(list: list,
+                owner: ProfileShell(id: store.currentUser.id, handle: "fixture", displayName: "Fixture",
+                                    avatarURL: nil, bio: nil, relationship: .nonFollower),
+                collaborators: [], itemCount: 0)],
+                details: [RemotePlaceListDetail(list: list, collaborators: [], items: [])],
+                visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        }
+        repository.listSnapshot = snapshot()
+        await store.refreshRemotePlaceLists(backend: backend)
+        let revision = store.presentationRevision
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(store.presentationRevision, revision)
+        // Content must be compared, not just IDs or timestamps.
+        list.name = "Renamed"
+        repository.listSnapshot = snapshot()
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(store.placeLists.first { $0.id == listID }?.name, "Renamed")
+        XCTAssertGreaterThan(store.presentationRevision, revision)
+        repository.listSnapshot = PlaceListsRemoteSnapshot(summaries: [], details: [], visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertNotNil(store.placeLists.first { $0.id == listID }?.deletedAt)
+    }
+
     func testDarkMapDefaultsOff() {
         let store = WanderStore(fixtures: .seed())
 
@@ -2059,6 +2292,38 @@ final class WanderStoreTests: XCTestCase {
 
         let relaunched = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
         assertHistory(relaunched, using: ProfilePresentationCache())
+    }
+
+    func testPlaceHistoryRefreshKeepsLiveVisitsAndRemovesOwnerDeletedVisits() async {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        let firstID = "a940b2a4-605d-48d3-a5cd-b23d230b00ce"
+        let secondID = "3223700f-cefc-4593-867e-d97f5830f428"
+        func visit(_ id: String) -> PlaceVisitResult {
+            PlaceVisitResult(visitID: id, userPlaceID: parentID, visitedAt: .now,
+                note: nil, ratingScore: nil, tags: [], backfilledFromUserPlace: false)
+        }
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(visitsByUserPlaceID: [parentID: [visit(firstID), visit(secondID)]])))
+        XCTAssertEqual(store.visits(for: parentID).count, 2)
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(visitsByUserPlaceID: [parentID: [visit(firstID)]])))
+        XCTAssertEqual(store.visits(for: parentID).map(\.id), [firstID])
+        _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository()))
+        XCTAssertTrue(store.visits(for: parentID).isEmpty)
+        XCTAssertFalse(store.shouldShowLegacyCheckInSummary(for: parentID),
+            "An authoritative empty history must not resurrect a deleted check-in as a summary")
+    }
+
+    func testFailedPlaceHistoryRefreshPreservesExistingTiles() async {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
+        let result = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(error: TestError.expected)))
+        XCTAssertFalse(result)
+        XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
     }
 
     func testRemoteStealthCalendarRetainsOwnerProfileActivity() async {
@@ -4930,6 +5195,118 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testPlaceProfileReadDoesNotResurrectLocalDeletionOrBlockedOwner() throws {
+        let store = WanderStore(fixtures: .seed())
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let staleRow = LocalUserPlace(
+            localID: "stale-profile-row", serverID: own.userPlace.id,
+            userID: store.currentUser.id, placeID: own.place.id,
+            status: own.userPlace.status, visibility: .followers, note: nil,
+            sourceType: "test", syncState: .synced
+        )
+        let stale = VisiblePlace(id: staleRow.id, place: own.place, userPlace: staleRow, owner: own.owner)
+        own.userPlace.deletedAt = .now
+        own.userPlace.syncStateRaw = SyncState.pendingDelete.rawValue
+        XCTAssertTrue(store.placeProfileVisibleSaves(from: [stale]).isEmpty)
+        let social = try XCTUnwrap(store.visiblePlaces().first { $0.owner.id != store.currentUser.id })
+        store.block(userID: social.owner.id)
+        XCTAssertTrue(store.placeProfileVisibleSaves(from: [social]).isEmpty)
+    }
+
+    func testPlaceHistoryIncludesRestoredWannaAfterCompletedDeletion() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let saved = store.saveCandidate(
+            PlaceCandidate(id: "restored-cafe", name: "Restored Cafe", category: "coffee", latitude: 34, longitude: -118, confidence: 1),
+            status: .wannaGo, visibility: .followers, note: nil, sourceType: .manual
+        )
+        let original = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        original.userPlace.serverID = "restored-wanna-server-id"
+        original.userPlace.syncStateRaw = SyncState.synced.rawValue
+        _ = await store.removeSave(
+            userPlaceID: saved.userPlaceID,
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository())
+        )
+        XCTAssertEqual(original.userPlace.syncState, .tombstoned)
+        let deletedAt = try XCTUnwrap(original.userPlace.deletedAt)
+        let restoredAt = deletedAt.addingTimeInterval(60)
+        let restoredRow = LocalUserPlace(
+            localID: "restored-wanna-server-id", serverID: "restored-wanna-server-id",
+            userID: store.currentUser.id, placeID: original.place.id,
+            status: .wannaGo, visibility: .followers, note: nil, sourceType: "manual",
+            syncState: .synced, localUpdatedAt: restoredAt, serverUpdatedAt: restoredAt,
+            updatedAt: restoredAt
+        )
+        let restored = VisiblePlace(id: restoredRow.id, place: original.place, userPlace: restoredRow, owner: store.currentUser)
+        _ = await store.refreshRemoteCurrentUserCalendarData(backend: WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [store.currentUser.id: [restored]])
+        ))
+
+        // Map/save controls and full history must agree on the same restored row.
+        XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.id == restoredRow.id })
+        let history = PlaceProfileHistoryPolicy.summaries(
+            candidate: PlaceSheetPlace(visiblePlace: restored).saveCandidate,
+            seeds: [restored], available: store.placeProfileVisibleSaves(from: [restored]),
+            currentUserID: store.currentUser.id, viewerFollows: { _ in false }
+        )
+        XCTAssertEqual(history.count, 1)
+        let summary = try XCTUnwrap(history.first)
+        let entry = PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: store.currentUser.id)
+        XCTAssertTrue(PlaceActivityFilter.all.includes(entry))
+        XCTAssertFalse(PlaceActivityFilter.myVisits.includes(entry))
+
+        // An old in-flight response must still not resurrect a completed delete.
+        restoredRow.updatedAt = deletedAt.addingTimeInterval(-60)
+        restoredRow.serverUpdatedAt = restoredRow.updatedAt
+        XCTAssertTrue(store.placeProfileVisibleSaves(from: [restored]).isEmpty)
+
+        // Unsent/failed deletion intent wins even over a newer remote edit.
+        restoredRow.updatedAt = restoredAt
+        restoredRow.serverUpdatedAt = restoredAt
+        for state in [SyncState.pendingDelete, .failed, .serverDenied] {
+            original.userPlace.syncStateRaw = state.rawValue
+            XCTAssertTrue(store.placeProfileVisibleSaves(from: [restored]).isEmpty)
+        }
+    }
+
+    func testPlaceHistoryRefreshReconcilesSyncedOwnVisitsAndPreservesPendingEdits() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let saved = store.saveCandidate(
+            PlaceCandidate(id: "history-cafe", name: "History Cafe", category: "coffee", latitude: 34, longitude: -118, confidence: 1),
+            status: .been, visibility: .followers, note: "original", sourceType: .manual, ratingScore: 3
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        visit.serverID = "remote-history-visit"
+        visit.syncStateRaw = SyncState.synced.rawValue
+        let updated = PlaceVisitResult(
+            visitID: "remote-history-visit", userPlaceID: saved.userPlaceID,
+            visitedAt: visit.visitedAt, note: "server edit", ratingScore: 5,
+            tags: [], backfilledFromUserPlace: false
+        )
+        let refreshed = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository(visitsByUserPlaceID: [saved.userPlaceID: [updated]]))
+        )
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(visit.note, "server edit")
+        XCTAssertEqual(visit.ratingScore, 5)
+
+        visit.note = "pending local edit"
+        visit.syncStateRaw = SyncState.pendingUpdate.rawValue
+        _ = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository())
+        )
+        XCTAssertEqual(store.visits(for: saved.userPlaceID).first?.note, "pending local edit")
+
+        visit.syncStateRaw = SyncState.synced.rawValue
+        _ = await store.refreshRemotePlaceActivity(
+            userPlaceIDs: [saved.userPlaceID],
+            backend: WanderBackend(visitRepository: FakeVisitRepository())
+        )
+        XCTAssertTrue(store.visits(for: saved.userPlaceID).isEmpty)
+        XCTAssertFalse(store.shouldShowLegacyCheckInSummary(for: saved.userPlaceID))
+    }
+
     func testRemoteCalendarCheckInDeleteIsAcceptedAndDoesNotReappearFromCache() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let userID = "user_current"
@@ -6620,6 +6997,64 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testPeopleCanLoadWhileTheFirstFeedRequestIsStalled() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let feed = FakeFeedRepository(responses: [.success(page)], isSuspended: true)
+        let profiles = FakeProfileRepository()
+        let task = Task { @MainActor in
+            await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertEqual(feed.requestCount, 1)
+        XCTAssertEqual(profiles.recommendationLimits, [20])
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+        XCTAssertNil(store.followedFeedPage)
+        feed.finish()
+        await task.value
+        XCTAssertNotNil(store.followedFeedPage)
+    }
+
+    func testFeedCanLoadWhilePeopleRequestIsStalled() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let feed = FakeFeedRepository(responses: [.success(page)])
+        let profiles = FakeProfileRepository()
+        profiles.suspendRecommendations = true
+        let task = Task { @MainActor in
+            await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertNotNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loading)
+        profiles.suspendRecommendations = false
+        await task.value
+    }
+
+    func testFailedPeopleRequestDoesNotFailTheFeed() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        await store.refreshFeedSurface(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(recommendationError: TestError.expected),
+            feedRepository: FakeFeedRepository(responses: [.success(page)])
+        ))
+        XCTAssertNotNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .failed)
+    }
+
+    func testFailedFeedRequestDoesNotFailPeopleRecommendations() async {
+        let store = makeStore()
+        await store.refreshFeedSurface(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(),
+            feedRepository: FakeFeedRepository(responses: [.failure(TestError.expected)])
+        ))
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .failed)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+    }
+
     func testPerformanceFeedCoalescesConcurrentRefreshesAndReusesWarmContent() async {
         let store = makeStore()
         let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
@@ -7406,6 +7841,20 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(store.presentationRevision, revisionAfterFirstSearch)
         XCTAssertEqual(profileRepository.queries, ["so", "so"])
+    }
+
+    func testCachedPeopleRecommendationsHideNewBlocksWithoutAnotherRequest() async {
+        let store = makeStore()
+        let shell = ProfileShell(id: "user_sofia", handle: "sofia", displayName: "Sofia Rivera",
+                                 avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let recommendation = DiscoverPeopleRecommendation(profile: shell, reason: .suggested, rank: 0)
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(recommendations: [recommendation])
+        ))
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations, [recommendation])
+        store.block(userID: shell.id)
+        XCTAssertTrue(store.visibleDiscoverPeopleRecommendations.isEmpty)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([recommendation]))
     }
 
     func testDiscoverPeopleRecommendationsLoadsCachesAndHydratesProfiles() async {
@@ -11902,6 +12351,7 @@ private final class FakeProfileRepository: ProfileRepository {
     private var currentProfileIsSuspended: Bool
     private(set) var queries: [String] = []
     private(set) var profileIDs: [String] = []
+    var suspendRecommendations = false
     private(set) var recommendationLimits: [Int] = []
     private(set) var currentProfileRequestCount = 0
 
@@ -11963,6 +12413,7 @@ private final class FakeProfileRepository: ProfileRepository {
 
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
         recommendationLimits.append(limit)
+        while suspendRecommendations { await Task.yield() }
         if let recommendationError {
             throw recommendationError
         }
@@ -12708,6 +13159,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
 private final class FakeSurfaceSnapshotRepository: SurfaceSnapshotRepository {
     private(set) var calendarRequestCount = 0
     private(set) var listRequestCount = 0
+    var suspendLists = false
     private(set) var socialViewports: [MapViewport] = []
     var listSnapshot = PlaceListsRemoteSnapshot(
         summaries: [], details: [], visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:]
@@ -12720,6 +13172,7 @@ private final class FakeSurfaceSnapshotRepository: SurfaceSnapshotRepository {
 
     func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
         listRequestCount += 1
+        while suspendLists { await Task.yield() }
         return listSnapshot
     }
 

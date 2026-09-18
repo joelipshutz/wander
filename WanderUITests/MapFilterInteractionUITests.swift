@@ -2,6 +2,20 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testInitialSplashDoesNotReturnAfterTabRoundTrip() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderMapCapture", "-WanderUsePerformanceFixtures", "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let loading = app.descendants(matching: .any).matching(identifier: "map.initialLoading").firstMatch
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 3))
+        app.buttons["Profile"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))
+        app.buttons["Map"].firstMatch.tap()
+        XCTAssertFalse(loading.exists)
+        XCTAssertTrue(app.maps.firstMatch.isHittable)
+    }
+
     func testPerformanceFixtureCoversMapKitDuringInitialAccountLoading() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -18,7 +32,8 @@ final class MapFilterInteractionUITests: XCTestCase {
             .matching(identifier: "map.initialLoading")
             .firstMatch
         XCTAssertTrue(loading.waitForExistence(timeout: 3))
-        XCTAssertEqual(loading.label, "Loading your map…")
+        XCTAssertFalse(app.staticTexts["Loading your map…"].exists)
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
         XCTAssertFalse(app.maps.firstMatch.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -386,13 +401,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderUseStorefrontFixtures"
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
         ]
         app.launch()
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["map.filter.featured"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 8))
 
         let pin = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Canyon Lookout Trail,")
@@ -444,9 +462,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 5))
 
         let pin = app.buttons
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "Bar Nido,"))
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Griffith Observatory Trail,"))
             .firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
+
+        // Use the isolated trail marker at the initial camera. Nearby restaurant
+        // markers can be collision-hidden while still exposing accessibility frames.
+        let beforeTap = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        beforeTap.name = "Isolated Griffith trail pin before physical tap"
+        beforeTap.lifetime = .keepAlways
+        add(beforeTap)
 
         // Tap through the map at the rendered pin center. This exercises the
         // gesture bridge instead of dispatching the pin's accessibility action.
@@ -458,7 +483,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 3))
-        XCTAssertTrue(card.label.contains("Bar Nido"))
+        XCTAssertTrue(card.label.contains("Griffith Observatory Trail"), "Selected card: \(card.label)")
 
         let unexpectedRecenterDismissal = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
@@ -727,6 +752,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let add = app.buttons["map.headerAdd"]
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
+        XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
         XCTAssertFalse(add.isHittable)
 
         let feed = app.buttons["Feed"]
@@ -737,6 +763,8 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(add.waitForExistence(timeout: 2))
+        XCTAssertTrue(add.isHittable)
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {

@@ -339,6 +339,8 @@ struct ProfileScreen: View {
                         .environmentObject(backend)
                 }
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
+                    // SwiftUI also evaluates inactive destinations. Keep the
+                    // map projection out of Profile and Settings updates.
                     if showsYourMapPrototype {
                         YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
                             .toolbar(.hidden, for: .tabBar)
@@ -960,6 +962,7 @@ struct ProfileDetailView: View {
                     .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsYourMapPrototype) {
+                // Avoid projecting the member's full map until it is opened.
                 if showsYourMapPrototype {
                     YourMapPrototypeScreen(
                         dataset: yourMapPrototypeDataset,

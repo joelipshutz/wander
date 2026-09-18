@@ -27,6 +27,8 @@ final class ClerkAuthService: AuthSessionProviding {
     private let resolveActiveSessionID: SessionIDResolver
     private let activateSession: SessionActivator
     private let nativeAuthSessionFenceStore: NativeAuthSessionFenceStore
+    private let appleSignInSessionStore: AppleSignInSessionStore
+    private var appleSignInSessionID: String?
     private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
     private let sessionAdoptionTimeoutNanoseconds: UInt64
     private let sessionAdoptionSleeper: SessionAdoptionSleeper
@@ -46,6 +48,7 @@ final class ClerkAuthService: AuthSessionProviding {
         activateSession: @escaping SessionActivator = { try await Clerk.shared.auth.setActive(sessionId: $0) },
         sessionCache: AuthSessionCache = .live,
         nativeAuthSessionFenceStore: NativeAuthSessionFenceStore = .live,
+        appleSignInSessionStore: AppleSignInSessionStore = .live,
         sessionAdoptionRetryDelaysNanoseconds: [UInt64] = [
             200_000_000,
             600_000_000,
@@ -63,6 +66,8 @@ final class ClerkAuthService: AuthSessionProviding {
         self.activateSession = activateSession
         self.sessionCache = sessionCache
         self.nativeAuthSessionFenceStore = nativeAuthSessionFenceStore
+        self.appleSignInSessionStore = appleSignInSessionStore
+        self.appleSignInSessionID = appleSignInSessionStore.load()
         switch nativeAuthSessionFenceStore.load() {
         case .missing:
             self.nativeAuthSessionFence = nil
@@ -141,7 +146,7 @@ final class ClerkAuthService: AuthSessionProviding {
                         continuation.yield(.signedOut)
                     case .sessionChanged:
                         guard let self else { return }
-                        let state = Self.currentClientState()
+                        let state = self.currentClientState()
                         guard self.shouldPublishSessionChange(observedState: state) else {
                             continue
                         }
@@ -239,8 +244,9 @@ final class ClerkAuthService: AuthSessionProviding {
                 || nativeAuthSessionFence?.requiredSessionID == session.clerkSessionID {
                 setNativeAuthSessionFence(nil)
             }
-            sessionCache.save(session.authSession)
-            state = .signedIn(session.authSession)
+            let authSession = onboardingSession(session.authSession, clerkSessionID: session.clerkSessionID)
+            sessionCache.save(authSession)
+            state = .signedIn(authSession)
             #if DEBUG
             WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.authSession.userID), privacy: .public)")
             #endif
@@ -344,7 +350,8 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.sessionUnavailable
         }
         let adoption = try await adoptCompletedNativeAuthSession(
-            expectedSessionID: completedSessionID
+            expectedSessionID: completedSessionID,
+            isAppleSignIn: provider == .apple
         )
         return NativeSocialAuthResult(
             outcome: .completed,
@@ -361,7 +368,8 @@ final class ClerkAuthService: AuthSessionProviding {
     /// require the exact session Clerk created, and cap the entire operation;
     /// ordinary foreground refreshes remain single-shot.
     func adoptCompletedNativeAuthSession(
-        expectedSessionID: String
+        expectedSessionID: String,
+        isAppleSignIn: Bool = false
     ) async throws -> NativeAuthSessionAdoption {
         guard pendingNativeAuthSessionID == nil else {
             throw AuthSessionError.sessionUnavailable
@@ -376,6 +384,9 @@ final class ClerkAuthService: AuthSessionProviding {
             state = .signedOut
             throw AuthSessionError.sessionUnavailable
         }
+
+        appleSignInSessionID = isAppleSignIn ? expectedSessionID : nil
+        appleSignInSessionStore.save(appleSignInSessionID)
 
         let deadline = DispatchTime.now().uptimeNanoseconds
             &+ sessionAdoptionTimeoutNanoseconds
@@ -821,12 +832,18 @@ final class ClerkAuthService: AuthSessionProviding {
         )
     }
 
-    private static func currentClientState() -> AuthState {
+    private func currentClientState() -> AuthState {
         guard let session = Clerk.shared.session,
-              isActiveSessionStatus(session.status),
+              Self.isActiveSessionStatus(session.status),
               let user = session.user
         else { return .signedOut }
-        return .signedIn(authSession(from: user))
+        return .signedIn(onboardingSession(Self.authSession(from: user), clerkSessionID: session.id))
+    }
+
+    private func onboardingSession(_ session: AuthSession, clerkSessionID: String) -> AuthSession {
+        var result = session
+        result.isAppleSignIn = appleSignInSessionID == clerkSessionID ? true : nil
+        return result
     }
 
     static func isActiveSessionStatus(_ status: ClerkKit.Session.SessionStatus) -> Bool {

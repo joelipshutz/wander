@@ -290,18 +290,28 @@ final class MapPlaceListPickerTests: XCTestCase {
             XCTAssertEqual(selected.size, CGSize(width: 22, height: 25))
             XCTAssertEqual(unselected.size, selected.size)
             XCTAssertEqual(selected.renderingMode, .alwaysOriginal)
-            XCTAssertEqual(unselected.renderingMode, .alwaysOriginal)
+            XCTAssertEqual(unselected.renderingMode, .alwaysTemplate)
             XCTAssertEqual(try paperFillRGBA(selected), [240, 90, 60, 255])
-            XCTAssertEqual(try paperFillRGBA(unselected), isDark ? [242, 233, 219, 255] : [20, 23, 20, 255])
+            XCTAssertEqual(try paperFillRGBA(unselected, tintColor: .white), [255, 255, 255, 255])
+            XCTAssertEqual(try paperFillRGBA(unselected, tintColor: .black), [0, 0, 0, 255])
             XCTAssertTrue(selected === PlaceListSymbol.paperTabImage(isSelected: true, isDark: isDark))
         }
     }
 
-    private func paperFillRGBA(_ image: UIImage) throws -> [UInt8] {
-        let source = try XCTUnwrap(image.cgImage)
+    private func paperFillRGBA(_ image: UIImage, tintColor: UIColor = .white) throws -> [UInt8] {
+        // Sample UIKit's displayed pixels: cgImage contains the untinted template mask.
+        let imageView = UIImageView(image: image)
+        imageView.tintColor = tintColor
+        imageView.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        let rendered = UIGraphicsImageRenderer(size: image.size, format: format).image { context in
+            imageView.layer.render(in: context.cgContext)
+        }
+        let source = try XCTUnwrap(rendered.cgImage)
         // A center pixel between rows measures opaque sheet fill without edge antialiasing.
         let crop = try XCTUnwrap(source.cropping(to: CGRect(
-            x: 10 * image.scale, y: 9 * image.scale, width: 1, height: 1
+            x: 10 * rendered.scale, y: 9 * rendered.scale, width: 1, height: 1
         )))
         var rgba = [UInt8](repeating: 0, count: 4)
         try rgba.withUnsafeMutableBytes { bytes in

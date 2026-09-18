@@ -1,8 +1,94 @@
 # REC-484: Foreground and cold-start responsiveness
 
 Issue: [REC-484](https://linear.app/recme/issue/REC-484/eliminate-prolonged-foreground-and-cold-start-stalls).
-Profiled baseline: `1666093fb`. Integrated base: `042f804d6`.
+Initial profiled baseline: `1666093fb`. Current integrated base: `5bf0870da`.
 Branch: `codex/rec-484-foreground-performance`.
+
+## Launch preparation and refresh follow-up
+
+This pass integrates `origin/main` through `5bf0870da`, including REC-534's
+Profile responsiveness work. Earlier sections below describe historical
+captures and candidates, not validation of this implementation.
+
+The launch artwork now stays visible for a minimum of two seconds. Local map
+content remains mounted and source hydration starts underneath the cover,
+instead of starting after reveal. Slow or offline network requests do not
+extend the cover indefinitely. The tab bar and native map interaction and
+accessibility are unavailable while covered, then restored on reveal. Completed
+initial source preparation is reused for the same signed-in account; returning
+to Map does not repeat the splash or initial hydration. Account changes and
+incomplete preparation cannot reuse a completed-account marker.
+
+Concurrent current-profile and list refresh callers now share both fetch and
+application work. Account changes cancel these tasks and stale completions
+cannot apply. Identical profile and shared-inbox responses skip publication and
+persistence. A bounded, immutable list snapshot comparison skips identical
+application only while account and presentation revision also match. Local
+edits, changed remote content, and access revocation still invalidate it.
+
+Shared reads are also canceled when their owning app root disappears, while
+completed same-account caches survive ordinary disappearance. Identity changes
+clear those caches explicitly. A mounted-root regression first failed because
+the profile refresh completed successfully after removal of its owning root;
+the root now invokes the store's shared-read cancellation during teardown.
+
+List item replacement publishes one updated array. Successful place/check-in
+acknowledgements persist their related identities together. Import duplicate
+reconciliation builds one name/provider index per input, preserving input-order
+precedence and coordinate semantics, then publishes changed rows once. Empty
+or unchanged reconciliation does not invalidate the app's other surfaces.
+The retained-map projection also shares main's selection authorization cache.
+No backend schema or analytics event contract changes are introduced.
+
+Four regressions failed against the previous implementation for repeated
+refresh application and stale-account application, then passed with the fixes.
+Focused validation passed 81 unit tests, including all 18 foreground tests.
+Four launch UI checks passed on both iPhone 17 and smaller iPhone 17e simulators
+running iOS 26.5: covered interaction, usable reveal, bounded reveal with stalled
+refresh, and returning from another tab without another splash. Both cover
+screenshots were visually reviewed. XcodeGen and whitespace checks passed.
+
+The first integrated full run completed with 2,204 passes, 21 failures, and two
+skips: 2,070 unit passes plus one obsolete retained-map source assertion, and
+134 UI passes plus 20 failures and two skips. This run predates the final splash
+interaction correction and root-lifecycle cancellation. It is not a passing
+full-suite result. The obsolete source assertion has been updated to follow the
+shared authorized projection.
+
+The UI run exposed conflicts between splash interaction gating and existing
+map controls. The map canvas now owns an accessibility container so its launch
+gate does not override descendant visibility. Tab-bar visibility follows the
+existing full-profile blocking state and returns to automatic handling after
+reveal. The interactive glass Add button is removed while More Filters is open,
+with an inert placeholder preserving dock geometry; its regression verifies
+that it leaves the accessibility tree and becomes usable again after returning.
+
+Final validation:
+
+- The corrected-source recheck passed all 2,072 unit tests, including all 18
+  foreground regressions and root-removal cancellation. Its 39 UI cases passed
+  35 and failed four: hidden Add interaction, warm Feed timing, check-in calendar
+  timing, and pinned Profile-header navigation.
+- After the final Add correction, all 115 focused checks passed: 107 map unit
+  tests and eight UI tests covering More Filters, all four launch-cover paths,
+  and place-profile round trips.
+- A final run without rebuilding or concurrent REC-484 compilation passed the
+  warm Feed and pinned Profile-header cases with unchanged assertions. The
+  check-in calendar case still failed: 5.344 seconds against its 1.0-second
+  end-to-end UI-test limit. This remains unresolved, is not established to be
+  pre-existing, and must not be treated as a passing performance check.
+- The full suite has not been rerun to green after these corrections. All
+  failures from the original integrated full run have been rechecked; the
+  calendar timing case is the remaining reproduced failure.
+- The final signed Debug iPhone build succeeded and strict signature
+  verification passed: version 1.0, build 175, arm64 debug UUID
+  `7BC99740-932D-3A28-8EF3-8E8BFB0B9172`. XcodeGen and whitespace checks passed.
+
+The PR remains a draft phone-test candidate. Next manual checks are cold launch,
+first visits and returns to each tab, and a 35-second background return, watching
+the first 30 seconds after reveal. Device profiling is not required for this
+pass unless severe lag remains. These automated results do not prove sustained
+physical-device responsiveness or establish that all hangs are resolved.
 
 ## Device evidence
 

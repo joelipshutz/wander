@@ -7,6 +7,42 @@ import XCTest
 @MainActor
 final class ForegroundPerformanceTests: XCTestCase {
 
+    func testImportDuplicateIndexNormalizesEachInputOnceAndPreservesInputOrder() {
+        var normalizations = 0
+        let places = (0..<1_500).map { index in
+            PlaceImportExistingPlace(userPlaceID: "save-\(index)", name: "Place \(index)",
+                                     latitude: nil, longitude: nil, sourceProvider: "fixture", sourceProviderPlaceID: "id-\(index)")
+        }
+        let index = PlaceImportExistingPlaceIndex(places: places) { name in
+            normalizations += 1
+            return name.lowercased()
+        }
+        for offset in 0..<100 {
+            let candidate = PlaceCandidate(id: "candidate-\(offset)", name: "Place \(offset)", category: "coffee",
+                                           latitude: nil, longitude: nil,
+                                           sourceProvider: "fixture", sourceProviderPlaceID: "id-1499", confidence: 1)
+            XCTAssertEqual(index.firstMatch(for: candidate)?.userPlaceID, "save-\(offset)")
+        }
+        XCTAssertEqual(normalizations, 1_600, "Do not normalize the same places for each imported candidate")
+    }
+
+    func testImportDuplicateIndexKeepsCoordinatesProviderAndDiacriticMatching() {
+        let places = [
+            PlaceImportExistingPlace(userPlaceID: "far", name: "Café!", latitude: 40, longitude: 1, sourceProvider: nil, sourceProviderPlaceID: nil),
+            PlaceImportExistingPlace(userPlaceID: "near", name: "CAFE", latitude: 34, longitude: -118, sourceProvider: "mapkit", sourceProviderPlaceID: "same"),
+            PlaceImportExistingPlace(userPlaceID: "no-coordinate", name: "Cafe", latitude: nil, longitude: nil, sourceProvider: nil, sourceProviderPlaceID: nil)
+        ]
+        let index = PlaceImportExistingPlaceIndex(places: places)
+        func candidate(_ name: String, _ provider: String = "mapkit", _ providerID: String? = nil) -> PlaceCandidate {
+            PlaceCandidate(id: "candidate", name: name, category: "coffee", latitude: 34.0001, longitude: -118,
+                           sourceProvider: provider, sourceProviderPlaceID: providerID, confidence: 1)
+        }
+        XCTAssertEqual(index.firstMatch(for: candidate("café"))?.userPlaceID, "near")
+        XCTAssertEqual(index.firstMatch(for: candidate("renamed", "mapkit", "same"))?.userPlaceID, "near")
+        XCTAssertNil(index.firstMatch(for: candidate("renamed", "google", "same")))
+        XCTAssertEqual(PlaceImportExistingPlaceIndex(places: [places[0], places[2]]).firstMatch(for: candidate("cafe"))?.userPlaceID, "no-coordinate")
+    }
+
     func testGroupingBuildsKeysOncePerDistinctPlaceInstance() {
         let store = WanderStore(fixtures: WanderFixtures.seed())
         let visible = store.visiblePlaces()

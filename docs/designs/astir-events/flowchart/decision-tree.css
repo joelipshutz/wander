@@ -1,0 +1,38 @@
+/* The content is unchanged; conditions and outcomes now own the spatial layout. */
+.canvas-world>.flow-section{padding:26px;background:#fbfcf8}
+.canvas-world .section-heading{max-width:1080px;margin-bottom:32px}
+.canvas-world .section-sub{max-width:900px}
+.decision-field{position:relative;isolation:isolate}
+.tree-source-context{max-width:960px;margin:0 0 24px;font-size:12px;line-height:1.6;color:#768573}.tree-source-context summary{cursor:pointer;font-size:11px}.tree-source-context p{padding:6px 0;border-bottom:1px solid #e4e9de}
+.tree-edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:0}
+.tree-node{position:absolute!important;margin:0!important;z-index:1}
+.canvas-world .screen.tree-node{width:260px;min-width:260px;background:#fffefb}
+.canvas-world .screen.tree-node .screen-image{width:186px}
+.canvas-world .screen.tree-node .variant-preview .screen-image{width:100px}
+.canvas-world .screen.tree-node .preview-figure.is-expanded .screen-image{width:100%}
+.tree-question{width:280px;min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 38px;color:#264c37;isolation:isolate;cursor:grab}
+.tree-question:before{content:"";position:absolute;inset:0;z-index:-1;background:#d6e4d4;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.tree-question:after{content:"";position:absolute;inset:2px;z-index:-1;background:#edf3e7;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.tree-question h3{font-size:16px;line-height:1.3;font-weight:600;letter-spacing:-.2px;margin:7px 0 0}
+.tree-kicker{font:650 9px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:1.2px;text-transform:uppercase;color:#6a8369}
+.tree-note{width:260px;padding:18px 20px;background:#eef2f3;border:1px solid #c8d4d8;border-radius:10px}
+.tree-note h3{font-size:15px;line-height:1.5;font-weight:550;margin:8px 0 0;color:#4d6871}
+.tree-node.status-open:before{background:#d2ad67}.tree-node.status-open:after{background:#fff4d9}
+.tree-node.status-open.tree-note{background:#fff4d9;border-color:#d2ad67}
+.status-open .tree-kicker{color:#9b762c}
+.tree-node.status-reference{border-style:dashed}
+.tree-continuation{font-size:12px;line-height:1.5;font-weight:600;color:#507284;border-bottom:1px dashed #d0dbe0;padding:0 0 10px;margin-bottom:12px}
+.canvas-world .screen-echo{border-color:#bacdd6;background:#f7fafb}
+.tree-destination{font-size:10px;line-height:1.5;letter-spacing:.3px;color:#6e8590;margin:12px 0 0}
+.branch-context{font-size:11px;font-weight:600;line-height:1.45;color:#55764e;padding:8px 10px;margin:-4px -4px 12px;background:#edf3e7;border-radius:5px}
+.tree-review-status{font-size:10px;line-height:1.5;color:#92722f;background:#fff4d9;border:1px dashed #d9b971;border-radius:4px;padding:5px 8px;margin-bottom:10px}
+.edge-label{display:table;margin:auto;max-width:232px;background:#fbfcf8;border:1px solid #d7e0d4;border-radius:6px;padding:5px 9px;text-align:center;font:550 11px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#5a6f5b;overflow-wrap:anywhere}
+.edge-label.label-yes{background:#eef7eb;color:#397753;border-color:#bcd8b8}
+.edge-label.label-no{background:#fff1e9;color:#a5644f;border-color:#e6c4b2}
+.edge-label.label-reference{background:#fff7e1;color:#8e743b;border-style:dashed}
+.edge-label.label-state{background:#f0f6f9;color:#507384;border-color:#c8d7df}
+.edge-label.label-retry{background:#f0f1f4;color:#73818f;border-style:dashed}
+.tree-edge.route-highlight path{stroke-width:4.5;filter:drop-shadow(0 0 4px #88a69366)}
+.tree-edge.route-highlight .edge-label{font-weight:750;border-width:2px}
+.tree-question:focus-visible{outline:3px solid #cb8667;outline-offset:4px}
+@media print{.canvas-world>.flow-section{position:relative!important;width:100%!important;overflow:hidden}.decision-field{transform:scale(.18);transform-origin:top left;height:1900px!important}.tree-edges{display:block!important}}

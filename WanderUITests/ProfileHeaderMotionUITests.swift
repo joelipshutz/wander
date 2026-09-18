@@ -86,6 +86,31 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         capture("Pinned photo after full-screen return")
     }
 
+    func testPhotoRemainsVisibleThroughPartialReverseAndResnapsAtTop() {
+        let app = launch(["-ProfileHeaderMotion", "compact"])
+        let photo = app.buttons["profile.header.photo"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 15))
+        let originalFrame = photo.frame
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.65))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.40))
+        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertEqual(photo.frame.minY, originalFrame.minY, accuracy: 2)
+        capture("Photo above header after downward scroll")
+
+        // Short, slow steps stop inside the former bio-triggered disappearance
+        // interval instead of skipping directly back to the top with a fling.
+        for step in 0..<5 {
+            let reverseEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.45))
+            end.press(forDuration: 0.1, thenDragTo: reverseEnd, withVelocity: .slow, thenHoldForDuration: 0.5)
+            XCTAssertEqual(photo.frame.width, originalFrame.width, accuracy: 1)
+            XCTAssertEqual(photo.frame.minY, originalFrame.minY, accuracy: 2)
+            XCTAssertTrue(photo.isHittable)
+            capture("Photo returning step \(step)")
+        }
+        photo.tap()
+        XCTAssertTrue(app.buttons["Close profile photo"].waitForExistence(timeout: 5))
+    }
+
     private func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs"] + arguments
@@ -94,6 +119,13 @@ final class ProfileHeaderMotionUITests: XCTestCase {
     }
 
     private func assertPinned(name: XCUIElement, photo: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        // Scroll deceleration can finish before the separate header animation.
+        // Check the settled geometry instead of sampling an intermediate frame.
+        let settled = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in abs(name.frame.midY - photo.frame.midY) <= 3 },
+            object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 3), .completed, file: file, line: line)
         XCTAssertEqual(name.frame.midY, photo.frame.midY, accuracy: 3, file: file, line: line)
         XCTAssertGreaterThan(photo.frame.minY, 40, file: file, line: line)
     }

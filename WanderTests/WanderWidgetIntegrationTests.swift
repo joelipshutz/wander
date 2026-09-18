@@ -335,6 +335,24 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         )
     }
 
+    func testSharedPlaceLinkWaitsForFeedProfileDismissal() throws {
+        let profile = WanderDeepLinkPresentationToken(surface: .feedPlaceProfile)
+        let route = WanderDeepLinkRoute.sharedPlace(placeID: "linked-place")
+        let requestID = UUID()
+        var registry = WanderDeepLinkPresentationRegistry()
+        var handoff = WanderDeepLinkHandoffCoordinator()
+
+        XCTAssertTrue(registry.presentationDidAppear(profile))
+        handoff.begin(requestID: requestID, route: route,
+                      awaitingDismissals: registry.tokensAwaitingDismissal)
+        XCTAssertNil(handoff.takeReadyRoute(requestID: requestID))
+        XCTAssertTrue(registry.presentationWillDisappear(profile))
+        XCTAssertNil(handoff.takeReadyRoute(requestID: requestID))
+        let dismissed = try XCTUnwrap(registry.sheetDidDismiss(surface: .feedPlaceProfile))
+        XCTAssertEqual(handoff.acknowledgeDismissal(dismissed), route)
+        XCTAssertNil(handoff.acknowledgeDismissal(dismissed))
+    }
+
     func testPresentationRegistryMapsDismissCallbackToOldestPhysicalGeneration() {
         let olderAdd = WanderDeepLinkPresentationToken(
             surface: .add,

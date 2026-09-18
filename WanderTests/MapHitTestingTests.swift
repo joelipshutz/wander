@@ -378,7 +378,7 @@ final class MapHitTestingTests: XCTestCase {
     func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
         XCTAssertEqual(
             MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),
-            0.35,
+            2,
             accuracy: 0.001
         )
         XCTAssertEqual(
@@ -386,10 +386,10 @@ final class MapHitTestingTests: XCTestCase {
                 arguments: [
                     "Wander",
                     MapInitialLoadingPolicy.testDelayArgument,
-                    "1750"
+                    "2750"
                 ]
             ),
-            1.75,
+            2.75,
             accuracy: 0.001
         )
         for invalidArguments in [
@@ -402,22 +402,22 @@ final class MapHitTestingTests: XCTestCase {
         ] {
             XCTAssertEqual(
                 MapInitialLoadingPolicy.minimumVisibleInterval(arguments: invalidArguments),
-                0.35,
+                2,
                 accuracy: 0.001
             )
         }
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
                 elapsed: 0.2,
-                minimumVisibleInterval: 0.35
+                minimumVisibleInterval: 2
             ),
-            0.15,
+            1.8,
             accuracy: 0.001
         )
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
-                elapsed: 1,
-                minimumVisibleInterval: 0.35
+                elapsed: 3,
+                minimumVisibleInterval: 2
             ),
             0,
             accuracy: 0.001
@@ -425,12 +425,11 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
                 elapsed: -1,
-                minimumVisibleInterval: 0.35
+                minimumVisibleInterval: 2
             ),
-            0.35,
+            2,
             accuracy: 0.001
         )
-        XCTAssertEqual(MapInitialLoadingPolicy.postRevealHydrationDelay, 0.25, accuracy: 0.001)
         XCTAssertEqual(
             MapInitialLoadingPolicy.refreshStallInterval(arguments: []),
             0,
@@ -2019,6 +2018,141 @@ final class MapSelectionMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testRetainedSelectionCacheReusesGroupingAcrossRepeatedMapReads() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let selected = try XCTUnwrap(places.first)
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        for _ in 0..<1_000 {
+            let result = cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: {
+                    reads += 1
+                    return places
+                }
+            )
+            XCTAssertEqual(result.place?.userPlace.id, selected.userPlace.id)
+            XCTAssertTrue(try XCTUnwrap(result.group).places.contains {
+                $0.userPlace.id == selected.userPlace.id
+            })
+        }
+        XCTAssertEqual(reads, 1)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheRevokesAllRetainedContentOnRevisionChange() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let group = try XCTUnwrap(VisiblePlaceGrouping.groups(
+            from: places, currentUserID: store.currentUser.id
+        ).first)
+        let cache = MapRetainedSelectionCache()
+        let before = cache.value(
+            sourceIdentity: ObjectIdentifier(store), revision: 1,
+            currentUserID: store.currentUser.id, retainedPlace: group.primary,
+            retainedGroup: group, submittedGroups: [group], authorizedPlaces: { places }
+        )
+        XCTAssertNotNil(before.place)
+        XCTAssertNotNil(before.group)
+        XCTAssertFalse(before.submittedGroups.isEmpty)
+        let revokedIDs = Set(group.places.map(\.userPlace.id))
+        let after = cache.value(
+            sourceIdentity: ObjectIdentifier(store), revision: 2,
+            currentUserID: store.currentUser.id, retainedPlace: group.primary,
+            retainedGroup: group, submittedGroups: [group], authorizedPlaces: {
+                places.filter { !revokedIDs.contains($0.userPlace.id) }
+            }
+        )
+        XCTAssertNil(after.place)
+        XCTAssertNil(after.group)
+        XCTAssertTrue(after.submittedGroups.isEmpty)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheHonorsRealStoreBlockImmediately() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let selected = try XCTUnwrap(store.visiblePlaces().first { $0.userPlace.userID == "user_ryan" })
+        let cache = MapRetainedSelectionCache()
+        func read() -> MapRetainedSelectionCache.Selection {
+            cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: { store.visiblePlaces() }
+            )
+        }
+        XCTAssertNotNil(read().place)
+        let revision = store.presentationRevision
+        store.block(userID: "user_ryan")
+        XCTAssertNotEqual(store.presentationRevision, revision)
+        XCTAssertNil(read().place)
+        XCTAssertNil(read().group)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheInvalidatesForAccountStoreAndRouteChanges() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let replacementStore = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let groups = VisiblePlaceGrouping.groups(from: places, currentUserID: store.currentUser.id)
+        let group = try XCTUnwrap(groups.first)
+        let second = try XCTUnwrap(places.first { $0.userPlace.id != group.primary.userPlace.id })
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        func read(source: WanderStore, user: String, place: VisiblePlace?, retained: VisiblePlaceGroup?, submitted: [VisiblePlaceGroup]) {
+            _ = cache.value(
+                sourceIdentity: ObjectIdentifier(source), revision: 1,
+                currentUserID: user, retainedPlace: place, retainedGroup: retained,
+                submittedGroups: submitted, authorizedPlaces: {
+                    reads += 1
+                    return places
+                }
+            )
+        }
+        read(source: store, user: "one", place: group.primary, retained: nil, submitted: [])
+        read(source: store, user: "two", place: group.primary, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 2)
+        read(source: replacementStore, user: "two", place: group.primary, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 3)
+        read(source: replacementStore, user: "two", place: second, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 4)
+        read(source: replacementStore, user: "two", place: second, retained: group, submitted: [])
+        XCTAssertEqual(reads, 5)
+        read(source: replacementStore, user: "two", place: second, retained: group, submitted: [group])
+        XCTAssertEqual(reads, 6)
+        read(source: replacementStore, user: "two", place: nil, retained: nil, submitted: [])
+        XCTAssertEqual(reads, 7)
+    }
+
+    @MainActor
+    func testRetainedSelectionCacheRefreshesFeaturedCorpusWithoutStoreMutation() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let places = store.visiblePlaces()
+        let selected = try XCTUnwrap(places.first)
+        let cache = MapRetainedSelectionCache()
+        var reads = 0
+        func read(featuredRevision: UInt64, accountID: String, corpus: [VisiblePlace]) -> MapRetainedSelectionCache.Selection {
+            cache.value(
+                sourceIdentity: ObjectIdentifier(store), revision: store.presentationRevision,
+                featuredRevision: featuredRevision, featuredAccountID: accountID,
+                currentUserID: store.currentUser.id, retainedPlace: selected,
+                retainedGroup: nil, submittedGroups: [], authorizedPlaces: {
+                    reads += 1
+                    return corpus
+                }
+            )
+        }
+        XCTAssertNotNil(read(featuredRevision: 1, accountID: "first", corpus: places).place)
+        XCTAssertNotNil(read(featuredRevision: 1, accountID: "first", corpus: places).place)
+        XCTAssertEqual(reads, 1)
+        XCTAssertNil(read(featuredRevision: 2, accountID: "first", corpus: []).place)
+        XCTAssertEqual(reads, 2)
+        XCTAssertNotNil(read(featuredRevision: 2, accountID: "second", corpus: places).place)
+        XCTAssertEqual(reads, 3)
+    }
+
+    @MainActor
     func testActivePinRetentionDropsAGroupAfterAuthorizationIsRevoked() throws {
         let store = WanderStore(fixtures: WanderFixtures.seed())
         let currentUserID = store.currentUser.id
@@ -2516,7 +2650,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.view(for: mapView.userLocation)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
-        XCTAssertTrue(map.contains("retainingGroup: authorizedRoutedGroup"))
+        XCTAssertTrue(map.contains("authorizedSelection: authorized"))
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
         XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
@@ -3815,7 +3949,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(socialOutline.arcs.map(\.trimTo), [0.472, 0.972])
         XCTAssertEqual(socialOutline.arcs.map(\.rotationDegrees), [-90, -90])
         XCTAssertEqual(socialOutline.arcs[0].dashPattern, [])
-        XCTAssertEqual(socialOutline.arcs[1].dashPattern, [1.5, 3.5])
+        XCTAssertEqual(socialOutline.arcs[1].dashPattern, [1.5, 5.5])
     }
 
     func testRyanBeenJoeBeenAndMayaWannaProducePersonalRingAndSplitSocialHalo() throws {
@@ -3872,7 +4006,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 24)
         XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
-        XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
+        XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 5.5])
         XCTAssertEqual(MapPinVisualMetrics.activeTitleClearance, 2)
         XCTAssertGreaterThanOrEqual(
             MapPinVisualMetrics.activeTitleVerticalOffset(
