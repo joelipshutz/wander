@@ -256,7 +256,32 @@ enum AppEntryStateResolver {
                 firstVisitWalkthroughEligible: localState.shouldEnableFirstVisitWalkthrough
             )
         }
-        return .onboarding(session: session, step: localState.nextStep)
+        return .onboarding(
+            session: onboardingSession(session, remoteProfile: remoteProfile),
+            step: localState.nextStep
+        )
+    }
+
+    static func onboardingSession(_ session: AuthSession, remoteProfile: LocalProfile?) -> AuthSession {
+        guard session.isAppleSignIn == true else { return session }
+        let profileName = remoteProfile?.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The webhook seeds nameless accounts with their allocated handle.
+        // That placeholder should follow the username selected during onboarding.
+        let savedName = profileName.flatMap { name in
+            !name.isEmpty && name != remoteProfile?.handle ? name : nil
+        }
+        let providerName = session.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = savedName ?? providerName.flatMap {
+            $0.isEmpty || $0 == session.handle ? nil : String($0.prefix(80))
+        }
+        return AuthSession(
+            userID: session.userID,
+            displayName: name,
+            handle: remoteProfile?.handle ?? session.handle,
+            email: session.email,
+            phoneNumber: session.phoneNumber,
+            isAppleSignIn: true
+        )
     }
 
     static func offlineState(
@@ -284,7 +309,8 @@ enum AppEntryStateResolver {
         localState.nextStep != .identity
             || ProfileIdentityDraft(
                 displayName: session.displayName ?? "",
-                handle: session.handle ?? ""
+                handle: session.handle ?? "",
+                usesAppleSignIn: session.isAppleSignIn == true
             ).isValid
     }
 }
@@ -499,7 +525,8 @@ final class AppEntryCoordinator: ObservableObject {
     private func validAuthIdentity(_ session: AuthSession) -> Bool {
         ProfileIdentityDraft(
             displayName: session.displayName ?? "",
-            handle: session.handle ?? ""
+            handle: session.handle ?? "",
+            usesAppleSignIn: session.isAppleSignIn == true
         ).isValid
     }
 }
