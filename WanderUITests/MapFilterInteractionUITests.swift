@@ -21,13 +21,21 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertEqual(loading.label, "Opening Astir")
         XCTAssertFalse(app.staticTexts["Loading your map…"].exists)
         XCTAssertFalse(loading.progressIndicators.firstMatch.exists)
-        XCTAssertFalse(app.maps.firstMatch.isHittable)
+        // MapKit's virtual accessibility map can report hittable through a
+        // covering view. Exercise a real gesture and check its effect instead.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
+            .press(forDuration: 0.7)
+        XCTAssertTrue(loading.exists)
         XCTAssertFalse(app.tabBars.firstMatch.exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-537 uninterrupted launch artwork while Map loads"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["map.selectedPlaceCard"].exists)
+        XCTAssertTrue(app.maps.firstMatch.isHittable)
     }
 
     func testPerformanceFixtureRevealsUsableMapAfterInitialLoading() {

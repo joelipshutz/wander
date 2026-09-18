@@ -1933,7 +1933,6 @@ struct MapScreen: View {
             ZStack(alignment: .bottom) {
                 NativeMapView(
                     attributionBottomClearance: mapSearchDockClearance,
-                    isInteractionEnabled: hasRevealedInitialMap,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -6472,7 +6471,6 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
-    let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6567,8 +6565,6 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
-            mapView.isUserInteractionEnabled = parent.isInteractionEnabled
-            mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
             if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
                 mapView.layoutMargins = UIEdgeInsets(
                     top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
