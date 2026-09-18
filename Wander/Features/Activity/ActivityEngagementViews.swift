@@ -355,6 +355,8 @@ struct ActivityPostcardView: View {
     var showsCommentButton = true
     var showsEngagementActions = true
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
+    var activityGroup: FeedActivityGroup? = nil
+    var openActivityList: ((LocalPlaceList) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -389,6 +391,10 @@ struct ActivityPostcardView: View {
                         )
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Note: \(note)")
+                }
+
+                if let activityGroup {
+                    FeedActivityDisclosure(group: activityGroup, openList: openActivityList)
                 }
 
                 if showsEngagementActions {

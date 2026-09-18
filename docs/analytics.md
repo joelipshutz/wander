@@ -74,7 +74,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
 | `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
 | `place_import_matching_completed` | Every item in that pasted import finishes local matching | aggregate `batch_count`, `matched_count`, `needs_review_count` |
-| `place_saved` | A new place save is created | `source_type`, `visibility`, `status` |
+| `place_saved` | A new place save or independent repeat Wanna is created; retries of the same Wanna do not emit again | `source_type`, `visibility`, `status` |
 | `check_in_created` | A visit is created | `is_repeat`, `visibility`, `date_bucket` |
 | `activity_like_changed` | Like state succeeds locally/remotely | `is_liked`, `outcome` |
 | `activity_comment_created` | Comment succeeds locally/remotely | `outcome` |
@@ -112,6 +112,8 @@ a recipient identifier.
 least one active device token. The zero bucket is therefore meaningful. The
 snapshot RPC performs the per-recipient calculation inside Supabase and returns
 only aggregates to the Edge Function/PostHog.
+
+Every new Wanna, including repeats at the same place, uses the existing save-streak celebration events. Retrying or editing that record does not emit another save or celebration.
 
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
 

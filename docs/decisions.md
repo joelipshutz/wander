@@ -1,8 +1,41 @@
 # Decisions
 
-Last updated: 2026-09-06
+Last updated: 2026-09-15
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Astir Events engineering direction (REC-467)
+
+The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
+plans the complete Events journey with two changing work lanes: parallel backend/history
+and native/Clip/web foundations, then before-event/admission and after-event/history.
+Keep the existing Supabase identity, canonical place and visit history. App Clip/browser
+RSVP and management precede the required app QR at the door. Admission, explicit
+check-in and historical completion remain distinct. Issued waitlist offers hold seats;
+manual pending review and phone verification do not. Use one full-access Team admin
+console role and a prepared offline roster with durable reconciliation.
+
+The [engineering plan](designs/astir-events/engineering-plan.md) records exact D1–D19
+approvals, including code allowance, rescheduling and registration deadlines. This
+entry approves no additional operating default and claims no implemented Events code.
+[Open decisions](designs/astir-events/engineering-open-decisions.md) remain explicit.
+
+## Feed activity grouping (REC-494)
+
+The Feed combines already-visible check-in, Wanna, and list-addition events from
+the same actor and canonical place within 30 minutes of the first event. The
+window does not slide. A second check-in starts a new group; list creation,
+missing-place events, and ambiguous legacy social saves remain separate.
+Check-in leads over Wanna, then list addition. Group identity and Feed ordering
+stay anchored to the first event, so later organization does not bump the card.
+
+One card shows the place artwork and headline, with visible list context and an
+inline **View activity / Hide activity** disclosure. Expanded rows show the
+chronological action and timestamp and open the original post or visible list.
+Original event IDs, likes, comments, shares, and authorization remain intact;
+the main action row belongs to the headline event. No conversations or stored
+events are merged. Grouping covers the events loaded in the current Feed page,
+and a refresh recomputes it solely from currently visible events.
 
 ## Product Decisions
 
@@ -40,6 +73,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 
 | Decision | Status | Notes |
 |---|---|---|
+| Dark-mode rating colors | Locked for REC-499 | Use the approved neon palette for the liquid rating slider in dark appearance: electric blue at 1, orange at 3, and neon red at 5, interpolating across the existing half-point rating scale. Light appearance retains its original palette; rating values and interaction are unchanged. |
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | Import review details and source identity | Locked for REC-409 | Import row details expand inline using the same save-editor components, mode switching, validation, and local persistence as ordinary Wanna and Check-in saves. A source mention may select up to five concrete candidates with one shared save mode. Place imagery comes from the place-photo pipeline; history uses preserved source artwork when available and monochrome source-brand assets shared by the app and Share extension. History labels remain Matching while either the batch or an item is processing. |
 | Import attention and progress | Locked for REC-409 | The History badge counts each matching import plus each finished import awaiting its first review, once per import rather than per place. Finished outcomes include successful matches, failed source scans, empty results, and saved reports; explicitly cancelled imports are excluded. It sits at the history button’s top right. Opening the grid or dismissing the toast does not clear it; opening that finished import through its history tile or Review action does, including the saved-report destination. Opening a still-matching report does not pre-acknowledge its future results. The optional review timestamp uses the existing owner-scoped device snapshot and remains compatible with older snapshots. Matching progress is transient, based on actual source/hint/row completion; a source URL is not counted as one place, and unknown totals stay indeterminate until extraction returns. No timer simulates resolved places. Each import-sheet presentation selects the content-fit detent afresh while retaining manual expansion. |
@@ -133,3 +167,55 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | M2 local product loop pushed | 2026-06-01 | Commit `962efce`, 18 tests passing, visual QA still pending. |
 | Add agent work log protocol | 2026-06-01 | All agents must update `docs/agent-log.md` before, during, and after non-trivial work. |
 | Retire agent work log protocol | 2026-07-28 | REC-177 supersedes the active diary requirement. The file is frozen as history; Linear and PRs are the current coordination surface. |
+
+## 2026-09-14 — Repeat Wanna saves preserve check-in state (REC-497)
+
+The place-profile right floating action always starts a fresh Wanna. The left
+Check in action keeps its existing behavior and always displays “Check in”,
+including after earlier visits. Repeated Wannas are independent history and Feed
+events; they do not rewrite the parent save. Each completed form creates a new
+record with its own date and details, retained until explicitly deleted. New Wanna
+events sort by their own save time in ALL; only the original pre-check-in Wanna
+summary is grouped as historical.
+Completing a Wanna form flushes the local save before dismissing the editor.
+Remote delivery and reminder reconciliation continue afterward; failed delivery
+retains the same record identity for retry instead of holding the form open.
+Any existing check-in therefore remains authoritative for the map pin, place
+state, rating, and unique-place profile counters. Wanna → Check-in → Wanna
+stays Been and does not increase the profile Wanna count. Repeat Wanna-only
+saves still count as one place. This supersedes REC-357's proposed active-Wanna
+after-check-in relationship rule, without adopting its planning/invitation work.
+
+Repeat Wanna creation uses the same save celebration as an initial save. Every
+owned activity tile exposes its edit pencil. Wanna edits update only that event's
+details and preserve its identity and original activity timestamp, including the
+original Wanna archived by a later check-in. Pending revisions remain durable and
+are protected from stale reads and acknowledgements; edits never trigger a new
+save celebration or change check-in state or unique-place counters. If the last
+check-in is deleted, an edited original Wanna is restored with its own content
+and visibility; later edits keep that Wanna summary consistent.
+
+## 2026-09-17 — Compact people cards and first Feed load (REC-531)
+
+People worth following occupies the former Featured for you position above
+Recent. Its shared cards are 184 points wide and at least 188 points tall at
+standard text sizes: a 48-point circular portrait, name, short accurate follow
+context, and a full-width 44-point Follow control. Handles and bios stay on the
+profile. Cards retain the adaptive Astir palette, Avenir identity text, and
+existing horizontal rail margins. Accessibility sizes widen cards to 240 points
+and allow content to grow vertically. Following and retry feedback stays inside
+the button so standard cards do not jump in height.
+
+Featured's views, models, and original database projection remain available.
+`FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
+request contract; restoring it uses the original RPC. The additive
+`followed_feed(input_include_featured, input_before, input_limit)` overload skips
+Featured's candidate projection when false, while retaining the same authorized
+activity and cursor semantics. Future activity-projection changes must keep both
+overloads aligned and pass `supabase/tests/feed_activity_only.sql`.
+
+People and posts load independently. Existing in-memory feed content remains
+visible during refresh; authorized text can render before media. No new disk
+cache of social content is introduced. Clients fall back to the original RPC
+only when the new overload is absent from the API schema, allowing either
+deployment order without retrying ordinary network or authorization failures.

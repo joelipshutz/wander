@@ -752,8 +752,11 @@ struct FirstVisitWalkthroughStore {
 
     func reset(for userID: String) {
         for surface in WalkthroughSurface.allCases {
-            defaults.removeObject(forKey: progressKey(userID: userID, surface: surface))
-            defaults.removeObject(forKey: completionKey(userID: userID, surface: surface))
+            // A reset is authoritative even when an inherited legacy domain
+            // still supplies old values after removeObject. Persist the fresh
+            // state so lazy migration cannot resurrect a completed journey.
+            defaults.set(0, forKey: progressKey(userID: userID, surface: surface))
+            defaults.set(false, forKey: completionKey(userID: userID, surface: surface))
             legacyVersionedKeys(
                 for: userID,
                 suffix: "\(surface.rawValue).progress"

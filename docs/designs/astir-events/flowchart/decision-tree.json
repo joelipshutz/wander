@@ -1,0 +1,5282 @@
+{
+  "version": 1,
+  "description": "Decisions and labeled outcomes over the unchanged 172 reviewed screen states. Open design choices are not approved runtime policy.",
+  "stages": [
+    {
+      "id": "entry",
+      "title": "How does someone find the event?",
+      "description": "Every invitation, reminder and share identifies the same event. The link never carries the sender’s account or reservation.",
+      "nodes": [
+        {
+          "id": "entry-d-source",
+          "type": "decision",
+          "label": "Starting from an invitation link?"
+        },
+        {
+          "id": "entry-d-code",
+          "type": "decision",
+          "label": "Does this invitation include an event code?"
+        },
+        {
+          "id": "entry-d-installed",
+          "type": "decision",
+          "label": "Does the guest already have Astir?"
+        },
+        {
+          "id": "entry-d-app-return",
+          "type": "decision",
+          "label": "Opening Astir after an earlier RSVP?"
+        },
+        {
+          "id": "invite",
+          "type": "screen",
+          "screenId": "invite"
+        },
+        {
+          "id": "invite-installed",
+          "type": "screen",
+          "screenId": "invite-installed"
+        },
+        {
+          "id": "invite-with-code",
+          "type": "screen",
+          "screenId": "invite-with-code"
+        },
+        {
+          "id": "events-discover",
+          "type": "screen",
+          "screenId": "events-discover"
+        },
+        {
+          "id": "alreadyRSVPed",
+          "type": "screen",
+          "screenId": "alreadyRSVPed"
+        },
+        {
+          "id": "entry-h-discover",
+          "type": "handoff",
+          "label": "Tap a nearby event → full-app detail and current booking",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "entry-h-recover",
+          "type": "handoff",
+          "label": "Find the original account and booking",
+          "targetStage": "install",
+          "targetScreen": "app-recovery-auth"
+        },
+        {
+          "id": "entry-d-opens-app",
+          "type": "decision",
+          "label": "Does the invitation actually open the full Astir app?"
+        },
+        {
+          "id": "entry-d-opens-clip",
+          "type": "decision",
+          "label": "Does the App Clip open successfully?"
+        },
+        {
+          "id": "entry-h-app-screen",
+          "type": "handoff",
+          "label": "Full app event → resolve this account and booking. Preview shows an unresolved account.",
+          "targetStage": "surfaces",
+          "targetScreen": "event-app-unknown"
+        },
+        {
+          "id": "entry-h-clip-screen",
+          "type": "handoff",
+          "label": "App Clip event → resolve this account and booking. Preview shows an unresolved account.",
+          "targetStage": "surfaces",
+          "targetScreen": "event-clip-unknown"
+        },
+        {
+          "id": "entry-h-browser-screen",
+          "type": "handoff",
+          "label": "Browser fallback → resolve this account and booking. Preview shows an unresolved account.",
+          "targetStage": "surfaces",
+          "targetScreen": "event-browser-unknown"
+        }
+      ],
+      "edges": [
+        {
+          "from": "entry-d-source",
+          "to": "entry-d-code",
+          "label": "Yes — invitation",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-source",
+          "to": "entry-d-app-return",
+          "label": "No — starting in Astir",
+          "kind": "no"
+        },
+        {
+          "from": "entry-d-code",
+          "to": "invite-with-code",
+          "label": "Yes — code included",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-code",
+          "to": "entry-d-installed",
+          "label": "No — normal invitation",
+          "kind": "no"
+        },
+        {
+          "from": "entry-d-installed",
+          "to": "invite-installed",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-installed",
+          "to": "invite",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "entry-d-app-return",
+          "to": "alreadyRSVPed",
+          "label": "Yes — recover my RSVP",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-app-return",
+          "to": "events-discover",
+          "label": "No — browse Events",
+          "kind": "no"
+        },
+        {
+          "from": "invite",
+          "to": "entry-d-opens-app",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "invite-installed",
+          "to": "entry-d-opens-app",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "invite-with-code",
+          "to": "entry-d-opens-app",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "events-discover",
+          "to": "entry-h-discover",
+          "label": "Tap the event",
+          "kind": "action"
+        },
+        {
+          "from": "alreadyRSVPed",
+          "to": "entry-h-recover",
+          "label": "Sign in to find my RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "entry-d-opens-app",
+          "to": "entry-h-app-screen",
+          "label": "Yes — full app",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-opens-app",
+          "to": "entry-d-opens-clip",
+          "label": "No — outside the app",
+          "kind": "no"
+        },
+        {
+          "from": "entry-d-opens-clip",
+          "to": "entry-h-clip-screen",
+          "label": "Yes — App Clip",
+          "kind": "yes"
+        },
+        {
+          "from": "entry-d-opens-clip",
+          "to": "entry-h-browser-screen",
+          "label": "No — browser fallback",
+          "kind": "no"
+        }
+      ]
+    },
+    {
+      "id": "surfaces",
+      "title": "Which screen opens for this guest?",
+      "description": "Choose the surface that actually opens, then resolve this viewer’s account and booking. Browser fallback does not prove that the app is absent.",
+      "nodes": [
+        {
+          "id": "surfaces-d-app-open",
+          "type": "decision",
+          "label": "Did the full Astir app open successfully?"
+        },
+        {
+          "id": "surfaces-d-clip-open",
+          "type": "decision",
+          "label": "Did the App Clip open successfully?"
+        },
+        {
+          "id": "surfaces-d-app-identity",
+          "type": "decision",
+          "label": "Is the current account recognized?\nFull Astir app"
+        },
+        {
+          "id": "surfaces-d-clip-identity",
+          "type": "decision",
+          "label": "Is the current account recognized?\nApp Clip"
+        },
+        {
+          "id": "surfaces-d-browser-identity",
+          "type": "decision",
+          "label": "Is the current account recognized?\nWeb browser"
+        },
+        {
+          "id": "surfaces-d-lookup",
+          "type": "decision",
+          "label": "Has the current booking lookup resolved?"
+        },
+        {
+          "id": "surfaces-d-ended",
+          "type": "decision",
+          "label": "Has this event ended?"
+        },
+        {
+          "id": "surfaces-d-booking",
+          "type": "decision",
+          "label": "What is this account’s actual booking state?"
+        },
+        {
+          "id": "event-app-unknown",
+          "type": "screen",
+          "screenId": "event-app-unknown"
+        },
+        {
+          "id": "event-app-unregistered",
+          "type": "screen",
+          "screenId": "event-app-unregistered"
+        },
+        {
+          "id": "event-app-confirmed",
+          "type": "screen",
+          "screenId": "event-app-confirmed"
+        },
+        {
+          "id": "event-clip-unknown",
+          "type": "screen",
+          "screenId": "event-clip-unknown"
+        },
+        {
+          "id": "event-clip-unregistered",
+          "type": "screen",
+          "screenId": "event-clip-unregistered"
+        },
+        {
+          "id": "event-clip-confirmed",
+          "type": "screen",
+          "screenId": "event-clip-confirmed"
+        },
+        {
+          "id": "event-browser-unknown",
+          "type": "screen",
+          "screenId": "event-browser-unknown"
+        },
+        {
+          "id": "event-browser-unregistered",
+          "type": "screen",
+          "screenId": "event-browser-unregistered"
+        },
+        {
+          "id": "event-browser-confirmed",
+          "type": "screen",
+          "screenId": "event-browser-confirmed"
+        },
+        {
+          "id": "surfaces-h-loading",
+          "type": "handoff",
+          "label": "Booking is loading — keep the event visible",
+          "targetStage": "account",
+          "targetScreen": "event-lookup-loading"
+        },
+        {
+          "id": "surfaces-h-failed",
+          "type": "handoff",
+          "label": "Lookup failed / unknown — retry, never assume no RSVP",
+          "targetStage": "account",
+          "targetScreen": "event-lookup-retry"
+        },
+        {
+          "id": "surfaces-h-ended",
+          "type": "handoff",
+          "label": "Ended event → publication and attendance checks",
+          "targetStage": "return"
+        },
+        {
+          "id": "surfaces-d-none-surface",
+          "type": "decision",
+          "label": "No active RSVP: which surface is open?"
+        },
+        {
+          "id": "surfaces-d-confirmed-surface",
+          "type": "decision",
+          "label": "Confirmed RSVP: which surface is open?"
+        },
+        {
+          "id": "surfaces-h-other-booking",
+          "type": "handoff",
+          "label": "Show pending, waitlisted, offered or expired state",
+          "targetStage": "reservation"
+        },
+        {
+          "id": "surfaces-h-inactive",
+          "type": "handoff",
+          "label": "Canceled / declined — no active ticket; retain actual state",
+          "targetStage": "texts",
+          "targetScreen": "rsvp-canceled"
+        },
+        {
+          "id": "surfaces-n-declined",
+          "type": "note",
+          "label": "Declined request: preserve actual result. Final rejection presentation is open (OD01).",
+          "status": "open"
+        },
+        {
+          "id": "surfaces-h-app-rsvp",
+          "type": "handoff",
+          "label": "RSVP → verify only missing identity / phone fields",
+          "targetStage": "account"
+        },
+        {
+          "id": "surfaces-h-app-controls",
+          "type": "handoff",
+          "label": "Confirmed guest → guest list, RSVP controls and texts",
+          "targetStage": "texts"
+        },
+        {
+          "id": "surfaces-h-clip-rsvp",
+          "type": "handoff",
+          "label": "RSVP → verify only missing identity / phone fields",
+          "targetStage": "account"
+        },
+        {
+          "id": "surfaces-h-clip-controls",
+          "type": "handoff",
+          "label": "Confirmed guest → guest list, RSVP controls and texts",
+          "targetStage": "texts"
+        },
+        {
+          "id": "surfaces-h-browser-rsvp",
+          "type": "handoff",
+          "label": "RSVP → verify only missing identity / phone fields",
+          "targetStage": "account"
+        },
+        {
+          "id": "surfaces-h-browser-controls",
+          "type": "handoff",
+          "label": "Confirmed guest → guest list, RSVP controls and texts",
+          "targetStage": "texts"
+        },
+        {
+          "id": "surfaces-n-earlier",
+          "type": "note",
+          "label": "Earlier review representations — references, not additional journey steps.",
+          "status": "reference"
+        },
+        {
+          "id": "event-detail",
+          "type": "screen",
+          "screenId": "event-detail",
+          "status": "reference"
+        },
+        {
+          "id": "browserfallback",
+          "type": "screen",
+          "screenId": "browserfallback",
+          "status": "reference"
+        },
+        {
+          "id": "installed-event-detail",
+          "type": "screen",
+          "screenId": "installed-event-detail",
+          "status": "reference"
+        },
+        {
+          "id": "installed-event-signedout",
+          "type": "screen",
+          "screenId": "installed-event-signedout",
+          "status": "reference"
+        },
+        {
+          "id": "surfaces-d-app-action",
+          "type": "decision",
+          "label": "Which action does this guest choose?\nFull app"
+        },
+        {
+          "id": "surfaces-h-app-auth",
+          "type": "handoff",
+          "label": "RSVP → establish the account and check for an existing booking",
+          "targetStage": "account",
+          "targetScreen": "app-event-auth"
+        },
+        {
+          "id": "surfaces-h-app-recovery",
+          "type": "handoff",
+          "label": "Find my RSVP → recover the original account and actual booking",
+          "targetStage": "account",
+          "targetScreen": "app-rsvp-auth"
+        },
+        {
+          "id": "surfaces-d-clip-action",
+          "type": "decision",
+          "label": "Which action does this guest choose?\nApp Clip"
+        },
+        {
+          "id": "surfaces-h-clip-auth",
+          "type": "handoff",
+          "label": "RSVP → establish the account and check for an existing booking",
+          "targetStage": "account",
+          "targetScreen": "rsvp-auth"
+        },
+        {
+          "id": "surfaces-h-clip-recovery",
+          "type": "handoff",
+          "label": "Find my RSVP → recover the original account and actual booking",
+          "targetStage": "account",
+          "targetScreen": "clip-recover-auth"
+        },
+        {
+          "id": "surfaces-d-browser-action",
+          "type": "decision",
+          "label": "Which action does this guest choose?\nBrowser"
+        },
+        {
+          "id": "surfaces-h-browser-auth",
+          "type": "handoff",
+          "label": "RSVP → establish the account and check for an existing booking",
+          "targetStage": "account",
+          "targetScreen": "rsvp-auth"
+        },
+        {
+          "id": "surfaces-h-browser-recovery",
+          "type": "handoff",
+          "label": "Find my RSVP → recover the original account and actual booking",
+          "targetStage": "account",
+          "targetScreen": "browser-recover-auth"
+        }
+      ],
+      "edges": [
+        {
+          "from": "surfaces-d-app-open",
+          "to": "surfaces-d-app-identity",
+          "label": "Yes — full app",
+          "kind": "yes"
+        },
+        {
+          "from": "surfaces-d-app-open",
+          "to": "surfaces-d-clip-open",
+          "label": "No — link remains outside app",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-clip-open",
+          "to": "surfaces-d-clip-identity",
+          "label": "Yes — App Clip",
+          "kind": "yes"
+        },
+        {
+          "from": "surfaces-d-clip-open",
+          "to": "surfaces-d-browser-identity",
+          "label": "No — use browser fallback",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-app-identity",
+          "to": "event-app-unknown",
+          "label": "No / session expired",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-app-identity",
+          "to": "surfaces-d-lookup",
+          "label": "Yes — app session",
+          "kind": "yes"
+        },
+        {
+          "from": "event-app-unknown",
+          "to": "surfaces-d-app-action",
+          "label": "Choose an action",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-clip-identity",
+          "to": "event-clip-unknown",
+          "label": "No / session expired",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-clip-identity",
+          "to": "surfaces-d-lookup",
+          "label": "Yes — clip session",
+          "kind": "yes"
+        },
+        {
+          "from": "event-clip-unknown",
+          "to": "surfaces-d-clip-action",
+          "label": "Choose an action",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-browser-identity",
+          "to": "event-browser-unknown",
+          "label": "No / session expired",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-browser-identity",
+          "to": "surfaces-d-lookup",
+          "label": "Yes — browser session",
+          "kind": "yes"
+        },
+        {
+          "from": "event-browser-unknown",
+          "to": "surfaces-d-browser-action",
+          "label": "Choose an action",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-lookup",
+          "to": "surfaces-h-loading",
+          "label": "Not yet — loading",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-lookup",
+          "to": "surfaces-h-failed",
+          "label": "Failed / inconsistent",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-lookup",
+          "to": "surfaces-d-ended",
+          "label": "Yes — successful lookup",
+          "kind": "yes"
+        },
+        {
+          "from": "surfaces-d-ended",
+          "to": "surfaces-h-ended",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "surfaces-d-ended",
+          "to": "surfaces-d-booking",
+          "label": "No — before or during event",
+          "kind": "no"
+        },
+        {
+          "from": "surfaces-d-booking",
+          "to": "surfaces-d-none-surface",
+          "label": "No active RSVP — lookup proved none",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-booking",
+          "to": "surfaces-d-confirmed-surface",
+          "label": "Confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-booking",
+          "to": "surfaces-h-other-booking",
+          "label": "Pending / waitlisted / offered",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-booking",
+          "to": "surfaces-h-inactive",
+          "label": "Canceled booking",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-booking",
+          "to": "surfaces-n-declined",
+          "label": "Declined request",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-none-surface",
+          "to": "event-app-unregistered",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-confirmed-surface",
+          "to": "event-app-confirmed",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "event-app-unregistered",
+          "to": "surfaces-h-app-rsvp",
+          "label": "Tap RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "event-app-confirmed",
+          "to": "surfaces-h-app-controls",
+          "label": "Continue in this same surface",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-none-surface",
+          "to": "event-clip-unregistered",
+          "label": "App Clip",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-confirmed-surface",
+          "to": "event-clip-confirmed",
+          "label": "App Clip",
+          "kind": "state"
+        },
+        {
+          "from": "event-clip-unregistered",
+          "to": "surfaces-h-clip-rsvp",
+          "label": "Tap RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "event-clip-confirmed",
+          "to": "surfaces-h-clip-controls",
+          "label": "Continue in this same surface",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-none-surface",
+          "to": "event-browser-unregistered",
+          "label": "Browser",
+          "kind": "state"
+        },
+        {
+          "from": "surfaces-d-confirmed-surface",
+          "to": "event-browser-confirmed",
+          "label": "Browser",
+          "kind": "state"
+        },
+        {
+          "from": "event-browser-unregistered",
+          "to": "surfaces-h-browser-rsvp",
+          "label": "Tap RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "event-browser-confirmed",
+          "to": "surfaces-h-browser-controls",
+          "label": "Continue in this same surface",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-n-earlier",
+          "to": "event-detail",
+          "label": "Earlier App Clip cover",
+          "kind": "reference"
+        },
+        {
+          "from": "surfaces-n-earlier",
+          "to": "browserfallback",
+          "label": "Earlier browser fallback",
+          "kind": "reference"
+        },
+        {
+          "from": "surfaces-n-earlier",
+          "to": "installed-event-detail",
+          "label": "Earlier installed-app detail",
+          "kind": "reference"
+        },
+        {
+          "from": "surfaces-n-earlier",
+          "to": "installed-event-signedout",
+          "label": "Earlier signed-out app",
+          "kind": "reference"
+        },
+        {
+          "from": "surfaces-d-app-action",
+          "to": "surfaces-h-app-auth",
+          "label": "RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-app-action",
+          "to": "surfaces-h-app-recovery",
+          "label": "Find my RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-clip-action",
+          "to": "surfaces-h-clip-auth",
+          "label": "RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-clip-action",
+          "to": "surfaces-h-clip-recovery",
+          "label": "Find my RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-browser-action",
+          "to": "surfaces-h-browser-auth",
+          "label": "RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "surfaces-d-browser-action",
+          "to": "surfaces-h-browser-recovery",
+          "label": "Find my RSVP",
+          "kind": "action"
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "title": "Resolve the account before making a reservation",
+      "description": "Apple or Google establishes identity. A successful lookup restores the actual booking; only a proved no-booking result can start a new request. Phone verification holds no seat.",
+      "nodes": [
+        {
+          "id": "account-d-action",
+          "type": "decision",
+          "label": "What is the guest trying to do?"
+        },
+        {
+          "id": "account-d-auth-surface",
+          "type": "decision",
+          "label": "Where is new sign-in happening?"
+        },
+        {
+          "id": "account-d-recover-surface",
+          "type": "decision",
+          "label": "Where is account recovery happening?"
+        },
+        {
+          "id": "account-d-auth-success",
+          "type": "decision",
+          "label": "Did Apple / Google sign-in succeed?"
+        },
+        {
+          "id": "account-d-lookup",
+          "type": "decision",
+          "label": "What did the current booking lookup return?"
+        },
+        {
+          "id": "account-d-exists",
+          "type": "decision",
+          "label": "Was an existing request / reservation found?"
+        },
+        {
+          "id": "account-d-recovery-intent",
+          "type": "decision",
+          "label": "Was the action “Find my RSVP”?"
+        },
+        {
+          "id": "account-d-phone-verified",
+          "type": "decision",
+          "label": "Are the required name and current verified phone already present?"
+        },
+        {
+          "id": "rsvp-auth",
+          "type": "screen",
+          "screenId": "rsvp-auth"
+        },
+        {
+          "id": "app-event-auth",
+          "type": "screen",
+          "screenId": "app-event-auth"
+        },
+        {
+          "id": "app-rsvp-auth",
+          "type": "screen",
+          "screenId": "app-rsvp-auth"
+        },
+        {
+          "id": "clip-recover-auth",
+          "type": "screen",
+          "screenId": "clip-recover-auth"
+        },
+        {
+          "id": "browser-recover-auth",
+          "type": "screen",
+          "screenId": "browser-recover-auth"
+        },
+        {
+          "id": "event-lookup-loading",
+          "type": "screen",
+          "screenId": "event-lookup-loading"
+        },
+        {
+          "id": "event-lookup-retry",
+          "type": "screen",
+          "screenId": "event-lookup-retry"
+        },
+        {
+          "id": "auth-canceled",
+          "type": "screen",
+          "screenId": "auth-canceled"
+        },
+        {
+          "id": "rsvp-phone",
+          "type": "screen",
+          "screenId": "rsvp-phone"
+        },
+        {
+          "id": "rsvp-phone-app",
+          "type": "screen",
+          "screenId": "rsvp-phone-app"
+        },
+        {
+          "id": "rsvp-code",
+          "type": "screen",
+          "screenId": "rsvp-code"
+        },
+        {
+          "id": "rsvp-code-app",
+          "type": "screen",
+          "screenId": "rsvp-code-app"
+        },
+        {
+          "id": "verification-error",
+          "type": "screen",
+          "screenId": "verification-error"
+        },
+        {
+          "id": "existing-member",
+          "type": "screen",
+          "screenId": "existing-member"
+        },
+        {
+          "id": "clip-ready-rsvp",
+          "type": "screen",
+          "screenId": "clip-ready-rsvp"
+        },
+        {
+          "id": "browser-ready-rsvp",
+          "type": "screen",
+          "screenId": "browser-ready-rsvp"
+        },
+        {
+          "id": "enter-code",
+          "type": "screen",
+          "screenId": "enter-code"
+        },
+        {
+          "id": "codeinvalid",
+          "type": "screen",
+          "screenId": "codeinvalid"
+        },
+        {
+          "id": "installed-code",
+          "type": "screen",
+          "screenId": "installed-code"
+        },
+        {
+          "id": "installed-code-invalid",
+          "type": "screen",
+          "screenId": "installed-code-invalid"
+        },
+        {
+          "id": "account-h-auth-retry",
+          "type": "handoff",
+          "label": "Retry sign-in in the same surface and event",
+          "targetStage": "account"
+        },
+        {
+          "id": "account-h-lookup-retry",
+          "type": "handoff",
+          "label": "Retry / finish the same account lookup",
+          "targetStage": "account"
+        },
+        {
+          "id": "account-h-restore",
+          "type": "handoff",
+          "label": "Restore the real booking — no new RSVP",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "account-n-wrong-account",
+          "type": "note",
+          "label": "No RSVP under this account: recover the original account. Do not silently merge or create a second booking."
+        },
+        {
+          "id": "account-d-phone-surface",
+          "type": "decision",
+          "label": "Which surface needs the missing details?"
+        },
+        {
+          "id": "account-d-ready-surface",
+          "type": "decision",
+          "label": "Account verified: which surface is open?"
+        },
+        {
+          "id": "account-d-sms-valid",
+          "type": "decision",
+          "label": "Was the SMS code verified for the current number?"
+        },
+        {
+          "id": "account-h-sms-retry",
+          "type": "handoff",
+          "label": "Retry verification or change the phone number",
+          "targetStage": "account"
+        },
+        {
+          "id": "account-d-code-needed",
+          "type": "decision",
+          "label": "Does this event require an invitation code?"
+        },
+        {
+          "id": "account-d-code-surface",
+          "type": "decision",
+          "label": "Which surface is collecting the code?"
+        },
+        {
+          "id": "account-d-code-valid",
+          "type": "decision",
+          "label": "Is the invitation code valid for this request?"
+        },
+        {
+          "id": "account-d-code-error-surface",
+          "type": "decision",
+          "label": "Which surface must show the code error?"
+        },
+        {
+          "id": "account-h-result",
+          "type": "handoff",
+          "label": "Submit eligible request → evaluate capacity and approval",
+          "targetStage": "reservation"
+        },
+        {
+          "id": "account-h-code-retry",
+          "type": "handoff",
+          "label": "Correct the invitation code in this surface",
+          "targetStage": "account"
+        },
+        {
+          "id": "account-n-code-placement",
+          "type": "note",
+          "label": "Code requirement is supported; exact code placement and related rule edits remain open (OD01). This is separate from SMS verification.",
+          "status": "open"
+        },
+        {
+          "id": "account-h-wrong-account",
+          "type": "handoff",
+          "label": "Choose the original account → repeat recovery and booking lookup",
+          "targetStage": "account"
+        }
+      ],
+      "edges": [
+        {
+          "from": "account-d-action",
+          "to": "account-d-auth-surface",
+          "label": "Sign in / create account",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-action",
+          "to": "account-d-recover-surface",
+          "label": "Find my RSVP / switch account",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-action",
+          "to": "account-d-phone-verified",
+          "label": "Known account + lookup proved no booking",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-auth-surface",
+          "to": "app-event-auth",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-auth-surface",
+          "to": "rsvp-auth",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-recover-surface",
+          "to": "app-rsvp-auth",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-recover-surface",
+          "to": "clip-recover-auth",
+          "label": "App Clip",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-recover-surface",
+          "to": "browser-recover-auth",
+          "label": "Browser",
+          "kind": "state"
+        },
+        {
+          "from": "rsvp-auth",
+          "to": "account-d-auth-success",
+          "label": "Complete sign-in",
+          "kind": "action"
+        },
+        {
+          "from": "app-event-auth",
+          "to": "account-d-auth-success",
+          "label": "Complete sign-in",
+          "kind": "action"
+        },
+        {
+          "from": "app-rsvp-auth",
+          "to": "account-d-auth-success",
+          "label": "Complete sign-in",
+          "kind": "action"
+        },
+        {
+          "from": "clip-recover-auth",
+          "to": "account-d-auth-success",
+          "label": "Complete sign-in",
+          "kind": "action"
+        },
+        {
+          "from": "browser-recover-auth",
+          "to": "account-d-auth-success",
+          "label": "Complete sign-in",
+          "kind": "action"
+        },
+        {
+          "from": "account-d-auth-success",
+          "to": "account-d-lookup",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-auth-success",
+          "to": "auth-canceled",
+          "label": "No — canceled / failed",
+          "kind": "no"
+        },
+        {
+          "from": "auth-canceled",
+          "to": "account-h-auth-retry",
+          "label": "Retry",
+          "kind": "retry"
+        },
+        {
+          "from": "account-d-lookup",
+          "to": "event-lookup-loading",
+          "label": "Still loading",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-lookup",
+          "to": "event-lookup-retry",
+          "label": "Failed / unresolved",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-lookup",
+          "to": "account-d-exists",
+          "label": "Successful lookup",
+          "kind": "state"
+        },
+        {
+          "from": "event-lookup-loading",
+          "to": "account-h-lookup-retry",
+          "label": "Result arrives → resolve actual booking",
+          "kind": "retry"
+        },
+        {
+          "from": "event-lookup-retry",
+          "to": "account-h-lookup-retry",
+          "label": "Try again",
+          "kind": "retry"
+        },
+        {
+          "from": "account-d-exists",
+          "to": "account-h-restore",
+          "label": "Yes — any existing state",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-exists",
+          "to": "account-d-recovery-intent",
+          "label": "No — absence proved",
+          "kind": "no"
+        },
+        {
+          "from": "account-d-recovery-intent",
+          "to": "account-n-wrong-account",
+          "label": "Yes — recovery intent",
+          "kind": "yes"
+        },
+        {
+          "from": "account-n-wrong-account",
+          "to": "account-h-wrong-account",
+          "label": "Choose another account",
+          "kind": "retry"
+        },
+        {
+          "from": "account-d-recovery-intent",
+          "to": "account-d-phone-verified",
+          "label": "No — new RSVP intent",
+          "kind": "no"
+        },
+        {
+          "from": "account-d-phone-verified",
+          "to": "account-d-ready-surface",
+          "label": "Yes — skip completed fields",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-phone-verified",
+          "to": "account-d-phone-surface",
+          "label": "No — collect only what is missing",
+          "kind": "no"
+        },
+        {
+          "from": "account-d-phone-surface",
+          "to": "rsvp-phone-app",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-phone-surface",
+          "to": "rsvp-phone",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "rsvp-phone",
+          "to": "rsvp-code",
+          "label": "Send SMS code",
+          "kind": "action"
+        },
+        {
+          "from": "rsvp-phone-app",
+          "to": "rsvp-code-app",
+          "label": "Send SMS code",
+          "kind": "action"
+        },
+        {
+          "from": "rsvp-code",
+          "to": "account-d-sms-valid",
+          "label": "Submit SMS code",
+          "kind": "action"
+        },
+        {
+          "from": "rsvp-code-app",
+          "to": "account-d-sms-valid",
+          "label": "Submit SMS code",
+          "kind": "action"
+        },
+        {
+          "from": "account-d-sms-valid",
+          "to": "account-d-ready-surface",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-sms-valid",
+          "to": "verification-error",
+          "label": "No — incorrect / expired",
+          "kind": "no"
+        },
+        {
+          "from": "verification-error",
+          "to": "account-h-sms-retry",
+          "label": "Keep the event and account",
+          "kind": "retry"
+        },
+        {
+          "from": "account-d-ready-surface",
+          "to": "existing-member",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-ready-surface",
+          "to": "clip-ready-rsvp",
+          "label": "App Clip",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-ready-surface",
+          "to": "browser-ready-rsvp",
+          "label": "Browser",
+          "kind": "state"
+        },
+        {
+          "from": "existing-member",
+          "to": "account-d-code-needed",
+          "label": "Submit RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "clip-ready-rsvp",
+          "to": "account-d-code-needed",
+          "label": "Submit RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "browser-ready-rsvp",
+          "to": "account-d-code-needed",
+          "label": "Submit RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "account-d-code-needed",
+          "to": "account-h-result",
+          "label": "No — codes disabled",
+          "kind": "no"
+        },
+        {
+          "from": "account-d-code-needed",
+          "to": "account-d-code-surface",
+          "label": "Yes — validate configured code",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-code-surface",
+          "to": "installed-code",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-code-surface",
+          "to": "enter-code",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "installed-code",
+          "to": "account-d-code-valid",
+          "label": "Use invitation code",
+          "kind": "action"
+        },
+        {
+          "from": "enter-code",
+          "to": "account-d-code-valid",
+          "label": "Use invitation code",
+          "kind": "action"
+        },
+        {
+          "from": "account-d-code-valid",
+          "to": "account-h-result",
+          "label": "Yes — capacity / approval still apply",
+          "kind": "yes"
+        },
+        {
+          "from": "account-d-code-valid",
+          "to": "account-d-code-error-surface",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "account-d-code-error-surface",
+          "to": "installed-code-invalid",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "account-d-code-error-surface",
+          "to": "codeinvalid",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "installed-code-invalid",
+          "to": "account-h-code-retry",
+          "label": "Try again",
+          "kind": "retry"
+        },
+        {
+          "from": "codeinvalid",
+          "to": "account-h-code-retry",
+          "label": "Try again",
+          "kind": "retry"
+        },
+        {
+          "from": "account-d-code-needed",
+          "to": "account-n-code-placement",
+          "label": "Design detail to resolve",
+          "kind": "reference"
+        }
+      ]
+    },
+    {
+      "id": "reservation",
+      "title": "What actually happened to the RSVP?",
+      "description": "Confirmation, pending approval, waitlist and offer are distinct. Pending requests hold no seat. An issued offer holds its seat and required code allowance until the deadline.",
+      "nodes": [
+        {
+          "id": "reservation-d-result",
+          "type": "decision",
+          "label": "What is the authoritative booking / request result?"
+        },
+        {
+          "id": "reservation-d-confirmed-surface",
+          "type": "decision",
+          "label": "Confirmed: which surface is open?"
+        },
+        {
+          "id": "reservation-d-pending-surface",
+          "type": "decision",
+          "label": "Pending approval: which surface is open?"
+        },
+        {
+          "id": "reservation-d-join",
+          "type": "decision",
+          "label": "No available place: does the guest choose Join waitlist?"
+        },
+        {
+          "id": "reservation-d-waiting-surface",
+          "type": "decision",
+          "label": "Waitlisted: which surface is open?"
+        },
+        {
+          "id": "reservation-d-offered-surface",
+          "type": "decision",
+          "label": "Current offer: which surface is open?"
+        },
+        {
+          "id": "reservation-d-expired-surface",
+          "type": "decision",
+          "label": "Expired offer: which surface is open?"
+        },
+        {
+          "id": "rsvp-confirmed",
+          "type": "screen",
+          "screenId": "rsvp-confirmed"
+        },
+        {
+          "id": "member-confirmed",
+          "type": "screen",
+          "screenId": "member-confirmed"
+        },
+        {
+          "id": "manualpending",
+          "type": "screen",
+          "screenId": "manualpending"
+        },
+        {
+          "id": "installed-pending",
+          "type": "screen",
+          "screenId": "installed-pending"
+        },
+        {
+          "id": "waitlist",
+          "type": "screen",
+          "screenId": "waitlist"
+        },
+        {
+          "id": "installed-waitlist",
+          "type": "screen",
+          "screenId": "installed-waitlist"
+        },
+        {
+          "id": "offer",
+          "type": "screen",
+          "screenId": "offer"
+        },
+        {
+          "id": "installed-offer",
+          "type": "screen",
+          "screenId": "installed-offer"
+        },
+        {
+          "id": "offerexpired",
+          "type": "screen",
+          "screenId": "offerexpired"
+        },
+        {
+          "id": "installed-offer-expired",
+          "type": "screen",
+          "screenId": "installed-offer-expired"
+        },
+        {
+          "id": "reservation-n-closed",
+          "type": "note",
+          "label": "Registration closed / ineligible: retain the actual result and allowed actions. No confirmation and no automatic waitlist enrollment."
+        },
+        {
+          "id": "reservation-h-not-joining",
+          "type": "handoff",
+          "label": "Return to the event without reserving a place",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "reservation-h-confirmed",
+          "type": "handoff",
+          "label": "Confirmation → texts and guest controls; download optional",
+          "targetStage": "texts",
+          "targetScreen": "confirmation-text"
+        },
+        {
+          "id": "reservation-d-approved",
+          "type": "decision",
+          "label": "Did Astir approve with available capacity and code allowance?"
+        },
+        {
+          "id": "reservation-n-remain-pending",
+          "type": "note",
+          "label": "Keep the actual pending state. No seat or code hold; no hidden move to the waitlist."
+        },
+        {
+          "id": "reservation-d-selected",
+          "type": "decision",
+          "label": "Did Astir select this guest and successfully issue an offer?"
+        },
+        {
+          "id": "reservation-n-still-waiting",
+          "type": "note",
+          "label": "Remain waitlisted. No seat promise or automatic promotion."
+        },
+        {
+          "id": "reservation-d-accept",
+          "type": "decision",
+          "label": "Does the guest choose to accept this offer?"
+        },
+        {
+          "id": "reservation-d-owner",
+          "type": "decision",
+          "label": "Is this the offer owner’s recognized account?"
+        },
+        {
+          "id": "reservation-d-valid",
+          "type": "decision",
+          "label": "Is the current offer still valid at acceptance?"
+        },
+        {
+          "id": "reservation-n-unaccepted",
+          "type": "note",
+          "label": "An unopened / unaccepted offer is not a confirmed RSVP. Expiry and decline retain their actual result."
+        },
+        {
+          "id": "reservation-h-offer-owner",
+          "type": "handoff",
+          "label": "Recover the account that received the offer",
+          "targetStage": "account"
+        },
+        {
+          "id": "reservation-n-changed",
+          "type": "note",
+          "label": "Offer unavailable / conflicting state: return the current authoritative outcome. No false confirmation."
+        },
+        {
+          "id": "reservation-n-expiry-policy",
+          "type": "note",
+          "label": "After expiration, holds release. Exact waiting / reselection disposition and deadline-edit conflicts remain open (OD01).",
+          "status": "open"
+        },
+        {
+          "id": "reservation-n-pending-policy",
+          "type": "note",
+          "label": "Pending-request withdrawal and rejection presentation are proposals, not selected behavior (OD01 / OD03).",
+          "status": "open"
+        }
+      ],
+      "edges": [
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-confirmed-surface",
+          "label": "Confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-pending-surface",
+          "label": "Pending — manual approval",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-join",
+          "label": "Full / released capacity protected",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-waiting-surface",
+          "label": "Existing waitlist entry",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-offered-surface",
+          "label": "Existing valid offer",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-d-expired-surface",
+          "label": "Offer expired",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-result",
+          "to": "reservation-n-closed",
+          "label": "Closed / ineligible",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-join",
+          "to": "reservation-d-waiting-surface",
+          "label": "Yes — explicit join succeeds",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-join",
+          "to": "reservation-h-not-joining",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "reservation-d-confirmed-surface",
+          "to": "member-confirmed",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-confirmed-surface",
+          "to": "rsvp-confirmed",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-pending-surface",
+          "to": "installed-pending",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-pending-surface",
+          "to": "manualpending",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-waiting-surface",
+          "to": "installed-waitlist",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-waiting-surface",
+          "to": "waitlist",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-offered-surface",
+          "to": "installed-offer",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-offered-surface",
+          "to": "offer",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-expired-surface",
+          "to": "installed-offer-expired",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-expired-surface",
+          "to": "offerexpired",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "rsvp-confirmed",
+          "to": "reservation-h-confirmed",
+          "label": "Reservation complete",
+          "kind": "action"
+        },
+        {
+          "from": "member-confirmed",
+          "to": "reservation-h-confirmed",
+          "label": "Reservation complete",
+          "kind": "action"
+        },
+        {
+          "from": "manualpending",
+          "to": "reservation-d-approved",
+          "label": "Astir reviews the request",
+          "kind": "action"
+        },
+        {
+          "from": "installed-pending",
+          "to": "reservation-d-approved",
+          "label": "Astir reviews the request",
+          "kind": "action"
+        },
+        {
+          "from": "reservation-d-approved",
+          "to": "reservation-d-confirmed-surface",
+          "label": "Yes — approval succeeds",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-approved",
+          "to": "reservation-n-remain-pending",
+          "label": "No — not approved / no capacity",
+          "kind": "no"
+        },
+        {
+          "from": "waitlist",
+          "to": "reservation-d-selected",
+          "label": "Staff selection — never automatic",
+          "kind": "action"
+        },
+        {
+          "from": "installed-waitlist",
+          "to": "reservation-d-selected",
+          "label": "Staff selection — never automatic",
+          "kind": "action"
+        },
+        {
+          "from": "reservation-d-selected",
+          "to": "reservation-d-offered-surface",
+          "label": "Yes — a seat is held",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-selected",
+          "to": "reservation-n-still-waiting",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "offer",
+          "to": "reservation-d-accept",
+          "label": "Offer has its own deadline",
+          "kind": "action"
+        },
+        {
+          "from": "installed-offer",
+          "to": "reservation-d-accept",
+          "label": "Offer has its own deadline",
+          "kind": "action"
+        },
+        {
+          "from": "reservation-d-accept",
+          "to": "reservation-d-owner",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-accept",
+          "to": "reservation-n-unaccepted",
+          "label": "No / not yet",
+          "kind": "no"
+        },
+        {
+          "from": "reservation-d-owner",
+          "to": "reservation-d-valid",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-owner",
+          "to": "reservation-h-offer-owner",
+          "label": "No / unknown",
+          "kind": "no"
+        },
+        {
+          "from": "reservation-d-valid",
+          "to": "reservation-d-confirmed-surface",
+          "label": "Yes — eligible acceptance succeeds",
+          "kind": "yes"
+        },
+        {
+          "from": "reservation-d-valid",
+          "to": "reservation-d-expired-surface",
+          "label": "No — deadline passed",
+          "kind": "no"
+        },
+        {
+          "from": "reservation-d-valid",
+          "to": "reservation-n-changed",
+          "label": "Other rejection / unresolved result",
+          "kind": "state"
+        },
+        {
+          "from": "offerexpired",
+          "to": "reservation-n-expiry-policy",
+          "label": "Expired is never confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "installed-offer-expired",
+          "to": "reservation-n-expiry-policy",
+          "label": "Expired is never confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "reservation-d-pending-surface",
+          "to": "reservation-n-pending-policy",
+          "label": "Unresolved secondary actions",
+          "kind": "reference"
+        }
+      ]
+    },
+    {
+      "id": "texts",
+      "title": "What happens between confirmation and the door?",
+      "description": "Texts continue without installation. A recognized confirmed RSVP unlocks guest list and RSVP management in app, App Clip and browser. Download is required only for app-only actions such as the entry QR.",
+      "nodes": [
+        {
+          "id": "confirmation-text",
+          "type": "screen",
+          "screenId": "confirmation-text"
+        },
+        {
+          "id": "pre-event-text",
+          "type": "screen",
+          "screenId": "pre-event-text"
+        },
+        {
+          "id": "two-hour-text",
+          "type": "screen",
+          "screenId": "two-hour-text"
+        },
+        {
+          "id": "important-change-text",
+          "type": "screen",
+          "screenId": "important-change-text"
+        },
+        {
+          "id": "noapp-confirmed-detail",
+          "type": "screen",
+          "screenId": "noapp-confirmed-detail"
+        },
+        {
+          "id": "confirmed-detail",
+          "type": "screen",
+          "screenId": "confirmed-detail"
+        },
+        {
+          "id": "full-guest-list",
+          "type": "screen",
+          "screenId": "full-guest-list"
+        },
+        {
+          "id": "manage-rsvp",
+          "type": "screen",
+          "screenId": "manage-rsvp"
+        },
+        {
+          "id": "cancel-confirm",
+          "type": "screen",
+          "screenId": "cancel-confirm"
+        },
+        {
+          "id": "rsvp-canceled",
+          "type": "screen",
+          "screenId": "rsvp-canceled"
+        },
+        {
+          "id": "cancel-after-start",
+          "type": "screen",
+          "screenId": "cancel-after-start"
+        },
+        {
+          "id": "event-rescheduled",
+          "type": "screen",
+          "screenId": "event-rescheduled"
+        },
+        {
+          "id": "rescheduled-cancel",
+          "type": "screen",
+          "screenId": "rescheduled-cancel"
+        },
+        {
+          "id": "rescheduled-canceled",
+          "type": "screen",
+          "screenId": "rescheduled-canceled"
+        },
+        {
+          "id": "rescheduled-unreserved",
+          "type": "screen",
+          "screenId": "rescheduled-unreserved"
+        },
+        {
+          "id": "event-canceled",
+          "type": "screen",
+          "screenId": "event-canceled",
+          "status": "open"
+        },
+        {
+          "id": "events-list",
+          "type": "screen",
+          "screenId": "events-list"
+        },
+        {
+          "id": "events-empty",
+          "type": "screen",
+          "screenId": "events-empty"
+        },
+        {
+          "id": "texts-d-message-eligible",
+          "type": "decision",
+          "label": "Is the booking still confirmed and the recipient eligible for this message?"
+        },
+        {
+          "id": "texts-d-message-trigger",
+          "type": "decision",
+          "label": "Which applicable message is due?"
+        },
+        {
+          "id": "texts-n-no-message",
+          "type": "note",
+          "label": "Do not send an inapplicable reminder. Preserve the actual reservation and messaging preferences."
+        },
+        {
+          "id": "texts-h-message-link",
+          "type": "handoff",
+          "label": "View event → resolve today’s app / account / booking state",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "texts-n-messaging-policy",
+          "type": "note",
+          "label": "Late-booking reminders, fallback channels and arrival-prompt prominence remain open (OD04). The sample timing does not settle every scheduling edge case.",
+          "status": "open"
+        },
+        {
+          "id": "texts-d-confirmed",
+          "type": "decision",
+          "label": "On return, is a recognized confirmed RSVP established?"
+        },
+        {
+          "id": "texts-d-app-open",
+          "type": "decision",
+          "label": "Did the full app open?"
+        },
+        {
+          "id": "texts-h-resolve",
+          "type": "handoff",
+          "label": "Resolve identity and actual booking first",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "texts-d-action",
+          "type": "decision",
+          "label": "What does the confirmed guest choose?"
+        },
+        {
+          "id": "texts-h-entry",
+          "type": "handoff",
+          "label": "Prepare entry QR → open or install Astir",
+          "targetStage": "install"
+        },
+        {
+          "id": "texts-n-stay",
+          "type": "note",
+          "label": "Keep viewing the event. No installation is required."
+        },
+        {
+          "id": "texts-d-cancel-requested",
+          "type": "decision",
+          "label": "Does the guest choose Cancel RSVP?"
+        },
+        {
+          "id": "texts-d-before-start",
+          "type": "decision",
+          "label": "Is it still before the event starts?"
+        },
+        {
+          "id": "texts-d-confirm-cancel",
+          "type": "decision",
+          "label": "Confirm cancellation?"
+        },
+        {
+          "id": "texts-h-keep",
+          "type": "handoff",
+          "label": "Keep the confirmed RSVP; return to the same app / Clip / browser event",
+          "targetStage": "texts"
+        },
+        {
+          "id": "texts-n-released",
+          "type": "note",
+          "label": "Seat and consumed code use release once. Booking benefits end; waiting-list inventory remains protected for staff selection."
+        },
+        {
+          "id": "texts-d-event-change",
+          "type": "decision",
+          "label": "What changed about the event?"
+        },
+        {
+          "id": "texts-n-event-cancel-policy",
+          "type": "note",
+          "label": "Event-wide cancellation and its full booking / access / messaging effects are unresolved (OD02). This screen is a proposal.",
+          "status": "open"
+        },
+        {
+          "id": "texts-d-keep-rescheduled",
+          "type": "decision",
+          "label": "Does the guest keep the rescheduled reservation?"
+        },
+        {
+          "id": "texts-d-reschedule-confirm",
+          "type": "decision",
+          "label": "Confirm cancellation of this rescheduled RSVP?"
+        },
+        {
+          "id": "texts-h-rebook",
+          "type": "handoff",
+          "label": "New RSVP attempt → apply current account and registration rules",
+          "targetStage": "account"
+        },
+        {
+          "id": "texts-d-events-results",
+          "type": "decision",
+          "label": "What can the Events tab show?"
+        },
+        {
+          "id": "texts-h-discover",
+          "type": "handoff",
+          "label": "Nearby upcoming events → discovery list",
+          "targetStage": "entry",
+          "targetScreen": "events-discover"
+        },
+        {
+          "id": "texts-h-past",
+          "type": "handoff",
+          "label": "Past events → return and recap checks",
+          "targetStage": "return",
+          "targetScreen": "past-events"
+        },
+        {
+          "id": "texts-h-reopen-confirmed",
+          "type": "handoff",
+          "label": "Tap a confirmed event → full-app detail, with booking rechecked",
+          "targetStage": "surfaces",
+          "targetScreen": "event-app-confirmed"
+        }
+      ],
+      "edges": [
+        {
+          "from": "texts-d-message-eligible",
+          "to": "texts-d-message-trigger",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-message-eligible",
+          "to": "texts-n-no-message",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "texts-d-message-trigger",
+          "to": "confirmation-text",
+          "label": "Newly confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-message-trigger",
+          "to": "pre-event-text",
+          "label": "24-hour reminder",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-message-trigger",
+          "to": "two-hour-text",
+          "label": "2-hour reminder",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-message-trigger",
+          "to": "important-change-text",
+          "label": "Important published change",
+          "kind": "state"
+        },
+        {
+          "from": "confirmation-text",
+          "to": "texts-h-message-link",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "pre-event-text",
+          "to": "texts-h-message-link",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "two-hour-text",
+          "to": "texts-h-message-link",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "important-change-text",
+          "to": "texts-h-message-link",
+          "label": "Tap View event",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-message-trigger",
+          "to": "texts-n-messaging-policy",
+          "label": "Remaining scheduling choices",
+          "kind": "reference"
+        },
+        {
+          "from": "texts-d-confirmed",
+          "to": "texts-d-app-open",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-confirmed",
+          "to": "texts-h-resolve",
+          "label": "No / unknown",
+          "kind": "no"
+        },
+        {
+          "from": "texts-d-app-open",
+          "to": "confirmed-detail",
+          "label": "Yes — full app",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-app-open",
+          "to": "noapp-confirmed-detail",
+          "label": "No — App Clip / browser",
+          "kind": "no"
+        },
+        {
+          "from": "confirmed-detail",
+          "to": "texts-d-action",
+          "label": "Guest actions remain available",
+          "kind": "action"
+        },
+        {
+          "from": "noapp-confirmed-detail",
+          "to": "texts-d-action",
+          "label": "Guest actions remain available",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-action",
+          "to": "full-guest-list",
+          "label": "View guest list",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-action",
+          "to": "manage-rsvp",
+          "label": "View or change RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-action",
+          "to": "texts-h-entry",
+          "label": "Choose to prepare for entry",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-action",
+          "to": "texts-n-stay",
+          "label": "Stay here / install later",
+          "kind": "action"
+        },
+        {
+          "from": "manage-rsvp",
+          "to": "texts-d-cancel-requested",
+          "label": "Manage this reservation",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-cancel-requested",
+          "to": "texts-d-before-start",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-cancel-requested",
+          "to": "texts-h-keep",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "texts-d-before-start",
+          "to": "cancel-confirm",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-before-start",
+          "to": "cancel-after-start",
+          "label": "No — self-cancellation closed",
+          "kind": "no"
+        },
+        {
+          "from": "cancel-confirm",
+          "to": "texts-d-confirm-cancel",
+          "label": "Review cancellation",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-confirm-cancel",
+          "to": "rsvp-canceled",
+          "label": "Yes — cancellation succeeds",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-confirm-cancel",
+          "to": "texts-h-keep",
+          "label": "No — keep my place",
+          "kind": "no"
+        },
+        {
+          "from": "rsvp-canceled",
+          "to": "texts-n-released",
+          "label": "Cancellation recorded",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-event-change",
+          "to": "event-rescheduled",
+          "label": "Upcoming event moved to a future date",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-event-change",
+          "to": "event-canceled",
+          "label": "Event-wide cancellation — policy open",
+          "kind": "reference"
+        },
+        {
+          "from": "event-canceled",
+          "to": "texts-n-event-cancel-policy",
+          "label": "Review before implementation",
+          "kind": "reference"
+        },
+        {
+          "from": "event-rescheduled",
+          "to": "texts-d-keep-rescheduled",
+          "label": "Booking remains confirmed after the date change",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-keep-rescheduled",
+          "to": "texts-h-keep",
+          "label": "Yes — same booking, new schedule",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-keep-rescheduled",
+          "to": "rescheduled-cancel",
+          "label": "No — choose cancellation",
+          "kind": "no"
+        },
+        {
+          "from": "rescheduled-cancel",
+          "to": "texts-d-reschedule-confirm",
+          "label": "Review cancellation",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-reschedule-confirm",
+          "to": "rescheduled-canceled",
+          "label": "Yes — before the new start",
+          "kind": "yes"
+        },
+        {
+          "from": "texts-d-reschedule-confirm",
+          "to": "texts-h-keep",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "rescheduled-canceled",
+          "to": "rescheduled-unreserved",
+          "label": "View updated event without the reservation",
+          "kind": "action"
+        },
+        {
+          "from": "rescheduled-unreserved",
+          "to": "texts-h-rebook",
+          "label": "Choose RSVP again",
+          "kind": "action"
+        },
+        {
+          "from": "texts-d-events-results",
+          "to": "events-list",
+          "label": "Confirmed upcoming events — shown first",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-events-results",
+          "to": "events-empty",
+          "label": "No confirmed or nearby upcoming events",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-events-results",
+          "to": "texts-h-discover",
+          "label": "Nearby events but none confirmed",
+          "kind": "state"
+        },
+        {
+          "from": "texts-d-events-results",
+          "to": "texts-h-past",
+          "label": "Guest opens Past events",
+          "kind": "action"
+        },
+        {
+          "from": "events-list",
+          "to": "texts-h-reopen-confirmed",
+          "label": "Tap confirmed event",
+          "kind": "action"
+        }
+      ]
+    },
+    {
+      "id": "install",
+      "title": "Prepare for entry",
+      "description": "Download is optional after RSVP and required for the door QR. Keep the event and original account; name and username are required, photo is optional. The A/B photo layout is still a design choice.",
+      "nodes": [
+        {
+          "id": "install-d-installed",
+          "type": "decision",
+          "label": "Is the full Astir app installed and open?"
+        },
+        {
+          "id": "entry-download",
+          "type": "screen",
+          "screenId": "entry-download"
+        },
+        {
+          "id": "install",
+          "type": "screen",
+          "screenId": "install"
+        },
+        {
+          "id": "recover-booking",
+          "type": "screen",
+          "screenId": "recover-booking"
+        },
+        {
+          "id": "recoveringmatchingbooking",
+          "type": "screen",
+          "screenId": "recoveringmatchingbooking"
+        },
+        {
+          "id": "missingidentity",
+          "type": "screen",
+          "screenId": "missingidentity"
+        },
+        {
+          "id": "account-entry-setup",
+          "type": "screen",
+          "screenId": "account-entry-setup"
+        },
+        {
+          "id": "wrongaccount",
+          "type": "screen",
+          "screenId": "wrongaccount"
+        },
+        {
+          "id": "app-recovery-auth",
+          "type": "screen",
+          "screenId": "app-recovery-auth"
+        },
+        {
+          "id": "ticket-first",
+          "type": "screen",
+          "screenId": "ticket-first"
+        },
+        {
+          "id": "ticket-option-a",
+          "type": "screen",
+          "screenId": "ticket-option-a"
+        },
+        {
+          "id": "optional-photo",
+          "type": "screen",
+          "screenId": "optional-photo"
+        },
+        {
+          "id": "profile-before-ticket",
+          "type": "screen",
+          "screenId": "profile-before-ticket"
+        },
+        {
+          "id": "ticket-after-profile",
+          "type": "screen",
+          "screenId": "ticket-after-profile"
+        },
+        {
+          "id": "photouploadfailure",
+          "type": "screen",
+          "screenId": "photouploadfailure"
+        },
+        {
+          "id": "install-d-lookup",
+          "type": "decision",
+          "label": "Has the original account lookup resolved?"
+        },
+        {
+          "id": "install-d-booking",
+          "type": "decision",
+          "label": "What is the actual booking state?"
+        },
+        {
+          "id": "install-h-loading",
+          "type": "handoff",
+          "label": "Lookup is still loading",
+          "targetStage": "account",
+          "targetScreen": "event-lookup-loading"
+        },
+        {
+          "id": "install-h-retry",
+          "type": "handoff",
+          "label": "Lookup failed — retry without changing the booking",
+          "targetStage": "account",
+          "targetScreen": "event-lookup-retry"
+        },
+        {
+          "id": "install-h-booking-state",
+          "type": "handoff",
+          "label": "Restore pending / waitlisted / offered / canceled state",
+          "targetStage": "reservation"
+        },
+        {
+          "id": "install-d-identity",
+          "type": "decision",
+          "label": "Are valid name and username both present?"
+        },
+        {
+          "id": "install-d-missing",
+          "type": "decision",
+          "label": "Which required account details are missing?"
+        },
+        {
+          "id": "install-d-layout",
+          "type": "decision",
+          "label": "Open design choice: which optional-photo layout?",
+          "status": "open"
+        },
+        {
+          "id": "install-d-photo",
+          "type": "decision",
+          "label": "Did the guest skip or save the optional photo?"
+        },
+        {
+          "id": "install-h-door",
+          "type": "handoff",
+          "label": "At the event: present the ticket",
+          "targetStage": "door",
+          "targetScreen": "arrival-ticket"
+        }
+      ],
+      "edges": [
+        {
+          "from": "install-d-installed",
+          "to": "recover-booking",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "install-d-installed",
+          "to": "entry-download",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "entry-download",
+          "to": "install",
+          "label": "Choose Download Astir",
+          "kind": "action"
+        },
+        {
+          "from": "install",
+          "to": "recover-booking",
+          "label": "Installation finishes; open this event",
+          "kind": "action"
+        },
+        {
+          "from": "recover-booking",
+          "to": "install-d-lookup",
+          "label": "Look up this event for the signed-in account",
+          "kind": "action"
+        },
+        {
+          "from": "install-d-lookup",
+          "to": "install-d-booking",
+          "label": "Yes — authoritative result",
+          "kind": "yes"
+        },
+        {
+          "from": "install-d-lookup",
+          "to": "install-h-loading",
+          "label": "Still loading",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-lookup",
+          "to": "install-h-retry",
+          "label": "Request failed",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-booking",
+          "to": "recoveringmatchingbooking",
+          "label": "Confirmed for this account",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-booking",
+          "to": "wrongaccount",
+          "label": "No matching RSVP",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-booking",
+          "to": "install-h-booking-state",
+          "label": "A different real booking state",
+          "kind": "state"
+        },
+        {
+          "from": "wrongaccount",
+          "to": "app-recovery-auth",
+          "label": "Use the account that made the RSVP",
+          "kind": "action"
+        },
+        {
+          "from": "app-recovery-auth",
+          "to": "recover-booking",
+          "label": "Sign-in succeeds; repeat lookup",
+          "kind": "retry"
+        },
+        {
+          "from": "recoveringmatchingbooking",
+          "to": "install-d-identity",
+          "label": "Confirmed booking recovered",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-identity",
+          "to": "install-d-missing",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "install-d-missing",
+          "to": "missingidentity",
+          "label": "Only remaining details",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-missing",
+          "to": "account-entry-setup",
+          "label": "Account setup unfinished",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-identity",
+          "to": "install-d-layout",
+          "label": "Yes — QR prerequisites met",
+          "kind": "yes"
+        },
+        {
+          "from": "missingidentity",
+          "to": "install-d-layout",
+          "label": "Save valid missing details",
+          "kind": "action"
+        },
+        {
+          "from": "account-entry-setup",
+          "to": "install-d-layout",
+          "label": "Save valid name and username",
+          "kind": "action"
+        },
+        {
+          "from": "install-d-layout",
+          "to": "ticket-first",
+          "label": "Option A — ticket first",
+          "kind": "reference"
+        },
+        {
+          "from": "install-d-layout",
+          "to": "profile-before-ticket",
+          "label": "Option B — optional photo first",
+          "kind": "reference"
+        },
+        {
+          "from": "ticket-first",
+          "to": "ticket-option-a",
+          "label": "Same Option A, comparison screen",
+          "kind": "reference"
+        },
+        {
+          "from": "ticket-first",
+          "to": "optional-photo",
+          "label": "Choose Add a photo",
+          "kind": "action"
+        },
+        {
+          "from": "ticket-option-a",
+          "to": "optional-photo",
+          "label": "Choose Add a photo",
+          "kind": "action"
+        },
+        {
+          "from": "optional-photo",
+          "to": "install-d-photo",
+          "label": "Photo choice",
+          "kind": "action"
+        },
+        {
+          "from": "profile-before-ticket",
+          "to": "install-d-photo",
+          "label": "Continue or Skip",
+          "kind": "action"
+        },
+        {
+          "from": "install-d-photo",
+          "to": "ticket-after-profile",
+          "label": "Skipped / canceled / photo saved",
+          "kind": "state"
+        },
+        {
+          "from": "install-d-photo",
+          "to": "photouploadfailure",
+          "label": "Upload failed",
+          "kind": "state"
+        },
+        {
+          "from": "photouploadfailure",
+          "to": "optional-photo",
+          "label": "Retry photo",
+          "kind": "retry"
+        },
+        {
+          "from": "photouploadfailure",
+          "to": "ticket-after-profile",
+          "label": "Skip and keep ticket access",
+          "kind": "action"
+        },
+        {
+          "from": "ticket-first",
+          "to": "install-h-door",
+          "label": "Use ticket now or later",
+          "kind": "action"
+        },
+        {
+          "from": "ticket-option-a",
+          "to": "install-h-door",
+          "label": "Use ticket now or later",
+          "kind": "action"
+        },
+        {
+          "from": "ticket-after-profile",
+          "to": "install-h-door",
+          "label": "Use ticket now or later",
+          "kind": "action"
+        }
+      ]
+    },
+    {
+      "id": "door",
+      "title": "At the door",
+      "description": "Guest screens are in Astir; staff screens are in the web console. Entry requires the installed app and verified confirmed booking. Admission never creates a personal check-in or place visit.",
+      "nodes": [
+        {
+          "id": "door-d-compatible",
+          "type": "decision",
+          "label": "Does the guest have a phone that can run Astir?"
+        },
+        {
+          "id": "arrival-ticket",
+          "type": "screen",
+          "screenId": "arrival-ticket"
+        },
+        {
+          "id": "staff-scan",
+          "type": "screen",
+          "screenId": "staff-scan"
+        },
+        {
+          "id": "staff-admitted",
+          "type": "screen",
+          "screenId": "staff-admitted"
+        },
+        {
+          "id": "qrfailure",
+          "type": "screen",
+          "screenId": "qrfailure"
+        },
+        {
+          "id": "door-help",
+          "type": "screen",
+          "screenId": "door-help"
+        },
+        {
+          "id": "staff-guest-search",
+          "type": "screen",
+          "screenId": "staff-guest-search"
+        },
+        {
+          "id": "stafffindguest",
+          "type": "screen",
+          "screenId": "stafffindguest"
+        },
+        {
+          "id": "duplicateadmission",
+          "type": "screen",
+          "screenId": "duplicateadmission"
+        },
+        {
+          "id": "scan-rejected",
+          "type": "screen",
+          "screenId": "scan-rejected"
+        },
+        {
+          "id": "staff-no-match",
+          "type": "screen",
+          "screenId": "staff-no-match"
+        },
+        {
+          "id": "unsupportedphone",
+          "type": "screen",
+          "screenId": "unsupportedphone"
+        },
+        {
+          "id": "door-d-ready",
+          "type": "decision",
+          "label": "Are Astir, the correct account, confirmed booking and required identity ready?"
+        },
+        {
+          "id": "door-h-setup",
+          "type": "handoff",
+          "label": "Finish installation / original-account entry setup",
+          "targetStage": "install"
+        },
+        {
+          "id": "door-d-qr",
+          "type": "decision",
+          "label": "Can the installed guest display the QR?"
+        },
+        {
+          "id": "door-d-online",
+          "type": "decision",
+          "label": "Does the door team have an internet connection?"
+        },
+        {
+          "id": "door-d-method",
+          "type": "decision",
+          "label": "Is a readable QR available?"
+        },
+        {
+          "id": "door-h-offline",
+          "type": "handoff",
+          "label": "Use the prepared offline roster",
+          "targetStage": "offline-door"
+        },
+        {
+          "id": "door-d-match",
+          "type": "decision",
+          "label": "Has staff established a matching, eligible confirmed booking?"
+        },
+        {
+          "id": "door-d-admission",
+          "type": "decision",
+          "label": "What does the current admission check return?"
+        },
+        {
+          "id": "door-reentry",
+          "type": "note",
+          "label": "Open policy: physical reentry and exceptional conflict outcomes. A duplicate must not create another admission.",
+          "status": "open"
+        },
+        {
+          "id": "door-h-after",
+          "type": "handoff",
+          "label": "Event happens; published recap uses validated attendance",
+          "targetStage": "return"
+        },
+        {
+          "id": "door-unknown-result",
+          "type": "note",
+          "label": "Admission result is unknown. Keep the same operation ID and recover its server result. Do not claim failure or success, create another admission, or queue a new offline entry."
+        }
+      ],
+      "edges": [
+        {
+          "from": "door-d-compatible",
+          "to": "unsupportedphone",
+          "label": "No — no device waiver",
+          "kind": "no"
+        },
+        {
+          "from": "door-d-compatible",
+          "to": "door-d-ready",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-ready",
+          "to": "door-h-setup",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "door-d-ready",
+          "to": "door-d-qr",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-qr",
+          "to": "arrival-ticket",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-qr",
+          "to": "qrfailure",
+          "label": "No — QR loading failure",
+          "kind": "no"
+        },
+        {
+          "from": "arrival-ticket",
+          "to": "door-d-online",
+          "label": "Present the QR",
+          "kind": "action"
+        },
+        {
+          "from": "qrfailure",
+          "to": "door-help",
+          "label": "Ask the team for help",
+          "kind": "action"
+        },
+        {
+          "from": "door-help",
+          "to": "door-d-online",
+          "label": "Staff takes over",
+          "kind": "action"
+        },
+        {
+          "from": "door-d-online",
+          "to": "door-d-method",
+          "label": "Yes — use current server checks",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-online",
+          "to": "door-h-offline",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "door-d-method",
+          "to": "staff-scan",
+          "label": "Yes — scan it",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-method",
+          "to": "staff-guest-search",
+          "label": "No — look up the installed guest",
+          "kind": "no"
+        },
+        {
+          "from": "staff-guest-search",
+          "to": "door-d-match",
+          "label": "Search and verify the account / event",
+          "kind": "action"
+        },
+        {
+          "from": "door-d-match",
+          "to": "stafffindguest",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "door-d-match",
+          "to": "staff-no-match",
+          "label": "No or uncertain",
+          "kind": "no"
+        },
+        {
+          "from": "staff-scan",
+          "to": "door-d-admission",
+          "label": "Validate ticket and current booking",
+          "kind": "action"
+        },
+        {
+          "from": "stafffindguest",
+          "to": "door-d-admission",
+          "label": "Complete checks; record admission",
+          "kind": "action"
+        },
+        {
+          "from": "door-d-admission",
+          "to": "staff-admitted",
+          "label": "Valid — first admission",
+          "kind": "state"
+        },
+        {
+          "from": "door-d-admission",
+          "to": "duplicateadmission",
+          "label": "Already admitted",
+          "kind": "state"
+        },
+        {
+          "from": "door-d-admission",
+          "to": "scan-rejected",
+          "label": "Invalid / canceled / wrong event",
+          "kind": "state"
+        },
+        {
+          "from": "scan-rejected",
+          "to": "staff-guest-search",
+          "label": "Resolve identity or booking; no automatic admission",
+          "kind": "retry"
+        },
+        {
+          "from": "staff-no-match",
+          "to": "staff-guest-search",
+          "label": "Retry with corrected information",
+          "kind": "retry"
+        },
+        {
+          "from": "duplicateadmission",
+          "to": "door-reentry",
+          "label": "Needs separate reentry policy",
+          "kind": "reference"
+        },
+        {
+          "from": "staff-admitted",
+          "to": "door-h-after",
+          "label": "After the event",
+          "kind": "state"
+        },
+        {
+          "from": "door-d-admission",
+          "to": "door-unknown-result",
+          "label": "Response lost / result unknown",
+          "kind": "state"
+        },
+        {
+          "from": "door-unknown-result",
+          "to": "door-d-admission",
+          "label": "Recover or retry the same admission operation",
+          "kind": "retry"
+        }
+      ]
+    },
+    {
+      "id": "offline-door",
+      "title": "Offline admission and reconciliation",
+      "description": "Prepare a minimal guest roster while online. A durable local record stays pending until the server validates it. Offline entry cannot create a booking, bypass the app, or grant protected recap access.",
+      "nodes": [
+        {
+          "id": "offline-door-d-connection",
+          "type": "decision",
+          "label": "Is staff preparing while online, or already in an outage?"
+        },
+        {
+          "id": "offline-roster-prepare",
+          "type": "screen",
+          "screenId": "offline-roster-prepare"
+        },
+        {
+          "id": "offline-roster-match",
+          "type": "screen",
+          "screenId": "offline-roster-match"
+        },
+        {
+          "id": "offline-entry-pending",
+          "type": "screen",
+          "screenId": "offline-entry-pending"
+        },
+        {
+          "id": "offline-syncing",
+          "type": "screen",
+          "screenId": "offline-syncing"
+        },
+        {
+          "id": "offline-sync-results",
+          "type": "screen",
+          "screenId": "offline-sync-results"
+        },
+        {
+          "id": "offline-booking-conflict",
+          "type": "screen",
+          "screenId": "offline-booking-conflict"
+        },
+        {
+          "id": "offline-roster-unavailable",
+          "type": "screen",
+          "screenId": "offline-roster-unavailable"
+        },
+        {
+          "id": "offline-door-d-roster",
+          "type": "decision",
+          "label": "Is a usable roster saved for this Team admin and event?"
+        },
+        {
+          "id": "offline-door-d-verified",
+          "type": "decision",
+          "label": "Are confirmed booking, guest identity and installed account established?"
+        },
+        {
+          "id": "offline-door-d-saved",
+          "type": "decision",
+          "label": "Did the admission save durably on this device?"
+        },
+        {
+          "id": "offline-door-d-reconnected",
+          "type": "decision",
+          "label": "Has connectivity returned?"
+        },
+        {
+          "id": "offline-door-h-next-guest",
+          "type": "handoff",
+          "label": "Continue checking guests; preserve the pending queue",
+          "targetStage": "offline-door",
+          "targetScreen": "offline-roster-match"
+        },
+        {
+          "id": "offline-door-d-response",
+          "type": "decision",
+          "label": "Did the server return an authorized result for this entry?"
+        },
+        {
+          "id": "offline-door-retry-pending",
+          "type": "note",
+          "label": "Keep unacknowledged rows pending. Reauthenticate when required; retry with the same operation IDs. Never clear the queue on partial success."
+        },
+        {
+          "id": "offline-door-d-result",
+          "type": "decision",
+          "label": "What is this entry’s reconciliation outcome?"
+        },
+        {
+          "id": "offline-door-h-validated",
+          "type": "handoff",
+          "label": "Server-valid admission: follow the normal post-event gates",
+          "targetStage": "return"
+        },
+        {
+          "id": "offline-door-conflict-policy",
+          "type": "note",
+          "label": "Team admin review is required. Do not restore canceled bookings or grant recap access. Exact exceptional resolution controls remain open.",
+          "status": "open"
+        },
+        {
+          "id": "offline-door-h-restore",
+          "type": "handoff",
+          "label": "Reconnect or obtain an authorized prepared device; keep unsynced work explicit",
+          "targetStage": "door"
+        }
+      ],
+      "edges": [
+        {
+          "from": "offline-door-d-connection",
+          "to": "offline-roster-prepare",
+          "label": "Online — prepare this event list",
+          "kind": "state"
+        },
+        {
+          "from": "offline-door-d-connection",
+          "to": "offline-door-d-roster",
+          "label": "Offline — use previously saved list",
+          "kind": "state"
+        },
+        {
+          "from": "offline-roster-prepare",
+          "to": "offline-door-d-roster",
+          "label": "Download saved; connection is later lost",
+          "kind": "state"
+        },
+        {
+          "from": "offline-door-d-roster",
+          "to": "offline-roster-match",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "offline-door-d-roster",
+          "to": "offline-roster-unavailable",
+          "label": "No / wrong account / storage unavailable",
+          "kind": "no"
+        },
+        {
+          "from": "offline-roster-match",
+          "to": "offline-door-d-verified",
+          "label": "Verify against prepared list",
+          "kind": "action"
+        },
+        {
+          "from": "offline-door-d-verified",
+          "to": "offline-roster-unavailable",
+          "label": "No or uncertain",
+          "kind": "no"
+        },
+        {
+          "from": "offline-door-d-verified",
+          "to": "offline-door-d-saved",
+          "label": "Yes — attempt local admission",
+          "kind": "yes"
+        },
+        {
+          "from": "offline-door-d-saved",
+          "to": "offline-entry-pending",
+          "label": "Yes — awaiting server validation",
+          "kind": "yes"
+        },
+        {
+          "from": "offline-door-d-saved",
+          "to": "offline-roster-unavailable",
+          "label": "No — show Not recorded",
+          "kind": "no"
+        },
+        {
+          "from": "offline-entry-pending",
+          "to": "offline-door-d-reconnected",
+          "label": "Keep the same pending operation",
+          "kind": "state"
+        },
+        {
+          "from": "offline-door-d-reconnected",
+          "to": "offline-door-h-next-guest",
+          "label": "No — remain pending",
+          "kind": "no"
+        },
+        {
+          "from": "offline-door-d-reconnected",
+          "to": "offline-syncing",
+          "label": "Yes — reconcile each operation",
+          "kind": "yes"
+        },
+        {
+          "from": "offline-syncing",
+          "to": "offline-door-d-response",
+          "label": "Check current admin, booking and event state",
+          "kind": "action"
+        },
+        {
+          "from": "offline-door-d-response",
+          "to": "offline-sync-results",
+          "label": "Yes — show individual outcomes",
+          "kind": "yes"
+        },
+        {
+          "from": "offline-door-d-response",
+          "to": "offline-door-retry-pending",
+          "label": "No / partial / unauthorized / interrupted",
+          "kind": "no"
+        },
+        {
+          "from": "offline-door-retry-pending",
+          "to": "offline-syncing",
+          "label": "Authorized retry after recovery",
+          "kind": "retry"
+        },
+        {
+          "from": "offline-sync-results",
+          "to": "offline-door-d-result",
+          "label": "Read this entry’s result",
+          "kind": "action"
+        },
+        {
+          "from": "offline-door-d-result",
+          "to": "offline-door-h-validated",
+          "label": "Accepted / already recorded",
+          "kind": "state"
+        },
+        {
+          "from": "offline-door-d-result",
+          "to": "offline-booking-conflict",
+          "label": "Conflict / changed or canceled booking",
+          "kind": "state"
+        },
+        {
+          "from": "offline-door-d-result",
+          "to": "offline-door-retry-pending",
+          "label": "Retryable / still unresolved",
+          "kind": "state"
+        },
+        {
+          "from": "offline-booking-conflict",
+          "to": "offline-door-conflict-policy",
+          "label": "Review the unresolved conflict",
+          "kind": "reference"
+        },
+        {
+          "from": "offline-roster-unavailable",
+          "to": "offline-door-h-restore",
+          "label": "Recovery before any admission",
+          "kind": "action"
+        }
+      ]
+    },
+    {
+      "id": "return",
+      "title": "Return after the event: check each gate",
+      "description": "Publication, validated admission and historical check-in completion are separate. No invitation or personal post substitutes for those gates.",
+      "nodes": [
+        {
+          "id": "return-d-entrance",
+          "type": "decision",
+          "label": "How does the guest return to this ended event?"
+        },
+        {
+          "id": "after_text",
+          "type": "screen",
+          "screenId": "after_text"
+        },
+        {
+          "id": "recap-notice",
+          "type": "screen",
+          "screenId": "recap-notice"
+        },
+        {
+          "id": "past-events",
+          "type": "screen",
+          "screenId": "past-events"
+        },
+        {
+          "id": "return-d-resolved",
+          "type": "decision",
+          "label": "Are account and event-access lookups resolved?"
+        },
+        {
+          "id": "return-h-lookup",
+          "type": "handoff",
+          "label": "Keep this event; resolve identity or retry the lookup. Unknown never means no admission.",
+          "targetStage": "account",
+          "targetScreen": "event-lookup-loading"
+        },
+        {
+          "id": "return-d-published",
+          "type": "decision",
+          "label": "Has Astir published this event’s recap?"
+        },
+        {
+          "id": "return-d-waiting-surface",
+          "type": "decision",
+          "label": "Which event surface is open?"
+        },
+        {
+          "id": "recap_unpublished",
+          "type": "screen",
+          "screenId": "recap_unpublished"
+        },
+        {
+          "id": "ended-unpublished",
+          "type": "screen",
+          "screenId": "ended-unpublished"
+        },
+        {
+          "id": "noapp-recap-unpublished",
+          "type": "screen",
+          "screenId": "noapp-recap-unpublished"
+        },
+        {
+          "id": "return-note-wait",
+          "type": "note",
+          "label": "Keep the ended-event context. No required check-in or protected recap while unpublished; invitations follow successful publication."
+        },
+        {
+          "id": "return-d-admission",
+          "type": "decision",
+          "label": "Is there valid, server-recorded admission for this event?"
+        },
+        {
+          "id": "return-d-preview-surface",
+          "type": "decision",
+          "label": "Where is the permitted event preview open?"
+        },
+        {
+          "id": "recap_locked_preview",
+          "type": "screen",
+          "screenId": "recap_locked_preview"
+        },
+        {
+          "id": "noapp-ended-preview",
+          "type": "screen",
+          "screenId": "noapp-ended-preview"
+        },
+        {
+          "id": "recap_missing_admission",
+          "type": "screen",
+          "screenId": "recap_missing_admission"
+        },
+        {
+          "id": "return-d-missed-scan",
+          "type": "decision",
+          "label": "Does a confirmed guest need help with a missing entry record?"
+        },
+        {
+          "id": "return-note-locked",
+          "type": "note",
+          "label": "No protected gallery or readable comments. Joining another event does not unlock this past event. Preview media, avatars and anonymous exposure remain OD05. ",
+          "status": "open"
+        },
+        {
+          "id": "return-h-staff",
+          "type": "handoff",
+          "label": "Staff verify and correct attendance; only a valid server admission can change access.",
+          "targetStage": "console",
+          "targetScreen": "console-attendance"
+        },
+        {
+          "id": "return-d-full-app",
+          "type": "decision",
+          "label": "Is this event open in the full Astir app?"
+        },
+        {
+          "id": "postevent-reinstall",
+          "type": "screen",
+          "screenId": "postevent-reinstall"
+        },
+        {
+          "id": "postevent-install",
+          "type": "screen",
+          "screenId": "postevent-install"
+        },
+        {
+          "id": "postevent-recover",
+          "type": "screen",
+          "screenId": "postevent-recover"
+        },
+        {
+          "id": "return-h-open-existing",
+          "type": "handoff",
+          "label": "If Astir is already installed, open it and restore this same attendee account.",
+          "targetStage": "return",
+          "targetScreen": "postevent-recover"
+        },
+        {
+          "id": "return-h-restored",
+          "type": "handoff",
+          "label": "Recover original identity, then recheck publication, admission and completion. Never create a replacement RSVP.",
+          "targetStage": "return"
+        },
+        {
+          "id": "return-d-completed",
+          "type": "decision",
+          "label": "Has this attendee ever explicitly completed this event check-in?"
+        },
+        {
+          "id": "return-h-checkin",
+          "type": "handoff",
+          "label": "Show the event check-in composer. All fields may be empty; submission is explicit.",
+          "targetStage": "recap",
+          "targetScreen": "after_composer"
+        },
+        {
+          "id": "return-d-load",
+          "type": "decision",
+          "label": "Can the entitled recap load now?"
+        },
+        {
+          "id": "return-h-recap",
+          "type": "handoff",
+          "label": "Open the shared recap directly. No second required check-in or new place visit.",
+          "targetStage": "recap",
+          "targetScreen": "after_recap"
+        },
+        {
+          "id": "recap-unavailable",
+          "type": "screen",
+          "screenId": "recap-unavailable"
+        },
+        {
+          "id": "return-note-retry-presentation",
+          "type": "note",
+          "label": "Temporary-load recovery preserves historical completion and draft state. Exact recovery layout is proposed. ",
+          "status": "open"
+        }
+      ],
+      "edges": [
+        {
+          "from": "return-d-entrance",
+          "to": "after_text",
+          "label": "Text received after publication",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-entrance",
+          "to": "recap-notice",
+          "label": "In-app notice after publication",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-entrance",
+          "to": "past-events",
+          "label": "Open Past events",
+          "kind": "state"
+        },
+        {
+          "from": "after_text",
+          "to": "return-d-resolved",
+          "label": "Open this event",
+          "kind": "action"
+        },
+        {
+          "from": "recap-notice",
+          "to": "return-d-resolved",
+          "label": "Open this event",
+          "kind": "action"
+        },
+        {
+          "from": "past-events",
+          "to": "return-d-resolved",
+          "label": "Open this event",
+          "kind": "action"
+        },
+        {
+          "from": "return-d-entrance",
+          "to": "return-d-resolved",
+          "label": "Open an existing event link",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-resolved",
+          "to": "return-h-lookup",
+          "label": "No — unknown / still loading / failed",
+          "kind": "no"
+        },
+        {
+          "from": "return-d-resolved",
+          "to": "return-d-published",
+          "label": "Yes — current state is known",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-published",
+          "to": "return-d-waiting-surface",
+          "label": "No — not published",
+          "kind": "no"
+        },
+        {
+          "from": "return-d-waiting-surface",
+          "to": "recap_unpublished",
+          "label": "Full app · admitted guest waiting",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-waiting-surface",
+          "to": "ended-unpublished",
+          "label": "Full app · ended-event detail",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-waiting-surface",
+          "to": "noapp-recap-unpublished",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "recap_unpublished",
+          "to": "return-note-wait",
+          "label": "Waiting state",
+          "kind": "state"
+        },
+        {
+          "from": "ended-unpublished",
+          "to": "return-note-wait",
+          "label": "Waiting state",
+          "kind": "state"
+        },
+        {
+          "from": "noapp-recap-unpublished",
+          "to": "return-note-wait",
+          "label": "Waiting state",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-published",
+          "to": "return-d-admission",
+          "label": "Yes — recap published",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-admission",
+          "to": "return-d-preview-surface",
+          "label": "No — no valid admission",
+          "kind": "no"
+        },
+        {
+          "from": "return-d-preview-surface",
+          "to": "recap_locked_preview",
+          "label": "Full app",
+          "kind": "state"
+        },
+        {
+          "from": "return-d-preview-surface",
+          "to": "noapp-ended-preview",
+          "label": "App Clip / browser",
+          "kind": "state"
+        },
+        {
+          "from": "recap_locked_preview",
+          "to": "return-d-missed-scan",
+          "label": "Guest asks about attendance",
+          "kind": "action"
+        },
+        {
+          "from": "noapp-ended-preview",
+          "to": "return-d-missed-scan",
+          "label": "Guest asks about attendance",
+          "kind": "action"
+        },
+        {
+          "from": "return-d-missed-scan",
+          "to": "recap_missing_admission",
+          "label": "Yes — request staff verification",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-missed-scan",
+          "to": "return-note-locked",
+          "label": "No — remain on allowed preview",
+          "kind": "no"
+        },
+        {
+          "from": "recap_missing_admission",
+          "to": "return-h-staff",
+          "label": "Ask Astir for help",
+          "kind": "action"
+        },
+        {
+          "from": "return-d-admission",
+          "to": "return-d-full-app",
+          "label": "Yes — valid admission",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-full-app",
+          "to": "postevent-reinstall",
+          "label": "No — App Clip / browser",
+          "kind": "no"
+        },
+        {
+          "from": "postevent-reinstall",
+          "to": "postevent-install",
+          "label": "Choose Download Astir for app-only check-in / upload",
+          "kind": "action"
+        },
+        {
+          "from": "postevent-install",
+          "to": "postevent-recover",
+          "label": "Open Astir with this event",
+          "kind": "action"
+        },
+        {
+          "from": "postevent-reinstall",
+          "to": "return-h-open-existing",
+          "label": "Choose Open Astir when installed",
+          "kind": "action"
+        },
+        {
+          "from": "postevent-reinstall",
+          "to": "noapp-ended-preview",
+          "label": "Continue viewing the permitted event preview",
+          "kind": "action"
+        },
+        {
+          "from": "postevent-recover",
+          "to": "return-h-restored",
+          "label": "Account restored; resolve actual state",
+          "kind": "action"
+        },
+        {
+          "from": "return-d-full-app",
+          "to": "return-d-completed",
+          "label": "Yes — full app",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-completed",
+          "to": "return-h-checkin",
+          "label": "No — first completion",
+          "kind": "no"
+        },
+        {
+          "from": "return-d-completed",
+          "to": "return-d-load",
+          "label": "Yes — even if the personal post was deleted",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-load",
+          "to": "return-h-recap",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "return-d-load",
+          "to": "recap-unavailable",
+          "label": "No — temporary loading failure",
+          "kind": "no"
+        },
+        {
+          "from": "recap-unavailable",
+          "to": "return-d-load",
+          "label": "Retry; retain historical completion",
+          "kind": "retry"
+        },
+        {
+          "from": "recap-unavailable",
+          "to": "return-note-retry-presentation",
+          "label": "Recovery presentation for review",
+          "kind": "reference"
+        }
+      ]
+    },
+    {
+      "id": "recap",
+      "title": "Complete once, then choose what to do",
+      "description": "An explicit first check-in creates one canonical event-labeled place visit. Later gallery, conversation and post-management actions are optional branches.",
+      "nodes": [
+        {
+          "id": "after_composer",
+          "type": "screen",
+          "screenId": "after_composer"
+        },
+        {
+          "id": "recap-d-submit",
+          "type": "decision",
+          "label": "Did the explicit check-in submission succeed?"
+        },
+        {
+          "id": "after_recap",
+          "type": "screen",
+          "screenId": "after_recap"
+        },
+        {
+          "id": "recap_upload_error",
+          "type": "screen",
+          "screenId": "recap_upload_error"
+        },
+        {
+          "id": "recap-note-unknown-submit",
+          "type": "note",
+          "label": "Recover the same operation result before deciding what to show. Preserve the draft while unresolved; never create a second completion or visit."
+        },
+        {
+          "id": "recap-d-action",
+          "type": "decision",
+          "label": "What does the eligible attendee choose from the shared recap?"
+        },
+        {
+          "id": "after_gallery",
+          "type": "screen",
+          "screenId": "after_gallery"
+        },
+        {
+          "id": "after_post",
+          "type": "screen",
+          "screenId": "after_post"
+        },
+        {
+          "id": "recap-comment",
+          "type": "screen",
+          "screenId": "recap-comment"
+        },
+        {
+          "id": "recap-comment-posted",
+          "type": "screen",
+          "screenId": "recap-comment-posted"
+        },
+        {
+          "id": "gallery-add",
+          "type": "screen",
+          "screenId": "gallery-add"
+        },
+        {
+          "id": "gallery-posted",
+          "type": "screen",
+          "screenId": "gallery-posted"
+        },
+        {
+          "id": "gallery-manage",
+          "type": "screen",
+          "screenId": "gallery-manage"
+        },
+        {
+          "id": "event-video",
+          "type": "screen",
+          "screenId": "event-video"
+        },
+        {
+          "id": "manage-personal-post",
+          "type": "screen",
+          "screenId": "manage-personal-post"
+        },
+        {
+          "id": "recap_removal_results",
+          "type": "screen",
+          "screenId": "recap_removal_results"
+        },
+        {
+          "id": "recap-after-deletion",
+          "type": "screen",
+          "screenId": "recap-after-deletion"
+        },
+        {
+          "id": "place-after-post-deletion",
+          "type": "screen",
+          "screenId": "place-after-post-deletion"
+        },
+        {
+          "id": "recap_photo_removed",
+          "type": "screen",
+          "screenId": "recap_photo_removed"
+        },
+        {
+          "id": "recap-after-photo-removal",
+          "type": "screen",
+          "screenId": "recap-after-photo-removal"
+        },
+        {
+          "id": "gallery-after-photo-removal",
+          "type": "screen",
+          "screenId": "gallery-after-photo-removal"
+        },
+        {
+          "id": "recap-note-conversation",
+          "type": "note",
+          "label": "Comments, replies and likes are in scope. Detailed edit/report controls remain OD06; no private messaging or reconnection feature.",
+          "status": "open"
+        },
+        {
+          "id": "recap-h-back",
+          "type": "handoff",
+          "label": "Return to this event’s shared recap with current access and historical completion.",
+          "targetStage": "recap",
+          "targetScreen": "after_recap"
+        },
+        {
+          "id": "recap-d-upload-app",
+          "type": "decision",
+          "label": "Is the attendee using the full app for this upload?"
+        },
+        {
+          "id": "recap-h-install",
+          "type": "handoff",
+          "label": "Open or install Astir; recover the same eligible attendee.",
+          "targetStage": "return",
+          "targetScreen": "postevent-reinstall"
+        },
+        {
+          "id": "recap-d-upload-success",
+          "type": "decision",
+          "label": "Did the selected media upload succeed?"
+        },
+        {
+          "id": "recap-d-upload-origin",
+          "type": "decision",
+          "label": "Which action was the failed upload part of?",
+          "status": "open"
+        },
+        {
+          "id": "recap-d-source-delete",
+          "type": "decision",
+          "label": "Does the uploader or Astir remove the source photo?"
+        },
+        {
+          "id": "recap-d-affected-view",
+          "type": "decision",
+          "label": "Which affected view is being opened after source removal?"
+        },
+        {
+          "id": "recap-note-source-retained",
+          "type": "note",
+          "label": "Other post content, remaining media, historical completion and the place visit remain. A removed source cannot be selected again."
+        },
+        {
+          "id": "recap-d-post-present",
+          "type": "decision",
+          "label": "Does this attendee’s personal event post still exist?"
+        },
+        {
+          "id": "recap-d-delete-post",
+          "type": "decision",
+          "label": "Does the owner confirm deletion of their personal event post?"
+        },
+        {
+          "id": "recap-d-after-delete",
+          "type": "decision",
+          "label": "Which view does the attendee open next?"
+        },
+        {
+          "id": "recap-note-deleted-visit",
+          "type": "note",
+          "label": "The shown place example has no independent visit. Preserve any unrelated visits, notes, ratings or explicit saves; never recreate the deleted event visit."
+        },
+        {
+          "id": "recap-h-map",
+          "type": "handoff",
+          "label": "Open the ordinary map and permitted event/place history.",
+          "targetStage": "map",
+          "targetScreen": "map_special_event"
+        },
+        {
+          "id": "recap-d-attachment-post",
+          "type": "decision",
+          "label": "Does the original personal post still exist when selected photos are attached?"
+        },
+        {
+          "id": "recap-note-new-post-open",
+          "type": "note",
+          "label": "Keep a deleted post and event visit deleted. Creating another post after deletion is an unresolved OD06 / P07 interaction; do not silently recreate it.",
+          "status": "open"
+        },
+        {
+          "id": "recap-d-recovered-submit",
+          "type": "decision",
+          "label": "What is the recovered result of that original submission?"
+        },
+        {
+          "id": "recap-h-committed-submit",
+          "type": "handoff",
+          "label": "Completion committed: open the currently authorized recap and current post state. If the post was later deleted, it stays deleted.",
+          "targetStage": "return"
+        },
+        {
+          "id": "recap-note-still-unresolved",
+          "type": "note",
+          "label": "Keep the same pending operation and retained draft. Do not announce failure or success until its actual result is known."
+        },
+        {
+          "id": "recap-h-access-changed",
+          "type": "handoff",
+          "label": "Access changed or was rejected: recheck publication, admission and completion for this event. Preserve history; do not classify this as a photo error.",
+          "targetStage": "return"
+        }
+      ],
+      "edges": [
+        {
+          "from": "after_composer",
+          "to": "recap-d-submit",
+          "label": "Submit, including with every optional field empty",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-submit",
+          "to": "after_recap",
+          "label": "Yes — one completion + one place visit",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-submit",
+          "to": "recap_upload_error",
+          "label": "No — a selected photo failed to upload",
+          "kind": "no"
+        },
+        {
+          "from": "recap-d-submit",
+          "to": "recap-note-unknown-submit",
+          "label": "Result unknown / response lost",
+          "kind": "state"
+        },
+        {
+          "from": "after_recap",
+          "to": "recap-d-action",
+          "label": "Recap is open",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "after_gallery",
+          "label": "Choose shared photos for my personal post",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "recap-comment",
+          "label": "Comment or reply",
+          "kind": "action"
+        },
+        {
+          "from": "recap-comment",
+          "to": "recap-comment-posted",
+          "label": "Post comment / reply",
+          "kind": "action"
+        },
+        {
+          "from": "recap-comment-posted",
+          "to": "recap-note-conversation",
+          "label": "Conversation controls for review",
+          "kind": "reference"
+        },
+        {
+          "from": "recap-comment-posted",
+          "to": "recap-h-back",
+          "label": "Back to recap",
+          "kind": "action"
+        },
+        {
+          "from": "event-video",
+          "to": "recap-h-back",
+          "label": "Close video",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "event-video",
+          "label": "Play a shared event video",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "recap-d-upload-app",
+          "label": "Contribute photos or videos",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-upload-app",
+          "to": "gallery-add",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-upload-app",
+          "to": "recap-h-install",
+          "label": "No — upload is an app-only action",
+          "kind": "no"
+        },
+        {
+          "from": "gallery-add",
+          "to": "recap-d-upload-success",
+          "label": "Upload ready photos / videos",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-upload-success",
+          "to": "gallery-posted",
+          "label": "Yes — visible to eligible attendees immediately",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-upload-success",
+          "to": "recap_upload_error",
+          "label": "No — preserve the failed selection / draft",
+          "kind": "no"
+        },
+        {
+          "from": "recap_upload_error",
+          "to": "recap-d-upload-origin",
+          "label": "Retry or explicitly omit optional failed media",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-upload-origin",
+          "to": "after_composer",
+          "label": "Personal check-in draft",
+          "kind": "retry"
+        },
+        {
+          "from": "recap-d-upload-origin",
+          "to": "gallery-add",
+          "label": "Shared-gallery contribution",
+          "kind": "retry"
+        },
+        {
+          "from": "gallery-posted",
+          "to": "gallery-manage",
+          "label": "Manage my own uploaded media",
+          "kind": "action"
+        },
+        {
+          "from": "gallery-posted",
+          "to": "recap-h-back",
+          "label": "Back to recap",
+          "kind": "action"
+        },
+        {
+          "from": "gallery-manage",
+          "to": "recap-d-source-delete",
+          "label": "Choose source-media removal",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-source-delete",
+          "to": "recap-h-back",
+          "label": "No — keep the source media",
+          "kind": "no"
+        },
+        {
+          "from": "recap-d-source-delete",
+          "to": "recap-d-affected-view",
+          "label": "Yes — remove source and all references",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-affected-view",
+          "to": "recap_photo_removed",
+          "label": "An existing personal post referencing it",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-affected-view",
+          "to": "recap-after-photo-removal",
+          "label": "The shared recap",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-affected-view",
+          "to": "gallery-after-photo-removal",
+          "label": "The photo picker / remaining gallery",
+          "kind": "state"
+        },
+        {
+          "from": "recap_photo_removed",
+          "to": "recap-note-source-retained",
+          "label": "Preserve the unaffected content",
+          "kind": "state"
+        },
+        {
+          "from": "recap-after-photo-removal",
+          "to": "recap-note-source-retained",
+          "label": "Preserve the unaffected content",
+          "kind": "state"
+        },
+        {
+          "from": "gallery-after-photo-removal",
+          "to": "recap-note-source-retained",
+          "label": "Preserve the unaffected content",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "recap-d-post-present",
+          "label": "Manage my event check-in",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-post-present",
+          "to": "manage-personal-post",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-post-present",
+          "to": "recap-after-deletion",
+          "label": "No — historical completion remains",
+          "kind": "no"
+        },
+        {
+          "from": "after_post",
+          "to": "manage-personal-post",
+          "label": "Open management for this post",
+          "kind": "action"
+        },
+        {
+          "from": "manage-personal-post",
+          "to": "recap-d-delete-post",
+          "label": "Choose Delete",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-delete-post",
+          "to": "recap-h-back",
+          "label": "No — keep the post",
+          "kind": "no"
+        },
+        {
+          "from": "recap-d-delete-post",
+          "to": "recap_removal_results",
+          "label": "Yes — remove this post and its event visit",
+          "kind": "yes"
+        },
+        {
+          "from": "recap_removal_results",
+          "to": "recap-d-after-delete",
+          "label": "Deletion complete",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-after-delete",
+          "to": "recap-after-deletion",
+          "label": "Shared recap — no repeated check-in",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-after-delete",
+          "to": "place-after-post-deletion",
+          "label": "Place — read remaining independent history",
+          "kind": "state"
+        },
+        {
+          "from": "place-after-post-deletion",
+          "to": "recap-note-deleted-visit",
+          "label": "Current place-history result",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-action",
+          "to": "recap-h-map",
+          "label": "View event on map",
+          "kind": "action"
+        },
+        {
+          "from": "after_post",
+          "to": "recap-h-map",
+          "label": "View the place / map",
+          "kind": "action"
+        },
+        {
+          "from": "recap-after-deletion",
+          "to": "recap-h-map",
+          "label": "View map; do not restore deleted visit",
+          "kind": "action"
+        },
+        {
+          "from": "after_gallery",
+          "to": "recap-d-attachment-post",
+          "label": "Attach selected live photos to the existing post",
+          "kind": "action"
+        },
+        {
+          "from": "recap-d-attachment-post",
+          "to": "after_post",
+          "label": "Yes — update the same post and visit",
+          "kind": "yes"
+        },
+        {
+          "from": "recap-d-attachment-post",
+          "to": "recap-note-new-post-open",
+          "label": "No — original post was deleted",
+          "kind": "no"
+        },
+        {
+          "from": "recap-note-unknown-submit",
+          "to": "recap-d-recovered-submit",
+          "label": "Resolve original operation identity",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-recovered-submit",
+          "to": "recap-h-committed-submit",
+          "label": "Committed — use current authorized state",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-recovered-submit",
+          "to": "after_composer",
+          "label": "Definitely no effect — retained draft may retry",
+          "kind": "retry"
+        },
+        {
+          "from": "recap-d-recovered-submit",
+          "to": "recap-note-still-unresolved",
+          "label": "Still unknown — remain pending",
+          "kind": "state"
+        },
+        {
+          "from": "recap-note-still-unresolved",
+          "to": "recap-d-recovered-submit",
+          "label": "Retry original-result lookup",
+          "kind": "retry"
+        },
+        {
+          "from": "recap-d-submit",
+          "to": "recap-h-access-changed",
+          "label": "Eligibility changed / access rejected",
+          "kind": "state"
+        },
+        {
+          "from": "recap-d-upload-success",
+          "to": "recap-h-access-changed",
+          "label": "Eligibility changed / access rejected",
+          "kind": "state"
+        }
+      ]
+    },
+    {
+      "id": "map",
+      "title": "Discover the event; keep map and recap permissions separate",
+      "description": "The map can promote a permitted event to someone who did not attend. The selected pin opens a collapsed card; expanding resolves the full event’s actual access state.",
+      "nodes": [
+        {
+          "id": "map-d-private-place",
+          "type": "decision",
+          "label": "Is the event at a private home?"
+        },
+        {
+          "id": "map-h-home",
+          "type": "handoff",
+          "label": "Apply resident consent, approximate location and exact-address entitlement separately.",
+          "targetStage": "home"
+        },
+        {
+          "id": "map-note-public-place",
+          "type": "note",
+          "label": "Use the canonical public venue. Each event has one place; a place may host many events."
+        },
+        {
+          "id": "map-d-visible",
+          "type": "decision",
+          "label": "Is this event visible to this viewer and inside its console-controlled map promotion window?"
+        },
+        {
+          "id": "ordinary-map",
+          "type": "screen",
+          "screenId": "ordinary-map"
+        },
+        {
+          "id": "map-d-admitted",
+          "type": "decision",
+          "label": "Does this viewer have valid admission for this event?"
+        },
+        {
+          "id": "map_special_event",
+          "type": "screen",
+          "screenId": "map_special_event"
+        },
+        {
+          "id": "map-event-collapsed",
+          "type": "screen",
+          "screenId": "map-event-collapsed"
+        },
+        {
+          "id": "map_place_history",
+          "type": "screen",
+          "screenId": "map_place_history"
+        },
+        {
+          "id": "map-event-preview",
+          "type": "screen",
+          "screenId": "map-event-preview"
+        },
+        {
+          "id": "map-event-collapsed-preview",
+          "type": "screen",
+          "screenId": "map-event-collapsed-preview"
+        },
+        {
+          "id": "map_place_preview",
+          "type": "screen",
+          "screenId": "map_place_preview"
+        },
+        {
+          "id": "location-primer",
+          "type": "screen",
+          "screenId": "location-primer"
+        },
+        {
+          "id": "location-denied",
+          "type": "screen",
+          "screenId": "location-denied"
+        },
+        {
+          "id": "notification-primer",
+          "type": "screen",
+          "screenId": "notification-primer"
+        },
+        {
+          "id": "map-h-expand",
+          "type": "handoff",
+          "label": "Open the ended event and recheck publication, valid admission and historical completion.",
+          "targetStage": "return"
+        },
+        {
+          "id": "map-h-preview",
+          "type": "handoff",
+          "label": "Open the upcoming or current event in Astir; resolve the current account and booking state.",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "map-d-visit",
+          "type": "decision",
+          "label": "Does the viewer still have their own event-linked place visit?"
+        },
+        {
+          "id": "map-h-no-event-visit",
+          "type": "handoff",
+          "label": "Read ordinary place history without inventing this event visit. If this post was deleted, preserve other independent visits.",
+          "targetStage": "recap",
+          "targetScreen": "place-after-post-deletion",
+          "status": "reference"
+        },
+        {
+          "id": "map-note-not-been",
+          "type": "note",
+          "label": "Opening an event or place never marks the viewer Been. Apply their real, independent place history and current audience restrictions."
+        },
+        {
+          "id": "map-note-pin-options",
+          "type": "note",
+          "label": "OD07: pin shape / motion, second-degree Friends and default overlap / promotion rules remain open. The visible variants are design options, not runtime branches.",
+          "status": "open"
+        },
+        {
+          "id": "map-d-discovery",
+          "type": "decision",
+          "label": "What does the guest explicitly choose during ordinary discovery?"
+        },
+        {
+          "id": "map-d-location",
+          "type": "decision",
+          "label": "Does the guest grant location permission?"
+        },
+        {
+          "id": "map-note-nearby",
+          "type": "note",
+          "label": "Use permitted location for nearby discovery. Existing map, search, Events and tickets remain available."
+        },
+        {
+          "id": "map-d-notifications",
+          "type": "decision",
+          "label": "Does the guest grant notification permission?"
+        },
+        {
+          "id": "map-note-alerts",
+          "type": "note",
+          "label": "Enable permitted push delivery for the configured event messages. Exact per-message channel policy remains OD04.",
+          "status": "open"
+        },
+        {
+          "id": "map-note-no-alerts",
+          "type": "note",
+          "label": "Keep the current RSVP and SMS preferences. In-app Events remains available."
+        },
+        {
+          "id": "map-d-event-phase",
+          "type": "decision",
+          "label": "Has this event ended?"
+        },
+        {
+          "id": "map-d-filter",
+          "type": "decision",
+          "label": "Which map filter is selected?"
+        },
+        {
+          "id": "map-d-you-filter",
+          "type": "decision",
+          "label": "Does this viewer have their own valid attendance for the You filter?"
+        },
+        {
+          "id": "map-d-friends-filter",
+          "type": "decision",
+          "label": "Is there relevant, permitted friend attendance for the Friends filter?"
+        },
+        {
+          "id": "map-note-friends-scope",
+          "type": "note",
+          "label": "Friends uses relevant friends’ attendance and existing restrictions. Whether second-degree connections count remains open under OD07.",
+          "status": "open"
+        }
+      ],
+      "edges": [
+        {
+          "from": "map-d-private-place",
+          "to": "map-h-home",
+          "label": "Yes — apply private-place controls",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-private-place",
+          "to": "map-note-public-place",
+          "label": "No — public venue",
+          "kind": "no"
+        },
+        {
+          "from": "map-note-public-place",
+          "to": "map-d-visible",
+          "label": "Evaluate map visibility",
+          "kind": "state"
+        },
+        {
+          "from": "map-h-home",
+          "to": "map-d-visible",
+          "label": "Continue only with the allowed location projection",
+          "kind": "state"
+        },
+        {
+          "from": "map-d-visible",
+          "to": "ordinary-map",
+          "label": "No — ordinary map / search remain usable",
+          "kind": "no"
+        },
+        {
+          "from": "map-d-admitted",
+          "to": "map_special_event",
+          "label": "Yes — attendee map example",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-admitted",
+          "to": "map-event-preview",
+          "label": "No — permitted nonattendee example",
+          "kind": "no"
+        },
+        {
+          "from": "map_special_event",
+          "to": "map-event-collapsed",
+          "label": "Tap the event pin",
+          "kind": "action"
+        },
+        {
+          "from": "map-event-preview",
+          "to": "map-event-collapsed-preview",
+          "label": "Tap the event pin",
+          "kind": "action"
+        },
+        {
+          "from": "map-event-collapsed",
+          "to": "map-d-visit",
+          "label": "Open the canonical place from the event",
+          "kind": "action"
+        },
+        {
+          "from": "map-d-visit",
+          "to": "map_place_history",
+          "label": "Yes — show event in current place history",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-visit",
+          "to": "map-h-no-event-visit",
+          "label": "No — no event visit or it was deleted",
+          "kind": "no"
+        },
+        {
+          "from": "map-event-collapsed-preview",
+          "to": "map_place_preview",
+          "label": "Open the canonical place from preview",
+          "kind": "action"
+        },
+        {
+          "from": "map_place_preview",
+          "to": "map-note-not-been",
+          "label": "Keep the viewer’s actual history",
+          "kind": "state"
+        },
+        {
+          "from": "map-event-collapsed",
+          "to": "map-note-pin-options",
+          "label": "Pin appearance options shown within this screen",
+          "kind": "reference"
+        },
+        {
+          "from": "ordinary-map",
+          "to": "map-d-discovery",
+          "label": "Continue exploring",
+          "kind": "action"
+        },
+        {
+          "from": "map-d-discovery",
+          "to": "location-primer",
+          "label": "Choose Nearby when location is needed",
+          "kind": "action"
+        },
+        {
+          "from": "location-primer",
+          "to": "map-d-location",
+          "label": "Continue to native location prompt",
+          "kind": "action"
+        },
+        {
+          "from": "map-d-location",
+          "to": "map-note-nearby",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-location",
+          "to": "location-denied",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "location-denied",
+          "to": "map-d-discovery",
+          "label": "Continue with map panning / search",
+          "kind": "retry"
+        },
+        {
+          "from": "map-d-discovery",
+          "to": "notification-primer",
+          "label": "Choose event alerts from Events / event detail",
+          "kind": "action"
+        },
+        {
+          "from": "notification-primer",
+          "to": "map-d-notifications",
+          "label": "Continue to native notification prompt",
+          "kind": "action"
+        },
+        {
+          "from": "map-d-notifications",
+          "to": "map-note-alerts",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-notifications",
+          "to": "map-note-no-alerts",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "map-event-collapsed",
+          "to": "map-d-event-phase",
+          "label": "Expand the event card",
+          "kind": "action"
+        },
+        {
+          "from": "map-event-collapsed-preview",
+          "to": "map-d-event-phase",
+          "label": "Expand the event card",
+          "kind": "action"
+        },
+        {
+          "from": "map-d-event-phase",
+          "to": "map-h-expand",
+          "label": "Yes — ended-event access rules",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-event-phase",
+          "to": "map-h-preview",
+          "label": "No — current event / RSVP state",
+          "kind": "no"
+        },
+        {
+          "from": "map-d-visible",
+          "to": "map-d-filter",
+          "label": "Yes — allowed event inside promotion window",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-filter",
+          "to": "map-d-admitted",
+          "label": "Featured — all permitted viewers",
+          "kind": "state"
+        },
+        {
+          "from": "map-d-filter",
+          "to": "map-d-you-filter",
+          "label": "You",
+          "kind": "state"
+        },
+        {
+          "from": "map-d-you-filter",
+          "to": "map_special_event",
+          "label": "Yes — include own attended event",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-you-filter",
+          "to": "ordinary-map",
+          "label": "No — omit this event from You",
+          "kind": "no"
+        },
+        {
+          "from": "map-d-filter",
+          "to": "map-d-friends-filter",
+          "label": "Friends",
+          "kind": "state"
+        },
+        {
+          "from": "map-d-friends-filter",
+          "to": "map-d-admitted",
+          "label": "Yes — include permitted friend activity",
+          "kind": "yes"
+        },
+        {
+          "from": "map-d-friends-filter",
+          "to": "ordinary-map",
+          "label": "No — omit this event from Friends",
+          "kind": "no"
+        },
+        {
+          "from": "map-d-friends-filter",
+          "to": "map-note-friends-scope",
+          "label": "Friends scope for review",
+          "kind": "reference"
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "title": "Private-home location rules",
+      "description": "For a viewer already permitted to see this event/place, apply these rules in every surface. Approximate discovery, exact address access and recap access are separate rights. Defaults: reveal 24 hours before start; expire 24 hours after end.",
+      "nodes": [
+        {
+          "id": "home-d-home",
+          "type": "decision",
+          "label": "Is this event attached to a private home?"
+        },
+        {
+          "id": "home-event-preview",
+          "type": "screen",
+          "screenId": "home-event-preview"
+        },
+        {
+          "id": "home-place-preview",
+          "type": "screen",
+          "screenId": "home-place-preview"
+        },
+        {
+          "id": "home-before",
+          "type": "screen",
+          "screenId": "home-before"
+        },
+        {
+          "id": "home-place-before",
+          "type": "screen",
+          "screenId": "home-place-before"
+        },
+        {
+          "id": "home-revealed",
+          "type": "screen",
+          "screenId": "home-revealed"
+        },
+        {
+          "id": "home-exact-details",
+          "type": "screen",
+          "screenId": "home-exact-details"
+        },
+        {
+          "id": "home-event-confirmed",
+          "type": "screen",
+          "screenId": "home-event-confirmed"
+        },
+        {
+          "id": "home-place-confirmed",
+          "type": "screen",
+          "screenId": "home-place-confirmed"
+        },
+        {
+          "id": "home-expired",
+          "type": "screen",
+          "screenId": "home-expired"
+        },
+        {
+          "id": "home-h-regular",
+          "type": "handoff",
+          "label": "Use the ordinary event / place location",
+          "targetStage": "surfaces"
+        },
+        {
+          "id": "home-d-consent",
+          "type": "decision",
+          "label": "Is resident consent established?"
+        },
+        {
+          "id": "home-consent-needed",
+          "type": "note",
+          "label": "Exact home details stay protected. Resolve resident consent; the precise consent form and publication control remain open.",
+          "status": "open"
+        },
+        {
+          "id": "home-d-confirmed",
+          "type": "decision",
+          "label": "Does this viewer have a current confirmed RSVP?"
+        },
+        {
+          "id": "home-d-window",
+          "type": "decision",
+          "label": "Where are we in this event’s address-reveal window?"
+        },
+        {
+          "id": "home-d-revealed-route",
+          "type": "decision",
+          "label": "Which location view is the guest opening?"
+        },
+        {
+          "id": "home-independent-rights",
+          "type": "note",
+          "label": "Independent place rights are evaluated separately. Expiring this event’s address access does not revoke another valid right or otherwise-valid recap access."
+        },
+        {
+          "id": "home-d-independent",
+          "type": "decision",
+          "label": "Does this viewer have an independent right to the exact place location?"
+        },
+        {
+          "id": "home-independent-access",
+          "type": "note",
+          "label": "Show exact place details under the independent place right, even if this event’s RSVP is absent or its reveal window is closed. Event booking and recap rights stay unchanged. This separate entitlement view is not yet mocked."
+        }
+      ],
+      "edges": [
+        {
+          "from": "home-d-home",
+          "to": "home-h-regular",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "home-d-home",
+          "to": "home-d-independent",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "home-d-consent",
+          "to": "home-consent-needed",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "home-d-consent",
+          "to": "home-d-confirmed",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "home-d-confirmed",
+          "to": "home-event-preview",
+          "label": "No — approximate event",
+          "kind": "no"
+        },
+        {
+          "from": "home-event-preview",
+          "to": "home-place-preview",
+          "label": "Open the linked place",
+          "kind": "action"
+        },
+        {
+          "from": "home-d-confirmed",
+          "to": "home-d-window",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "home-d-window",
+          "to": "home-before",
+          "label": "Before reveal",
+          "kind": "state"
+        },
+        {
+          "from": "home-before",
+          "to": "home-place-before",
+          "label": "Open the linked place",
+          "kind": "action"
+        },
+        {
+          "from": "home-d-window",
+          "to": "home-d-revealed-route",
+          "label": "Within reveal window",
+          "kind": "state"
+        },
+        {
+          "from": "home-d-revealed-route",
+          "to": "home-revealed",
+          "label": "Return when address becomes available",
+          "kind": "state"
+        },
+        {
+          "from": "home-d-revealed-route",
+          "to": "home-event-confirmed",
+          "label": "Event detail",
+          "kind": "state"
+        },
+        {
+          "from": "home-revealed",
+          "to": "home-exact-details",
+          "label": "View exact arrival details",
+          "kind": "action"
+        },
+        {
+          "from": "home-event-confirmed",
+          "to": "home-place-confirmed",
+          "label": "Open the linked place",
+          "kind": "action"
+        },
+        {
+          "from": "home-d-window",
+          "to": "home-expired",
+          "label": "After access expires",
+          "kind": "state"
+        },
+        {
+          "from": "home-expired",
+          "to": "home-independent-rights",
+          "label": "Event-derived access has ended",
+          "kind": "reference"
+        },
+        {
+          "from": "home-d-independent",
+          "to": "home-independent-access",
+          "label": "Yes — use the independent location entitlement",
+          "kind": "yes"
+        },
+        {
+          "from": "home-d-independent",
+          "to": "home-d-consent",
+          "label": "No — check event-derived address access",
+          "kind": "no"
+        }
+      ]
+    },
+    {
+      "id": "console",
+      "title": "Astir’s Team admin console",
+      "description": "All authorized console users have one Team admin role with full access. Staff work branches by task; guests never pass through this console. Proposed recovery and control layouts stay labeled in the screen notes.",
+      "nodes": [
+        {
+          "id": "console-d-admin",
+          "type": "decision",
+          "label": "Is the signed-in operator a current Team admin?"
+        },
+        {
+          "id": "console-no-access",
+          "type": "note",
+          "label": "No console access. Establish an authorized Team admin session; a client-side role flag is not sufficient."
+        },
+        {
+          "id": "console-d-task",
+          "type": "decision",
+          "label": "What is the Team admin trying to do?"
+        },
+        {
+          "id": "console-event",
+          "type": "screen",
+          "screenId": "console-event"
+        },
+        {
+          "id": "console-preview",
+          "type": "screen",
+          "screenId": "console-preview"
+        },
+        {
+          "id": "console-live",
+          "type": "screen",
+          "screenId": "console-live"
+        },
+        {
+          "id": "console-publish",
+          "type": "screen",
+          "screenId": "console-publish"
+        },
+        {
+          "id": "console-registration",
+          "type": "screen",
+          "screenId": "console-registration"
+        },
+        {
+          "id": "console-map-controls",
+          "type": "screen",
+          "screenId": "console-map-controls"
+        },
+        {
+          "id": "console-home",
+          "type": "screen",
+          "screenId": "console-home"
+        },
+        {
+          "id": "console-messages",
+          "type": "screen",
+          "screenId": "console-messages"
+        },
+        {
+          "id": "console-tags",
+          "type": "screen",
+          "screenId": "console-tags"
+        },
+        {
+          "id": "console-invite-codes",
+          "type": "screen",
+          "screenId": "console-invite-codes"
+        },
+        {
+          "id": "console-notifications",
+          "type": "screen",
+          "screenId": "console-notifications"
+        },
+        {
+          "id": "console-guests",
+          "type": "screen",
+          "screenId": "console-guests"
+        },
+        {
+          "id": "console-review-request",
+          "type": "screen",
+          "screenId": "console-review-request"
+        },
+        {
+          "id": "console-request-approved",
+          "type": "screen",
+          "screenId": "console-request-approved"
+        },
+        {
+          "id": "console-offer",
+          "type": "screen",
+          "screenId": "console-offer"
+        },
+        {
+          "id": "console-offer-sent",
+          "type": "screen",
+          "screenId": "console-offer-sent"
+        },
+        {
+          "id": "console-recap-preview",
+          "type": "screen",
+          "screenId": "console-recap-preview"
+        },
+        {
+          "id": "console-recap-live",
+          "type": "screen",
+          "screenId": "console-recap-live"
+        },
+        {
+          "id": "console-publish-failed",
+          "type": "screen",
+          "screenId": "console-publish-failed"
+        },
+        {
+          "id": "console-invite-failed",
+          "type": "screen",
+          "screenId": "console-invite-failed"
+        },
+        {
+          "id": "console-attendance",
+          "type": "screen",
+          "screenId": "console-attendance"
+        },
+        {
+          "id": "console-attendance-corrected",
+          "type": "screen",
+          "screenId": "console-attendance-corrected"
+        },
+        {
+          "id": "console-moderation",
+          "type": "screen",
+          "screenId": "console-moderation"
+        },
+        {
+          "id": "console-photo-removed",
+          "type": "screen",
+          "screenId": "console-photo-removed"
+        },
+        {
+          "id": "console-d-publish-event",
+          "type": "decision",
+          "label": "Are required details valid, and did publication succeed?"
+        },
+        {
+          "id": "console-draft",
+          "type": "note",
+          "label": "Keep the draft and explain missing details or failed saving. Do not announce a live event. Detailed failure UI is not yet mocked."
+        },
+        {
+          "id": "console-d-setting",
+          "type": "decision",
+          "label": "Which operating rule is being edited?"
+        },
+        {
+          "id": "console-d-guest-state",
+          "type": "decision",
+          "label": "Is this guest pending approval or on the waitlist?"
+        },
+        {
+          "id": "console-d-approve",
+          "type": "decision",
+          "label": "Do current identity, booking, capacity and any required code-allowance checks permit approval?"
+        },
+        {
+          "id": "console-pending-unchanged",
+          "type": "note",
+          "label": "Keep the request pending and show the conflict / unavailable capacity. Do not silently move it to the waitlist."
+        },
+        {
+          "id": "console-d-offer",
+          "type": "decision",
+          "label": "Can a seat and any required code allowance be held for this offer?"
+        },
+        {
+          "id": "console-offer-not-issued",
+          "type": "note",
+          "label": "No offer or confirmation is created. Explain the unavailable limit or unresolved cutoff/deadline conflict."
+        },
+        {
+          "id": "console-h-offer-accept",
+          "type": "handoff",
+          "label": "Guest must accept the valid offer before its deadline",
+          "targetStage": "reservation",
+          "targetScreen": "offer"
+        },
+        {
+          "id": "console-h-confirmed",
+          "type": "handoff",
+          "label": "Guest receives the confirmed RSVP state and message",
+          "targetStage": "reservation"
+        },
+        {
+          "id": "console-d-recap-published",
+          "type": "decision",
+          "label": "Did recap publication succeed?"
+        },
+        {
+          "id": "console-d-invites",
+          "type": "decision",
+          "label": "Did invitation deliveries succeed?"
+        },
+        {
+          "id": "console-h-recap-return",
+          "type": "handoff",
+          "label": "Eligible guests receive the notice / text and return",
+          "targetStage": "return"
+        },
+        {
+          "id": "console-retry-delivery",
+          "type": "note",
+          "label": "Retry only failed / unresolved deliveries. Keep the published recap and successful deliveries; do not double-send."
+        },
+        {
+          "id": "console-d-correction",
+          "type": "decision",
+          "label": "Has staff verified valid attendance and saved the correction?"
+        },
+        {
+          "id": "console-not-corrected",
+          "type": "note",
+          "label": "No correction or recap entitlement is granted without verified, saved admission."
+        },
+        {
+          "id": "console-h-after-correction",
+          "type": "handoff",
+          "label": "Re-evaluate recap publication and historical check-in completion",
+          "targetStage": "return"
+        },
+        {
+          "id": "console-d-removed",
+          "type": "decision",
+          "label": "Did the authorized source-photo removal succeed?"
+        },
+        {
+          "id": "console-not-removed",
+          "type": "note",
+          "label": "Show removal failure; do not claim the source is gone. Detailed recovery layout remains to be reviewed."
+        },
+        {
+          "id": "console-h-door",
+          "type": "handoff",
+          "label": "Scan or look up arrivals",
+          "targetStage": "door",
+          "targetScreen": "staff-scan"
+        },
+        {
+          "id": "console-h-roster",
+          "type": "handoff",
+          "label": "Prepare the offline door roster",
+          "targetStage": "offline-door",
+          "targetScreen": "offline-roster-prepare"
+        }
+      ],
+      "edges": [
+        {
+          "from": "console-d-admin",
+          "to": "console-no-access",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-d-admin",
+          "to": "console-d-task",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-event",
+          "label": "Create / edit the event",
+          "kind": "action"
+        },
+        {
+          "from": "console-event",
+          "to": "console-preview",
+          "label": "Preview the saved draft",
+          "kind": "action"
+        },
+        {
+          "from": "console-preview",
+          "to": "console-d-publish-event",
+          "label": "Choose Publish",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-publish-event",
+          "to": "console-live",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-publish-event",
+          "to": "console-draft",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-draft",
+          "to": "console-event",
+          "label": "Correct and retry",
+          "kind": "retry"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-d-setting",
+          "label": "Configure event rules",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-publish",
+          "label": "Visibility / follow-up",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-registration",
+          "label": "Approval / offer defaults / RSVP cutoff",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-map-controls",
+          "label": "Event map styling",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-home",
+          "label": "Home privacy / consent",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-messages",
+          "label": "SMS templates / timing",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-tags",
+          "label": "Optional check-in tags",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-invite-codes",
+          "label": "Invitation codes / limits",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-setting",
+          "to": "console-notifications",
+          "label": "Push and SMS program",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-guests",
+          "label": "Manage guests",
+          "kind": "action"
+        },
+        {
+          "from": "console-guests",
+          "to": "console-d-guest-state",
+          "label": "Choose the guest",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-guest-state",
+          "to": "console-review-request",
+          "label": "Pending approval",
+          "kind": "state"
+        },
+        {
+          "from": "console-d-guest-state",
+          "to": "console-offer",
+          "label": "Waitlisted — staff selects recipient",
+          "kind": "state"
+        },
+        {
+          "from": "console-review-request",
+          "to": "console-d-approve",
+          "label": "Choose Approve",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-approve",
+          "to": "console-request-approved",
+          "label": "Yes — confirmation succeeds",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-approve",
+          "to": "console-pending-unchanged",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-offer",
+          "to": "console-d-offer",
+          "label": "Issue the selected guest’s offer",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-offer",
+          "to": "console-offer-sent",
+          "label": "Yes — offer issued with a deadline",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-offer",
+          "to": "console-offer-not-issued",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-offer-sent",
+          "to": "console-h-offer-accept",
+          "label": "Sending the offer is not confirmation",
+          "kind": "state"
+        },
+        {
+          "from": "console-request-approved",
+          "to": "console-h-confirmed",
+          "label": "Approval committed",
+          "kind": "state"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-recap-preview",
+          "label": "Publish the post-event recap",
+          "kind": "action"
+        },
+        {
+          "from": "console-recap-preview",
+          "to": "console-d-recap-published",
+          "label": "Publish ready recap",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-recap-published",
+          "to": "console-recap-live",
+          "label": "Yes — then queue invitations",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-recap-published",
+          "to": "console-publish-failed",
+          "label": "No — send no invitations",
+          "kind": "no"
+        },
+        {
+          "from": "console-publish-failed",
+          "to": "console-recap-preview",
+          "label": "Correct and retry publication",
+          "kind": "retry"
+        },
+        {
+          "from": "console-recap-live",
+          "to": "console-d-invites",
+          "label": "Process queued invitations",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-invites",
+          "to": "console-invite-failed",
+          "label": "Some failed / unresolved",
+          "kind": "no"
+        },
+        {
+          "from": "console-d-invites",
+          "to": "console-h-recap-return",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "console-invite-failed",
+          "to": "console-retry-delivery",
+          "label": "Review failed sends",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-attendance",
+          "label": "Correct a missed admission",
+          "kind": "action"
+        },
+        {
+          "from": "console-attendance",
+          "to": "console-d-correction",
+          "label": "Check and correct admission",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-correction",
+          "to": "console-attendance-corrected",
+          "label": "Yes",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-correction",
+          "to": "console-not-corrected",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-attendance-corrected",
+          "to": "console-h-after-correction",
+          "label": "Admission corrected; no personal visit created",
+          "kind": "state"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-moderation",
+          "label": "Moderate a source upload",
+          "kind": "action"
+        },
+        {
+          "from": "console-moderation",
+          "to": "console-d-removed",
+          "label": "Remove the selected source photo",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-removed",
+          "to": "console-photo-removed",
+          "label": "Yes — invalidate its references",
+          "kind": "yes"
+        },
+        {
+          "from": "console-d-removed",
+          "to": "console-not-removed",
+          "label": "No",
+          "kind": "no"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-h-door",
+          "label": "Scan or look up arrivals",
+          "kind": "action"
+        },
+        {
+          "from": "console-d-task",
+          "to": "console-h-roster",
+          "label": "Prepare the offline door roster",
+          "kind": "action"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2271 @@
+{
+  "area": "booking, communications, admission and internal console",
+  "baseline": {
+    "source": "astir-events-spec/events-exit-criteria.md: B01–B16, M01–M14, A01–A11, C01–C07",
+    "source_decisions": "engineering-plan.md approved D3A–D14A and D16A; D17A authorizes this test review only",
+    "repo": "wander-events-flowchart-review",
+    "head": "f8d258e869503a28d70518a050dff36a344134c6",
+    "reviewed_code_base": "a0117cff6ed55a967f4212b45bb28d8c39ca1488",
+    "observed_origin_main": "0d29d776f42132a28548355ae4e18302cdc3857a",
+    "drift": "Read-only git diff a0117cff..origin/main shows only docs/designs/astir-events artifacts; inspected scripts, Supabase, project.yml and framework code unchanged.",
+    "status": "PLANNED ONLY: no Events test implementation, application test execution, hosted requests, real messages, or admin configuration changes performed.",
+    "mapping_count": 48,
+    "additional_risk_count": 10,
+    "browser_framework": "Playwright test locations are proposed; no existing web package, browser-test framework or Playwright installation was found in inspected tracked files. Selection/setup remains implementation work."
+  },
+  "cases": [
+    {
+      "id": "B01",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/rsvp.spec.ts"
+      ],
+      "assertions": [
+        "With codes disabled, an eligible account can complete the free verified RSVP through the actual API without supplying an invented empty code.",
+        "Assert one confirmed booking and correct capacity allocation; failure/unknown response remains recoverable and never fabricates confirmation.",
+        "Browser UI must not force app installation before confirmation; native/Clip consumers use the same state contract."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/invitation-codes.spec.ts",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "An authorized Team admin generates an optional code; an eligible recipient supplies it for the same canonical event.",
+        "Forwarded invitation/code never authenticates its recipient as the sender, transfers an RSVP, or exposes sender phone or private booking data.",
+        "Only an authorized admin can generate/inspect code administration; direct ordinary-user calls fail. Exact code-entry/prefill UI remains P18-proposed."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_booking.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/invitation-codes.spec.ts"
+      ],
+      "assertions": [
+        "Multiple distinct verified eligible accounts can use an unlimited code without an artificial usage ceiling.",
+        "Unlimited code never bypasses event capacity, manual approval, account ownership, verification or the later full-app entry gate.",
+        "Known pending/waitlisted/confirmed states return the actual existing request rather than another allocation."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B04",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke"
+      ],
+      "planned_files": [
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_booking.sql",
+        "scripts/supabase-smoke-test.mjs"
+      ],
+      "assertions": [
+        "Five pending/waitlisted requests on a five-use code consume zero uses and reserve zero allowance absent an issued offer.",
+        "Automatic confirmation, manual approval and valid offer acceptance each allocate exactly one consumed use with one confirmed booking/seat in the same transaction.",
+        "A valid offer reserves code allowance without consuming it; unrelated confirmation cannot spend that allowance.",
+        "Invalid, unverified, rejected or transaction-failed confirmations consume no use, create no seat and enqueue no confirmed message. Exhausted quota cannot confirm."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs"
+      ],
+      "assertions": [
+        "Use separate DB sessions and explicit barriers to contend two eligible confirmations for the last seat AND last code use; verify committed totals and final outcomes rather than sequential RPC results.",
+        "Repeat with an issued offer already holding the last allowance, and with manual approval, cancellation/rebooking and offer issuance racing; no allocation spends protected capacity or code allowance.",
+        "Drop the client response after a successful commit, then retry the same operation identity: one current booking, one consumed use, one seat and one logical confirmation message.",
+        "Inspect a fresh session after all commits; assert no orphan allocation, negative counter, duplicate logical message or unhandled deadlock."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/guest/invitation-codes.spec.ts"
+      ],
+      "assertions": [
+        "Missing/invalid required code blocks new submission without losing event/account context; a disabled code blocks new submissions and unfinished attempts.",
+        "Previously committed, account-bound, verified pending/waitlist requests retain code eligibility, but still need available quota/capacity and approval; existing confirmations and valid offers survive.",
+        "Synchronize submission versus code deactivation in two DB sessions to prove commit ordering, then retry a lost committed response; no client timestamp or code precheck manufactures grandfathered eligibility.",
+        "Cancellation followed by deliberate rebooking is a new attempt and receives no inherited eligibility. Other code edits/cap reductions and exact P18 UI are POLICY-GATED, not approved by this test."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B07",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/guest/rsvp.spec.ts"
+      ],
+      "assertions": [
+        "For default registration close at event end, eligible online RSVP succeeds after start but before end; repeat with a configured earlier close and before/at/after boundaries.",
+        "A new unreserved phone-verification attempt holds no seat; if capacity fills meanwhile, retain verified identity and offer the choice to join the event waitlist without automatic enrollment.",
+        "After the cutoff, unfinished attempts cannot submit a new booking. A pre-cutoff committed request with a lost response resolves its current booking, including pending state.",
+        "Include a request blocked on capacity lock until cutoff passes and assert fresh server eligibility at the mutation boundary; no payment, offline signup, self-cancel extension or entry-app waiver."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B08",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Pending manual-review application allocates no seat or code use and exposes no confirmed-only rights.",
+        "Approval with unprotected seat/code allowance atomically confirms once and enqueues one logical confirmation; duplicate/lost-response retry reads current state.",
+        "With insufficient capacity or code allowance, applicant remains pending and operator sees the reason; no false success, automatic waitlist move or theft of issued-offer/D31-protected capacity.",
+        "Two independently authenticated admins approve different applicants in separate DB sessions against the last spot; at most one commits."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B09",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/rsvp.spec.ts"
+      ],
+      "assertions": [
+        "A full event, or released inventory still protected for active waitlist selection, returns a real event-waitlist option rather than false confirmation.",
+        "Joining an event waitlist requires an explicit guest action; city-interest state remains a distinct record and cannot count as event attendance/confirmation.",
+        "No waitlisted requester gains confirmed guest list, QR or exact-home reveal by reading a client flag or requesting the API directly."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B10",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/guest/offers.spec.ts",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Admin selection creates an offer, not confirmation; opening the link never accepts. Authenticated owner sees the actual offer/deadline without confirmed benefits.",
+        "Offer creation atomically holds one seat and, if required, one available code allowance; allowance is held rather than consumed.",
+        "Concurrent offer issuance against the last seat/code allowance cannot overissue; lack of either limit leaves no unusable orphan offer.",
+        "Default offer duration is 24h unless configured. Bounding a new offer by registration close / changing an issued deadline remains POLICY-GATED and must not silently shorten a promised hold."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B11",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/offers.spec.ts"
+      ],
+      "assertions": [
+        "A correct authenticated owner accepting a valid offer before deadline converts the existing seat/code holds into one confirmed booking and consumed use.",
+        "Repeated acceptance and a lost-success-response retry after the old deadline return the current successful booking without another allocation/message or false expiry.",
+        "After a subsequent cancellation, stale acceptance returns current canceled state and cannot revive the booking or reclaim released allowance.",
+        "No ownership proof is accepted from a name, phone string, forwarded URL or a different signed-in account."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B12",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/guest/offers.spec.ts"
+      ],
+      "assertions": [
+        "Wrong-account, declined, expired-unaccepted and at-deadline acceptance fail without confirmation or confirmed benefits.",
+        "Start the contender transaction before deadline, hold its capacity lock in another DB session until after deadline, then release it: acceptance must use a fresh authoritative server clock AFTER lock acquisition, not transaction-start now() or client time.",
+        "Delay expiry cleanup: expired holds stop allocating seat/code allowance and cannot be accepted; decline/expiry release unconsumed allowance once without a cancellation refund or automatic next promotion.",
+        "D31 still protects released capacity while applicable waitlist exists. Post-expiry display/withdrawal/reselection details remain P11 POLICY-GATED."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B13",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_private_location.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/guest/manage-rsvp.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Recognized confirmed guest cancels before start on app, App Clip and browser; full-app download is not required for no-app management.",
+        "Successful cancellation releases the seat and refunds a consumed capped-code use once; code-free booking produces no allowance. Old QR and booking-based precise-location entitlement are invalid.",
+        "After commit-response loss, repeat cancellation cannot refund twice; old approval/offer retries cannot revive it. A deliberate rebooking uses current capacity/code/approval/waitlist rules.",
+        "Race cancellation, another guest spending the returned allowance and original guest rebooking in separate DB sessions; no retained claim or lost-generation retry can cancel the new booking.",
+        "Preserve D31-protected released inventory. Cancellation confirmation-copy/extra prompt remains P03-proposed."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B14",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/guest/manage-rsvp.spec.ts"
+      ],
+      "assertions": [
+        "At and after current event start, self-cancellation is blocked; include boundary at the new start after an approved reschedule.",
+        "Failure before start leaves booking, seat, code consumption and entitlement unchanged, with no canceled UI or extra allowance.",
+        "Distinguish rejected mutation from unknown transport completion; unknown UI retries/resolves the same operation, not an untracked second cancellation."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B15",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Reducing capacity below confirmed plus active unexpired holds fails without deleting or changing confirmations/offers; equality is allowed if otherwise valid.",
+        "Race capacity reduction against confirmation/offer issuance under the same event lock; final committed commitments never exceed capacity.",
+        "POLICY-GATED: approval-mode edits and changes to issued offer duration must acquire expected assertions only after P04/P11 policy approval; do not default those proposals to passing requirements."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/migrations/20260729123000_web_links_and_place_list_invites.sql",
+          "line": 210,
+          "note": "Existing list invitation locks a specific row, not shared event capacity; Events races cannot be assumed solved by reuse. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "B16",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_publication.sql",
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_private_location.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/manage-rsvp.spec.ts",
+        "events-web/tests/console/event-controls.spec.ts",
+        "events-web/tests/console/offline-admission.spec.ts"
+      ],
+      "assertions": [
+        "Reschedule an upcoming event to a future date: same event/canonical link, confirmed booking, seat and code use; canceled bookings remain canceled; issued offer deadline does not silently reset.",
+        "Successful revision changes current event/ticket/relative home windows and schedules important-change messaging; allow pre-start cancellation against the current event start.",
+        "Repeat the same revision / fail its transaction: no duplicate logical notice or notice for failed state. An old queued reminder cannot dispatch as current; delivery failure does not undo the edit.",
+        "Old links fetch new state. Exported calendars, previously disclosed addresses and disconnected roster snapshots are explicitly not claimed to update/erase remotely.",
+        "POLICY-GATED: event-wide cancellation, venue changes, completed-event edits, exact calendar payload and issued-offer edits remain separate proposals."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 892,
+          "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M01",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/message-recovery.spec.ts"
+      ],
+      "assertions": [
+        "Successful confirmed RSVP without full app atomically enqueues exactly one logical confirmation SMS for the verified event phone and canonical View event link.",
+        "No confirmed message on uncommitted/failed RSVP or nonconfirmed state; no push registration/permission/install requirement for confirmation.",
+        "Use an allowlisted fake SMS transport and inspect payload/outbox records; queued/API-accepted is not delivered, read or attended. Never send a real text during these tests."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M02",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/message-recovery.spec.ts"
+      ],
+      "assertions": [
+        "Pending, waitlisted and offered fixtures cannot receive a confirmation template, confirmed-only guest list or 24h precise-address entitlement.",
+        "Any configured state-specific message is derived from current committed state; offer message explains acceptance without accepting merely on open.",
+        "Anonymous/wrong-account delivery-link opens do not transfer the recipient entitlement or expose their private phone/booking."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M03",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "Control scheduler time immediately before, at and after start-minus-24h and start-minus-2h; each agreed reminder produces one logical send for the still-confirmed eligible account.",
+        "Repeat scheduler claims with independent workers and verify same message identity/channel uniqueness; use current event revision and canonical link, including a rescheduled event.",
+        "No full-app installation dependency for SMS; future-marketing preference is not reused as the event-message gate."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 892,
+          "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M04",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "POLICY-GATED P10: once late-reminder policy is reviewed, parameterize RSVP before both, between, and after both scheduled reminders.",
+        "Confirmation remains the approved success trigger; proposed skip-elapsed / only-remaining behavior must be tagged pending policy, not silently implemented as an approved schedule.",
+        "Use fake clock and compare message identities/due times; no wall-clock sleeps or real SMS."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M05",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_publication.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/message-recovery.spec.ts",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Publish a reschedule and retry the identical revision: affected confirmed guests get one logical important-change notice and current management/cancellation link without reconfirming.",
+        "Failed publish enqueues no notice. Worker rechecks current revision/recipient eligibility so an obsolete queued reminder cannot falsely report the old schedule as current.",
+        "A provider delivery failure does not roll back the event update or make canonical event details disappear; UI exposes actual current state independently.",
+        "Exact provider retry/fallback cadence remains proposed; test selected mechanics only after contract review."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.ts",
+          "line": 149,
+          "note": "Existing worker settles results using event and claim token, providing a seam to assess rather than proof of Events reliability. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 892,
+          "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M06",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_publication.sql",
+        "supabase/tests/events_admission.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "Event end alone or failed/unpublished recap creates no recap-ready invitation.",
+        "Successful publication targets valid server-admitted guests for content/check-in invitation; RSVP-only/no-show or locally queued offline admission does not qualify.",
+        "Repeated publish/reconcile creates one logical owed invitation; full protected recap still requires explicit historical completion, not receipt of the invite.",
+        "Trigger ownership is after-event-map; all delivery uses the shared foundation and its fake-provider tests."
+      ],
+      "owner_package": "after-event-map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M07",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/push-notification-worker/events.test.ts",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "WanderUITests/EventsMessageReturnUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "On real iPhone exercise allowed, denied, not-yet-asked, later-disabled notification settings and invalid/removed token fixtures.",
+        "Optional value explanation precedes native permission request; denial/unavailable push never blocks RSVP, QR or eligible recap. Event SMS has its own eligibility.",
+        "Invalid-token treatment does not revoke account/booking or disable unrelated valid devices; accepted provider status does not claim delivery/read.",
+        "POLICY-GATED: exact push schedule or additional cross-channel fallback is not chosen by these invariants. App Clip permission is not proof of the full long-lived message program."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests classify APNs permanent-token, permanent-event and retryable failures. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 837,
+          "note": "Existing push settlement tests assert one accepted token does not hide another token retry; Events SMS and door queues need their own coverage. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M08",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/message-recovery.spec.ts"
+      ],
+      "assertions": [
+        "Unchecked future-event marketing choice prevents marketing enrollment/send while preserving approved event-program enrollment and booking.",
+        "POLICY-GATED P10 opt-out mechanics: after selection, opted-out event messages must stay suppressed without canceling the RSVP; no push-failure fallback silently overrides that choice.",
+        "Recheck channel eligibility at dispatch and reject client attempts to mutate another account consent; no phone/consent data in public event projection or analytics.",
+        "Test an already-queued message versus consent change with fake transport; concrete STOP/provider response semantics remain dependent on selected provider/policy."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 119,
+          "note": "Existing analytics test excludes recipient and notification content; Events must add its own sensitive-field fixtures. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M09",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "supabase/functions/push-notification-worker/events.test.ts",
+        "scripts/events-concurrency.test.mjs"
+      ],
+      "assertions": [
+        "Replay trigger, concurrent claims, duplicated callbacks, lease expiry and worker crash: retain one intended logical message/channel and reject stale claim settlements.",
+        "Mixed batch includes provider-accepted, retryable, permanently invalid and unknown transport results; persist per-recipient/channel outcome and do not resend accepted successes when retrying failures.",
+        "Provider accepted request but acknowledgement/DB settlement is lost: preserve unknown outcome and resolve using the chosen provider idempotency/status contract; do not claim exactly-once physical delivery or blindly create a second SMS.",
+        "Push failure after planned SMS does not add another SMS. queued, submitted/sent, provider-confirmed-delivered, failed and unknown remain distinct; retry/fallback schedule is POLICY-GATED."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 837,
+          "note": "Existing push settlement tests assert one accepted token does not hide another token retry; Events SMS and door queues need their own coverage. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 892,
+          "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 50,
+          "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M10",
+      "layers": [
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest"
+      ],
+      "planned_files": [
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/guest/message-recovery.spec.ts",
+        "WanderUITests/EventsMessageReturnUITests.swift"
+      ],
+      "assertions": [
+        "Fake SMS outage/permanent failure, no usable push and never-opened messages leave canonical event and existing booking available in browser and Events.",
+        "Required later app/QR and check-in actions remain discoverable without a notification; no message read, delivery or attendance claim follows from queueing or API acceptance.",
+        "Timeout/unknown message status does not create another reservation, require a repeat signup or hide the changed event."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 23,
+          "note": "Existing Deno tests classify APNs permanent-token, permanent-event and retryable failures. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M11",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_admission.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts"
+      ],
+      "assertions": [
+        "Canceled/revoked booking cannot be rendered in an outgoing message as presently confirmed/ready to enter; verify current state immediately before dispatch.",
+        "POLICY-GATED P05/P10: precise suppression and state-change schedule for event-wide cancellation remain unapproved; add expected sends only after selection.",
+        "Use concurrent cancellation versus worker claim to ensure stale queued claims do not restore booking rights; an already externally delivered message cannot be retracted, so its link must resolve current state."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 892,
+          "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.ts",
+          "line": 149,
+          "note": "Existing worker settles results using event and claim token, providing a seam to assess rather than proof of Events reliability. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M12",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_private_location.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Two authorized Team admins can edit content/timing; ordinary, signed-out and revoked callers cannot write templates or inspect private preview recipients via direct API.",
+        "Preview configured recipient states and inspect HTML/accessibility tree/network payload as well as visible copy: no exact home location, private recap content, phone or other guest data outside authorization.",
+        "Successful relevant change affects appropriate future sends; failed save does not show success or dispatch a message.",
+        "POLICY-GATED P09/P19: exact draft/preview/publish procedure and schedule fallback are not adopted by this test mapping."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.test.ts",
+          "line": 119,
+          "note": "Existing analytics test excludes recipient and notification content; Events must add its own sensitive-field fixtures. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M13",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "events-web/tests/guest/message-recovery.spec.ts",
+        "WanderUITests/EventsMessageReturnUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "On physical iPhone admit guest, remove full app, open canonical recap link from a controlled test-message route, then reinstall/open and authenticate original account.",
+        "Clip/browser shows appropriate event and app handoff for check-in/upload, without claiming push delivery to removed installation or offering browser completion.",
+        "Recover server admission/completion; never duplicate booking or visit. Completed guest returns directly to eligible recap; incomplete guest still needs explicit check-in.",
+        "API-backed web test proves server state; device evidence must separately prove OS link/uninstall/reinstall behavior. No real SMS is sent in this review."
+      ],
+      "owner_package": "entry-and-identity",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "M14",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/console/admission.spec.ts"
+      ],
+      "assertions": [
+        "Authorized correction after recap publication creates canonical admission and correct eligibility without personal post, visit or completion.",
+        "Repeated correction and lost-response retry create no duplicate admission or logical owed invitation; pending offline correction alone does not qualify.",
+        "POLICY-GATED: exact late-invitation send procedure still requires review; test agreed eligibility now and activate its specific delivery assertions only after selection."
+      ],
+      "owner_package": "after-event-map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/functions/push-notification-worker/index.ts",
+          "line": 149,
+          "note": "Existing worker settles results using event and claim token, providing a seam to assess rather than proof of Events reliability. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A01",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Scan confirmed full-app guest with valid name/username and no profile photo using authenticated web console on intended staff device.",
+        "Assert exactly one correct event/account canonical admission and actor attribution; no automatic place visit, Been status, personal post or historical completion.",
+        "Shared/native state fixtures and API reject missing setup/confirmation; optional photo absence does not become an entry gate.",
+        "Verify actual camera/QR readability and full-app-to-scanner flow on physical hardware, not only mocked browser camera input."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A02",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "events-web/tests/guest/rsvp.spec.ts",
+        "events-web/tests/console/admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Full app absent or unsupported guest device shows the supported phone/app entry requirement and correct Open/Get Astir action.",
+        "Browser/Clip RSVP confirmation and same-surface management remain possible where supported, but browser-only admission/QR bypass is not invented.",
+        "Verify real app-installed/not-installed routing separately from test fixture simulation; denial retains the guest event/booking context."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A03",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "With installed app and completed valid account/confirmed booking, force QR-load failure and perform verified staff lookup/admission.",
+        "Fallback authorizes the same canonical booking after account/app checks; QR-load failure itself, name match or phone string does not prove eligibility.",
+        "Pending/waitlisted, wrong account and incomplete setup cannot enter through the fallback. Recovery produces no replacement RSVP or personal visit.",
+        "Physical rehearsal must demonstrate how the approved installed-app/account checks are performed; no new staff role/device exemption."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A04",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts",
+        "events-web/tests/console/offline-admission.spec.ts"
+      ],
+      "assertions": [
+        "Direct online requests for wrong event/account, canceled/ineligible credential, ambiguous/no lookup result cannot create admission or reveal protected data.",
+        "Known invalid or missing downloaded roster entry cannot be fabricated as confirmed during an outage; no offline signup.",
+        "An old snapshot that really contains a matching confirmed entry follows D9 pending reconciliation, not false current server success; test separately from known-invalid state.",
+        "Distinguish permission denial, unauthenticated, lookup failure and genuinely no match; do not reinterpret all as QR-loading fallback."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A05",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/console/admission.spec.ts"
+      ],
+      "assertions": [
+        "Repeat same scan/manual mutation and contend distinct operation IDs for the same guest/event in separate sessions: one canonical admission with existing-result response.",
+        "Lost committed response retry creates no extra admission, attendance-dependent invitation or personal visit.",
+        "Operator sees previous admission without claiming a second unique attendee. Physical reentry treatment remains P15 POLICY-GATED; no staff-lead role is added."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A06",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts"
+      ],
+      "assertions": [
+        "Authorized missed-admission correction changes admission/recap eligibility without creating/deleting the personal check-in, completion or independent place history.",
+        "POLICY-GATED P15: detailed revocation procedure awaits review. Once revoked under a selected procedure, protected recap authorization must not persist through API or stale UI/cache.",
+        "Preserve actor attribution, idempotent correction and distinction among booking, admission and completion."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 68,
+          "note": "Existing history repair is tested for idempotence and preservation of historical activity; Events must extend canonical-history regression coverage. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A07",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts",
+        "events-web/tests/console/authorization.spec.ts"
+      ],
+      "assertions": [
+        "Signed-out, expired-session, ordinary-account and revoked Team admin direct API calls fail protected server reads/mutations; both active Team admins can operate all console functions.",
+        "Connection loss after Admit commit leaves an unknown/reconciling state; resolve the same stable operation identity/current admission before attempting another logical admission.",
+        "Prepared offline roster may not know remote revocation while disconnected; on reconnect require current authorized account and preserve unresolved work without bypassing rights.",
+        "Unknown/403 outcomes must not display confirmed success or be flattened into a misleading no-booking state."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A08",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/admission.spec.ts",
+        "events-web/tests/console/offline-admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Online authorized admin downloads one complete versioned account/event roster with visible last-sync; it contains only required identification/booking data, no unrelated feedback/gallery/exact private-venue fields.",
+        "Disconnect, match valid guest/account/app, persist stable operation and roster version BEFORE showing Admitted offline · awaiting sync; reload preserves queue and local same-device deduplication.",
+        "Before server reconciliation, attendee cannot gain check-in eligibility or protected recap. Reconnect validates current server rules and creates exactly one canonical admission.",
+        "After reconciliation, normal historical-completion gate still applies and no personal visit is created by admission. Verify reload/offline persistence and scanner lifecycle on actual intended staff browsers."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A09",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/offline-admission.spec.ts",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Download confirmed roster, then change/cancel booking, reschedule event or revoke acting admin in the isolated test backend while device is offline.",
+        "Offline UI identifies snapshot/last-sync and queued status, not current truth. Reconnect rechecks current event/booking/team rights and reports each conflict without restoring old entitlement.",
+        "Invalid or denied queue rows stay unresolved for an authorized Team admin; do not silently discard them or grant recap from client timestamps.",
+        "Do not promise immediate remote cache erasure or schedule updates during total disconnection; no cross-account roster exposure during recovery."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/console/offline-admission.spec.ts",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Use two separate offline browser/device stores to record same guest, plus valid and conflicting other guests; synchronize a mixed batch.",
+        "Stable operation identity plus canonical event/guest uniqueness yields one admission and no duplicate downstream invitation; each response identifies its individual committed/duplicate/conflict/unknown result.",
+        "Drop response after partial or full server commit and repeat the same batch: reconcile successes idempotently, retain unknown/unresolved rows, never mark entire queue synced after partial failure.",
+        "Local device counts stay explicitly local; same-guest multi-device race is checked in separate DB sessions, then exercised on two intended staff devices."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "scripts/package.json",
+          "line": 24,
+          "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 837,
+          "note": "Existing push settlement tests assert one accepted token does not hide another token retry; Events SMS and door queues need their own coverage. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "events-web/tests/console/offline-admission.spec.ts",
+        "events-web/tests/console/authorization.spec.ts",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Interrupt paginated roster refresh and inject failed durable queue write/quota exceeded: previous complete snapshot survives and failed write never produces admitted-offline acknowledgement.",
+        "Reload, close/reopen, update shell/service-worker version and interrupt synchronization: unsynced operations retain original IDs and account/event ownership within verified supported browser behavior.",
+        "Evict local data before reopening offline: show roster/queue unavailable, never empty-success or synced. Document actual browser eviction/lifecycle behavior without claiming storage is guaranteed.",
+        "Sign out/switch accounts with unsynced rows: make pending work/cleanup consequences explicit first, lock/remove protected access, and never expose or reassign the former account queue to the next account.",
+        "Exact persistence technology/retention is implementation validation, not an approved TTL or a promise of remotely erasing an offline device."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C01",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_private_location.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/authorization.spec.ts",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Two separately authenticated Team admins can use all Events controls including scanner, content, messages, settings and private feedback; no per-event assignment or organizer/door split.",
+        "Ordinary member, anonymous caller, expired session and revoked membership fail protected API and direct table/storage/RPC access; an already-open page or forged client flag does not grant rights.",
+        "Check grants, RLS, security mode and pinned search_path for new/changed RPCs; service-only worker functions are not callable with guest/admin client credentials.",
+        "Guest preview requests obey guest permissions and cannot inherit console/private feedback/exact-home data into public payloads; record acting admin on writes."
+      ],
+      "owner_package": "events-data-and-rules",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C02",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_publication.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Authorized admin creates and changes an event using the shared backend configuration: exactly one canonical linked place, event timing, image, description and RSVP controls.",
+        "Read from a second authenticated browser/API session to prove persistence and guest-facing result, not merely local form state.",
+        "Reject failed mutations without success UI or publication side effects; direct unauthorized mutation cannot bypass the console.",
+        "POLICY-GATED P19/P09: precise required draft fields, preview/publish sequence and unavailable-draft behavior remain proposals until reviewed."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C03",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_private_location.sql",
+        "supabase/tests/events_publication.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/event-controls.spec.ts"
+      ],
+      "assertions": [
+        "Exercise each approved control: map style toggle/window/preset, home reveal/expiry, automatic/manual mode, code mode/cap, offer duration and earlier registration close; show saved current value and correct guest result.",
+        "Assert authorized persisted settings across a separate API-backed guest context; invalid input or failed save cannot show success or leak exact-home details in preview.",
+        "Capacity reduction respects confirmed/held commitments; approved deactivation, current cutoff and reveal/expiry behavior remain consistent with B06/B07/B15 and home tests.",
+        "POLICY-GATED: behavior of existing requests after approval-mode edits, issued-deadline edits, quota reductions or whole-event code changes is not selected by the existence of these controls."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C04",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_publication.sql",
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "events-web/tests/console/recap-publication.spec.ts"
+      ],
+      "assertions": [
+        "Admin assigns correct event first-party photos/videos and suggested tags, then publishes via actual API in an isolated environment.",
+        "Only successfully committed publication may create content/check-in invitation work; failed upload/publication or unauthorized publish creates no false ready state or outgoing invite.",
+        "Other event tags/media cannot appear accidentally; guest projections and protected media stay permission-gated.",
+        "Trigger ownership is after-event-map; use the common messaging enqueue contract, not a second independent delivery system."
+      ],
+      "owner_package": "after-event-map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/notifications.sql",
+          "line": 6,
+          "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "scripts/supabase-smoke-test.mjs",
+          "line": 1110,
+          "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C05",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_canonical_history_regression.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/event-controls.spec.ts",
+        "events-web/tests/console/admission.spec.ts",
+        "events-web/tests/console/recap-publication.spec.ts"
+      ],
+      "assertions": [
+        "Waitlist selection issues held offer and never confirms automatically; eligible approval respects code/capacity/approval rules.",
+        "Missed-scan correction only changes admission; it creates no personal post/completion/Been visit.",
+        "Authorized media removal invalidates the source wherever referenced while preserving remaining posts, notes, visits and independent history; cannot mutate unrelated event media.",
+        "Observe actual database results and a separate guest API context after each console action, plus failure/unknown-response UI."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 68,
+          "note": "Existing history repair is tested for idempotence and preservation of historical activity; Events must extend canonical-history regression coverage. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 101,
+          "note": "Existing owner-deletion test ensures repair does not revive a deleted check-in. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C06",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "native XCTest / XCUITest"
+      ],
+      "planned_files": [
+        "supabase/tests/events_canonical_history_regression.sql",
+        "supabase/tests/events_authorization.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "WanderTests/EventsCanonicalHistoryTests.swift"
+      ],
+      "assertions": [
+        "Create independent ordinary place visit, note, rating, follower-only audience, list membership and explicit save; complete/delete an event visit at the same canonical place.",
+        "Event adds one event-labeled canonical visit with no invented venue rating, parent-rating/note overwrite, audience broadening or second history; deletion retains independent records/intent.",
+        "Repeat with blocked/nonfollower contexts and historical compatibility/backfill repair; older restricted activity must not become visible or deleted activity revived.",
+        "Native adapter and DB projection must agree on distinct admission, historical completion and visit/post deletion. Existing adjacent history tests are prerequisites, not Events coverage."
+      ],
+      "owner_package": "after-event-map",
+      "requires_real_device": false,
+      "existing_evidence": [
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 68,
+          "note": "Existing history repair is tested for idempotence and preservation of historical activity; Events must extend canonical-history regression coverage. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/checkin_history_engagement.sql",
+          "line": 101,
+          "note": "Existing owner-deletion test ensures repair does not revive a deleted check-in. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/rls_visibility.sql",
+          "line": 7,
+          "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    },
+    {
+      "id": "C07",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "WanderUITests/EventsNavigationUITests.swift",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "events-web/tests/guest/rsvp.spec.ts",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Native navigation places QR in Events and introduces no separate Tickets tab; actual setup gate collects missing name/username and leaves photo optional.",
+        "Inspect source/feature flags and visible journey for unapproved reconnection or future profile/check-in privacy expansion; retain existing permissions without shipping deferred new controls.",
+        "Browser and Clip stay no-install RSVP/management surfaces until entry; native/App Clip build and physical invocation evidence remain separate from HTML design verification.",
+        "Report each runtime layer as not implemented/not executed until evidence exists; screenshots, mapped acceptance IDs and frontend prototypes cannot count as backend or release passes."
+      ],
+      "owner_package": "entry-and-identity",
+      "requires_real_device": true,
+      "existing_evidence": [
+        {
+          "file": "project.yml",
+          "line": 45,
+          "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+        },
+        {
+          "file": "supabase/tests/clerk_identity_continuity.sql",
+          "line": 7,
+          "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+        }
+      ]
+    }
+  ],
+  "additional_risks": [
+    {
+      "id": "TB01",
+      "description": "transactional rollback smoke cannot prove concurrent allocation or booking-generation isolation.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "scripts/events-concurrency.test.mjs",
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql",
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_notifications.sql"
+      ],
+      "assertions": [
+        "Use at least two independent DB clients, committed isolated fixtures, explicit lock/barrier coordination and a third observation session; never substitute sequential requests inside one smoke transaction.",
+        "Cover confirmation/offer/approval/cancellation/cap edit/code deactivation cross-races; verify limits, exactly-once logical effects, protected inventory, no orphan code redemption and bounded outcomes.",
+        "An old cancellation/acceptance retry after cancel-and-rebook targets its original operation/generation and cannot mutate the new booking.",
+        "Run only in disposable local/test database with fake delivery and isolated fixture teardown; not the hosted rollback-smoke path or production."
+      ],
+      "owner_package": "events-data-and-rules",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB02",
+      "description": "transaction-start time can accept an offer or new RSVP after its cutoff when lock acquisition is delayed.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "scripts/events-concurrency.test.mjs",
+        "supabase/tests/events_booking.sql",
+        "supabase/tests/events_invitation_codes.sql"
+      ],
+      "assertions": [
+        "Hold event lock across deadline in session A while session B begins beforehand and waits; after release, B uses fresh authoritative server time and fails expired acceptance.",
+        "Repeat for new registration cutoff and self-cancel start boundary; previously committed successful operation retry still returns current result.",
+        "No fake client clock or cleanup-job execution substitutes for server-side after-lock check."
+      ],
+      "owner_package": "events-data-and-rules",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB03",
+      "description": "provider acceptance with a lost acknowledgement can yield duplicate physical SMS or a false delivered state.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "supabase/functions/push-notification-worker/events.test.ts"
+      ],
+      "assertions": [
+        "Fake provider accepts then drops response; separately accept response then fail DB settlement. Preserve unknown outcome and stable logical identity.",
+        "Validate chosen provider dedupe/status/callback capability before selecting retry mechanics; do not promise exactly-once external delivery from a DB uniqueness constraint.",
+        "No fallback creates an extra SMS after planned SMS success or overrides opted-out channel; keep queued/submitted/delivered/read/attendance meanings separate.",
+        "Concrete resend schedule and provider-specific fallback remain proposed; no real outbound communication during harness execution."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB04",
+      "description": "a partial door-batch response or expired authorization can silently discard unsynced admissions.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_admission.sql",
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_notifications.sql",
+        "scripts/events-concurrency.test.mjs",
+        "events-web/tests/console/offline-admission.spec.ts"
+      ],
+      "assertions": [
+        "Mix committed, duplicate, conflicting and unprocessed rows; fail transport and/or permission mid-reconciliation, then replay original operation IDs.",
+        "Only authoritative individual acknowledgements clear queued entries; unknown/conflict rows remain recoverable and recap remains locked until valid server admission.",
+        "Re-authentication uses an authorized Team admin without changing acting-record attribution or exposing another account roster; do not claim all-success from HTTP success alone."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB05",
+      "description": "browser storage loss, account changes and shell updates can invalidate the claimed offline door capability.",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "events-web/tests/console/offline-admission.spec.ts",
+        "events-web/tests/console/authorization.spec.ts",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "Inject failed IndexedDB/selected persistence commits and partial roster downloads; acknowledge only durable operations and atomically promote complete snapshots.",
+        "On intended Safari/other staff devices test offline reload/close/background/update, quota denial, simulated/actual storage eviction, account switch and unsynced-work warning.",
+        "No protected feedback/gallery/precise-home data in shared shell cache; no cross-account roster. If storage is absent, report unavailable, not empty synced queue.",
+        "Persisting locally cannot guarantee immunity from OS eviction or immediate remote erasure; record supported behavior and product impact explicitly."
+      ],
+      "owner_package": "before-event-door",
+      "requires_real_device": true
+    },
+    {
+      "id": "TB06",
+      "description": "stale message work can leak location or claim obsolete booking/schedule state after cancellation, reschedule or consent change.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network",
+        "Node pg multi-session concurrency (isolated disposable database)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/tests/events_private_location.sql",
+        "supabase/tests/events_authorization.sql",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "scripts/events-concurrency.test.mjs"
+      ],
+      "assertions": [
+        "Claim message then alter event revision, booking eligibility, home reveal/expiry or channel consent before dispatch; revalidate relevant rights/current revision against authoritative state.",
+        "Use payload spies to inspect all outbound fields, provider metadata, analytics and logs, not only template display; no unauthorized exact home coordinates/address/private comments/phone list.",
+        "Unavoidable change after provider submission is not claimed retractable; canonical link always returns current viewer-owned state.",
+        "P10 exact suppression/fallback policy remains unselected; confidentiality and current-state accuracy are release-blocking invariants."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB07",
+      "description": "UI-only Team admin checks or service-role testing can hide missing RLS and unsafe RPC grants.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)"
+      ],
+      "planned_files": [
+        "supabase/tests/events_authorization.sql",
+        "supabase/tests/events_private_location.sql",
+        "supabase/tests/events_admission.sql",
+        "scripts/supabase-smoke-test.mjs",
+        "events-web/tests/console/authorization.spec.ts"
+      ],
+      "assertions": [
+        "Run anonymous, ordinary, active/revoked Team admin and wrong-account requests using genuine client roles; no service-role-only API pass counts as guest authorization coverage.",
+        "Inspect function signatures/security mode/search_path/grants and direct table/storage access; service-only claim/settlement hooks must reject public client roles.",
+        "Guest-preview APIs cannot inherit console privileges; already-open page and stale auth cannot create current server access. Offline authorization caveat is tested separately, not used to waive server checks."
+      ],
+      "owner_package": "events-data-and-rules",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB08",
+      "description": "mocked browser screens alone cannot prove the no-install-to-native door or actual offline scanner flow.",
+      "layers": [
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest",
+        "real iPhone / intended staff-browser device verification"
+      ],
+      "planned_files": [
+        "events-web/tests/guest/rsvp.spec.ts",
+        "events-web/tests/guest/manage-rsvp.spec.ts",
+        "events-web/tests/console/admission.spec.ts",
+        "events-web/tests/console/offline-admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift",
+        "WanderUITests/EventsMessageReturnUITests.swift",
+        "docs/testing/events/booking-door-real-device.md"
+      ],
+      "assertions": [
+        "API-backed guest and console runs use seeded isolated backend, real role tokens and persisted operations while SMS/APNs transport remains fake.",
+        "Separately perform physical iPhone App Clip/web/app identity recovery, account completion before QR, real scanner camera and uninstall/reinstall after-event return with original account.",
+        "Record actual host/build/device/browser/commit and outcomes; no Playwright browser fixture claims App Clip, OS universal-link selection, app-installed detection or device storage durability."
+      ],
+      "owner_package": "entry-and-identity",
+      "requires_real_device": true
+    },
+    {
+      "id": "TB09",
+      "description": "worker claim and settlement retry can turn a mixed delivery batch into whole-batch success.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Deno worker with fake clock/provider/network"
+      ],
+      "planned_files": [
+        "supabase/tests/events_notifications.sql",
+        "supabase/functions/event-message-worker/index.test.ts",
+        "supabase/functions/push-notification-worker/events.test.ts"
+      ],
+      "assertions": [
+        "Create multiple logical messages and multiple device tokens with accepted, retryable, permanent-token, permanent-event, unknown and failed-settlement outcomes.",
+        "Accepted successes are not resent; valid devices survive another token permanent failure; stale lease cannot overwrite a newer claim or resurrect a terminal message.",
+        "Authenticated provider callback adapter, once selected, rejects invalid signatures, binds provider ID to intended message and handles duplicate/out-of-order callbacks without granting guest rights.",
+        "Analytics failure cannot roll back settled delivery or leak recipient content. Provider callback and retry details remain implementation/provider-contract checks, not newly approved cadence."
+      ],
+      "owner_package": "shared-messaging-foundation",
+      "requires_real_device": false
+    },
+    {
+      "id": "TB10",
+      "description": "malformed or stale cross-surface result can flatten unknown/denied into success or another account state.",
+      "layers": [
+        "local pgTAP",
+        "planned hosted rollback smoke",
+        "Playwright stubbed UI",
+        "Playwright API-backed integration (isolated test environment)",
+        "native XCTest / XCUITest"
+      ],
+      "planned_files": [
+        "events-contracts/fixtures/booking-door.json",
+        "supabase/tests/events_authorization.sql",
+        "events-web/tests/guest/rsvp.spec.ts",
+        "events-web/tests/guest/manage-rsvp.spec.ts",
+        "events-web/tests/console/admission.spec.ts",
+        "WanderUITests/EventsAdmissionUITests.swift"
+      ],
+      "assertions": [
+        "Feed shared fixtures for lookup loading/failure/no-match, pending/waitlist/offer/confirmed/canceled, unsupported enum and malformed response into Swift and web consumers.",
+        "No missing/unknown state defaults to confirmed; 401/session-expired differs from authenticated 403 and expected capacity/code/expiry outcomes.",
+        "Switch accounts while lookup/mutation completes: stale response cannot attach booking, phone, QR or protected roster to new account; resolve unknown committed mutation by original operation identity."
+      ],
+      "owner_package": "entry-and-identity",
+      "requires_real_device": false
+    }
+  ],
+  "framework_evidence": [
+    {
+      "file": "scripts/supabase-smoke-test.mjs",
+      "line": 1110,
+      "note": "Existing migration-preview / strict pgTAP rollback-only entry points can host planned Events contract checks. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "scripts/package.json",
+      "line": 24,
+      "note": "Pinned pg client can support a new Node test harness with independent PostgreSQL connections. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/clerk_identity_continuity.sql",
+      "line": 7,
+      "note": "Existing tests inspect security mode, search_path and authenticated canonical-identity resolution. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/rls_visibility.sql",
+      "line": 7,
+      "note": "Existing fixtures distinguish owner, follower, mutual, nonfollower and blocked viewers. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/notifications.sql",
+      "line": 6,
+      "note": "Existing notification pgTAP suite provides transactional notification fixture patterns. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/notifications.sql",
+      "line": 837,
+      "note": "Existing push settlement tests assert one accepted token does not hide another token retry; Events SMS and door queues need their own coverage. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/notifications.sql",
+      "line": 892,
+      "note": "Existing push suite exercises stale claim rejection; Events message dispatch needs its own revision/eligibility checks. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/functions/push-notification-worker/index.test.ts",
+      "line": 50,
+      "note": "Existing Deno test injects fetch and records request/collapse IDs and provider acknowledgement. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/functions/push-notification-worker/index.test.ts",
+      "line": 23,
+      "note": "Existing Deno tests classify APNs permanent-token, permanent-event and retryable failures. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/functions/push-notification-worker/index.test.ts",
+      "line": 119,
+      "note": "Existing analytics test excludes recipient and notification content; Events must add its own sensitive-field fixtures. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/functions/push-notification-worker/index.ts",
+      "line": 149,
+      "note": "Existing worker settles results using event and claim token, providing a seam to assess rather than proof of Events reliability. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/checkin_history_engagement.sql",
+      "line": 68,
+      "note": "Existing history repair is tested for idempotence and preservation of historical activity; Events must extend canonical-history regression coverage. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/checkin_history_engagement.sql",
+      "line": 101,
+      "note": "Existing owner-deletion test ensures repair does not revive a deleted check-in. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "project.yml",
+      "line": 45,
+      "note": "Existing scheme includes WanderTests and WanderUITests; Events/App Clip and real-device evidence still have to be added. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "scripts/supabase-smoke-test.mjs",
+      "line": 1119,
+      "note": "Smoke fixtures run in one rollback transaction; this is hosted compatibility evidence and cannot prove concurrent session behavior. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "scripts/supabase-smoke-test.mjs",
+      "line": 1182,
+      "note": "Linked targeted migration/test path explicitly wraps preview and strict tests in BEGIN / ROLLBACK. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "scripts/clerk-account-continuity-audit.test.mjs",
+      "line": 2,
+      "note": "Existing scripts use the Node built-in test runner; new separate-session harness can follow this runner style. Adjacent evidence only; no Events test is implemented or passed."
+    },
+    {
+      "file": "supabase/tests/production_security_hardening.sql",
+      "line": 27,
+      "note": "Existing security tests inspect anonymous/authenticated execution grants rather than trusting UI visibility. Adjacent evidence only; no Events test is implemented or passed."
+    }
+  ],
+  "notes": [
+    "Exactly 48 assigned source cases are mapped once. Each named case expands to concrete parameterized instances during implementation; this is not a claim of exhaustive combinations or 48 runtime passes.",
+    "All planned_files are repository-relative future artifacts or future additions to an existing harness. Worker/web/native directory names are provisional implementation locations, not a second-service architecture or installed framework claim.",
+    "Every existing_evidence/framework_evidence item is an adjacent harness/pattern only. Existing pgTAP, APNs and history tests do not establish Events coverage.",
+    "Test fixtures must use reserved isolated identities and no real guest data. API-backed browser integration requires an isolated live test backend with real roles and fake outbound delivery; stubbed UI remains a separate layer.",
+    "Local deterministic SQL and future hosted rollback compatibility checks cover commits/constraints/RLS in a controlled transaction. Independent-session concurrency requires its own disposable database and cannot run as one hosted rollback transaction.",
+    "Hosted smoke is planned, not executed or authorized by this mapping. Before any future hosted run verify no external hooks can emit SMS/push; rollback alone does not undo an external send. Do not modify live admin settings to make tests pass.",
+    "Keep source proposals conditional: P03 cancellation presentation; P04/P11 mode/deadline/waitlist edits; P05 event-wide cancellation/venue/completed-event changes; P09/P19 publication mechanics; P10 exact retry/push/fallback/late-reminder/opt-out mechanics; P15 detailed revocation/reentry; P18 other code edits/UI; P20 calendar payload. Approved invariants remain mandatory independently.",
+    "D14 permits new online RSVPs until event end or configured earlier close; do not inherit an earlier start-time registration cutoff. Self-cancel still closes at start. Existing offers cannot be silently shortened to resolve a new cutoff.",
+    "P0 risks are intended release blockers for supported paths once implemented. P1 worker partial-failure coverage remains required reliability evidence. Exact proposed visual copy, UI arrangement and still-unselected policy branches are review gates rather than fake failing/passing tests.",
+    "Ownership follows D8: events-data-and-rules owns common schema/locks/RLS foundation; entry-and-identity owns host/auth/navigation seams; before-event-door owns B/A and related console; after-event-map owns recap publication/history; shared-messaging-foundation has one owner. Cross-package assertions require joined integration, not duplicate delivery/backends.",
+    "For C05 media removal and C06 canonical history, coordinate after-event-map implementation/tests; before-event-door can drive console actions but cannot substitute its own independent media/history implementation.",
+    "Physical App Clip invocation, uninstall/reinstall, push permission/token behavior, installed-app checks, staff camera and offline persistence are real-device checks. Browser automation/simulator-only results cannot certify them.",
+    "Before acceptance, replace planned statuses with command/environment/commit/device artifacts and actual results, separately reporting not-run, failed, blocked and passed. Policy-gated assertions stay blocked pending selection rather than skipped and counted passed."
+  ]
+}

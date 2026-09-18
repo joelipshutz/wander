@@ -6764,6 +6764,64 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testPeopleCanLoadWhileTheFirstFeedRequestIsStalled() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let feed = FakeFeedRepository(responses: [.success(page)], isSuspended: true)
+        let profiles = FakeProfileRepository()
+        let task = Task { @MainActor in
+            await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertEqual(feed.requestCount, 1)
+        XCTAssertEqual(profiles.recommendationLimits, [20])
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+        XCTAssertNil(store.followedFeedPage)
+        feed.finish()
+        await task.value
+        XCTAssertNotNil(store.followedFeedPage)
+    }
+
+    func testFeedCanLoadWhilePeopleRequestIsStalled() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        let feed = FakeFeedRepository(responses: [.success(page)])
+        let profiles = FakeProfileRepository()
+        profiles.suspendRecommendations = true
+        let task = Task { @MainActor in
+            await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertNotNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loading)
+        profiles.suspendRecommendations = false
+        await task.value
+    }
+
+    func testFailedPeopleRequestDoesNotFailTheFeed() async {
+        let store = makeStore()
+        let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        await store.refreshFeedSurface(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(recommendationError: TestError.expected),
+            feedRepository: FakeFeedRepository(responses: [.success(page)])
+        ))
+        XCTAssertNotNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .failed)
+    }
+
+    func testFailedFeedRequestDoesNotFailPeopleRecommendations() async {
+        let store = makeStore()
+        await store.refreshFeedSurface(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(),
+            feedRepository: FakeFeedRepository(responses: [.failure(TestError.expected)])
+        ))
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedLoadState, .failed)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+    }
+
     func testPerformanceFeedCoalescesConcurrentRefreshesAndReusesWarmContent() async {
         let store = makeStore()
         let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
@@ -7550,6 +7608,20 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(store.presentationRevision, revisionAfterFirstSearch)
         XCTAssertEqual(profileRepository.queries, ["so", "so"])
+    }
+
+    func testCachedPeopleRecommendationsHideNewBlocksWithoutAnotherRequest() async {
+        let store = makeStore()
+        let shell = ProfileShell(id: "user_sofia", handle: "sofia", displayName: "Sofia Rivera",
+                                 avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let recommendation = DiscoverPeopleRecommendation(profile: shell, reason: .suggested, rank: 0)
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(
+            profileRepository: FakeProfileRepository(recommendations: [recommendation])
+        ))
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations, [recommendation])
+        store.block(userID: shell.id)
+        XCTAssertTrue(store.visibleDiscoverPeopleRecommendations.isEmpty)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([recommendation]))
     }
 
     func testDiscoverPeopleRecommendationsLoadsCachesAndHydratesProfiles() async {
@@ -11816,6 +11888,7 @@ private final class FakeProfileRepository: ProfileRepository {
     private var currentProfileIsSuspended: Bool
     private(set) var queries: [String] = []
     private(set) var profileIDs: [String] = []
+    var suspendRecommendations = false
     private(set) var recommendationLimits: [Int] = []
     private(set) var currentProfileRequestCount = 0
 
@@ -11877,6 +11950,7 @@ private final class FakeProfileRepository: ProfileRepository {
 
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
         recommendationLimits.append(limit)
+        while suspendRecommendations { await Task.yield() }
         if let recommendationError {
             throw recommendationError
         }

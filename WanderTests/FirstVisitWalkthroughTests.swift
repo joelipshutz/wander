@@ -412,6 +412,32 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
+    func testExplicitResetOverridesInheritedLegacyProgress() throws {
+        let defaults = try makeDefaults()
+        let registeredDefaults = defaults.volatileDomain(forName: UserDefaults.registrationDomain)
+        defer { defaults.setVolatileDomain(registeredDefaults, forName: UserDefaults.registrationDomain) }
+        // Removing an app-domain key does not remove a registered/inherited
+        // legacy value. An explicit replay reset must still win over migration.
+        defaults.register(defaults: [
+            "wander.walkthrough.v1.legacy-replay.add.complete": true,
+            "wander.walkthrough.v1.legacy-replay.add.progress": 2,
+        ])
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "legacy-replay",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
+
+        coordinator.resetCurrentUser()
+
+        XCTAssertFalse(store.isComplete(for: "legacy-replay", surface: .add))
+        XCTAssertEqual(store.progress(for: "legacy-replay", surface: .add), 0)
+        coordinator.prepareDebugReplay(at: .addImport)
+        coordinator.activate(.add)
+        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+    }
+
     func testDebugReplayClearsStaleDownstreamJourneyCompletion() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)

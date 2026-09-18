@@ -1365,6 +1365,7 @@ struct MapScreen: View {
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
+    @State private var retainedSelectionCache = MapRetainedSelectionCache()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedNativeMapFeatureID: String?
@@ -1384,7 +1385,6 @@ struct MapScreen: View {
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var isPlaceProfileMounted: Bool
-    @State private var placeProfilePreloadTask: Task<Void, Never>?
     @State private var placeProfilePresentationID: UUID?
     @State private var placeProfileDismissalID: UUID?
     @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
@@ -1625,31 +1625,30 @@ struct MapScreen: View {
         )
     }
 
+    private var authorizedRetainedSelection: MapRetainedSelectionCache.Selection {
+        retainedSelectionCache.value(
+            sourceIdentity: ObjectIdentifier(store),
+            revision: store.presentationRevision,
+            featuredRevision: featuredPlacesRevision,
+            featuredAccountID: featuredViewportAccountID,
+            currentUserID: store.currentUser.id,
+            retainedPlace: routedVisiblePlace,
+            retainedGroup: routedVisiblePlaceGroup,
+            submittedGroups: submittedSavedSearchGroups,
+            authorizedPlaces: { authorizedSelectionPlaces }
+        )
+    }
+
     private var visiblePlaces: [VisiblePlace] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedPlaces = MapActivePinRetention.places(
             from: renderProjection.visiblePlaces,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup
+            retaining: authorized.place,
+            retainingGroup: authorized.group
         )
         return MapActivePinRetention.places(
             from: activeRetainedPlaces,
-            retainingGroups: authorizedSubmittedGroups
+            retainingGroups: authorized.submittedGroups
         )
     }
 
@@ -1677,31 +1676,16 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorizedPlaces = authorizedSelectionPlaces
-        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(
-            routedVisiblePlace,
-            within: authorizedPlaces
-        )
-        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
-            routedVisiblePlaceGroup,
-            requiring: authorizedRoutedPlace,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
-        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
-            submittedSavedSearchGroups,
-            within: authorizedPlaces,
-            currentUserID: store.currentUser.id
-        )
+        let authorized = authorizedRetainedSelection
         let activeRetainedGroups = MapActivePinRetention.groups(
             from: renderProjection.visiblePlaceGroups,
-            retaining: authorizedRoutedPlace,
-            retainingGroup: authorizedRoutedGroup,
+            retaining: authorized.place,
+            retainingGroup: authorized.group,
             currentUserID: store.currentUser.id
         )
         return MapActivePinRetention.groups(
             from: activeRetainedGroups,
-            retainingGroups: authorizedSubmittedGroups,
+            retainingGroups: authorized.submittedGroups,
             currentUserID: store.currentUser.id
         )
     }
@@ -2379,7 +2363,6 @@ struct MapScreen: View {
                 initialMapSourceLoadID = nil
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
-                placeProfilePreloadTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -2437,8 +2420,6 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
-            placeProfilePreloadTask?.cancel()
-            placeProfilePreloadTask = nil
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
@@ -3617,28 +3598,6 @@ struct MapScreen: View {
             compactCardReadyIdentity = identity
             presentCompactCard()
         }
-        preloadSelectedPlaceProfile(for: identity)
-    }
-
-    private func preloadSelectedPlaceProfile(for identity: String) {
-        guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled,
-                  identity == compactSelectionIdentity,
-                  hasSelectedProfile,
-                  !isPlaceProfileMounted,
-                  !isPlaceProfilePresented
-            else { return }
-
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isPlaceProfileMounted = true
-            }
-            placeProfilePreloadTask = nil
-        }
     }
 
     private func presentCompactCard() {
@@ -4037,6 +3996,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4077,6 +4037,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4110,6 +4071,7 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: .none,
                 usesInteractiveHorizontalDismissal: true,
+                hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
                     collapseSelectedPlaceProfile()
                 },
@@ -4120,8 +4082,6 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
-        placeProfilePreloadTask?.cancel()
-        placeProfilePreloadTask = nil
         placeProfilePresentationID = nil
         placeProfileDismissalID = nil
         placeProfileDismissalCompletion = nil
@@ -5250,7 +5210,7 @@ struct MapScreen: View {
                action: saveAction,
             baseContext: context
         ) {
-            presentAttachedSaveFlow(attachedContext)
+            presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)
             return
         }
 
@@ -5296,7 +5256,7 @@ struct MapScreen: View {
                action: saveAction,
             baseContext: context
         ) {
-            presentAttachedSaveFlow(attachedContext)
+            presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)
             return
         }
 
@@ -5318,9 +5278,13 @@ struct MapScreen: View {
         return draft
     }
 
-    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext) {
+    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext, startsFreshWanna: Bool = false) {
         guard attachedMapSaveFlow == nil else { return }
-        if let existingDraft = placeSaveDraftStore.draft,
+        if startsFreshWanna, let draft = PlaceSaveDraft.restorableFlow(
+            ownerUserID: store.currentUser.id, context: context
+        ) {
+            placeSaveDraftStore.begin(draft)
+        } else if let existingDraft = placeSaveDraftStore.draft,
            existingDraft.ownerUserID == store.currentUser.id,
            existingDraft.candidate.id == context.candidate.id {
             if existingDraft.form.selectedStatus != context.initialStatus {
@@ -5473,12 +5437,16 @@ struct MapScreen: View {
             }
 
             if let userID = auth.state.session?.userID {
-                await pushNotifications.reconcileWannaGoReminders(
-                    store.wannaGoReminderItems,
-                    backend: backend,
-                    userID: userID,
-                    authSession: auth
-                )
+                // Reminder reconciliation must not hold the completed form open.
+                Task { @MainActor in
+                    guard auth.state.session?.userID == userID else { return }
+                    await pushNotifications.reconcileWannaGoReminders(
+                        store.wannaGoReminderItems,
+                        backend: backend,
+                        userID: userID,
+                        authSession: auth
+                    )
+                }
             }
             return result
         case .sharedVisit(let invitation):
@@ -10305,6 +10273,69 @@ enum MapPinSelectionMotionStyle {
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
+/// One authorized selection snapshot per store revision. No cross-account or
+/// historical entries are retained; changed access is checked before reuse.
+@MainActor
+final class MapRetainedSelectionCache {
+    struct Selection {
+        let place: VisiblePlace?
+        let group: VisiblePlaceGroup?
+        let submittedGroups: [VisiblePlaceGroup]
+    }
+
+    private struct Key: Equatable {
+        let sourceIdentity: ObjectIdentifier
+        let revision: UInt64
+        let featuredRevision: UInt64
+        let featuredAccountID: String?
+        let currentUserID: String
+        let retainedPlaceID: String?
+        let retainedGroupIDs: [String]?
+        let submittedGroupIDs: [[String]]
+    }
+
+    private var key: Key?
+    private var selection: Selection?
+
+    func value(
+        sourceIdentity: ObjectIdentifier,
+        revision: UInt64,
+        featuredRevision: UInt64 = 0,
+        featuredAccountID: String? = nil,
+        currentUserID: String,
+        retainedPlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup],
+        authorizedPlaces: () -> [VisiblePlace]
+    ) -> Selection {
+        let nextKey = Key(
+            sourceIdentity: sourceIdentity,
+            revision: revision,
+            featuredRevision: featuredRevision,
+            featuredAccountID: featuredAccountID,
+            currentUserID: currentUserID,
+            retainedPlaceID: retainedPlace?.userPlace.id,
+            retainedGroupIDs: retainedGroup?.places.map(\.userPlace.id),
+            submittedGroupIDs: submittedGroups.map { $0.places.map(\.userPlace.id) }
+        )
+        if key == nextKey, let selection { return selection }
+        let places = authorizedPlaces()
+        let place = MapActivePinRetention.authorizedPlace(retainedPlace, within: places)
+        let result = Selection(
+            place: place,
+            group: MapActivePinRetention.authorizedGroup(
+                retainedGroup, requiring: place, within: places, currentUserID: currentUserID
+            ),
+            submittedGroups: MapActivePinRetention.authorizedGroups(
+                submittedGroups, within: places, currentUserID: currentUserID
+            )
+        )
+        key = nextKey
+        selection = result
+        return result
+    }
+}
+
 enum MapActivePinRetention {
     /// Featured's anonymous place aggregates are server-authorized separately
     /// from personal/social saves. Use the unranked response so recentering or
@@ -10904,6 +10935,7 @@ struct MapPlaceSaveContext: Identifiable {
     let existingLatestVisit: LocalPlaceVisit?
     let initialVisitedAt: Date?
     let calendarReservationID: String?
+    var editedWanna: PlaceWannaSave? = nil
 
     init(
         candidate: PlaceCandidate,
@@ -10982,7 +11014,8 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var showsRemoveControl: Bool {
-        switch mode {
+        if editedWanna != nil { return false }
+        return switch mode {
         case .editVisit, .editWant:
             true
         case .add, .addVisit, .sharedVisit:
@@ -11270,6 +11303,24 @@ struct MapPlaceSaveContext: Identifiable {
         return resolvingExistingSave(selection: selection)
     }
 
+    func freshWannaContext() -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate,
+            mode: .add(.manual),
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
+            initialStatus: .wannaGo,
+            initialVisibility: initialVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialPlannedDate: nil,
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil,
+            initialPhotoAttachments: []
+        )
+    }
+
     func preselectingStatus(_ selection: PlaceStatus) -> MapPlaceSaveContext {
         if existingCurrentUserSave != nil {
             return resolvingExistingSave(selection: selection)
@@ -11427,6 +11478,20 @@ struct MapPlaceSaveContext: Identifiable {
             initialCuisine: initialCuisine(from: attributes),
             initialPhotoAttachments: []
         )
+    }
+
+    static func editWanna(_ wanna: PlaceWannaSave, visiblePlace: VisiblePlace) -> MapPlaceSaveContext {
+        let attributes = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: wanna.attributeAnswersJSON)
+        var context = MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace), mode: .editWant(visiblePlace),
+            requiresStatusConfirmation: false, hasPriorCheckIn: visiblePlace.userPlace.status == .been,
+            initialStatus: .wannaGo, initialVisibility: wanna.visibility, initialRatingScore: nil,
+            initialNote: wanna.note ?? "", initialPlannedDate: wanna.plannedDate,
+            initialAnswers: initialAnswers(from: attributes),
+            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialCuisine: initialCuisine(from: attributes), initialPhotoAttachments: [])
+        context.editedWanna = wanna
+        return context
     }
 
     private static func candidate(from visiblePlace: VisiblePlace) -> PlaceCandidate {
@@ -11595,6 +11660,7 @@ struct MapPlaceSaveSubmission {
     let reconcilesSharedVisitInvitees: Bool
     var visitedAt: Date = .now
     var plannedDate: Date? = nil
+    var wannaOperationID: UUID? = nil
 
     func replacingImportCandidate(
         _ candidate: PlaceCandidate,
@@ -11842,6 +11908,32 @@ func persistNewPlaceSaveSubmission(
         return nil
     }
 
+    if submission.status == .wannaGo {
+        let operationID = (submission.wannaOperationID ?? submission.context.id).uuidString.lowercased()
+        let result = await store.saveNewWanna(
+            submission.candidate,
+            operationID: operationID,
+            visibility: submission.visibility,
+            note: submission.note,
+            plannedDate: submission.plannedDate,
+            attributes: submission.attributes,
+            sourceType: sourceType,
+            backend: nil
+        )
+        // Closing the form acknowledges durable local storage. The same UUID
+        // stays in the outbox until remote delivery succeeds, including offline.
+        store.flushPersistence()
+        if let backend {
+            let ownerID = store.currentUser.id
+            Task { @MainActor [weak store] in
+                guard let store, store.currentUser.id == ownerID else { return }
+                await store.syncSavedWanna(operationID: operationID,
+                                          userPlaceID: result.userPlaceID, backend: backend)
+            }
+        }
+        return result
+    }
+
     let result = await store.saveCandidate(
         submission.candidate,
         status: submission.status,
@@ -11985,6 +12077,19 @@ func persistScopedVisitOrWantSubmission(
         )
         return (SaveResult(userPlaceID: updatedVisit.userPlaceID, syncState: updatedVisit.syncState), updatedVisit)
     case .editWant(let visiblePlace):
+        if let wanna = submission.context.editedWanna {
+            guard submission.status == .wannaGo else { return (nil, nil) }
+            let result = store.updateWanna(wanna, visibility: submission.visibility,
+                note: submission.note, plannedDate: submission.plannedDate, attributes: submission.attributes)
+            if result != nil, let backend {
+                let ownerID = store.currentUser.id
+                Task { @MainActor [weak store] in
+                    guard let store, store.currentUser.id == ownerID else { return }
+                    _ = await store.syncPendingWannaSaves(backend: backend)
+                }
+            }
+            return (result, nil)
+        }
         let result = await store.saveCandidate(
             submission.candidate,
             status: submission.status,
@@ -12512,8 +12617,11 @@ struct MapPlaceSaveFlowSheet: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(WanderTheme.radiusSheet)
         .presentationBackground(astirBrandMode.background)
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
-        .presentationContentInteraction(.resizes)
+        .presentationBackgroundInteraction(.disabled)
+        // Form swipes scroll immediately at either detent. Native resize-first
+        // gestures can consume short swipes and spring back to the compact height.
+        // The grabber and explicit content expansion still resize the sheet.
+        .presentationContentInteraction(.scrolls)
     }
 
     private func expand() {
@@ -12868,7 +12976,8 @@ struct MapPlaceSaveEditor: View {
             plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
                 plannedDate,
                 status: selectedStatus
-            )
+            ),
+            wannaOperationID: draftID ?? context.id
         )
     }
 
@@ -17160,9 +17269,11 @@ struct PlaceActivityEntry: Identifiable {
     let visit: LocalPlaceVisit?
     let kind: PlaceActivityEntryKind
     let currentUserID: String
+    var wanna: PlaceWannaSave? = nil
 
     var id: String {
-        switch kind {
+        if let wanna { return wanna.id }
+        return switch kind {
         case .visit:
             visit?.id ?? "\(summary.id)_visit"
         case .currentWant:
@@ -17173,6 +17284,10 @@ struct PlaceActivityEntry: Identifiable {
             "\(summary.id)_legacy_been"
         }
     }
+
+    // A newly appended Wanna is current activity, not the archived pre-check-in
+    // summary. Keep its own timestamp in ALL rather than burying it below older saves.
+    var sortBucket: Int { wanna == nil || wanna?.isHistoricalOriginal == true ? kind.sortBucket : 0 }
 
     var owner: LocalProfile {
         summary.visiblePlace.owner
@@ -17191,7 +17306,8 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var timestamp: Date {
-        switch kind {
+        if let wanna { return wanna.occurredAt }
+        return switch kind {
         case .visit:
             visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.savedAt
         case .currentWant:
@@ -17219,7 +17335,7 @@ struct PlaceActivityEntry: Identifiable {
         case .historicalWant:
             userPlace.historicalWantNote
         }
-        let trimmed = sourceNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = (wanna == nil ? sourceNote : wanna?.note)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
@@ -17246,11 +17362,11 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var canEdit: Bool {
-        isCurrentUser && (kind == .visit || kind == .currentWant)
+        isCurrentUser
     }
 
     var editAccessibilityLabel: String {
-        kind == .currentWant ? "Edit want" : CheckInCopy.editAction
+        status == .wannaGo ? "Edit want" : CheckInCopy.editAction
     }
 
     var status: PlaceStatus {
@@ -17263,6 +17379,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var tags: [String] {
+        if let wanna { return uniqueTags(VisitAttributeAnswers.tags(fromAttributeAnswersJSON: wanna.attributeAnswersJSON)) }
         if let visit, !visit.tags.isEmpty {
             return uniqueTags(visit.tags)
         }
@@ -17423,6 +17540,10 @@ struct PlaceActivitySection: View {
             .flatMap { summary -> [PlaceActivityEntry] in
                 let userPlace = summary.visiblePlace.userPlace
                 let visits = store.visits(for: summary.visiblePlace.userPlace.id)
+                let wannaEntries = store.wannaSaves(for: userPlace).map {
+                    PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant,
+                                       currentUserID: currentUserID, wanna: $0)
+                }
 
                 if userPlace.status == .been {
                     var entries = visits.map { visit in
@@ -17436,20 +17557,24 @@ struct PlaceActivitySection: View {
                         )
                     }
 
-                    if userPlace.hasHistoricalWant {
+                    if userPlace.hasHistoricalWant,
+                       !wannaEntries.contains(where: { $0.wanna?.isHistoricalOriginal == true }) {
                         entries.append(
                             PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant, currentUserID: currentUserID)
                         )
                     }
 
-                    return entries
+                    return entries + wannaEntries
                 }
 
-                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)]
+                if wannaEntries.contains(where: { $0.wanna?.isHistoricalOriginal == true }) {
+                    return wannaEntries
+                }
+                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)] + wannaEntries
             }
             .sorted { lhs, rhs in
-                if lhs.kind.sortBucket != rhs.kind.sortBucket {
-                    return lhs.kind.sortBucket < rhs.kind.sortBucket
+                if lhs.sortBucket != rhs.sortBucket {
+                    return lhs.sortBucket < rhs.sortBucket
                 }
                 if lhs.timestamp != rhs.timestamp {
                     return lhs.timestamp > rhs.timestamp
@@ -17532,7 +17657,19 @@ struct PlaceActivitySection: View {
         guard entry.canEdit else { return }
 
         let context: MapPlaceSaveContext
-        if entry.kind == .visit, let visit = entry.visit {
+        if let wanna = entry.wanna {
+            context = .editWanna(wanna, visiblePlace: entry.summary.visiblePlace)
+        } else if entry.kind == .historicalWant {
+            context = .editWanna(PlaceWannaSave(
+                id: UUID().uuidString.lowercased(), ownerID: currentUserID,
+                userPlaceID: entry.userPlace.id, occurredAt: entry.timestamp,
+                note: entry.userPlace.historicalWantNote, visibility: entry.userPlace.visibility,
+                plannedDate: nil, attributeAnswersJSON: entry.userPlace.historicalWantAttributeAnswersJSON ?? "[]",
+                isHistoricalOriginal: true), visiblePlace: entry.summary.visiblePlace)
+        } else if entry.kind == .legacyBeenSummary,
+                  let visit = store.editableLegacyVisit(for: entry.userPlace.id) {
+            context = .editVisit(visit, visiblePlace: entry.summary.visiblePlace)
+        } else if entry.kind == .visit, let visit = entry.visit {
             context = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
         } else if entry.kind == .currentWant {
             context = MapPlaceSaveContext.editWant(
@@ -17797,6 +17934,7 @@ private struct PlaceActivityCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(entry.editAccessibilityLabel)
+                .accessibilityIdentifier("place-activity.edit.\(entry.id)")
             }
             StatusBadge(status: entry.status)
         }
@@ -17826,7 +17964,8 @@ private struct PlaceActivityCard: View {
             .filter { !$0.isEmpty }
 
         return ActivityEngagementContext(
-            activityID: match?.activityID ?? "local-place-activity-\(entry.id)",
+            activityID: entry.wanna.map { $0.isSynced ? $0.id : "local-place-activity-\($0.id)" }
+                ?? match?.activityID ?? "local-place-activity-\(entry.id)",
             actor: store.shell(for: entry.owner),
             placeName: visiblePlace.place.canonicalName,
             placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
@@ -17861,6 +18000,7 @@ private struct PlaceActivityCard: View {
     }
 
     private var isEngagementResolved: Bool {
+        if let wanna = entry.wanna { return wanna.isSynced }
         let serverID = entry.userPlace.serverID ?? entry.userPlace.id
         guard UUID(uuidString: serverID) != nil
         else { return true }

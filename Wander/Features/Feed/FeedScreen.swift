@@ -15,6 +15,7 @@ struct FeedScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
+    @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
     @State private var selectedSurface: FeedSurface
     @State private var hasMountedPeopleSurface: Bool
@@ -26,8 +27,22 @@ struct FeedScreen: View {
     @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    private let onPlaceProfilePresentation: (WanderDeepLinkPresentationToken) -> Void
+    private let onPlaceProfileWillDismiss: (WanderDeepLinkPresentationToken) -> Void
+    private let onPlaceProfileDidDismiss: () -> Void
 
-    init(onAdd: @escaping () -> Void = {}) {
+    init(
+        presentationResetRequest: WanderPresentationResetRequest? = nil,
+        onPlaceProfilePresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onPlaceProfileWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onPlaceProfileDidDismiss: @escaping () -> Void = {},
+        onAdd: @escaping () -> Void = {}
+    ) {
+        self.presentationResetRequest = presentationResetRequest
+        self.onPlaceProfilePresentation = onPlaceProfilePresentation
+        self.onPlaceProfileWillDismiss = onPlaceProfileWillDismiss
+        self.onPlaceProfileDidDismiss = onPlaceProfileDidDismiss
         self.onAdd = onAdd
         let initialSurface = FeedSurface.resolvedInitialSurface()
         _selectedSurface = State(initialValue: initialSurface)
@@ -132,9 +147,15 @@ struct FeedScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .fullScreenCover(isPresented: selectedPlaceDestinationBinding) {
-                NavigationStack {
-                    selectedPlaceDestination
+            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss) {
+                WanderRootPresentationLifecycle(
+                    surface: .feedPlaceProfile,
+                    onPresent: onPlaceProfilePresentation,
+                    onDismiss: onPlaceProfileWillDismiss
+                ) {
+                    NavigationStack {
+                        selectedPlaceDestination
+                    }
                 }
             }
             .navigationDestination(item: commentsRouteBinding) { route in
@@ -167,6 +188,7 @@ struct FeedScreen: View {
             }
             .blocksProductUpsells(
                 while: selectedProfile != nil
+                    || selectedPlace != nil
                     || placeSaveFlow != nil
                     || savedMessage != nil
             )
@@ -206,6 +228,10 @@ struct FeedScreen: View {
                 if !isShowing {
                     restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
+            }
+            .onChange(of: presentationResetRequest?.id) { _, requestID in
+                guard requestID != nil else { return }
+                selectedPlace = nil
             }
         }
     }
@@ -406,10 +432,13 @@ struct FeedScreen: View {
 
     @ViewBuilder
     private var content: some View {
+        if !FeedPresentation.showsFeaturedPlaces {
+            peopleRail
+        }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
             FeedLoadingState()
         } else if let page, !page.activity.isEmpty {
-            if !page.featuredPlaces.isEmpty {
+            if FeedPresentation.showsFeaturedPlaces, !page.featuredPlaces.isEmpty {
                 FeedSectionHeading(title: "Featured for you")
                 FeedFeaturedRail(
                     places: page.featuredPlaces,
@@ -439,7 +468,7 @@ struct FeedScreen: View {
         } else {
             FeedSectionHeading(title: "Recent")
             FeedEmptyState(
-                recommendations: peopleRecommendations,
+                recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
                 followingProfileIDs: followingProfileIDs,
                 openSearch: openDiscoverSearch,
                 openProfile: openProfile,
@@ -450,16 +479,43 @@ struct FeedScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var peopleRail: some View {
+        switch store.discoverPeopleRecommendationsState {
+        case .loaded where !store.visibleDiscoverPeopleRecommendations.isEmpty:
+            PeopleRecommendationShelf(
+                recommendations: store.visibleDiscoverPeopleRecommendations,
+                isFollowing: { store.hasAcknowledgedFollow(to: $0) },
+                isFollowInFlight: { followingProfileIDs.contains($0) },
+                didFollowFail: { followFailedProfileIDs.contains($0) },
+                open: { openProfile($0.profile) },
+                follow: follow
+            )
+        case .idle, .loading:
+            if auth.isSignedIn {
+                PeopleRecommendationLoadingShelf()
+            }
+        case .failed:
+            FeedRetryRow(
+                title: "Suggestions couldn't load",
+                subtitle: "Your feed can still load below.",
+                actionTitle: "Try again",
+                retry: {
+                    await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+                }
+            )
+        case .loaded:
+            EmptyView()
+        }
+    }
+
     private var freshnessDetail: String? {
         guard store.feedLoadState == .stale else { return nil }
         return "Updated earlier"
     }
 
     private var peopleRecommendations: [DiscoverPeopleRecommendation] {
-        guard case .loaded(let recommendations) = store.discoverPeopleRecommendationsState else {
-            return []
-        }
-        return Array(recommendations.prefix(3))
+        Array(store.visibleDiscoverPeopleRecommendations.prefix(3))
     }
 
     private func refresh() async {
@@ -467,13 +523,11 @@ struct FeedScreen: View {
     }
 
     private func refresh(force: Bool) async {
-        _ = await store.refreshFollowedFeed(
+        await store.refreshFeedSurface(
             backend: auth.isSignedIn ? backend : nil,
             preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID,
             force: force
         )
-        guard store.followedFeedPage?.activity.isEmpty != false else { return }
-        await store.refreshDiscoverPeopleRecommendations(backend: auth.isSignedIn ? backend : nil)
     }
 
     private var commentsRouteBinding: Binding<ActivityCommentsRoute?> {
@@ -515,12 +569,14 @@ struct FeedScreen: View {
 
     private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
         guard let activityID,
-              page?.activity.contains(where: { $0.id == activityID }) == true
+              let group = FeedPresentation.groupedActivity(page?.activity ?? []).first(where: {
+                  $0.activities.contains { $0.id == activityID }
+              })
         else { return }
         Task { @MainActor in
             await Task.yield()
             withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo(activityID, anchor: .center)
+                proxy.scrollTo(group.id, anchor: .center)
             }
         }
     }
@@ -716,15 +772,20 @@ struct FeedScreen: View {
     private func follow(_ recommendation: DiscoverPeopleRecommendation) {
         guard !followingProfileIDs.contains(recommendation.profile.id) else { return }
         auth.requireSignIn(for: .followPeople) {
+            followingProfileIDs.insert(recommendation.profile.id)
+            followFailedProfileIDs.remove(recommendation.profile.id)
             Task { @MainActor in
-                followingProfileIDs.insert(recommendation.profile.id)
-                _ = await store.follow(
+                let succeeded = await store.follow(
                     userID: recommendation.profile.id,
                     source: .profile,
                     backend: auth.isSignedIn ? backend : nil
                 )
                 followingProfileIDs.remove(recommendation.profile.id)
-                await refresh()
+                if succeeded {
+                    await refresh()
+                } else {
+                    followFailedProfileIDs.insert(recommendation.profile.id)
+                }
             }
         }
     }
@@ -1537,16 +1598,17 @@ private struct FeedActivityList: View {
 
     var body: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
-            ForEach(activity) { event in
+            let groups = FeedPresentation.groupedActivity(activity)
+            ForEach(groups) { group in
                 FeedActivityModule(
-                    activity: event,
+                    group: group,
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
                 )
-                .id(event.id)
+                .id(group.id)
                 .walkthroughTarget(
-                    event.id == activity.first?.id ? .feedActivity : nil
+                    group.id == groups.first?.id ? .feedActivity : nil
                 )
             }
         }
@@ -1564,7 +1626,8 @@ private enum FeedFeaturedLayout {
 }
 
 private struct FeedActivityModule: View {
-    let activity: FeedActivity
+    let group: FeedActivityGroup
+    private var activity: FeedActivity { group.primaryActivity }
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
@@ -1575,7 +1638,7 @@ private struct FeedActivityModule: View {
             context: engagementContext ?? fallbackPostcardContext,
             visiblePlace: activity.place,
             metadataIcon: metadataIcon,
-            secondaryMetadataTitle: secondaryMetadataTitle,
+            secondaryMetadataTitle: group.isCombined ? nil : secondaryMetadataTitle,
             secondaryMetadataAction: listDestinationAction,
             secondaryMetadataAccessibilityLabel: secondaryMetadataAccessibilityLabel,
             artworkAction: activityDestinationAction,
@@ -1586,7 +1649,9 @@ private struct FeedActivityModule: View {
             actorAccessibilityIdentifier: "feed.activity.\(activity.id).actor",
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
-            showsEngagementActions: engagementContext != nil
+            showsEngagementActions: engagementContext != nil,
+            activityGroup: group.isCombined ? group : nil,
+            openActivityList: openList
         )
         .environment(\.activityPostcardVisualStyle, .astir)
     }
@@ -1824,21 +1889,24 @@ struct FeedResolvedPlacePhoto: View {
 }
 
 private struct FeedLoadingState: View {
+    @Environment(\.astirBrandMode) private var brandMode
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            FeedSectionHeading(title: "Featured for you")
-            HStack(spacing: WanderTheme.spacing3) {
-                ForEach(0..<2, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .fill(WanderTheme.surfaceSand.color)
-                        .frame(width: 184, height: 218)
+            if FeedPresentation.showsFeaturedPlaces {
+                FeedSectionHeading(title: "Featured for you")
+                HStack(spacing: WanderTheme.spacing3) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                            .fill(brandMode.raisedBackground)
+                            .frame(width: 184, height: 218)
+                    }
                 }
             }
             FeedSectionHeading(title: "Recent")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .fill(WanderTheme.surfaceSand.color)
+                        .fill(brandMode.raisedBackground)
                         .frame(height: 142)
                 }
             }
@@ -1856,8 +1924,10 @@ private struct FeedRefreshRecoveryState: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            FeedSectionHeading(title: "Featured for you")
-            FeedRecoveryFeaturedRail()
+            if FeedPresentation.showsFeaturedPlaces {
+                FeedSectionHeading(title: "Featured for you")
+                FeedRecoveryFeaturedRail()
+            }
 
             FeedSectionHeading(title: "Recent", detail: "Unavailable")
             FeedRecoveryActivityList()

@@ -173,7 +173,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
-        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage("))
+        XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -255,7 +255,8 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
-        XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
+        XCTAssertTrue(root.contains("FeedScreen("))
+        XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
@@ -916,7 +917,9 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss)"))
+        XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 
@@ -4055,7 +4058,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
         XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
-        XCTAssertTrue(mapScreen.contains("preloadSelectedPlaceProfile(for: identity)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(true)"))
         XCTAssertTrue(mapScreen.contains("setPlaceProfilePresentedWithoutSwiftUIAnimation(false)"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
@@ -4779,8 +4781,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains("[Self.compactDetent, .large]"))
         XCTAssertTrue(sheetWrapper.contains("selection: $selectedDetent"))
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
-        XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
-        XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.resizes)"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.disabled)"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.scrolls)"))
         XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
         XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))
         XCTAssertFalse(placeProfile.contains("compactDetent"))
@@ -4842,7 +4844,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("existingDraft.form.selectedStatus != context.initialStatus"))
         XCTAssertTrue(mapScreen.contains("switchedForm.selectedStatus = context.initialStatus"))
         XCTAssertTrue(mapScreen.contains("submittedAt: nil"))
-        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
+        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext, startsFreshWanna: saveAction.kind == .wanna)"))
         XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
 
         let visiblePlaceHandler = try sourceSection(
@@ -5330,7 +5332,10 @@ final class NavigationContractTests: XCTestCase {
             1,
             "The empty Feed state must provide a stable activity walkthrough target."
         )
-        XCTAssertTrue(feed.contains("event.id == activity.first?.id ? .feedActivity : nil"))
+        XCTAssertTrue(
+            feed.contains("group.id == groups.first?.id ? .feedActivity : nil"),
+            "The first displayed activity group must remain the Feed walkthrough target."
+        )
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 
         let backHandler = try sourceSection(

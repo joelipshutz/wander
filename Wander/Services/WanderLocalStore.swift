@@ -283,6 +283,8 @@ final class WanderStore: ObservableObject {
     )?
     private var feedRefreshCompletedAt: Date?
     private var feedRefreshCompletedRevision: UInt64?
+    @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
+    private var syncingWannaIDs = Set<String>()
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
@@ -575,6 +577,7 @@ final class WanderStore: ObservableObject {
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
             self.remoteVisiblePlaceCache = restored.cachedCurrentUserVisiblePlaces
+            self.placeWannaSaves = restored.placeWannaSaves
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
@@ -1472,6 +1475,7 @@ final class WanderStore: ObservableObject {
         places = []
         userPlaces = []
         placeAttributes = []
+        placeWannaSaves = []
         placeVisits = []
         visitPhotos = []
         follows = []
@@ -1613,6 +1617,18 @@ final class WanderStore: ObservableObject {
             userPlaceReferenceIDs.contains($0.userPlaceID)
                 && $0.syncState != .synced
         }
+    }
+
+    /// Recommendations can publish while posts are waiting on the network, and
+    /// posts can publish while recommendations are still pending.
+    func refreshFeedSurface(
+        backend: WanderBackend?, preservingActivityID: String? = nil, force: Bool = false
+    ) async {
+        async let people: Void = refreshDiscoverPeopleRecommendations(backend: backend)
+        _ = await refreshFollowedFeed(
+            backend: backend, preservingActivityID: preservingActivityID, force: force
+        )
+        await people
     }
 
     /// Loads the local Feed fixture only when a remote Feed repository is not
@@ -2397,7 +2413,27 @@ final class WanderStore: ObservableObject {
         ]
         .compactMap { $0 }
 
-        let orderedActivity = FeedPresentation.newestFirst(activity, relativeTo: now)
+        var displayActivity = activity
+        #if DEBUG
+        // An explicit UI-test fixture exercises grouping through the real Feed
+        // and original-post routes without writing or reading remote activity.
+        if ProcessInfo.processInfo.arguments.contains("-WanderFeedGroupingUITest"),
+           let visit = activity.first, let list = mayaList {
+            displayActivity += [
+                FeedActivity(
+                    id: "fixture-feed-group-wanna", kind: .placeWannaGo,
+                    actor: visit.actor, place: visit.place,
+                    occurredAt: visit.occurredAt.addingTimeInterval(-120)
+                ),
+                FeedActivity(
+                    id: "fixture-feed-group-list", kind: .listItemAdded,
+                    actor: visit.actor, place: visit.place, list: list,
+                    occurredAt: visit.occurredAt.addingTimeInterval(120)
+                )
+            ]
+        }
+        #endif
+        let orderedActivity = FeedPresentation.newestFirst(displayActivity, relativeTo: now)
         let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
         return FollowedFeedPage(
             activity: orderedActivity,
@@ -5782,11 +5818,42 @@ final class WanderStore: ObservableObject {
         return profiles
     }
 
+    var visibleDiscoverPeopleRecommendations: [DiscoverPeopleRecommendation] {
+        guard case .loaded(let recommendations) = discoverPeopleRecommendationsState else { return [] }
+        return recommendations.filter {
+            $0.id != currentUser.id
+                && $0.profile.isPrivateProfile != true
+                && !isProfilePrivate($0.id)
+                && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+    }
+
     func refreshDiscoverPeopleRecommendations(
         backend: WanderBackend?,
         force: Bool = false,
         limit: Int = 20
     ) async {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderCompactPeopleUITest") {
+            let recommendations = [
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_maya", handle: "maya", displayName: "Maya Chen",
+                    avatarURL: nil, bio: nil, relationship: .follower
+                ), reason: .sharedFollows(3), rank: 0),
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_compact_alex", handle: "alex", displayName: "Alex Rivera",
+                    avatarURL: nil, bio: nil, relationship: .nonFollower
+                ), reason: .followsYou, rank: 1),
+                DiscoverPeopleRecommendation(profile: ProfileShell(
+                    id: "user_compact_long", handle: "longname", displayName: "Alexandra Montgomery",
+                    avatarURL: nil, bio: nil, relationship: .nonFollower
+                ), reason: .suggested, rank: 2)
+            ]
+            upsertRemoteProfileShells(recommendations.map(\.profile))
+            discoverPeopleRecommendationsState = .loaded(recommendations)
+            return
+        }
+        #endif
         guard let backend, backend.profileRepository != nil else {
             discoverPeopleRecommendationsState = .idle
             return
@@ -6388,6 +6455,190 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }
 
+    func wannaSaves(for userPlace: LocalUserPlace) -> [PlaceWannaSave] {
+        guard userPlace.deletedAt == nil else { return [] }
+        let ids = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
+        return placeWannaSaves.filter {
+            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID
+                && visibilityPolicy.canSeePlace(
+                    viewerID: currentUser.id, ownerID: $0.ownerID, visibility: $0.visibility,
+                    relationship: relationship(to: $0.ownerID),
+                    isBlocked: isBlockedBetweenCurrentUser(and: $0.ownerID)
+                )
+        }.sorted { $0.occurredAt > $1.occurredAt }
+    }
+
+    /// Unlike edit/import/save-from-Feed, a new form submission appends a Wanna.
+    /// Existing Been/Wanna summary metadata is deliberately left untouched.
+    func saveNewWanna(
+        _ candidate: PlaceCandidate,
+        operationID: String = UUID().uuidString.lowercased(),
+        visibility: PlaceVisibility,
+        note: String?,
+        plannedDate: Date?,
+        attributes: [PlaceAttributeDraft],
+        sourceType: AddSourceType = .manual,
+        backend: WanderBackend?
+    ) async -> SaveResult {
+        guard let existing = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }) else {
+            return await saveCandidate(candidate, status: .wannaGo, visibility: visibility,
+                                       note: note, sourceType: sourceType, plannedDate: plannedDate,
+                                       attributes: attributes, backend: backend)
+        }
+        if let pending = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            let synced = pending.isSynced ? true : await syncWannaSave(id: pending.id, backend: backend)
+            return SaveResult(userPlaceID: existing.userPlace.id,
+                              syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed))
+        }
+        let wanna = PlaceWannaSave(
+            id: operationID, ownerID: currentUser.id,
+            userPlaceID: existing.userPlace.id, occurredAt: .now, note: note,
+            visibility: visibilityForSave(visibility),
+            plannedDate: plannedDate.map { WannaGoDate.normalized($0) },
+            attributeAnswersJSON: VisitAttributeAnswers.encoded(from: attributes)
+        )
+        placeWannaSaves.append(wanna)
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placeSaved,
+            properties: ["source_type": sourceType.rawValue, "visibility": wanna.visibility.rawValue,
+                         "status": PlaceStatus.wannaGo.rawValue]))
+        analytics.track(.engagement(need: .expression, action: .placeSaved, surface: "add",
+            properties: ["source_type": sourceType.rawValue, "status": PlaceStatus.wannaGo.rawValue]))
+        recordNewSaveForStreak(place: existing.place, status: .wannaGo,
+                               savedAt: wanna.occurredAt, previousSummary: saveStreakSummary)
+        persist()
+        let synced = await syncWannaSave(id: wanna.id, backend: backend)
+        return SaveResult(userPlaceID: existing.userPlace.id,
+                          syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed),
+                          placeID: existing.place.serverID)
+    }
+
+    func updateWanna(_ target: PlaceWannaSave, visibility: PlaceVisibility, note: String?,
+                     plannedDate: Date?, attributes: [PlaceAttributeDraft]) -> SaveResult? {
+        guard target.ownerID == currentUser.id,
+              let parent = currentUserVisiblePlaces.first(where: {
+                  [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(target.userPlaceID)
+              })?.userPlace, parent.deletedAt == nil,
+              CommunityContentPolicy.allows(note),
+              attributes.allSatisfy({ (try? CommunityContentPolicy.validateJSONText($0.valueJSON)) != nil })
+        else { return nil }
+        let index = placeWannaSaves.firstIndex {
+            $0.ownerID == currentUser.id && ($0.id == target.id
+                || (target.isHistoricalOriginal == true && $0.isHistoricalOriginal == true
+                    && [parent.id, parent.localID, parent.serverID].contains($0.userPlaceID)))
+        }
+        guard index != nil || (target.isHistoricalOriginal == true && parent.hasHistoricalWant) else { return nil }
+        var updated = index.map { placeWannaSaves[$0] } ?? target
+        updated.note = note
+        updated.visibility = visibilityForSave(visibility)
+        updated.plannedDate = plannedDate.map { WannaGoDate.normalized($0) }
+        updated.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+        updated.editedAt = max(Date.now, (updated.editedAt ?? .distantPast).addingTimeInterval(0.001))
+        updated.isSynced = false
+        if let index { placeWannaSaves[index] = updated } else { placeWannaSaves.append(updated) }
+        if updated.isHistoricalOriginal == true, parent.status == .wannaGo {
+            parent.note = updated.note
+            parent.visibilityRaw = updated.visibility.rawValue
+            parent.plannedDate = updated.plannedDate
+            replaceAttributes(for: parent.id, with: attributes, syncState: parent.syncState)
+        }
+        persist()
+        flushPersistence()
+        return SaveResult(userPlaceID: parent.id, syncState: .pendingUpdate)
+    }
+
+    func editableLegacyVisit(for userPlaceID: String) -> LocalPlaceVisit? {
+        guard let visible = currentUserVisiblePlaces.first(where: {
+            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(userPlaceID)
+        }), visible.userPlace.status == .been else { return nil }
+        let parent = currentUserPlace(matching: userPlaceID) ?? materializeRemoteCurrentUserPlace(visible)
+        syncBackfilledVisit(for: parent)
+        persist()
+        return visits(for: parent.id).first
+    }
+
+    /// Deliver one already-persisted form without making its dismissal wait on
+    /// the network. A first Wanna creates the parent; repeats append only an event.
+    func syncSavedWanna(operationID: String, userPlaceID: String, backend: WanderBackend) async {
+        if let wanna = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            if !wanna.isSynced { _ = await syncWannaSave(id: wanna.id, backend: backend) }
+        } else if let parent = currentUserPlace(matching: userPlaceID),
+                  parent.deletedAt == nil, parent.syncState != .synced {
+            _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .directSave)
+        }
+    }
+
+    @discardableResult
+    func syncPendingWannaSaves(backend: WanderBackend?) async -> Int {
+        let pending = placeWannaSaves.filter { !$0.isSynced && $0.ownerID == currentUser.id }
+        var count = 0
+        for wanna in pending {
+            if await syncWannaSave(id: wanna.id, backend: backend) { count += 1 }
+        }
+        return count
+    }
+
+    private func syncWannaSave(id: String, backend: WanderBackend?) async -> Bool {
+        guard let backend, let repository = backend.userPlaceRepository as? any WannaSaveRepository,
+              syncingWannaIDs.insert(id).inserted else { return false }
+        defer { syncingWannaIDs.remove(id) }
+        let ownerID = currentUser.id
+        // An edit can arrive during a create/update request. Deliver the newer
+        // persisted revision before finishing, and never replace it with an old ack.
+        while let snapshot = placeWannaSaves.first(where: { $0.id == id }),
+              snapshot.ownerID == ownerID, currentUser.id == ownerID, !snapshot.isSynced {
+            guard let parent = currentUserVisiblePlaces.first(where: {
+                [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(snapshot.userPlaceID)
+            })?.userPlace, parent.deletedAt == nil else { return false }
+            if parent.serverID == nil {
+                _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .failedRetry)
+            }
+            let parentID = parent.serverID ?? parent.id
+            guard UUID(uuidString: parentID) != nil, currentUser.id == ownerID else { return false }
+            var delivered = snapshot
+            delivered.userPlaceID = parentID
+            do {
+                if delivered.isHistoricalOriginal != true { try await repository.saveWanna(delivered) }
+                if delivered.editedAt != nil { delivered = try await repository.updateWanna(delivered) }
+                guard currentUser.id == ownerID,
+                      let index = placeWannaSaves.firstIndex(where: { $0.id == id }) else { return false }
+                guard placeWannaSaves[index] == snapshot else { continue }
+                delivered.isSynced = true
+                placeWannaSaves[index] = delivered
+                persist()
+                return true
+            } catch { return false } // The persisted revision remains in the outbox.
+        }
+        return false
+    }
+
+    func refreshWannaSaves(userPlaceIDs: [String], backend: WanderBackend) async {
+        guard let repository = backend.userPlaceRepository as? any WannaSaveRepository else { return }
+        let viewerID = currentUser.id
+        let ids = userPlaceIDs.filter { UUID(uuidString: $0) != nil }
+        guard !ids.isEmpty else { return }
+        let requested = Set(ids)
+        let before = Dictionary(uniqueKeysWithValues: placeWannaSaves.filter {
+            requested.contains($0.userPlaceID)
+        }.map { ($0.id, $0) })
+        do {
+            let rows = try await repository.wannaSaves(userPlaceIDs: ids)
+            guard currentUser.id == viewerID else { return }
+            // Keep pending edits and revisions changed while this read was in flight.
+            placeWannaSaves.removeAll { $0.isSynced && before[$0.id] == $0 }
+            let protectedIDs = Set(placeWannaSaves.map(\.id))
+            let pendingHistoricalParents = Set(placeWannaSaves.filter {
+                $0.isHistoricalOriginal == true && !$0.isSynced
+            }.map(\.userPlaceID))
+            placeWannaSaves.append(contentsOf: rows.filter {
+                !protectedIDs.contains($0.id)
+                    && !($0.isHistoricalOriginal == true && pendingHistoricalParents.contains($0.userPlaceID))
+            })
+            persist()
+        } catch { /* Preserve the durable local snapshot on read failure. */ }
+    }
+
     /// Import is idempotent. A repeated import may enrich a Wanna with its
     /// first Check In, but it must never create another visit for a place that
     /// is already Been or overwrite details the user previously entered.
@@ -6791,7 +7042,8 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount + deletedCount
+        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        return syncedCount + deletedCount + wannaCount
     }
 
     @discardableResult
@@ -6816,7 +7068,8 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount + deletedCount
+        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        return syncedCount + deletedCount + wannaCount
     }
 
     @discardableResult
@@ -8398,6 +8651,7 @@ final class WanderStore: ObservableObject {
             )
         ).sorted()
         guard !requestedUserPlaceIDs.isEmpty else { return true }
+        await refreshWannaSaves(userPlaceIDs: requestedUserPlaceIDs, backend: backend)
 
         var hydratedVisits: [PlaceVisitResult] = []
         var hydratedPhotos: [VisitPhotoResult] = []
@@ -9532,19 +9786,21 @@ final class WanderStore: ObservableObject {
     }
 
     private func restoreHistoricalWantAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) -> Bool {
-        guard let wantedAt = userPlace.historicalWantedAt else { return false }
+        let original = wannaSaves(for: userPlace).first { $0.isHistoricalOriginal == true }
+        guard let wantedAt = original?.occurredAt ?? userPlace.historicalWantedAt else { return false }
 
         let drafts = VisitAttributeAnswers.drafts(
-            fromAttributeAnswersJSON: userPlace.historicalWantAttributeAnswersJSON ?? "[]"
+            fromAttributeAnswersJSON: original?.attributeAnswersJSON ?? userPlace.historicalWantAttributeAnswersJSON ?? "[]"
         )
         userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
-        userPlace.note = userPlace.historicalWantNote
+        userPlace.note = original.map { $0.note } ?? userPlace.historicalWantNote
+        if let original { userPlace.visibilityRaw = original.visibility.rawValue }
         userPlace.ratingSignal = ratingSignal(from: drafts)
         userPlace.ratingScore = nil
         userPlace.recommendedScore = nil
         userPlace.recommendedCount = 0
         userPlace.visitedAt = nil
-        userPlace.plannedDate = nil
+        userPlace.plannedDate = original?.plannedDate
         userPlace.savedAt = wantedAt
         userPlace.deletedAt = nil
         userPlace.updatedAt = date

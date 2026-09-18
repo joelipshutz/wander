@@ -2024,7 +2024,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let checkInAgain = app.buttons["Check in again"].firstMatch
+        let checkInAgain = app.buttons["Check in"].firstMatch
         XCTAssertTrue(checkInAgain.waitForExistence(timeout: 3))
         checkInAgain.tap()
 
@@ -2162,11 +2162,11 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
 
         let checkInAgain = app.buttons["place-profile.floating-action.checkIn"]
-        let editHistory = app.buttons["place-profile.floating-action.editHistory"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(checkInAgain.waitForExistence(timeout: 5))
-        XCTAssertTrue(editHistory.waitForExistence(timeout: 2))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 2))
         XCTAssertTrue(checkInAgain.isHittable)
-        XCTAssertTrue(editHistory.isHittable)
+        XCTAssertTrue(wanna.isHittable)
 
         let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         topScreenshot.name = "Floating place actions at profile top"
@@ -2176,7 +2176,7 @@ final class OnboardingUITests: XCTestCase {
         app.swipeUp()
         app.swipeUp()
         XCTAssertTrue(checkInAgain.isHittable)
-        XCTAssertTrue(editHistory.isHittable)
+        XCTAssertTrue(wanna.isHittable)
 
         let deepScrollScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         deepScrollScreenshot.name = "Floating place actions after deep scroll"
@@ -2245,7 +2245,7 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testFirstMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
+    func testFirstMapWannaOpensAFreshDraftEachTime() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2293,7 +2293,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
-            "Wanna sunset draft"
+            "what you'll want to remember, who told you..."
         )
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -2312,7 +2312,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
-            "Wanna sunset draft"
+            "what you'll want to remember, who told you..."
         )
     }
 
@@ -2351,7 +2351,7 @@ final class OnboardingUITests: XCTestCase {
             attachedTray.waitForNonExistence(timeout: 4),
             "One physical tap should submit and dismiss the Wanna editor."
         )
-        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isSelected)
+        XCTAssertFalse(app.buttons["place-profile.floating-action.wanna"].isSelected)
     }
 
     func testMapCheckInRespondsToSinglePhysicalTap() {
@@ -2433,9 +2433,93 @@ final class OnboardingUITests: XCTestCase {
             "One physical Save tap should commit and dismiss the Check-in editor."
         )
         XCTAssertTrue(
-            app.buttons["Check in again"].firstMatch.waitForExistence(timeout: 4),
+            app.buttons["Check in"].firstMatch.waitForExistence(timeout: 4),
             "The completed Check-in should update the place action exactly once."
         )
+    }
+
+    func testEachWannaSubmissionFromPlaceProfileCreatesVisibleHistory() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs", "-WanderMapPlace", "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] {
+            let wanna = app.buttons["place-profile.floating-action.wanna"]
+            XCTAssertTrue(wanna.waitForExistence(timeout: 6))
+            wanna.tap()
+            let note = app.textFields["save.note"]
+            XCTAssertTrue(note.waitForExistence(timeout: 4))
+            XCTAssertFalse((note.value as? String ?? "").contains("Wanna record"))
+            note.tap()
+            note.typeText(marker)
+            let save = app.buttons["Add to Wanna"].firstMatch
+            XCTAssertTrue(save.waitForExistence(timeout: 3))
+            save.tap()
+            XCTAssertTrue(note.waitForNonExistence(timeout: 6), "Every submission should finish")
+        }
+        let history = app.scrollViews["place-profile.scroll"].firstMatch
+        for _ in 0..<5 { history.swipeUp() }
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists,
+                          "Each Wanna must remain in ALL history: \(marker)")
+        }
+        let pencils = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "place-activity.edit."))
+        let pencil = pencils.allElementsBoundByIndex.first { $0.isHittable && $0.label == "Edit want" }
+        XCTAssertNotNil(pencil, "Every owned Wanna tile should offer its edit pencil")
+        guard let pencil else { return }
+        pencil.tap()
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 4))
+        let original = note.value as? String ?? ""
+        XCTAssertTrue(original.contains("Wanna record"), "Editing must load this event's own details")
+        note.tap()
+        note.typeText(" edited")
+        let updated = (note.value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        app.buttons["Update Wanna"].firstMatch.tap()
+        XCTAssertTrue(note.waitForNonExistence(timeout: 6))
+        for _ in 0..<3 { history.swipeUp() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", updated)).firstMatch.exists)
+        for marker in ["Wanna record alpha", "Wanna record beta", "Wanna record gamma"] where marker != original {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists,
+                          "Editing one Wanna must preserve its siblings")
+        }
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Independent Wanna history after editing one record"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testCompactWannaFormScrollsWithoutPullingTheSheet() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs", "-WanderMapPlace", "Woodcat Coffee",
+            "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 6))
+        wanna.tap()
+        let scroll = app.scrollViews["save.editorScroll"].firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: 4))
+        let compactTop = scroll.frame.minY
+        let heading = app.staticTexts["a note for future you"].firstMatch
+        let headingTop = heading.frame.minY
+        let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
+        let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.35))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        let scrolled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            heading.frame.minY < headingTop - 60 && abs(scroll.frame.minY - compactTop) < 30
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [scrolled], timeout: 3), .completed,
+                       "An ordinary upward content gesture must scroll the compact form without sheet snapback")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Wanna form after compact content scroll"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testAttachedWannaSheetCanExpandAndDismissFromItsNativeGrabber() {
@@ -2481,7 +2565,7 @@ final class OnboardingUITests: XCTestCase {
         }
 
         let compactMinY = attachedTray.frame.minY
-        let expandTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.14))
+        let expandTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
         grabberCoordinate(for: attachedTray)
             .press(forDuration: 0.05, thenDragTo: expandTarget)
 
@@ -2510,7 +2594,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(wanna.isHittable)
     }
 
-    func testExistingMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
+    func testExistingMapWannaStartsFreshAndCheckInRestoresTheCurrentDraft() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2530,37 +2614,34 @@ final class OnboardingUITests: XCTestCase {
 
         let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["Update Wanna"].exists)
-        XCTAssertTrue(app.buttons["Remove from Wanna"].exists)
+        XCTAssertTrue(attachedTray.buttons["Add to Wanna"].exists)
+        XCTAssertFalse(attachedTray.buttons["Update Wanna"].exists)
+        XCTAssertFalse(attachedTray.buttons["Remove from Wanna"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
 
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
-        XCTAssertEqual(
-            note.value as? String,
-            "Saved for a low-effort sunset picnic."
-        )
+        // The main Wanna action creates a new event, even for a saved place.
+        XCTAssertEqual(note.value as? String, note.placeholderValue)
         note.tap()
-        note.typeText(" Updated")
-        let editedNote = note.value as? String
-        XCTAssertTrue(editedNote?.contains("Saved for a low-effort sunset picnic.") == true)
-        XCTAssertTrue(editedNote?.contains("Updated") == true)
+        note.typeText("First unsaved Wanna")
+        XCTAssertEqual(note.value as? String, "First unsaved Wanna")
 
         app.buttons["save.close"].tap()
-        XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
+        XCTAssertTrue(attachedTray.waitForNonExistence(timeout: 2))
         XCTAssertTrue(wanna.isHittable)
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredNote = app.textFields["save.note"]
-        XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        XCTAssertEqual(
-            restoredNote.value as? String,
-            editedNote
-        )
+        let freshNote = app.textFields["save.note"]
+        XCTAssertTrue(freshNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(freshNote.value as? String, freshNote.placeholderValue,
+                       "A repeated Wanna starts fresh instead of editing a saved or abandoned event")
+        freshNote.tap()
+        freshNote.typeText("Current Wanna draft")
+        XCTAssertEqual(freshNote.value as? String, "Current Wanna draft")
 
         app.buttons["save.close"].tap()
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
@@ -2575,10 +2656,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         let conversionNote = app.textFields["save.note"]
         XCTAssertTrue(conversionNote.waitForExistence(timeout: 3))
-        XCTAssertEqual(conversionNote.value as? String, editedNote)
+        XCTAssertEqual(conversionNote.value as? String, "Current Wanna draft")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "Existing Wanna converts to attached Check in"
+        screenshot.name = "Fresh Wanna draft converts to attached Check in"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -2597,24 +2678,29 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let wanna = app.buttons["place-profile.floating-action.wanna"]
-        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
-        wanna.tap()
+        // Wanna creates a new event; edit an existing event from its history pencil.
+        let history = app.scrollViews["place-profile.scroll"].firstMatch
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        let edit = app.buttons["place-activity.edit.up_joe_elysian_picnic_current_want"]
+        for _ in 0..<5 where !edit.isHittable { history.swipeUp() }
+        XCTAssertTrue(edit.isHittable)
+        edit.tap()
 
-        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
-        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        let editorScrollView = app.scrollViews["save.editorScroll"]
+        XCTAssertTrue(editorScrollView.waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["Update Wanna"].exists)
 
-        let deleteButton = attachedTray.buttons["Remove from Wanna"].firstMatch
+        let deleteButton = editorScrollView.buttons["Remove from Wanna"].firstMatch
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 2))
 
-        let editorScrollView = attachedTray.scrollViews.firstMatch
         XCTAssertTrue(editorScrollView.exists)
-        editorScrollView.swipeUp()
-        if !deleteButton.isHittable {
+        let saveButton = app.buttons["Update Wanna"]
+        for _ in 0..<8 {
+            if deleteButton.isHittable && deleteButton.frame.maxY < saveButton.frame.minY { break }
             editorScrollView.swipeUp()
         }
         XCTAssertTrue(deleteButton.isHittable)
+        XCTAssertLessThan(deleteButton.frame.maxY, saveButton.frame.minY)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-361 lightweight Edit Wanna delete action"
@@ -2629,7 +2715,7 @@ final class OnboardingUITests: XCTestCase {
         confirmation.buttons["Cancel"].tap()
 
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 2))
-        XCTAssertTrue(attachedTray.exists)
+        XCTAssertTrue(editorScrollView.exists)
         XCTAssertTrue(app.buttons["Update Wanna"].exists)
     }
 

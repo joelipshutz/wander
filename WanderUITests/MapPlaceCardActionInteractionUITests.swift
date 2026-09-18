@@ -236,6 +236,11 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         capture("REC495 Shared attached check-in editor")
         app.buttons["save.close"].tap()
         XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        app.buttons["place-profile.floating-action.wanna"].tap()
+        XCTAssertTrue(app.textFields["save.note"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["save.checkInDateDisclosure"].exists)
+        XCTAssertFalse(app.buttons["Remove from Wanna"].exists)
+        app.buttons["save.close"].tap()
         app.buttons["place-profile.back"].tap()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 5))
     }
