@@ -15,6 +15,61 @@ import UIKit
         try verifyTabBarAppearance(isLight: false)
     }
 
+    func testTabGlassSurvivesScrubbingAndLiveAppearanceChanges() throws {
+        let previous = XCUIDevice.shared.appearance
+        addTeardownBlock { @MainActor in XCUIDevice.shared.appearance = previous }
+        XCUIDevice.shared.appearance = .light
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                               "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        app.launch()
+        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        let tabs = app.tabBars.firstMatch
+        for destination in ["Events", "Map", "Profile", "Events", "Feed", "Map", "Events"] {
+            let source = tabs.buttons.matching(NSPredicate(format: "isSelected == true")).firstMatch
+            source.press(forDuration: 0.4, thenDragTo: tabs.buttons[destination])
+            XCTAssertTrue(tabs.buttons[destination].isSelected)
+            capture("Scrub — \(destination)")
+            let pixels = try pixelStats(tabs.screenshot().image)
+            XCTAssertGreaterThan(pixels.luminance, 0.55, "Light glass became dark after scrubbing to \(destination).")
+        }
+        for appearance in [XCUIDevice.Appearance.dark, .light, .dark, .light] {
+            XCUIDevice.shared.appearance = appearance
+            // The OS animates its appearance change; this wait is only for that
+            // system transition, never for a tab selection.
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+                return appearance == .light ? pixels.luminance > 0.55 : pixels.luminance < 0.45
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 3), .completed)
+            capture("Live appearance — \(appearance)")
+        }
+    }
+
+    func testKeepMePostedIsTappableAndKeepsItsSelectionAcrossTabs() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                               "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
+        app.launch()
+        let button = app.buttons["events.keepMePosted"]
+        XCTAssertTrue(button.waitForExistence(timeout: 20))
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(button.isHittable)
+        XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+        XCTAssertLessThan(button.frame.maxY, tabs.frame.minY)
+        capture("Events CTA — orange")
+        button.tap()
+        let confirmed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: button
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [confirmed], timeout: 5), .completed)
+        capture("Events CTA — white")
+        tabs.buttons["Map"].tap()
+        tabs.buttons["Events"].tap()
+        XCTAssertTrue(button.isSelected)
+        XCTAssertTrue(button.isHittable)
+    }
+
     private func verifyTabBarAppearance(isLight: Bool) throws {
         let previousAppearance = XCUIDevice.shared.appearance
         addTeardownBlock { @MainActor in

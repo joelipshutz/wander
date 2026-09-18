@@ -2,30 +2,57 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// A local, decorative recording. It never loads event data or owns tab navigation.
+/// A local decorative recording with a native, server-confirmed launch-interest CTA.
 struct EventsComingSoonScreen: View {
     let isSelected: Bool
+    var userID: String? = nil
+    var repository: (any EventsInterestRepository)? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false
+    @StateObject private var interest = EventsInterestModel()
+
+    private var playbackPolicy: EventsPlaybackPolicy {
+        EventsPlaybackPolicy(isSelected: isSelected, isVisible: isVisible,
+                             isSceneActive: scenePhase == .active, reduceMotion: reduceMotion)
+    }
 
     var body: some View {
-        EventsVideoSurface(
-            policy: EventsPlaybackPolicy(
-                isSelected: isSelected,
-                isVisible: isVisible,
-                isSceneActive: scenePhase == .active,
-                reduceMotion: reduceMotion
+        ZStack(alignment: .bottom) {
+            EventsVideoSurface(policy: playbackPolicy)
+                .ignoresSafeArea()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Coming soon. An Ocean Park experiment.")
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("events.comingSoon")
+
+            EventsNotifyControl(
+                selected: interest.isRegistered,
+                saving: interest.isSaving,
+                enabled: userID != nil,
+                animates: playbackPolicy.shouldPlay,
+                action: { Task { await interest.register(repository: repository) } }
             )
-        )
-        .ignoresSafeArea()
+                .frame(height: 60)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+        }
         .background(Color.black.ignoresSafeArea())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Coming soon. An Ocean Park experiment.")
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityIdentifier("events.comingSoon")
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false }
+        .task(id: userID) { await interest.load(userID: userID, repository: repository) }
+        .task(id: isSelected) {
+            if isSelected { await interest.load(userID: userID, repository: repository) }
+        }
+        .alert("Keep me posted", isPresented: Binding(
+            get: { interest.errorMessage != nil },
+            set: { if !$0 { interest.errorMessage = nil } }
+        )) {
+            Button("Try again") { Task { await interest.register(repository: repository) } }
+            Button("Cancel", role: .cancel) { interest.errorMessage = nil }
+        } message: {
+            Text(interest.errorMessage ?? "")
+        }
     }
 }
 
@@ -189,4 +216,141 @@ private struct EventsVideoSurface: UIViewRepresentable {
 
 #Preview {
     EventsComingSoonScreen(isSelected: true)
+}
+
+/// A real button with cached, distressed artwork. Core Animation supplies the
+/// occasional tape flicker; no additional video decoder or per-frame SwiftUI work.
+private struct EventsNotifyControl: UIViewRepresentable {
+    let selected: Bool
+    let saving: Bool
+    let enabled: Bool
+    let animates: Bool
+    let action: () -> Void
+
+    final class Coordinator {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    func makeUIView(context: Context) -> EventsNotifyButton {
+        let button = EventsNotifyButton()
+        button.addAction(UIAction { [weak coordinator = context.coordinator] _ in
+            coordinator?.action()
+        }, for: .touchUpInside)
+        return button
+    }
+
+    func updateUIView(_ button: EventsNotifyButton, context: Context) {
+        context.coordinator.action = action
+        button.isSelected = selected
+        button.isEnabled = enabled && !saving
+        button.alpha = saving ? 0.65 : 1
+        button.accessibilityValue = saving ? "Saving" : (selected ? "Selected" : "Not selected")
+        button.accessibilityHint = selected ? "You're on the Events launch list." : "Get notified when Events launches."
+        button.updateAnimation(animates && !saving)
+    }
+
+    static func dismantleUIView(_ button: EventsNotifyButton, coordinator: Coordinator) {
+        button.updateAnimation(false)
+    }
+}
+
+@MainActor final class EventsNotifyButton: UIButton {
+    private var artworkSize: CGSize = .zero
+    private var animates = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        accessibilityIdentifier = "events.keepMePosted"
+        accessibilityLabel = "Keep me posted"
+        imageView?.contentMode = .scaleToFill
+        adjustsImageWhenHighlighted = false
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var isSelected: Bool {
+        didSet { accessibilityValue = isSelected ? "Selected" : "Not selected" }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.size != artworkSize else { return }
+        artworkSize = bounds.size
+        setImage(EventsNotifyArtwork.image(size: bounds.size, selected: false), for: .normal)
+        setImage(EventsNotifyArtwork.image(size: bounds.size, selected: true), for: .selected)
+        imageView?.frame = bounds
+    }
+
+    func updateAnimation(_ enabled: Bool) {
+        guard animates != enabled else { return }
+        animates = enabled
+        guard enabled else {
+            imageView?.layer.removeAnimation(forKey: "tape")
+            return
+        }
+        let opacity = CAKeyframeAnimation(keyPath: "opacity")
+        opacity.values = [1, 1, 0.38, 0.88, 1, 1, 0.52, 1, 1]
+        opacity.keyTimes = [0, 0.21, 0.215, 0.23, 0.24, 0.59, 0.60, 0.61, 1]
+        opacity.calculationMode = .discrete
+        let shift = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        shift.values = [0, 0, -1.4, 0.6, 0, 0, 1.8, 0, 0]
+        shift.keyTimes = opacity.keyTimes
+        shift.calculationMode = .discrete
+        let group = CAAnimationGroup()
+        group.animations = [opacity, shift]
+        group.duration = 8
+        group.repeatCount = .infinity
+        imageView?.layer.add(group, forKey: "tape")
+    }
+}
+
+@MainActor enum EventsNotifyArtwork {
+    static func image(size: CGSize, selected: Bool) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: size, format: format).image { renderer in
+            let context = renderer.cgContext
+            let color = selected
+                ? UIColor(red: 0.91, green: 0.90, blue: 0.84, alpha: 1)
+                : UIColor(red: 0.843, green: 0.459, blue: 0.329, alpha: 1)
+            let edge = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+            let border = UIBezierPath(roundedRect: edge, cornerRadius: 12)
+            color.setStroke()
+            border.lineWidth = 2.2
+            border.stroke()
+            let font = UIFont(name: "HelveticaNeue-CondensedBlack", size: 27)
+                ?? UIFont.systemFont(ofSize: 25, weight: .black)
+            let text = "KEEP ME POSTED" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color,
+                                                            .kern: 0.6]
+            let textSize = text.size(withAttributes: attributes)
+            text.draw(at: CGPoint(x: (size.width - textSize.width) / 2,
+                                 y: (size.height - textSize.height) / 2), withAttributes: attributes)
+            // Erode only the ink. Clear pixels stay clear through every state.
+            context.setBlendMode(.destinationOut)
+            var seed: UInt64 = 542_03
+            func noise() -> CGFloat {
+                seed = seed &* 6364136223846793005 &+ 1
+                return CGFloat((seed >> 32) & 0xffff) / 65535
+            }
+            for _ in 0..<Int(size.width * size.height / 13) {
+                let x = noise() * size.width, y = noise() * size.height
+                context.setFillColor(UIColor.black.withAlphaComponent(0.12 + noise() * 0.38).cgColor)
+                context.fill(CGRect(x: x, y: y, width: 0.4 + noise() * 1.3, height: 0.35 + noise() * 0.7))
+            }
+            for y in stride(from: CGFloat(2), to: size.height, by: 1.7) {
+                context.setFillColor(UIColor.black.withAlphaComponent(0.12 + noise() * 0.10).cgColor)
+                context.fill(CGRect(x: 0, y: y, width: size.width, height: 0.35))
+            }
+            for _ in 0..<14 {
+                context.setFillColor(UIColor.black.withAlphaComponent(0.55).cgColor)
+                context.fill(CGRect(x: noise() * size.width, y: noise() * size.height,
+                                    width: 2 + noise() * 7, height: 0.5))
+            }
+        }.withRenderingMode(.alwaysOriginal)
+    }
 }
