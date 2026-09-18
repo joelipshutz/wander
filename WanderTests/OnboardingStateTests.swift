@@ -4,6 +4,38 @@ import XCTest
 
 @MainActor
 final class OnboardingStateTests: XCTestCase {
+    func testAppleIdentityUsesSavedProfileBeforeProviderName() {
+        let session = AuthSession(userID: "user", displayName: "Apple name", handle: nil,
+                                  email: "relay@privaterelay.appleid.com", isAppleSignIn: true)
+        let profile = LocalProfile(localID: "local", serverID: "user", handle: "chosen_handle", displayName: "Chosen name")
+        let result = AppEntryStateResolver.onboardingSession(session, remoteProfile: profile)
+        XCTAssertEqual(result.displayName, "Chosen name")
+        XCTAssertEqual(result.handle, "chosen_handle")
+        XCTAssertEqual(result.email, session.email)
+        XCTAssertEqual(result.isAppleSignIn, true)
+        XCTAssertEqual(result.userID, session.userID)
+    }
+
+    func testAppleMissingNameIgnoresSeededHandleAndRemainsResumable() {
+        let session = AuthSession(userID: "user", displayName: nil, handle: nil, isAppleSignIn: true)
+        let profile = LocalProfile(localID: "local", serverID: "user", handle: "seeded_123", displayName: "seeded_123")
+        guard case .onboarding(let result, let step) = AppEntryStateResolver.signedInState(
+            session: session, localState: .fresh, remoteProfile: profile
+        ) else { return XCTFail("Incomplete Apple account must enter onboarding") }
+        XCTAssertNil(result.displayName)
+        XCTAssertEqual(step, .identity)
+        XCTAssertEqual(ProfileIdentityDraft(displayName: result.displayName ?? "", handle: "my_username",
+                                            usesAppleSignIn: result.isAppleSignIn == true).normalizedDisplayName, "my_username")
+        profile.onboardingCompletedAt = Date()
+        XCTAssertTrue(AppEntryStateResolver.signedInState(session: session, localState: .fresh, remoteProfile: profile).isReady)
+    }
+
+    func testNonAppleOnboardingIdentityIsUnchanged() {
+        let session = AuthSession(userID: "user", displayName: nil, handle: nil)
+        let profile = LocalProfile(localID: "local", serverID: "user", handle: "seeded", displayName: "Saved")
+        XCTAssertEqual(AppEntryStateResolver.onboardingSession(session, remoteProfile: profile), session)
+    }
+
     func testAuthenticatedSimulatorFixturePersistsUntilLiveAuthIsRequested() throws {
         let suiteName = "OnboardingStateTests.simulatorSession.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

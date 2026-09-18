@@ -63,10 +63,11 @@ across production surfaces by this provisional grammar:
 - Feed and Lists floating headers hide on sustained downward scrolling and
   return on upward scrolling; Reduce Motion must remain respected.
 - The Map masthead's OCEAN PARK label uses the approved 06 analog tracking
-  motion: one 0.96-second episode at a newly randomized 55–65-second interval.
+  motion: the first 0.96-second episode starts after 3 seconds, followed by newly
+  randomized 55–65-second onset-to-onset intervals.
   ASTIR and the surrounding glass stay still. The native label sleeps between
   episodes and pauses while covered, offscreen, backgrounded, or Reduce Motion
-  is enabled. Returning to an eligible Map starts a fresh quiet interval.
+  is enabled. Returning to an eligible Map starts a fresh 3-second initial delay.
 
 ## Product Context
 

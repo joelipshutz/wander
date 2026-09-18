@@ -3,9 +3,11 @@ import Foundation
 struct ProfileIdentityDraft: Equatable {
     var displayName: String
     var handle: String
+    var usesAppleSignIn = false
 
     var normalizedDisplayName: String {
-        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return usesAppleSignIn && name.isEmpty ? normalizedHandle : name
     }
 
     var normalizedHandle: String {
