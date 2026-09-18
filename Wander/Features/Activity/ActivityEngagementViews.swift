@@ -17,6 +17,7 @@ extension EnvironmentValues {
 }
 
 struct ActivityEngagementActionRow: View {
+    @Environment(\.activityPresentationHandoff) private var handoff
     @Environment(\.activityPostcardVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
@@ -35,6 +36,7 @@ struct ActivityEngagementActionRow: View {
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
     @State private var reportSubject: CommunityReportSubject?
     @State private var isResolvingAction = false
+    @State private var actionGeneration = UUID()
     @State private var actionError: String?
 
     var body: some View {
@@ -67,28 +69,44 @@ struct ActivityEngagementActionRow: View {
         }
         .sheet(item: $wannaSaveContext, onDismiss: {
             store.saveFlowDidDismiss(.saveSheet)
+            handoff.onDidDismiss(.activitySave)
         }) { saveContext in
-            MapPlaceSaveFlowSheet(context: saveContext) { submission in
-                await persistNewPlaceSaveSubmission(
-                    submission,
-                    store: store,
-                    backend: auth.isSignedIn ? backend : nil
-                )
-            } onRemove: { _ in
-                false
+            WanderRootPresentationLifecycle(
+                surface: .activitySave, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                MapPlaceSaveFlowSheet(context: saveContext) { submission in
+                    await persistNewPlaceSaveSubmission(
+                        submission, store: store, backend: auth.isSignedIn ? backend : nil
+                    )
+                } onRemove: { _ in false }
             }
         }
-        .fullScreenCover(item: $sharePreviewPresentation) { presentation in
-            ActivitySharePreviewScreen(
-                context: presentation.context,
-                content: presentation.content,
-                analytics: store.productAnalytics
-            )
-            .id(presentation.id)
+        .fullScreenCover(item: $sharePreviewPresentation, onDismiss: { handoff.onDidDismiss(.activityShare) }) { presentation in
+            WanderRootPresentationLifecycle(
+                surface: .activityShare, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                ActivitySharePreviewScreen(
+                    context: presentation.context, content: presentation.content,
+                    analytics: store.productAnalytics
+                )
+                .id(presentation.id)
+            }
         }
-        .sheet(item: $reportSubject) { subject in
-            CommunityReportSheet(subject: subject)
-                .environmentObject(backend)
+        .sheet(item: $reportSubject, onDismiss: { handoff.onDidDismiss(.activityReport) }) { subject in
+            WanderRootPresentationLifecycle(
+                surface: .activityReport, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                CommunityReportSheet(subject: subject)
+                    .environmentObject(backend)
+            }
+        }
+        .onChange(of: handoff.resetID) { _, resetID in
+            guard resetID != nil else { return }
+            actionGeneration = UUID()
+            wannaSaveContext = nil
+            sharePreviewPresentation = nil
+            reportSubject = nil
+            actionError = nil
         }
     }
 
@@ -236,6 +254,7 @@ struct ActivityEngagementActionRow: View {
         guard !isResolvingAction else { return }
         isResolvingAction = true
         let requestUserID = store.currentUser.id
+        let requestGeneration = actionGeneration
         Task { @MainActor in
             defer { isResolvingAction = false }
             let resolved: ActivityEngagementContext?
@@ -244,7 +263,8 @@ struct ActivityEngagementActionRow: View {
             } else {
                 resolved = isEngagementEnabled ? context : nil
             }
-            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+            guard !Task.isCancelled, store.currentUser.id == requestUserID,
+                  actionGeneration == requestGeneration else { return }
             guard let resolved else {
                 actionError = "Check your connection and tap the action to try again. If the owner removed this check-in, it will disappear when history refreshes."
                 return
@@ -838,7 +858,27 @@ enum ActivityPostcardArtworkPolicy {
     }
 }
 
+/// Share the root's physical dismissal acknowledgements with post-owned covers.
+struct ActivityPresentationHandoff {
+    var resetID: UUID?
+    var onPresent: (WanderDeepLinkPresentationToken) -> Void = { _ in }
+    var onWillDismiss: (WanderDeepLinkPresentationToken) -> Void = { _ in }
+    var onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void = { _ in }
+}
+
+private struct ActivityPresentationHandoffKey: EnvironmentKey {
+    static var defaultValue: ActivityPresentationHandoff { ActivityPresentationHandoff() }
+}
+
+extension EnvironmentValues {
+    var activityPresentationHandoff: ActivityPresentationHandoff {
+        get { self[ActivityPresentationHandoffKey.self] }
+        set { self[ActivityPresentationHandoffKey.self] = newValue }
+    }
+}
+
 struct ActivityCommentsScreen: View {
+    @Environment(\.activityPresentationHandoff) private var handoff
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
@@ -879,10 +919,6 @@ struct ActivityCommentsScreen: View {
                         .tint(brandMode.accent)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: 140)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                } else if comments.isEmpty, commentError == nil {
-                    emptyState
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 } else {
@@ -934,26 +970,45 @@ struct ActivityCommentsScreen: View {
             await refreshComments()
         }
         .refreshable { await refreshComments() }
-        .fullScreenCover(item: $photoViewerRoute) { route in
-            ActivityCommentsPhotoViewer(
-                media: context.media,
-                initialMediaID: route.mediaID,
-                reportedUserID: context.actor.id,
-                reportedUserName: context.actor.displayName,
-                placeName: context.placeName
-            )
+        .fullScreenCover(item: $photoViewerRoute, onDismiss: { handoff.onDidDismiss(.activityPhoto) }) { route in
+            WanderRootPresentationLifecycle(
+                surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                ActivityCommentsPhotoViewer(
+                    media: context.media,
+                    initialMediaID: route.mediaID,
+                    reportedUserID: context.actor.id,
+                    reportedUserName: context.actor.displayName,
+                    placeName: context.placeName
+                )
+            }
         }
-        .fullScreenCover(item: $sharePreviewPresentation) { presentation in
-            ActivitySharePreviewScreen(
-                context: presentation.context,
-                content: presentation.content,
-                analytics: store.productAnalytics
-            )
-            .id(presentation.id)
+        .fullScreenCover(item: $sharePreviewPresentation, onDismiss: { handoff.onDidDismiss(.activityShare) }) { presentation in
+            WanderRootPresentationLifecycle(
+                surface: .activityShare, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                ActivitySharePreviewScreen(
+                    context: presentation.context,
+                    content: presentation.content,
+                    analytics: store.productAnalytics
+                )
+                .id(presentation.id)
+            }
         }
-        .sheet(item: $reportSubject) { subject in
-            CommunityReportSheet(subject: subject)
-                .environmentObject(backend)
+        .sheet(item: $reportSubject, onDismiss: { handoff.onDidDismiss(.activityReport) }) { subject in
+            WanderRootPresentationLifecycle(
+                surface: .activityReport, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                CommunityReportSheet(subject: subject)
+                    .environmentObject(backend)
+            }
+        }
+        .onChange(of: handoff.resetID) { _, resetID in
+            guard resetID != nil else { return }
+            composerFocused = false
+            photoViewerRoute = nil
+            sharePreviewPresentation = nil
+            reportSubject = nil
         }
     }
 
@@ -1089,22 +1144,6 @@ struct ActivityCommentsScreen: View {
         return { openList(listContext.id) }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: "bubble.right")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(brandMode.accentText)
-            Text("Start the conversation")
-                .font(AstirTypography.sectionTitle)
-                .foregroundStyle(brandMode.primaryText)
-            Text("Share what makes this place worth remembering.")
-                .font(AstirTypography.bodySmall)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(brandMode.secondaryText)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-    }
-
     private var composer: some View {
         VStack(spacing: 0) {
             Divider()
@@ -1119,6 +1158,7 @@ struct ActivityCommentsScreen: View {
                 )
 
                 TextField("Add a comment…", text: $draft, axis: .vertical)
+                    .accessibilityIdentifier("activity.comment.input")
                     .font(AstirTypography.body)
                     .lineLimit(1...4)
                     .focused($composerFocused)
@@ -1133,11 +1173,25 @@ struct ActivityCommentsScreen: View {
                             .stroke(brandMode.border, lineWidth: 1)
                     )
 
-                Button("Post", action: post)
-                    .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accentText)
-                    .frame(minWidth: 52, minHeight: 44)
-                    .disabled(normalizedDraft.isEmpty || isPosting)
+                Button(action: post) {
+                    Group {
+                        if isPosting {
+                            ProgressView().tint(brandMode.accentForeground)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 19, weight: .semibold))
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent.opacity(normalizedDraft.isEmpty ? 0.35 : 1), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isPosting ? "Sending comment" : "Send comment")
+                .accessibilityIdentifier("activity.comment.send")
+                .disabled(normalizedDraft.isEmpty || normalizedDraft.count > 1_000 || isPosting)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.vertical, WanderTheme.spacing2)
@@ -1383,7 +1437,8 @@ struct ActivityCommentsRouteScreen: View {
             guard scenePhase == .active else { return }
             await retry()
         }
-        .navigationTitle("comments")
+        .accessibilityIdentifier("activity.post.screen")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .tint(brandMode.accent)
         .toolbarBackground(brandMode.background, for: .navigationBar)
@@ -1407,8 +1462,8 @@ struct ActivityCommentsRouteScreen: View {
     }
 
     private var resolutionError: String? {
-        guard let activityID = currentRoute?.activityID else { return nil }
-        return store.activityEngagementError(for: activityID)
+        guard let route = currentRoute else { return nil }
+        return store.activityEngagementError(for: route.checkInTarget?.visitID ?? route.activityID)
     }
 
     private var resolutionState: some View {

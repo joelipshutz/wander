@@ -4525,6 +4525,31 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testPostIdentityOverridesLegacyPlaceDeeplink() {
+        for kind in ["activity_commented", "activity_liked", "followed_place_visit", "place_saved_from_your_map"] {
+            let destination = PushNotificationManager.destination(from: ["recme": [
+                "notification_type": kind, "deeplink_url": "recme://places/place-1",
+                "data": ["activity_id": "activity-1", "place_id": "place-1"]
+            ]])
+            XCTAssertEqual(destination, .activityComments(id: "activity-1"))
+        }
+    }
+
+    func testCheckInNotificationKeepsExactVisitIdentityAndLegacyFallback() {
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let destination = PushNotificationManager.destination(from: ["recme": [
+            "notification_type": "followed_place_visit", "deeplink_url": "recme://places/place-1",
+            "data": ["user_place_id": parent, "visit_id": visit, "place_id": "place-1"]
+        ]])
+        XCTAssertEqual(destination, .checkInComments(userPlaceID: parent, visitID: visit))
+        XCTAssertEqual(WanderRootView.notificationTab(for: try! XCTUnwrap(destination)), .discover)
+        let malformed = PushNotificationManager.destination(from: ["recme": [
+            "notification_type": "followed_place_visit", "deeplink_url": "recme://places/place-1",
+            "data": ["user_place_id": parent, "visit_id": "", "activity_id": " "]
+        ]])
+        XCTAssertEqual(malformed, .place(id: "place-1"))
+    }
+
     func testEveryNotificationTypeHasAnAppDestination() {
         func destination(_ type: String, data: [String: Any] = [:]) -> NotificationDestination? {
             PushNotificationManager.destination(from: [
